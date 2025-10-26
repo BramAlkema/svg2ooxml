@@ -1,0 +1,51 @@
+"""Tests for the color matrix filter integration."""
+
+from __future__ import annotations
+
+from lxml import etree
+
+from svg2ooxml.ir.effects import CustomEffect
+from svg2ooxml.services.filter_service import FilterService
+from svg2ooxml.services.filter_types import FilterEffectResult
+
+
+def _make_service() -> FilterService:
+    service = FilterService()
+    service.bind_services = getattr(service, "bind_services", lambda services: None)
+    return service
+
+
+def test_color_matrix_saturate_produces_effect() -> None:
+    service = FilterService()
+    filter_xml = etree.fromstring(
+        "<filter id='cm'><feColorMatrix type='saturate' values='0.5'/></filter>"
+    )
+    service.register_filter("cm", filter_xml)
+
+    results = service.resolve_effects("cm")
+
+    assert results
+    first = results[0]
+    assert isinstance(first, FilterEffectResult)
+    assert first.strategy == "native"
+    assert isinstance(first.effect, CustomEffect)
+    assert "satMod" in first.effect.drawingml
+
+
+def test_color_matrix_matrix_flags_fallback() -> None:
+    service = FilterService()
+    filter_xml = etree.fromstring(
+        "<filter id='cm'><feColorMatrix type='matrix' values='" + " ".join(["1"] * 20) + "'/></filter>"
+    )
+    service.register_filter("cm", filter_xml)
+
+    results = service.resolve_effects("cm")
+
+    assert results
+    first = results[0]
+    assert first.fallback == "emf"
+    assert first.strategy == "vector"
+    assert first.effect.drawingml.startswith("<a:effectLst>")
+    assets = first.metadata.get("fallback_assets")
+    assert assets and assets[0]["type"] == "emf"
+    assert assets[0].get("metadata", {}).get("filter_type") == "color_matrix"

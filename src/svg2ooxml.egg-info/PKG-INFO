@@ -1,0 +1,31 @@
+Metadata-Version: 2.4
+Name: svg2ooxml
+Version: 0.1.0
+Summary: SVG to Office Open XML conversion toolkit.
+Author: SVG2OOXML Contributors
+License: TBD
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+Requires-Dist: tinycss2>=1.2
+Requires-Dist: click>=8.1
+Provides-Extra: dev
+Requires-Dist: black>=24.0; extra == "dev"
+Requires-Dist: isort>=5.12; extra == "dev"
+Requires-Dist: mypy>=1.8; extra == "dev"
+Requires-Dist: pre-commit>=3.5; extra == "dev"
+Requires-Dist: pytest>=7.4; extra == "dev"
+Requires-Dist: ruff>=0.4.0; extra == "dev"
+Provides-Extra: accel
+Requires-Dist: numpy>=1.24; extra == "accel"
+Provides-Extra: color
+Requires-Dist: numpy>=1.24; extra == "color"
+Requires-Dist: colorspacious>=1.1.0; extra == "color"
+Requires-Dist: Pillow>=10.0; extra == "color"
+Provides-Extra: render
+Requires-Dist: skia-python>=87.5; extra == "render"
+Requires-Dist: Pillow>=10.0; extra == "render"
+Provides-Extra: slides
+Requires-Dist: cryptography>=41.0; extra == "slides"
+Requires-Dist: google-api-python-client>=2.130; extra == "slides"
+Requires-Dist: google-auth>=2.26; extra == "slides"
+Requires-Dist: google-auth-oauthlib>=1.2; extra == "slides"

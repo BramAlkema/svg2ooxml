@@ -1,0 +1,96 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "svg2ooxml"
+version = "0.1.0"
+description = "SVG to Office Open XML conversion toolkit."
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [
+  { name = "SVG2OOXML Contributors" }
+]
+license = { text = "TBD" }
+dependencies = [
+  "tinycss2>=1.2",
+  "click>=8.1"
+]
+
+[project.optional-dependencies]
+dev = [
+  "black>=24.0",
+  "isort>=5.12",
+  "mypy>=1.8",
+  "pre-commit>=3.5",
+  "pytest>=7.4",
+  "ruff>=0.4.0"
+]
+accel = [
+  "numpy>=1.24"
+]
+color = [
+  "numpy>=1.24",
+  "colorspacious>=1.1.0",
+  "Pillow>=10.0"
+]
+render = [
+  "skia-python>=87.5",
+  "Pillow>=10.0"
+]
+slides = [
+  "cryptography>=41.0",
+  "google-api-python-client>=2.130",
+  "google-auth>=2.26",
+  "google-auth-oauthlib>=1.2"
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+namespaces = false
+
+[tool.black]
+line-length = 88
+target-version = ["py310"]
+
+[tool.isort]
+profile = "black"
+line_length = 88
+src_paths = ["src", "tests"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 88
+select = [
+  "E",
+  "F",
+  "I",
+  "N",
+  "UP",
+  "B"
+]
+ignore = [
+  "E203"
+]
+src = ["src", "tests"]
+exclude = ["venv"]
+
+[tool.pytest.ini_options]
+addopts = "-ra --strict-markers --strict-config --maxfail=1"
+testpaths = ["tests"]
+markers = [
+  "visual: visual regression tests that rely on PPTX rendering",
+]
+
+[tool.mypy]
+python_version = "3.10"
+warn_unused_configs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+strict_optional = true
+show_error_codes = true
+namespace_packages = false
+plugins = []
+mypy_path = ["src"]
+disallow_untyped_defs = false
+follow_imports = "normal"

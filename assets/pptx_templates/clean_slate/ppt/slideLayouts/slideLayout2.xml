@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<p:sldLayout xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+             xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+             xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+             type="title" preserve="1">
+    <p:cSld name="Title and Content">
+        <p:spTree>
+            <p:nvGrpSpPr>
+                <p:cNvPr id="1" name=""/>
+                <p:cNvGrpSpPr/>
+                <p:nvPr/>
+            </p:nvGrpSpPr>
+            <p:grpSpPr>
+                <a:xfrm>
+                    <a:off x="0" y="0"/>
+                    <a:ext cx="0" cy="0"/>
+                    <a:chOff x="0" y="0"/>
+                    <a:chExt cx="0" cy="0"/>
+                </a:xfrm>
+            </p:grpSpPr>
+
+            <!-- Title placeholder -->
+            <p:sp>
+                <p:nvSpPr>
+                    <p:cNvPr id="2" name="Title Placeholder 1"/>
+                    <p:cNvSpPr>
+                        <a:spLocks noGrp="1"/>
+                    </p:cNvSpPr>
+                    <p:nvPr>
+                        <p:ph type="title"/>
+                    </p:nvPr>
+                </p:nvSpPr>
+                <p:spPr>
+                    <a:xfrm>
+                        <a:off x="685800" y="411480"/>
+                        <a:ext cx="7772400" cy="1097280"/>
+                    </a:xfrm>
+                </p:spPr>
+                <p:txBody>
+                    <a:bodyPr/>
+                    <a:lstStyle/>
+                    <a:p/>
+                </p:txBody>
+            </p:sp>
+
+            <!-- Body placeholder -->
+            <p:sp>
+                <p:nvSpPr>
+                    <p:cNvPr id="3" name="Content Placeholder 2"/>
+                    <p:cNvSpPr>
+                        <a:spLocks noGrp="1"/>
+                    </p:cNvSpPr>
+                    <p:nvPr>
+                        <p:ph type="body" idx="1"/>
+                    </p:nvPr>
+                </p:nvSpPr>
+                <p:spPr>
+                    <a:xfrm>
+                        <a:off x="685800" y="1828800"/>
+                        <a:ext cx="7772400" cy="4191000"/>
+                    </a:xfrm>
+                </p:spPr>
+                <p:txBody>
+                    <a:bodyPr/>
+                    <a:lstStyle/>
+                    <a:p/>
+                </p:txBody>
+            </p:sp>
+        </p:spTree>
+    </p:cSld>
+    <p:clrMapOvr>
+        <a:masterClrMapping/>
+    </p:clrMapOvr>
+</p:sldLayout>

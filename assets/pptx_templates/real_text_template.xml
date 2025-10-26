@@ -1,0 +1,32 @@
+<p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+      xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+    <p:nvSpPr>
+        <p:cNvPr id="{SHAPE_ID}" name="Text {SHAPE_ID}"/>
+        <p:cNvSpPr>
+            <a:spLocks noGrp="1"/>
+        </p:cNvSpPr>
+        <p:nvPr>
+            <p:ph type="obj"/>
+        </p:nvPr>
+    </p:nvSpPr>
+    <p:spPr>
+        <a:xfrm>
+            <a:off x="{X_EMU}" y="{Y_EMU}"/>
+            <a:ext cx="{WIDTH_EMU}" cy="{HEIGHT_EMU}"/>
+        </a:xfrm>
+    </p:spPr>
+    <p:txBody>
+        <a:bodyPr/>
+        <a:lstStyle/>
+        <a:p>
+            <a:r>
+                <a:rPr lang="en-US" dirty="0">
+                    <a:solidFill>
+                        <a:srgbClr val="{TEXT_COLOR}"/>
+                    </a:solidFill>
+                </a:rPr>
+                <a:t>{TEXT_CONTENT}</a:t>
+            </a:r>
+        </a:p>
+    </p:txBody>
+</p:sp>

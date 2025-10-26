@@ -1,0 +1,15 @@
+{
+  "mesh_rows": 1,
+  "mesh_columns": 2,
+  "patch_count": 2,
+  "stop_count": 2,
+  "colors_used": ["0000FF", "FF0000"],
+  "paint_policy": {
+    "gradient_kind": "mesh",
+    "suggest_fallback": "emf",
+    "patch_count": 2
+  },
+  "geometry_policy": {
+    "suggest_fallback": "emf"
+  }
+}

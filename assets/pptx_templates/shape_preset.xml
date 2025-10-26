@@ -1,0 +1,16 @@
+<p:sp>
+    <p:nvSpPr>
+        <p:cNvPr id="{SHAPE_ID}" name="Shape {SHAPE_ID}">{HYPERLINK_XML}</p:cNvPr>
+        <p:cNvSpPr/>
+        <p:nvPr/>
+    </p:nvSpPr>
+    <p:spPr>
+        <a:xfrm>
+            <a:off x="{X_EMU}" y="{Y_EMU}"/>
+            <a:ext cx="{WIDTH_EMU}" cy="{HEIGHT_EMU}"/>
+        </a:xfrm>
+        <a:prstGeom prst="{PRESET}">
+            <a:avLst/>
+        </a:prstGeom>
+{CLIP_PATH_XML}{MASK_XML}{EFFECTS_XML}{FILL_XML}{STROKE_XML}    </p:spPr>
+</p:sp>

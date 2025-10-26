@@ -1,0 +1,363 @@
+"""Filter rendering orchestrator for svg2ooxml."""
+
+from __future__ import annotations
+
+import logging
+import math
+import re
+from typing import Iterable, List
+
+from svg2ooxml.filters.base import FilterContext, FilterResult
+from svg2ooxml.ir.effects import CustomEffect
+from svg2ooxml.services.filter_types import FilterEffectResult
+from svg2ooxml.units.conversion import px_to_emu
+from svg2ooxml.drawingml.emf_adapter import EMFAdapter, PaletteResolver
+from svg2ooxml.drawingml.raster_adapter import RasterAdapter
+
+
+HOOK_PATTERN = re.compile(r"<!--\s*svg2ooxml:(?P<name>\w+)(?P<attrs>[^>]*)-->", re.IGNORECASE)
+ATTR_PATTERN = re.compile(r"(\w+)=\"([^\"]*)\"")
+
+
+class FilterRenderer:
+    """Bridge between FilterRegistry outputs and IR effects."""
+
+    def __init__(
+        self,
+        *,
+        logger: logging.Logger | None = None,
+        palette_resolver: PaletteResolver | None = None,
+    ) -> None:
+        self._logger = logger or logging.getLogger(__name__)
+        self._emf_adapter = EMFAdapter(palette_resolver=palette_resolver)
+        self._raster_adapter = RasterAdapter()
+        self._reuse_counter = 0
+
+    def set_palette_resolver(self, resolver: PaletteResolver | None) -> None:
+        """Install a palette resolver used for EMF fallback rendering."""
+
+        self._emf_adapter.set_palette_resolver(resolver)
+
+    def render(
+        self,
+        filter_results: Iterable[FilterResult],
+        *,
+        context: FilterContext | None = None,
+    ) -> List[FilterEffectResult]:
+        outputs: List[FilterEffectResult] = []
+        policy = self._policy_from_context(context)
+        for result in filter_results:
+            if not isinstance(result, FilterResult) or not result.is_success():
+                continue
+
+            drawingml = result.drawingml or ""
+            metadata = dict(result.metadata or {})
+
+            hook_name, attrs, remainder = self._extract_hook(drawingml)
+            if hook_name:
+                builder = self._hook_builders().get(hook_name)
+                if builder:
+                    try:
+                        drawingml = builder(hook_name, attrs, remainder, result, context)
+                    except Exception:  # pragma: no cover - defensive logging
+                        self._logger.debug("Hook builder %s failed", hook_name, exc_info=True)
+                        drawingml = remainder or ""
+                else:
+                    drawingml = remainder or ""
+            elif drawingml and drawingml.strip().startswith("<!--") and not remainder:
+                # Unhandled comment; drop it.
+                drawingml = ""
+
+            if not drawingml and result.fallback == "emf":
+                drawingml = self._placeholder_emf(metadata, result)
+                strategy = "vector"
+            elif not drawingml and result.fallback in {"bitmap", "raster"}:
+                drawingml = self._placeholder_raster(metadata, result)
+                strategy = "raster"
+            else:
+                strategy = self._strategy_from_policy(result, policy)
+
+            effect = CustomEffect(drawingml=drawingml)
+            outputs.append(
+                FilterEffectResult(
+                    effect=effect,
+                    strategy=strategy,
+                    metadata=metadata,
+                    fallback=result.fallback,
+                )
+            )
+        return outputs
+
+    # ------------------------------------------------------------------
+    # Hook builders
+    # ------------------------------------------------------------------
+
+    def _hook_builders(self):
+        return {
+            "flood": self._build_flood,
+            "offset": self._build_offset,
+            "merge": self._build_pass_through,
+            "tile": self._build_pass_through,
+            "composite": self._build_pass_through,
+            "blend": self._build_pass_through,
+            "componentTransfer": self._build_comment_only,
+            "convolveMatrix": self._build_comment_only,
+            "image": self._build_comment_only,
+            "diffuseLighting": self._build_comment_only,
+            "specularLighting": self._build_comment_only,
+        }
+
+    def _build_flood(self, name, attrs, remainder, result, context) -> str:
+        color = attrs.get("color", "000000").strip().upper()
+        if color.startswith("#"):
+            color = color[1:]
+        if len(color) == 3:
+            color = "".join(ch * 2 for ch in color)
+        try:
+            opacity = float(attrs.get("opacity", "1"))
+        except ValueError:
+            opacity = 1.0
+        opacity = max(0.0, min(opacity, 1.0))
+        alpha = int(opacity * 100000)
+        return (
+            "<a:effectLst>"
+            "<a:solidFill>"
+            f"<a:srgbClr val=\"{color}\"><a:alpha val=\"{alpha}\"/></a:srgbClr>"
+            "</a:solidFill>"
+            "</a:effectLst>"
+        )
+
+    def _build_offset(self, name, attrs, remainder, result, context) -> str:
+        try:
+            dx = float(attrs.get("dx", "0"))
+            dy = float(attrs.get("dy", "0"))
+        except ValueError:
+            dx = dy = 0.0
+
+        dx_emu = int(px_to_emu(dx))
+        dy_emu = int(px_to_emu(dy))
+        distance = int(math.hypot(dx_emu, dy_emu))
+
+        if distance == 0:
+            return "<a:effectLst><!-- offset: no displacement --></a:effectLst>"
+
+        # PowerPoint angle (0 = right, counter-clockwise positive, units 60000 per degree)
+        angle_rad = math.atan2(dy_emu, dx_emu)
+        ppt_angle = int((math.degrees(angle_rad) * 60000) % 21600000)
+
+        distance = min(distance, 914400)
+
+        return (
+            "<a:effectLst>"
+            f"<a:outerShdw blurRad=\"0\" dist=\"{distance}\" dir=\"{ppt_angle}\" algn=\"ctr\">"
+            "<a:srgbClr val=\"000000\"><a:alpha val=\"0\"/></a:srgbClr>"
+            "</a:outerShdw>"
+            "</a:effectLst>"
+        )
+
+    def _build_pass_through(self, name, attrs, remainder, result, context) -> str:
+        if remainder:
+            return remainder
+        return self._build_comment(name, attrs)
+
+    def _build_comment_only(self, name, attrs, remainder, result, context) -> str:
+        return self._build_comment(name, attrs)
+
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
+
+    def _extract_hook(self, drawingml: str):
+        match = HOOK_PATTERN.search(drawingml)
+        if not match:
+            return None, {}, drawingml
+        name = match.group("name")
+        attr_block = match.group("attrs") or ""
+        attrs = {m.group(1): m.group(2) for m in ATTR_PATTERN.finditer(attr_block)}
+        remainder = drawingml[match.end():].strip()
+        return name, attrs, remainder
+
+    def _build_comment(self, name: str, attrs: dict[str, str]) -> str:
+        if not attrs:
+            return f"<!-- svg2ooxml:{name} -->"
+        pairs = " ".join(f'{key}="{value}"' for key, value in attrs.items())
+        return f"<!-- svg2ooxml:{name} {pairs} -->"
+
+    def _strategy_from_policy(self, result: FilterResult, policy: dict[str, object] | None) -> str:
+        if policy is None:
+            return "native"
+        prefer_vector = bool(policy.get("prefer_emf_blend_modes"))
+        if prefer_vector and result.metadata.get("filter_type") in {"blend", "component_transfer"}:
+            return "vector"
+        return "native"
+
+    def _placeholder_emf(self, metadata: dict[str, object], result: FilterResult) -> str:
+        try:
+            asset = self._ensure_emf_asset(metadata, result)
+        except Exception:  # pragma: no cover - defensive fallback
+            self._logger.debug("EMF adapter failed; falling back to placeholder", exc_info=True)
+            asset = None
+
+        if not asset:
+            return "<a:effectLst><!-- svg2ooxml:emf placeholder="" --></a:effectLst>"
+
+        rel_id = asset.get("relationship_id")
+        if not isinstance(rel_id, str) or not rel_id:
+            rel_id = self._allocate_reuse_id()
+            asset["relationship_id"] = rel_id
+
+        width_emu = asset.get("width_emu")
+        height_emu = asset.get("height_emu")
+        data_hex = asset.get("data_hex")
+        if not data_hex:
+            raw = asset.get("data")
+            if isinstance(raw, (bytes, bytearray)):
+                data_hex = bytes(raw).hex()
+                asset["data_hex"] = data_hex
+
+        comment_parts = [f'relationship="{rel_id}"']
+        if width_emu is not None:
+            comment_parts.append(f'width="{int(width_emu)}"')
+        if height_emu is not None:
+            comment_parts.append(f'height="{int(height_emu)}"')
+        comment = " ".join(comment_parts)
+        blip_fill = f'<a:blipFill rotWithShape="0"><a:blip r:embed="{rel_id}"'
+        if data_hex:
+            blip_fill += f'><a:extLst><a:ext uri="{{28A0092B-C50C-407E-A947-70E740481C1C}}">{data_hex}</a:ext></a:extLst></a:blip></a:blipFill>'
+        else:
+            blip_fill += "/></a:blipFill>"
+        return f'<a:effectLst><!-- svg2ooxml:emf {comment} -->{blip_fill}</a:effectLst>'
+
+    def _placeholder_raster(self, metadata: dict[str, object], result: FilterResult) -> str:
+        assets_list = metadata.get("fallback_assets")
+        existing_asset: dict[str, object] | None = None
+        if isinstance(assets_list, list):
+            for asset in assets_list:
+                if isinstance(asset, dict) and asset.get("type") == "raster":
+                    existing_asset = asset
+                    break
+
+        if existing_asset is not None:
+            rel_id = existing_asset.get("relationship_id")
+            if not isinstance(rel_id, str) or not rel_id:
+                rel_id = f"rIdRasterReuse{self._raster_adapter._counter + 1}"
+                existing_asset["relationship_id"] = rel_id
+            width_px = existing_asset.get("width_px")
+            height_px = existing_asset.get("height_px")
+            data_hex = existing_asset.get("data_hex")
+            if not data_hex:
+                raw = existing_asset.get("data")
+                if isinstance(raw, (bytes, bytearray)):
+                    data_hex = bytes(raw).hex()
+                    existing_asset["data_hex"] = data_hex
+            comment_parts = [f'relationship="{rel_id}"']
+            if width_px is not None:
+                comment_parts.append(f'width="{int(width_px)}"')
+            if height_px is not None:
+                comment_parts.append(f'height="{int(height_px)}"')
+            comment = " ".join(comment_parts)
+            blip_fill = f'<a:blipFill rotWithShape="0"><a:blip r:embed="{rel_id}"'
+            if data_hex:
+                blip_fill += f'><a:extLst><a:ext uri="{{svg2ooxml:raster}}">{data_hex}</a:ext></a:extLst></a:blip></a:blipFill>'
+            else:
+                blip_fill += "/></a:blipFill>"
+            return f'<a:effectLst><!-- svg2ooxml:raster {comment} -->{blip_fill}</a:effectLst>'
+
+        placeholder_meta: dict[str, object] = {}
+        for key in ("policy", "radius_effective", "alpha", "color", "radius_max"):
+            if key in metadata:
+                placeholder_meta[key] = metadata[key]
+
+        raster = self._raster_adapter.generate_placeholder(metadata=placeholder_meta)
+        assets = metadata.setdefault("fallback_assets", [])
+        if isinstance(assets, list):
+            assets.append(
+                {
+                    "type": "raster",
+                    "relationship_id": raster.relationship_id,
+                    "width_px": raster.width_px,
+                    "height_px": raster.height_px,
+                    "metadata": raster.metadata,
+                    "data_hex": raster.image_bytes.hex(),
+                }
+            )
+        data_hex = raster.image_bytes.hex()
+        return (
+            "<a:effectLst>"
+            f"<!-- svg2ooxml:raster relationship=\"{raster.relationship_id}\" size=\"{len(raster.image_bytes)}\" -->"
+            f"<a:blipFill rotWithShape=\"0\"><a:blip r:embed=\"{raster.relationship_id}\"><a:extLst><a:ext uri=\"{{svg2ooxml:raster}}\">{data_hex}</a:ext></a:extLst></a:blip></a:blipFill>"
+            "</a:effectLst>"
+        )
+
+    def _ensure_emf_asset(self, metadata: dict[str, object], result: FilterResult) -> dict[str, object] | None:
+        asset = self._active_emf_asset(metadata)
+        if asset is not None:
+            return asset
+
+        filter_type = self._filter_type(metadata, result)
+        try:
+            source_meta = result.metadata if isinstance(result.metadata, dict) else metadata
+            if isinstance(source_meta, dict):
+                source_meta = dict(source_meta)
+            else:
+                source_meta = metadata if isinstance(metadata, dict) else {}
+            emf = self._emf_adapter.render_filter(filter_type, source_meta)
+        except Exception:
+            self._logger.debug("Failed to render EMF for filter %s", filter_type, exc_info=True)
+            return None
+
+        asset = {
+            "type": "emf",
+            "relationship_id": emf.relationship_id,
+            "width_emu": emf.width_emu,
+            "height_emu": emf.height_emu,
+            "metadata": emf.metadata,
+            "data_hex": emf.emf_bytes.hex(),
+        }
+        assets = metadata.setdefault("fallback_assets", [])
+        if isinstance(assets, list):
+            assets.append(asset)
+        emf_meta = metadata.setdefault("emf_asset", {})
+        if isinstance(emf_meta, dict):
+            emf_meta.setdefault("width_emu", emf.width_emu)
+            emf_meta.setdefault("height_emu", emf.height_emu)
+            emf_meta.setdefault("filter_type", emf.metadata.get("filter_type", filter_type))
+        return asset
+
+    def _active_emf_asset(self, metadata: dict[str, object]) -> dict[str, object] | None:
+        assets_list = metadata.get("fallback_assets")
+        if isinstance(assets_list, list):
+            for asset in assets_list:
+                if isinstance(asset, dict) and asset.get("type") == "emf":
+                    return asset
+        return None
+
+    def _filter_type(self, metadata: dict[str, object], result: FilterResult) -> str:
+        if isinstance(metadata, dict):
+            token = metadata.get("filter_type")
+            if isinstance(token, str) and token:
+                return token
+        meta = result.metadata if isinstance(result.metadata, dict) else {}
+        token = meta.get("filter_type") if isinstance(meta, dict) else None
+        if isinstance(token, str) and token:
+            return token
+        return "generic"
+
+    def _allocate_reuse_id(self) -> str:
+        self._reuse_counter += 1
+        return f"rIdEmfReuse{self._reuse_counter}"
+
+    def _policy_from_context(self, context: FilterContext | None) -> dict[str, object] | None:
+        if context is None:
+            return None
+        options = getattr(context, "options", None)
+        if isinstance(options, dict):
+            policy_opts = options.get("policy")
+            if isinstance(policy_opts, dict):
+                filter_policy = policy_opts.get("filter")
+                if isinstance(filter_policy, dict):
+                    return filter_policy
+        return None
+
+
+__all__ = ["FilterRenderer"]

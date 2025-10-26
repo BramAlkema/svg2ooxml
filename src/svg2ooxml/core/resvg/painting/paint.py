@@ -1,0 +1,159 @@
+"""Paint resolution helpers for fill/stroke styles."""
+
+from __future__ import annotations
+
+import re
+from dataclasses import dataclass
+from typing import Optional, Tuple
+
+from .colors import parse_rgb
+
+_HEX_SHORT_RE = re.compile(r"^#([0-9a-fA-F]{3})$")
+_HEX_FULL_RE = re.compile(r"^#([0-9a-fA-F]{6})$")
+_RGB_RE = re.compile(r"^rgb\(([^)]+)\)$")
+_URL_RE = re.compile(r"url\((#[^)]+)\)")
+
+
+@dataclass(frozen=True)
+class Color:
+    r: float
+    g: float
+    b: float
+    a: float = 1.0
+
+
+@dataclass(frozen=True)
+class PaintReference:
+    href: str
+
+
+@dataclass(frozen=True)
+class FillStyle:
+    color: Optional[Color]
+    opacity: float
+    reference: Optional[PaintReference]
+
+
+@dataclass(frozen=True)
+class StrokeStyle:
+    color: Optional[Color]
+    width: Optional[float]
+    opacity: float
+    reference: Optional[PaintReference]
+
+
+@dataclass(frozen=True)
+class TextStyle:
+    font_families: Tuple[str, ...]
+    font_size: Optional[float]
+    font_style: Optional[str]
+    font_weight: Optional[str]
+
+
+def _clamp(value: float, minimum: float = 0.0, maximum: float = 1.0) -> float:
+    return max(minimum, min(maximum, value))
+
+
+def _parse_component(value: str) -> Optional[int]:
+    value = value.strip()
+    if value.endswith("%"):
+        try:
+            pct = float(value[:-1])
+        except ValueError:
+            return None
+        return int(_clamp(pct / 100.0) * 255)
+    try:
+        return int(value)
+    except ValueError:
+        return None
+
+
+def _parse_rgb_function(value: str) -> Optional[tuple[int, int, int]]:
+    match = _RGB_RE.match(value)
+    if not match:
+        return None
+    parts = [part.strip() for part in match.group(1).split(",")]
+    if len(parts) != 3:
+        return None
+    comps = [_parse_component(part) for part in parts]
+    if any(comp is None for comp in comps):
+        return None
+    return tuple(int(comp) for comp in comps)
+
+
+def parse_color(value: Optional[str], opacity: Optional[float]) -> Optional[Color]:
+    if value is None:
+        return None
+    value = value.strip()
+    rgb: Optional[tuple[int, int, int]] = None
+    if match := _HEX_SHORT_RE.match(value):
+        hex_value = match.group(1)
+        rgb = tuple(int(ch * 2, 16) for ch in hex_value)
+    elif _HEX_FULL_RE.match(value):
+        rgb = parse_rgb(value)
+    else:
+        rgb = _parse_rgb_function(value)
+
+    if rgb is None:
+        return None
+
+    a = _clamp(opacity if opacity is not None else 1.0)
+    return Color(r=rgb[0] / 255.0, g=rgb[1] / 255.0, b=rgb[2] / 255.0, a=a)
+
+
+def resolve_fill(fill_value: Optional[str], fill_opacity: Optional[float], opacity: Optional[float]) -> FillStyle:
+    effective_opacity = (fill_opacity if fill_opacity is not None else 1.0) * (
+        opacity if opacity is not None else 1.0
+    )
+    reference = None
+    if fill_value:
+        match = _URL_RE.match(fill_value.strip())
+        if match:
+            reference = PaintReference(href=match.group(1))
+            color = None
+        else:
+            color = parse_color(fill_value, effective_opacity)
+    else:
+        color = None
+    return FillStyle(color=color, opacity=effective_opacity, reference=reference)
+
+
+def resolve_stroke(
+    stroke_value: Optional[str],
+    stroke_width: Optional[float],
+    stroke_opacity: Optional[float],
+    opacity: Optional[float],
+) -> StrokeStyle:
+    effective_opacity = (stroke_opacity if stroke_opacity is not None else 1.0) * (
+        opacity if opacity is not None else 1.0
+    )
+    reference = None
+    if stroke_value:
+        match = _URL_RE.match(stroke_value.strip())
+        if match:
+            reference = PaintReference(href=match.group(1))
+            color = None
+        else:
+            color = parse_color(stroke_value, effective_opacity)
+    else:
+        color = None
+    return StrokeStyle(color=color, width=stroke_width, opacity=effective_opacity, reference=reference)
+
+
+def resolve_text_style(font_family: Optional[str], font_size: Optional[float], font_style: Optional[str], font_weight: Optional[str]) -> TextStyle:
+    families: Tuple[str, ...]
+    if font_family:
+        families = tuple(
+            part.strip().strip("'\"")
+            for part in font_family.split(",")
+            if part.strip().strip("'\"")
+        )
+    else:
+        families = ()
+
+    return TextStyle(
+        font_families=families,
+        font_size=font_size,
+        font_style=font_style.strip() if font_style else None,
+        font_weight=font_weight.strip() if font_weight else None,
+    )

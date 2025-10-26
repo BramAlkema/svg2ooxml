@@ -1,0 +1,28 @@
+<p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+      xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+    <p:nvSpPr>
+        <p:cNvPr id="{SHAPE_ID}" name="{SHAPE_NAME}">{HYPERLINK_XML}</p:cNvPr>
+        <p:cNvSpPr/>
+        <p:nvPr/>
+    </p:nvSpPr>
+    <p:spPr>
+        <a:xfrm>
+            <a:off x="{X_EMU}" y="{Y_EMU}"/>
+            <a:ext cx="{WIDTH_EMU}" cy="{HEIGHT_EMU}"/>
+        </a:xfrm>
+        <a:prstGeom prst="rect">
+            <a:avLst/>
+        </a:prstGeom>
+        <a:noFill/>
+{CLIP_PATH_XML}{MASK_XML}
+    </p:spPr>
+    <p:txBody>
+        <a:bodyPr>
+{BODY_EXTRA}        </a:bodyPr>
+        <a:lstStyle/>
+        <a:p>
+            <a:pPr algn="{TEXT_ALIGN}"/>
+            {RUNS_XML}
+        </a:p>
+    </p:txBody>
+</p:sp>

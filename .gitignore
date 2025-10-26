@@ -1,0 +1,24 @@
+# Python environments
+.venv/
+.venv_*/
+__pycache__/
+
+# Tooling caches and coverage
+.pytest_cache/
+.ruff_cache/
+.coverage
+.benchmarks/
+.mypy_cache/
+
+# Editor / OS artefacts
+.DS_Store
+*.swp
+
+# Local build and temp dirs
+tmp/
+.tmp_render/
+.visual_tmp/
+reports/
+
+# Misc generated files
+Untitled *.pptx
