@@ -1,0 +1,32 @@
+substitutions:
+  _REGION: us-central1
+  _SERVICE: svg2ooxml-export
+  _REPOSITORY: svg2ooxml-packages
+  _IMAGE: svg2ooxml-service
+
+steps:
+  - name: gcr.io/k8s-skaffold/pack
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        pack build us-central1-docker.pkg.dev/$PROJECT_ID/$_REPOSITORY/$_IMAGE:$COMMIT_SHA \
+          --path . \
+          --builder gcr.io/buildpacks/builder:v1 \
+          --tag us-central1-docker.pkg.dev/$PROJECT_ID/$_REPOSITORY/$_IMAGE:latest
+
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        gcloud run deploy $_SERVICE \
+          --image us-central1-docker.pkg.dev/$PROJECT_ID/$_REPOSITORY/$_IMAGE:$COMMIT_SHA \
+          --region $_REGION \
+          --platform managed \
+          --service-account svg2ooxml-runner@$PROJECT_ID.iam.gserviceaccount.com \
+          --allow-unauthenticated
+
+images:
+  - us-central1-docker.pkg.dev/$PROJECT_ID/$_REPOSITORY/$_IMAGE:$COMMIT_SHA
+  - us-central1-docker.pkg.dev/$PROJECT_ID/$_REPOSITORY/$_IMAGE:latest
