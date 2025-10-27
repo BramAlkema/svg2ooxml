@@ -9,14 +9,12 @@ options:
 
 steps:
   - name: gcr.io/k8s-skaffold/pack
-    entrypoint: bash
     args:
-      - -c
-      - |
-        pack build $_REGION-docker.pkg.dev/$PROJECT_ID/$_REPOSITORY/$_IMAGE:$COMMIT_SHA \
-          --path . \
-          --builder gcr.io/buildpacks/builder:v1 \
-          --tag $_REGION-docker.pkg.dev/$PROJECT_ID/$_REPOSITORY/$_IMAGE:latest
+      - build
+      - $_REGION-docker.pkg.dev/$PROJECT_ID/$_REPOSITORY/$_IMAGE:$COMMIT_SHA
+      - --path=.
+      - --builder=gcr.io/buildpacks/builder:v1
+      - --tag=$_REGION-docker.pkg.dev/$PROJECT_ID/$_REPOSITORY/$_IMAGE:latest
 
   - name: gcr.io/google.com/cloudsdktool/cloud-sdk
     entrypoint: bash
