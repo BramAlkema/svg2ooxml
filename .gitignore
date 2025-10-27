@@ -22,3 +22,12 @@ reports/
 
 # Misc generated files
 Untitled *.pptx
+
+# Cloud credentials (never commit!)
+service-account*.json
+credentials.json
+*-key.json
+
+# Local environment variables
+.env
+.env.local

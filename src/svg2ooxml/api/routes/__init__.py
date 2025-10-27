@@ -5,12 +5,13 @@ from typing import Any as _Any
 
 __all__ = [
     'register_svg_routes',
-    'svg'
+    'svg',
+    'export_router'
 ]
 
 # map symbol -> relative module
-_symbol_map = {'register_svg_routes': 'svg'}
-_module_map = {'svg': 'svg'}
+_symbol_map = {'register_svg_routes': 'svg', 'export_router': 'export'}
+_module_map = {'svg': 'svg', 'export': 'export'}
 
 
 def __getattr__(name: str) -> _Any:  # PEP 562
