@@ -8,7 +8,7 @@ from functools import lru_cache
 from huey import MemoryHuey, RedisHuey
 from huey.api import Huey
 
-from svg2ooxml.api.services.export_service import ExportService
+from ..services.export_service import ExportService
 
 
 @lru_cache(maxsize=1)
