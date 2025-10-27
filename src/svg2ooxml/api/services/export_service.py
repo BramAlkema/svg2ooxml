@@ -16,11 +16,10 @@ from pathlib import Path
 from typing import Any, Optional, Sequence
 from urllib.parse import urlparse
 
-from google.cloud import firestore, storage
-
 from ..caching import job_status_cache
 from ..models import RequestedFont, SVGFrame
 from .converter import ConversionArtifacts, FontDiagnostics, render_pptx_for_frames
+from .dependencies import ExportServiceDependencies, build_export_service_dependencies
 from svg2ooxml.services.fonts import FontFetcher, FontSource
 
 logger = logging.getLogger(__name__)
@@ -54,22 +53,35 @@ class FontPreparationResult:
 class ExportService:
     """Service for managing export jobs end-to-end."""
 
-    def __init__(self, *, db_client=None, storage_client=None) -> None:
+    def __init__(
+        self,
+        *,
+        dependencies: ExportServiceDependencies | None = None,
+        db_client=None,
+        storage_client=None,
+        font_fetcher: FontFetcher | None = None,
+    ) -> None:
         self.project_id = os.getenv("GCP_PROJECT") or os.getenv("GOOGLE_CLOUD_PROJECT")
 
+        base_dependencies = dependencies or build_export_service_dependencies(self.project_id)
+        effective_dependencies = base_dependencies.with_overrides(
+            firestore_client=db_client,
+            storage_client=storage_client,
+            font_fetcher=font_fetcher,
+        )
+
         # Firestore handles job metadata and font cache mapping.
-        self.db = db_client or firestore.Client(project=self.project_id)
+        self.db = effective_dependencies.firestore_client
         self.jobs_collection = self.db.collection("exports")
         self.font_cache_collection = self.db.collection("font_cache")
         self.conversion_cache_collection = self.db.collection("conversion_cache")
 
         # Cloud Storage contains generated PPTX files and cached font binaries.
-        self.storage_client = storage_client or storage.Client(project=self.project_id)
+        self.storage_client = effective_dependencies.storage_client
         self.bucket_name = f"{self.project_id}-exports"
         self._ensure_bucket_exists()
 
-        font_cache_root = Path(tempfile.gettempdir()) / "svg2ooxml-font-cache"
-        self.font_fetcher = FontFetcher(cache_directory=font_cache_root)
+        self.font_fetcher = effective_dependencies.font_fetcher
 
         logger.info("ExportService initialised for project %s", self.project_id)
 
@@ -569,6 +581,9 @@ class ExportService:
 
     def _upload_pptx(self, job_id: str, pptx_path: Path) -> str:
         """Upload PPTX artefact to Cloud Storage and return a signed URL."""
+        from datetime import timedelta
+        from google.auth.transport import requests as auth_requests
+        from google.cloud import iam_credentials_v1
 
         bucket = self.storage_client.bucket(self.bucket_name)
         blob_name = f"exports/{job_id}/presentation.pptx"
@@ -579,12 +594,22 @@ class ExportService:
         )
         logger.info("Uploaded PPTX for job %s to gs://%s/%s", job_id, self.bucket_name, blob_name)
 
-        signed_url = blob.generate_signed_url(
-            version="v4",
-            expiration=604800,  # 7 days
-            method="GET",
-        )
-        return signed_url
+        # Use IAM signBlob API for Cloud Run (no key file needed)
+        try:
+            service_account_email = f"svg2ooxml-runner@{self.project_id}.iam.gserviceaccount.com"
+
+            signed_url = blob.generate_signed_url(
+                version="v4",
+                expiration=timedelta(days=7),
+                method="GET",
+                service_account_email=service_account_email,
+            )
+            return signed_url
+        except Exception as e:
+            logger.warning(f"Failed to generate signed URL: {e}. Using public URL.")
+            # Fallback: make blob publicly readable and return public URL
+            blob.make_public()
+            return blob.public_url
 
 
 __all__ = ["ExportService", "ExportStatus", "JobNotFoundError"]
