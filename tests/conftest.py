@@ -1,18 +1,35 @@
-"""Pytest configuration to locate the src package."""
-
 from __future__ import annotations
 
 import sys
-from pathlib import Path
+import types
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-SRC_PATH = PROJECT_ROOT / "src"
 
-if str(SRC_PATH) not in sys.path:
-    sys.path.insert(0, str(SRC_PATH))
+if "google.cloud" not in sys.modules:  # pragma: no cover - used for test isolation
+    cloud_pkg = types.ModuleType("google.cloud")
 
-# Register shared fixtures for visual tests.
-try:  # pragma: no cover - optional dependency path
-    from tests.visual.helpers import visual_tools  # noqa: F401
-except ImportError:
-    pass
+    class _StubClient:  # pragma: no cover - simple stub
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def collection(self, *_args, **_kwargs):
+            raise RuntimeError("Stub Firestore client does not provide collections")
+
+    firestore_mod = types.ModuleType("google.cloud.firestore")
+    firestore_mod.Client = _StubClient
+
+    class _StubStorageClient:  # pragma: no cover
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def bucket(self, *_args, **_kwargs):
+            raise RuntimeError("Stub storage client does not provide buckets")
+
+    storage_mod = types.ModuleType("google.cloud.storage")
+    storage_mod.Client = _StubStorageClient
+
+    cloud_pkg.firestore = firestore_mod
+    cloud_pkg.storage = storage_mod
+
+    sys.modules["google.cloud"] = cloud_pkg
+    sys.modules["google.cloud.firestore"] = firestore_mod
+    sys.modules["google.cloud.storage"] = storage_mod

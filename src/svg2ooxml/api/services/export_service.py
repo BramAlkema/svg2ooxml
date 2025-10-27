@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 import os
 import shutil
@@ -53,16 +54,17 @@ class FontPreparationResult:
 class ExportService:
     """Service for managing export jobs end-to-end."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, db_client=None, storage_client=None) -> None:
         self.project_id = os.getenv("GCP_PROJECT") or os.getenv("GOOGLE_CLOUD_PROJECT")
 
         # Firestore handles job metadata and font cache mapping.
-        self.db = firestore.Client(project=self.project_id)
+        self.db = db_client or firestore.Client(project=self.project_id)
         self.jobs_collection = self.db.collection("exports")
         self.font_cache_collection = self.db.collection("font_cache")
+        self.conversion_cache_collection = self.db.collection("conversion_cache")
 
         # Cloud Storage contains generated PPTX files and cached font binaries.
-        self.storage_client = storage.Client(project=self.project_id)
+        self.storage_client = storage_client or storage.Client(project=self.project_id)
         self.bucket_name = f"{self.project_id}-exports"
         self._ensure_bucket_exists()
 
@@ -208,12 +210,20 @@ class ExportService:
             tmp_dir = Path(tempfile.mkdtemp(prefix=f"svg2ooxml-job-{job_id}-"))
             pptx_path = tmp_dir / "presentation.pptx"
 
-            conversion = render_pptx_for_frames(
-                frames,
-                pptx_path,
-                requested_fonts=requested_fonts,
-                extra_font_directories=font_prep.directories,
-            )
+            cache_key = self._build_conversion_cache_key(frames, requested_fonts)
+            cached = self._maybe_load_cached_conversion(cache_key, pptx_path)
+
+            if cached is not None:
+                summary = cached
+            else:
+                conversion = render_pptx_for_frames(
+                    frames,
+                    pptx_path,
+                    requested_fonts=requested_fonts,
+                    extra_font_directories=font_prep.directories,
+                )
+                summary = self._build_conversion_summary(conversion, font_prep, requested_fonts)
+                self._store_conversion_cache(cache_key, summary, conversion.pptx_path)
 
             self.update_job_status(
                 job_id=job_id,
@@ -222,12 +232,10 @@ class ExportService:
                 progress=80.0,
             )
 
-            pptx_url = self._upload_pptx(job_id, conversion.pptx_path)
+            pptx_url = self._upload_pptx(job_id, pptx_path)
 
             slides_url = None
             thumbnail_urls = None
-
-            summary = self._build_conversion_summary(conversion, font_prep, requested_fonts)
 
             self.update_job_status(
                 job_id=job_id,
@@ -359,6 +367,78 @@ class ExportService:
             downloaded_fonts=downloaded,
             missing_sources=missing_sources,
         )
+
+    def _build_conversion_cache_key(
+        self,
+        frames: Sequence[SVGFrame],
+        fonts: Sequence[RequestedFont],
+    ) -> str:
+        """Return a hash representing the conversion inputs."""
+
+        hasher = hashlib.sha256()
+        version = os.getenv("SVG2OOXML_CACHE_VERSION", "v1")
+        hasher.update(version.encode("utf-8"))
+        for frame in frames:
+            hasher.update((frame.name or "").encode("utf-8"))
+            hasher.update(str(frame.width).encode("utf-8"))
+            hasher.update(str(frame.height).encode("utf-8"))
+            hasher.update(frame.svg_content.encode("utf-8"))
+        for font in fonts:
+            hasher.update(font.family.encode("utf-8"))
+            if font.source_url:
+                hasher.update(str(font.source_url).encode("utf-8"))
+            hasher.update(str(font.weight or 0).encode("utf-8"))
+            hasher.update(font.style.encode("utf-8"))
+        return hasher.hexdigest()
+
+    def _maybe_load_cached_conversion(
+        self,
+        cache_key: str,
+        target_path: Path,
+    ) -> dict[str, Any] | None:
+        """Download cached PPTX if available; return summary metadata."""
+
+        doc = self.conversion_cache_collection.document(cache_key).get()
+        if not doc.exists:
+            return None
+
+        metadata = doc.to_dict()
+        bucket = self.storage_client.bucket(self.bucket_name)
+        blob = bucket.blob(f"exports/cache/{cache_key}.pptx")
+        if not blob.exists():
+            self.conversion_cache_collection.document(cache_key).delete()
+            return None
+
+        blob.download_to_filename(str(target_path))
+        summary_json = metadata.get("summary")
+        if isinstance(summary_json, str):
+            return json.loads(summary_json)
+        if isinstance(summary_json, dict):
+            return summary_json
+        return None
+
+    def _store_conversion_cache(
+        self,
+        cache_key: str,
+        summary: dict[str, Any],
+        pptx_path: Path,
+    ) -> None:
+        """Persist conversion output for reuse."""
+
+        bucket = self.storage_client.bucket(self.bucket_name)
+        blob = bucket.blob(f"exports/cache/{cache_key}.pptx")
+        blob.upload_from_filename(
+            str(pptx_path),
+            content_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        )
+
+        payload = {
+            "summary": json.dumps(summary),
+            "cache_key": cache_key,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "version": os.getenv("SVG2OOXML_CACHE_VERSION", "v1"),
+        }
+        self.conversion_cache_collection.document(cache_key).set(payload)
 
     def _fetch_font_asset(
         self,
