@@ -45,6 +45,14 @@ slides = [
   "google-auth>=2.26",
   "google-auth-oauthlib>=1.2"
 ]
+api = [
+  "fastapi>=0.109.0",
+  "uvicorn[standard]>=0.27.0",
+  "pydantic>=2.5.3",
+  "python-multipart>=0.0.6",
+  "google-cloud-firestore>=2.14.0",
+  "google-cloud-storage>=2.14.0"
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]
