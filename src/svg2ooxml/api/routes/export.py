@@ -3,59 +3,17 @@
 from __future__ import annotations
 
 import logging
-from typing import Optional
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, status
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, HTTPException, status
+from fastapi.concurrency import run_in_threadpool
 
+from ..background import enqueue_export_job
+from ..models import ExportRequest, ExportResponse, JobStatusResponse
 from ..services.export_service import ExportService, ExportStatus, JobNotFoundError
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-
-
-class SVGFrame(BaseModel):
-    """Single SVG frame to convert."""
-
-    name: str = Field(..., description="Frame name from Figma")
-    svg_content: str = Field(..., description="SVG content as string")
-    width: float = Field(..., gt=0, description="Frame width in pixels")
-    height: float = Field(..., gt=0, description="Frame height in pixels")
-
-
-class ExportRequest(BaseModel):
-    """Request payload for creating an export job."""
-
-    frames: list[SVGFrame] = Field(..., min_length=1, description="SVG frames to convert")
-    figma_file_id: Optional[str] = Field(None, description="Figma file ID for reference")
-    figma_file_name: Optional[str] = Field(None, description="Figma file name")
-    output_format: str = Field("pptx", pattern="^(pptx|slides)$", description="Output format")
-    fonts: Optional[list[str]] = Field(None, description="Custom fonts used in the design")
-
-
-class ExportResponse(BaseModel):
-    """Response after creating an export job."""
-
-    job_id: str = Field(..., description="Unique job identifier")
-    status: str = Field(..., description="Current job status")
-    message: str = Field(..., description="Human-readable status message")
-
-
-class JobStatusResponse(BaseModel):
-    """Response for job status queries."""
-
-    job_id: str
-    status: str
-    message: str
-    progress: float = Field(..., ge=0, le=100, description="Progress percentage")
-    pptx_url: Optional[str] = Field(None, description="Cloud Storage signed URL for PPTX")
-    slides_url: Optional[str] = Field(None, description="Google Slides public URL")
-    thumbnail_urls: Optional[list[str]] = Field(None, description="Slide thumbnail URLs")
-    error: Optional[str] = Field(None, description="Error message if job failed")
-    created_at: str
-    updated_at: str
-
 
 # Initialize service
 export_service = ExportService()
@@ -64,7 +22,6 @@ export_service = ExportService()
 @router.post("/export", response_model=ExportResponse, status_code=status.HTTP_202_ACCEPTED)
 async def create_export_job(
     request: ExportRequest,
-    background_tasks: BackgroundTasks,
 ) -> ExportResponse:
     """
     Create a new export job to convert Figma SVG frames to PowerPoint/Slides.
@@ -83,7 +40,8 @@ async def create_export_job(
         )
 
         # Create job in Firestore
-        job_id = await export_service.create_job(
+        job_id = await run_in_threadpool(
+            export_service.create_job,
             frames=request.frames,
             figma_file_id=request.figma_file_id,
             figma_file_name=request.figma_file_name,
@@ -92,10 +50,7 @@ async def create_export_job(
         )
 
         # Queue background processing
-        background_tasks.add_task(
-            export_service.process_job,
-            job_id=job_id,
-        )
+        enqueue_export_job(job_id)
 
         return ExportResponse(
             job_id=job_id,
@@ -121,7 +76,7 @@ async def get_job_status(job_id: str) -> JobStatusResponse:
     - **job_id**: The unique identifier returned when creating the job
     """
     try:
-        job_data = await export_service.get_job_status(job_id)
+        job_data = await run_in_threadpool(export_service.get_job_status, job_id)
 
         return JobStatusResponse(
             job_id=job_id,
@@ -134,6 +89,8 @@ async def get_job_status(job_id: str) -> JobStatusResponse:
             error=job_data.get("error"),
             created_at=job_data["created_at"],
             updated_at=job_data["updated_at"],
+            conversion_summary=job_data.get("conversion_summary"),
+            font_summary=job_data.get("font_summary"),
         )
 
     except JobNotFoundError:
@@ -159,7 +116,7 @@ async def delete_job(job_id: str):
     - **job_id**: The unique identifier of the job to delete
     """
     try:
-        await export_service.delete_job(job_id)
+        await run_in_threadpool(export_service.delete_job, job_id)
         return None
 
     except JobNotFoundError:

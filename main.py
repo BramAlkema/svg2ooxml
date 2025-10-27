@@ -12,6 +12,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from src.svg2ooxml.api.routes.export import router as export_router
+from src.svg2ooxml.api.middleware import RateLimiter, RateLimitMiddleware
+
+
+RATE_LIMIT = int(os.getenv("SVG2OOXML_RATE_LIMIT", "60"))
+RATE_WINDOW_SECONDS = int(os.getenv("SVG2OOXML_RATE_WINDOW", "60"))
 
 # Configure logging
 logging.basicConfig(
@@ -57,6 +62,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Basic per-client rate limiting middleware
+rate_limiter = RateLimiter(limit=RATE_LIMIT, window_seconds=RATE_WINDOW_SECONDS)
+app.add_middleware(RateLimitMiddleware, limiter=rate_limiter)
 
 # Include routers
 app.include_router(export_router, prefix="/api/v1", tags=["export"])

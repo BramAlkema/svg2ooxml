@@ -3,6 +3,8 @@ fastapi==0.109.0
 uvicorn[standard]==0.27.0
 pydantic==2.5.3
 python-multipart==0.0.6
+huey==2.4.5
+redis==5.0.1
 
 # Google Cloud dependencies
 google-cloud-firestore==2.14.0
