@@ -15,6 +15,7 @@ steps:
       - --path=.
       - --builder=gcr.io/buildpacks/builder:v1
       - --tag=$_REGION-docker.pkg.dev/$PROJECT_ID/$_REPOSITORY/$_IMAGE:latest
+      - --publish
 
   - name: gcr.io/google.com/cloudsdktool/cloud-sdk
     args:
