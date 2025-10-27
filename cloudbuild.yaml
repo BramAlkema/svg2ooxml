@@ -28,4 +28,4 @@ steps:
       - --platform=managed
       - --service-account=svg2ooxml-runner@$PROJECT_ID.iam.gserviceaccount.com
       - --allow-unauthenticated
-      - --set-env-vars=PYTHONPATH=/workspace/src
+      - --set-env-vars=PYTHONPATH=/workspace/src,GCP_PROJECT=$PROJECT_ID
