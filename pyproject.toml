@@ -59,8 +59,7 @@ cloud = [
   "google-auth-oauthlib>=1.2.0"
 ]
 worker = [
-  "huey>=2.4.5",
-  "redis>=5.0.1"
+  "huey[redis]>=2.4.5"
 ]
 
 [tool.setuptools.packages.find]
