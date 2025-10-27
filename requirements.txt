@@ -1,27 +1,34 @@
-# Core dependencies
-fastapi==0.109.0
-uvicorn[standard]==0.27.0
-pydantic==2.5.3
-python-multipart==0.0.6
-huey==2.4.5
-redis==5.0.1
-
-# Google Cloud dependencies
-google-cloud-firestore==2.14.0
-google-cloud-storage==2.14.0
-google-api-python-client==2.130.0
-google-auth==2.26.2
-google-auth-oauthlib==1.2.0
-
-# svg2ooxml dependencies
+# Runtime dependencies for svg2ooxml Cloud Run deployment
+# Core
 tinycss2>=1.2
 click>=8.1
+lxml>=4.9.0
+
+# API
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+pydantic>=2.5.3
+python-multipart>=0.0.6
+
+# Cloud (Google Cloud Platform)
+google-cloud-firestore>=2.14.0
+google-cloud-storage>=2.14.0
+google-cloud-iam>=2.14.0
+google-cloud-tasks>=2.16.0
+google-api-python-client>=2.130
+google-auth>=2.26
+google-auth-oauthlib>=1.2.0
+
+# Worker (kept for compatibility, but using Cloud Tasks instead)
+huey>=2.4.5
+redis>=5.0.1
+
+# Rendering
+skia-python>=87.5
+Pillow>=10.0
 numpy>=1.24
 colorspacious>=1.1.0
-Pillow>=10.0
-skia-python>=87.5
-cryptography>=41.0
 
-# Office Open XML
-python-pptx==0.6.23
-lxml>=4.9.0
+# Presentations
+python-pptx>=0.6.23
+cryptography>=41.0
