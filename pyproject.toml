@@ -14,7 +14,8 @@ authors = [
 license = { text = "TBD" }
 dependencies = [
   "tinycss2>=1.2",
-  "click>=8.1"
+  "click>=8.1",
+  "lxml>=4.9.0"
 ]
 
 [project.optional-dependencies]

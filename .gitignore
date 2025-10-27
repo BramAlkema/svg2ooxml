@@ -31,3 +31,6 @@ credentials.json
 # Local environment variables
 .env
 .env.local
+
+# Documentation (local notes)
+docs/adr/*.md
