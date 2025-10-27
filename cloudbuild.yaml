@@ -28,7 +28,3 @@ steps:
       - --platform=managed
       - --service-account=svg2ooxml-runner@$PROJECT_ID.iam.gserviceaccount.com
       - --allow-unauthenticated
-
-images:
-  - $_REGION-docker.pkg.dev/$PROJECT_ID/$_REPOSITORY/$_IMAGE:$COMMIT_SHA
-  - $_REGION-docker.pkg.dev/$PROJECT_ID/$_REPOSITORY/$_IMAGE:latest
