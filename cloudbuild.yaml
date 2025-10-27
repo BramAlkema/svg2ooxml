@@ -1,8 +1,11 @@
 substitutions:
   _REGION: europe-west1
   _SERVICE: svg2ooxml-export
-  _REPOSITORY: svg2ooxml-packages
+  _REPOSITORY: svg2ooxml
   _IMAGE: svg2ooxml-service
+
+options:
+  logging: CLOUD_LOGGING_ONLY
 
 steps:
   - name: gcr.io/k8s-skaffold/pack
