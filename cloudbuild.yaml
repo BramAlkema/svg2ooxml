@@ -17,16 +17,16 @@ steps:
       - --tag=$_REGION-docker.pkg.dev/$PROJECT_ID/$_REPOSITORY/$_IMAGE:latest
 
   - name: gcr.io/google.com/cloudsdktool/cloud-sdk
-    entrypoint: bash
     args:
-      - -c
-      - |
-        gcloud run deploy $_SERVICE \
-          --image $_REGION-docker.pkg.dev/$PROJECT_ID/$_REPOSITORY/$_IMAGE:$COMMIT_SHA \
-          --region $_REGION \
-          --platform managed \
-          --service-account svg2ooxml-runner@$PROJECT_ID.iam.gserviceaccount.com \
-          --allow-unauthenticated
+      - gcloud
+      - run
+      - deploy
+      - $_SERVICE
+      - --image=$_REGION-docker.pkg.dev/$PROJECT_ID/$_REPOSITORY/$_IMAGE:$COMMIT_SHA
+      - --region=$_REGION
+      - --platform=managed
+      - --service-account=svg2ooxml-runner@$PROJECT_ID.iam.gserviceaccount.com
+      - --allow-unauthenticated
 
 images:
   - $_REGION-docker.pkg.dev/$PROJECT_ID/$_REPOSITORY/$_IMAGE:$COMMIT_SHA
