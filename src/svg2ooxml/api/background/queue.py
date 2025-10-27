@@ -41,4 +41,4 @@ def process_export_job(job_id: str) -> None:
 def enqueue_export_job(job_id: str) -> None:
     """Schedule an export job for asynchronous processing."""
 
-    huey.enqueue(process_export_job, job_id)
+    process_export_job(job_id)
