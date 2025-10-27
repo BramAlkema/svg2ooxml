@@ -36,7 +36,7 @@ steps:
     args:
       - -c
       - |
-        SERVICE_URL=$(gcloud run services describe $_SERVICE --region=$_REGION --format="value(status.url)")
+        SERVICE_URL=$$(gcloud run services describe $_SERVICE --region=$_REGION --format="value(status.url)")
         gcloud run services update $_SERVICE \
           --region=$_REGION \
-          --update-env-vars=SERVICE_URL=$SERVICE_URL
+          --update-env-vars=SERVICE_URL=$$SERVICE_URL
