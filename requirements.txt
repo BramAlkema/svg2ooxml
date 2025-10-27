@@ -3,6 +3,7 @@
 tinycss2>=1.2
 click>=8.1
 lxml>=4.9.0
+packaging>=23.0
 
 # API
 fastapi>=0.109.0
