@@ -5,9 +5,8 @@ from __future__ import annotations
 import os
 from functools import lru_cache
 
-from huey import MemoryHuey
+from huey import MemoryHuey, RedisHuey
 from huey.api import Huey
-from huey.contrib.redis import RedisHuey
 
 from svg2ooxml.api.services.export_service import ExportService
 
