@@ -12,6 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from src.svg2ooxml.api.routes.export import router as export_router
+from src.svg2ooxml.api.routes.tasks import router as tasks_router
 from src.svg2ooxml.api.middleware import RateLimiter, RateLimitMiddleware
 
 
@@ -69,6 +70,7 @@ app.add_middleware(RateLimitMiddleware, limiter=rate_limiter)
 
 # Include routers
 app.include_router(export_router, prefix="/api/v1", tags=["export"])
+app.include_router(tasks_router, prefix="/api/v1/tasks", tags=["tasks"])
 
 
 @app.get("/")

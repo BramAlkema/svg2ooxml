@@ -28,4 +28,4 @@ steps:
       - --platform=managed
       - --service-account=svg2ooxml-runner@$PROJECT_ID.iam.gserviceaccount.com
       - --allow-unauthenticated
-      - --set-env-vars=PYTHONPATH=/workspace/src,GCP_PROJECT=$PROJECT_ID
+      - --set-env-vars=PYTHONPATH=/workspace/src,GCP_PROJECT=$PROJECT_ID,SERVICE_URL=https://$_SERVICE-$PROJECT_NUMBER-ew.a.run.app,CLOUD_TASKS_LOCATION=$_REGION,CLOUD_TASKS_QUEUE=svg2ooxml-jobs
