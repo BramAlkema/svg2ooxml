@@ -493,12 +493,11 @@ class IRConverter(PolicyHooksMixin, ShapeConversionMixin, TraversalHooksMixin):
         if override:
             tokens.extend(token.strip() for token in override.split(",") if token.strip())
         else:
-            try:
-                lang, _ = locale.getdefaultlocale()
-            except Exception:
-                lang = None
-            if lang:
-                tokens.append(lang)
+            tokens.extend(self._environment_languages())
+            if not tokens:
+                detected = self._current_locale_language()
+                if detected:
+                    tokens.append(detected)
         if not tokens:
             tokens.append("en")
 
@@ -514,6 +513,35 @@ class IRConverter(PolicyHooksMixin, ShapeConversionMixin, TraversalHooksMixin):
         if "en" not in normalized:
             normalized.append("en")
         return tuple(normalized)
+
+    @staticmethod
+    def _environment_languages() -> tuple[str, ...]:
+        candidates: list[str] = []
+        env_vars = ("LC_ALL", "LC_MESSAGES", "LC_CTYPE", "LANG", "LANGUAGE")
+        for name in env_vars:
+            raw_value = os.environ.get(name)
+            if not raw_value:
+                continue
+            parts = raw_value.split(":") if name == "LANGUAGE" else [raw_value]
+            for part in parts:
+                token = part.strip()
+                if not token:
+                    continue
+                normalized = locale.normalize(token)
+                language = normalized.split(".", 1)[0] if normalized else ""
+                if language and language not in candidates:
+                    candidates.append(language)
+            if candidates:
+                break
+        return tuple(candidates)
+
+    @staticmethod
+    def _current_locale_language() -> str | None:
+        try:
+            language, _ = locale.getlocale()
+        except Exception:
+            return None
+        return language
 
 
 __all__ = ["IRConverter", "IRScene"]

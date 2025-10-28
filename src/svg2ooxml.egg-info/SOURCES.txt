@@ -31,6 +31,7 @@ src/svg2ooxml/api/services/fakes.py
 src/svg2ooxml/batch/__init__.py
 src/svg2ooxml/clip/__init__.py
 src/svg2ooxml/clipmask/__init__.py
+src/svg2ooxml/clipmask/types.py
 src/svg2ooxml/color/__init__.py
 src/svg2ooxml/common/__init__.py
 src/svg2ooxml/common/interpolation.py
@@ -59,6 +60,12 @@ src/svg2ooxml/core/hyperlinks/__init__.py
 src/svg2ooxml/core/hyperlinks/processor.py
 src/svg2ooxml/core/ir/__init__.py
 src/svg2ooxml/core/ir/converter.py
+src/svg2ooxml/core/ir/fallbacks.py
+src/svg2ooxml/core/ir/policy_hooks.py
+src/svg2ooxml/core/ir/rectangles.py
+src/svg2ooxml/core/ir/shape_converters.py
+src/svg2ooxml/core/ir/smart_font_bridge.py
+src/svg2ooxml/core/ir/text_pipeline.py
 src/svg2ooxml/core/masks/__init__.py
 src/svg2ooxml/core/masks/processor.py
 src/svg2ooxml/core/parser/__init__.py
@@ -121,7 +128,10 @@ src/svg2ooxml/core/traversal/constants.py
 src/svg2ooxml/core/traversal/coordinate_space.py
 src/svg2ooxml/core/traversal/geometry_utils.py
 src/svg2ooxml/core/traversal/hooks.py
+src/svg2ooxml/core/traversal/marker_runtime.py
+src/svg2ooxml/core/traversal/markers.py
 src/svg2ooxml/core/traversal/runtime.py
+src/svg2ooxml/core/traversal/traversal.py
 src/svg2ooxml/core/traversal/bridges/__init__.py
 src/svg2ooxml/core/traversal/bridges/resvg_clip_mask.py
 src/svg2ooxml/css/__init__.py
@@ -145,6 +155,9 @@ src/svg2ooxml/drawingml/rasterizer.py
 src/svg2ooxml/drawingml/result.py
 src/svg2ooxml/drawingml/shapes_runtime.py
 src/svg2ooxml/drawingml/writer.py
+src/svg2ooxml/drawingml/bridges/__init__.py
+src/svg2ooxml/drawingml/bridges/emf_path_adapter.py
+src/svg2ooxml/drawingml/bridges/resvg_paint_bridge.py
 src/svg2ooxml/elements/__init__.py
 src/svg2ooxml/filters/__init__.py
 src/svg2ooxml/fonts/__init__.py

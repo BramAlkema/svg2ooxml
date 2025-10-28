@@ -8,7 +8,7 @@ from svg2ooxml.core.traversal import clipping
 from svg2ooxml.core.traversal.geometry_utils import is_axis_aligned
 from svg2ooxml.ir.geometry import LineSegment, Point, Rect
 from svg2ooxml.ir.scene import ClipStrategy
-from svg2ooxml.legacy.clipmask.types import ClipDefinition, MaskInfo
+from svg2ooxml.clipmask.types import ClipDefinition, MaskInfo
 from svg2ooxml.common.geometry import Matrix2D
 
 

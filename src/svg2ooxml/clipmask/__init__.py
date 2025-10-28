@@ -1,6 +1,5 @@
+"""Clip and mask helpers for svg2ooxml."""
 
-"""Compatibility wrapper for legacy clipmask package."""
+from .types import ClipDefinition, MaskInfo
 
-from svg2ooxml._legacy import redirect_package as _redirect_package
-
-_redirect_package("clipmask")
+__all__ = ["ClipDefinition", "MaskInfo"]
