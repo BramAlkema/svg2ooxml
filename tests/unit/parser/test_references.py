@@ -2,7 +2,7 @@
 
 from lxml import etree
 
-from svg2ooxml.parser.references import (
+from svg2ooxml.core.parser.references import (
     EXTERNAL_PROTOCOLS,
     collect_namespaces,
     has_external_references,

@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from svg2ooxml.services.registry import get_provider_factories
+
 
 @dataclass
 class ConversionServices:
@@ -27,6 +29,14 @@ class ConversionServices:
         for name, value in self.services.items():
             cloned.register(name, self._clone_value(value))
         return cloned
+
+    def ensure_default(self, name: str) -> Any:
+        if name not in self.services:
+            factory_map = get_provider_factories()
+            factory = factory_map.get(name)
+            if factory is not None:
+                self.register(name, factory())
+        return self.services.get(name)
 
     @property
     def filter_service(self) -> Any:
@@ -65,10 +75,6 @@ class ConversionServices:
         return self.resolve("font_embedding")
 
     @property
-    def drawingml_path_generator(self) -> Any:
-        return self.resolve("drawingml_path_generator")
-
-    @property
     def hyperlink_processor(self) -> Any:
         return self.resolve("hyperlink_processor")
 
@@ -99,6 +105,10 @@ class ConversionServices:
     @property
     def clip_service(self) -> Any:
         return self.resolve("clip_service")
+
+    @property
+    def drawingml_path_generator(self) -> Any:
+        return self.resolve("drawingml_path_generator")
 
     # ------------------------------------------------------------------ #
     # Internal helpers

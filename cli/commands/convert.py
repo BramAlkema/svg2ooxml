@@ -21,7 +21,7 @@ from svg2ooxml.core.pptx_exporter import (
     SvgToPptxMultiResult,
     SvgToPptxResult,
 )
-from svg2ooxml.map.tracer import ConversionTracer
+from svg2ooxml.core.tracing import ConversionTracer
 
 
 def _looks_like_uri(value: str) -> bool:

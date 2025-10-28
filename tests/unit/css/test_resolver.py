@@ -3,8 +3,9 @@
 import pytest
 from lxml import etree
 
+from svg2ooxml.core.parser import UnitConverter
 from svg2ooxml.css import StyleContext, StyleResolver
-from svg2ooxml.parser.units import UnitConverter
+from svg2ooxml.legacy.map.converter.use_runtime import _apply_computed_presentation
 
 
 def _make_context(width: float = 200.0, height: float = 100.0) -> tuple[UnitConverter, StyleContext]:
@@ -79,3 +80,100 @@ def test_paint_style_handles_url_and_percentage_width() -> None:
     assert paint["stroke"] is None
     assert paint["stroke_width_px"] == pytest.approx(100.0)
     assert paint["opacity"] == pytest.approx(0.5)
+
+
+def test_stylesheet_rules_apply_to_use_clones() -> None:
+    resolver = StyleResolver()
+    converter, context = _make_context()
+    svg_markup = """
+        <svg xmlns='http://www.w3.org/2000/svg'>
+            <style>
+                .parent > rect { fill: #008000; stroke: #006400; stroke-width: 5; }
+            </style>
+            <g class='parent'>
+                <rect id='original' width='100' height='100'/>
+            </g>
+        </svg>
+    """
+    root = etree.fromstring(svg_markup)
+
+    resolver.collect_css(root)
+    rect = root.find("{http://www.w3.org/2000/svg}g/{http://www.w3.org/2000/svg}rect")
+    assert rect is not None
+
+    paint = resolver.compute_paint_style(rect, context=context)
+    assert paint["fill"] == "#008000"
+    assert paint["stroke"] == "#006400"
+
+    clone = etree.fromstring(etree.tostring(rect))
+
+    dummy_converter = type("Dummy", (), {"_style_resolver": resolver, "_css_context": context})()
+    _apply_computed_presentation(dummy_converter, rect, clone)
+
+    clone_paint = resolver.compute_paint_style(clone, context=context)
+    assert clone_paint["fill"] == "#008000"
+    assert clone_paint["stroke"] == "#006400"
+
+
+def test_stylesheet_rules_apply_to_text_elements() -> None:
+    resolver = StyleResolver()
+    svg_markup = """
+        <svg xmlns='http://www.w3.org/2000/svg'>
+            <style>
+                .title { fill: #008000; font-weight: 700; }
+            </style>
+            <text class='title'>Hello</text>
+        </svg>
+    """
+    root = etree.fromstring(svg_markup)
+    resolver.collect_css(root)
+
+    text_node = root.find("{http://www.w3.org/2000/svg}text")
+    assert text_node is not None
+
+    style = resolver.compute_text_style(text_node)
+
+    assert style["fill"] == "#008000"
+    assert style["font_weight"] == "bold"
+
+
+def test_inline_style_respects_stylesheet_important() -> None:
+    resolver = StyleResolver()
+    svg_markup = """
+        <svg xmlns='http://www.w3.org/2000/svg'>
+            <style>
+                text { fill: #008000 !important; }
+            </style>
+            <text style='fill: #ff0000'>Hello</text>
+        </svg>
+    """
+    root = etree.fromstring(svg_markup)
+    resolver.collect_css(root)
+
+    text_node = root.find("{http://www.w3.org/2000/svg}text")
+    assert text_node is not None
+
+    style = resolver.compute_text_style(text_node)
+
+    assert style["fill"] == "#008000"
+
+
+def test_inline_important_overrides_stylesheet_important() -> None:
+    resolver = StyleResolver()
+    svg_markup = """
+        <svg xmlns='http://www.w3.org/2000/svg'>
+            <style>
+                text { fill: #008000 !important; }
+            </style>
+            <text style='fill: #ff0000 !important'>Hello</text>
+        </svg>
+    """
+    root = etree.fromstring(svg_markup)
+    resolver.collect_css(root)
+
+    text_node = root.find("{http://www.w3.org/2000/svg}text")
+    assert text_node is not None
+
+    style = resolver.compute_text_style(text_node)
+
+    assert style["fill"] == "#FF0000"

@@ -5,14 +5,14 @@ from __future__ import annotations
 import pytest
 from lxml import etree
 
-from svg2ooxml.map.converter.core import IRConverter
+from svg2ooxml.core.ir import IRConverter
 from svg2ooxml.map.ir_converter import IRScene, convert_parser_output
 from svg2ooxml.ir.scene import Group, Image, Path, Rectangle
 from svg2ooxml.ir.text import TextFrame
 from svg2ooxml.ir.geometry import BezierSegment, LineSegment, Point, Rect
 from svg2ooxml.ir.shapes import Circle, Ellipse, Rectangle, Line, Polyline, Polygon
 from svg2ooxml.ir.paint import GradientPaintRef, LinearGradientPaint, PatternPaint, SolidPaint, Stroke
-from svg2ooxml.parser.result import ParseResult
+from svg2ooxml.core.parser import ParseResult
 from svg2ooxml.policy import PolicyContext, PolicyEngine
 from svg2ooxml.policy.constants import FALLBACK_BITMAP, FALLBACK_EMF
 from svg2ooxml.services import configure_services
@@ -75,6 +75,12 @@ def _register_filter(parse_result: ParseResult, filter_markup: str) -> None:
     filter_id = element.get("id", "filter")
     filters[filter_id] = element
     parse_result.filters = filters  # type: ignore[assignment]
+
+
+def test_legacy_core_module_exposes_ir_converter() -> None:
+    from svg2ooxml.map.converter.core import IRConverter as LegacyIRConverter
+
+    assert LegacyIRConverter is IRConverter
 
 
 def test_convert_rect_produces_rectangle() -> None:

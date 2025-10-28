@@ -59,12 +59,22 @@ class Rasterizer:
         width_px = max(int(math.ceil(bounds.width * self._scale)), 1)
         height_px = max(int(math.ceil(bounds.height * self._scale)), 1)
 
-        surface = skia.Surface(
-            width_px,
-            height_px,
-            colorType=skia.ColorType.kRGBA_8888_ColorType,
-            alphaType=skia.AlphaType.kPremul_AlphaType,
-        )
+        try:
+            # skia-python ≥ 138 dropped the alphaType argument on the direct width/height
+            # overload. Build an ImageInfo so that we always request RGBA premul explicitly.
+            info = skia.ImageInfo.Make(
+                width_px,
+                height_px,
+                skia.ColorType.kRGBA_8888_ColorType,
+                skia.AlphaType.kPremul_AlphaType,
+            )
+            surface = skia.Surface(info)
+        except (AttributeError, TypeError):  # pragma: no cover - compatibility fallback
+            surface = skia.Surface(
+                width_px,
+                height_px,
+                colorType=skia.ColorType.kRGBA_8888_ColorType,
+            )
         canvas = surface.getCanvas()
         canvas.clear(skia.ColorTRANSPARENT)
         canvas.scale(self._scale, self._scale)
@@ -86,7 +96,20 @@ class Rasterizer:
             return None
 
         image = surface.makeImageSnapshot()
-        data = image.encodeToData(skia.kPNG)
+        try:
+            data = image.encodeToData()
+        except TypeError:  # pragma: no cover - legacy signature
+            png_format = getattr(getattr(skia, "EncodedImageFormat", skia), "kPNG", None)
+            if png_format is None:
+                png_format = getattr(skia, "kPNG", None)
+            quality = 100
+            if png_format is None:
+                data = image.encodeToData()
+            else:
+                try:
+                    data = image.encodeToData(png_format, quality)
+                except TypeError:
+                    data = image.encodeToData(png_format)
         if not data:
             return None
 

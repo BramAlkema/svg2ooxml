@@ -17,11 +17,11 @@ from svg2ooxml.common.tempfiles import temporary_directory
 from svg2ooxml.drawingml.assets import FontAsset, MediaAsset, NavigationAsset
 from svg2ooxml.drawingml.result import DrawingMLRenderResult
 from svg2ooxml.drawingml.writer import DrawingMLWriter
-from svg2ooxml.map.converter.core import IRScene
+from svg2ooxml.core.ir import IRScene
 from svg2ooxml.ir.text import EmbeddedFontPlan
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
-    from svg2ooxml.map.tracer import ConversionTracer
+    from svg2ooxml.core.tracing import ConversionTracer
 
 ASSETS_ROOT = Path(__file__).resolve().parents[3] / "assets" / "pptx_templates"
 REL_NS = "http://schemas.openxmlformats.org/package/2006/relationships"

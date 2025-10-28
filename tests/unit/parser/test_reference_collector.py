@@ -1,6 +1,6 @@
 """Tests for the parser reference collector."""
 
-from svg2ooxml.parser.reference_collector import collect_references
+from svg2ooxml.core.parser.reference_collector import collect_references
 
 
 def test_collect_references_returns_clip_and_masks() -> None:

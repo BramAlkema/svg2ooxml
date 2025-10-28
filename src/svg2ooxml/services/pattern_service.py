@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any, Dict, Union
 
 from lxml import etree
 
-from svg2ooxml.map.converter.resvg_paint_bridge import (
+from svg2ooxml.drawingml.bridges import (
     PatternDescriptor,
     build_pattern_element,
     describe_pattern_element,

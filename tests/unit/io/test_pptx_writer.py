@@ -17,7 +17,7 @@ from svg2ooxml.ir.geometry import Point, Rect
 from svg2ooxml.ir.paint import SolidPaint
 from svg2ooxml.ir.shapes import Rectangle
 from svg2ooxml.ir.text import EmbeddedFontPlan, Run, TextAnchor, TextFrame
-from svg2ooxml.map.converter.core import IRScene
+from svg2ooxml.core.ir import IRScene
 from svg2ooxml.pipeline.navigation import NavigationKind, NavigationSpec, SlideTarget
 
 

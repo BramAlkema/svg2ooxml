@@ -1,8 +1,24 @@
 tinycss2>=1.2
 click>=8.1
+lxml>=4.9.0
 
 [accel]
 numpy>=1.24
+
+[api]
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+pydantic>=2.5.3
+python-multipart>=0.0.6
+
+[cloud]
+google-cloud-firestore>=2.14.0
+google-cloud-storage>=2.14.0
+google-cloud-iam>=2.14.0
+google-cloud-tasks>=2.16.0
+google-api-python-client>=2.130
+google-auth>=2.26
+google-auth-oauthlib>=1.2.0
 
 [color]
 numpy>=1.24
@@ -20,9 +36,12 @@ ruff>=0.4.0
 [render]
 skia-python>=87.5
 Pillow>=10.0
+numpy>=1.24
 
 [slides]
+python-pptx>=0.6.23
 cryptography>=41.0
-google-api-python-client>=2.130
-google-auth>=2.26
-google-auth-oauthlib>=1.2
+
+[worker]
+huey>=2.4.5
+redis>=5.0.1

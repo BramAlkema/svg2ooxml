@@ -9,9 +9,9 @@ from lxml import etree
 from svg2ooxml.io.emf import EMFRecordType
 from svg2ooxml.ir.geometry import LineSegment, Point
 from svg2ooxml.ir.paint import SolidPaint, Stroke, StrokeCap, StrokeJoin
-from svg2ooxml.map.converter.coordinate_space import CoordinateSpace
-from svg2ooxml.map.converter.fallbacks import render_emf_fallback
-from svg2ooxml.map.converter.styles import StyleResult
+from svg2ooxml.core.ir.fallbacks import render_emf_fallback
+from svg2ooxml.core.styling.style_extractor import StyleResult
+from svg2ooxml.core.traversal.coordinate_space import CoordinateSpace
 from svg2ooxml.units.conversion import UnitConverter
 
 

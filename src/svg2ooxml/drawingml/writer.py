@@ -13,7 +13,7 @@ from svg2ooxml.ir.geometry import Point, Rect
 from svg2ooxml.ir.scene import ClipRef, Group, Image, MaskRef, Path as IRPath, SceneGraph
 from svg2ooxml.ir.shapes import Circle, Ellipse, Rectangle, Line, Polygon, Polyline
 from svg2ooxml.ir.text import TextFrame
-from svg2ooxml.map.converter.core import IRScene
+from svg2ooxml.core.ir import IRScene
 from svg2ooxml.policy.constants import FALLBACK_BITMAP, FALLBACK_RASTERIZE
 
 from . import paint_runtime, shapes_runtime
@@ -29,7 +29,7 @@ from .mask_writer import MaskWriter
 from .rasterizer import Rasterizer, SKIA_AVAILABLE
 
 if TYPE_CHECKING:  # pragma: no cover - type checking only
-    from svg2ooxml.map.tracer import ConversionTracer
+    from svg2ooxml.core.tracing import ConversionTracer
 
 DEFAULT_SLIDE_SIZE = (9144000, 6858000)  # 10" x 7.5"
 

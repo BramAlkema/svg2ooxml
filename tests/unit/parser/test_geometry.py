@@ -2,7 +2,7 @@
 
 from math import isclose
 
-from svg2ooxml.parser.geometry import Matrix2D, parse_transform_list
+from svg2ooxml.common.geometry import Matrix2D, parse_transform_list
 
 
 def test_matrix_multiply_composes_transforms() -> None:

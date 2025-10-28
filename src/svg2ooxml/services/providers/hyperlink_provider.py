@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 
-from svg2ooxml.map.converter.hyperlinks import HyperlinkProcessor
+from svg2ooxml.core.hyperlinks import HyperlinkProcessor
 
 from .registry import register_provider
 

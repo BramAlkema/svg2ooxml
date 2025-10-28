@@ -7,7 +7,7 @@ This repository currently exposes a placeholder implementation of the full svg2o
 - **Parser Layer** (`parser/`, `css/`, `transforms/`, `units/`, `viewbox/`, `color/`, `clip/`, `masks/`)
   Responsible for ingesting SVG markup, normalising geometry, interpreting units, and preparing reusable scene metadata. Most files are lightweight scaffolds; the svg2pptx logic will replace these stubs.
   - `parser/dom_loader.py`, `parser/normalization.py`, `parser/style_context.py`, `parser/reference_collector.py`, and `parser/statistics.py` slice the legacy `core/parse/parser.py` into modular entry points ready for porting.
-  - `parser/xml/enhanced_builder.py` mirrors the helper previously located in `core/utils/enhanced_xml_builder.py`.
+  - `core/parser/xml_utils.py` provides the safe iteration helpers previously located under `legacy/parser/xml`.
 
 - **Intermediate Representation** (`ir/`, `elements/`, `geometry/`, `paint/`, `fonts/`, `text/`)  
   Houses IR models, geometry helpers, paint definitions, and text layout primitives. These packages are empty wrappers right now to keep imports stable for upcoming ports.

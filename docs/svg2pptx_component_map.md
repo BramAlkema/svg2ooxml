@@ -49,7 +49,7 @@ This document captures the complete surface area of the legacy `svg2pptx` codeba
 | `units` | Unit conversion | `parser/units`, `geometry/units` | In progress | `parse`, `map`, `presentation` |
 | `utils` | Shared utilities | `src/svg2ooxml/common` | Port sparingly | Many |
 | `viewbox` & `viewbox_new` | ViewBox computations | `parser/units` or `geometry/viewbox` | Port | `parse`, `map` |
-| `xml` | XML helpers (safe iteration, normalizers) | `parser/xml` | Port | `parse`, `clip` |
+| `xml` | XML helpers (safe iteration, normalizers) | `core/parser/xml_utils.py` | Port | `parse`, `clip` |
 
 ## Additional Top-Level Folders
 

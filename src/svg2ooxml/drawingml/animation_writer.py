@@ -21,7 +21,7 @@ from svg2ooxml.ir.animation import (
 from svg2ooxml.units.conversion import UnitConverter
 
 if TYPE_CHECKING:
-    from svg2ooxml.map.tracer import ConversionTracer
+    from svg2ooxml.core.tracing import ConversionTracer
 
 
 _UNIT_CONVERTER = UnitConverter()

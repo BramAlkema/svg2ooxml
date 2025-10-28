@@ -1,6 +1,6 @@
 """Tests for color parsing helpers."""
 
-from svg2ooxml.parser.colors import parse_color, register_palette
+from svg2ooxml.core.parser import parse_color, register_palette
 
 
 def test_parse_color_handles_hex() -> None:

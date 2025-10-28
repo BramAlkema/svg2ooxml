@@ -8,6 +8,7 @@ import click
 
 from .commands.auth import auth
 from .commands.convert import convert
+from .commands.visual import visual
 
 
 def _package_version() -> str:
@@ -25,6 +26,7 @@ def cli() -> None:
 
 cli.add_command(convert)
 cli.add_command(auth)
+cli.add_command(visual)
 
 
 def run_cli() -> None:

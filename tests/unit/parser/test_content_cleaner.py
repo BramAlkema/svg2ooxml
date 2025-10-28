@@ -2,7 +2,7 @@
 
 import pytest
 
-from svg2ooxml.parser.content_cleaner import (
+from svg2ooxml.core.parser.content_cleaner import (
     XML_DECLARATION,
     fix_encoding_issues,
     prepare_svg_content,

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from svg2ooxml.parser.batch.tasks import convert_single_svg
+from svg2ooxml.core.parser.batch.tasks import convert_single_svg
 
 
 def test_convert_single_svg_produces_pptx(tmp_path) -> None:

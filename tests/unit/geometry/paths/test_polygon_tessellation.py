@@ -8,9 +8,9 @@ from pathlib import Path
 
 from lxml import etree
 
+from svg2ooxml.core.parser import ParseResult
 from svg2ooxml.geometry.paths.segments import compute_segments_bbox
 from svg2ooxml.map.ir_converter import IRScene, convert_parser_output
-from svg2ooxml.parser.result import ParseResult
 from svg2ooxml.services.setup import configure_services
 
 # TODO(ADR-geometry-ir): Replace with svg2pptx baseline comparison once tessellation data is ported.

@@ -5,7 +5,7 @@ import math
 from svg2ooxml.ir.geometry import Point, Rect
 from svg2ooxml.ir.text import Run, TextAnchor, TextFrame
 from svg2ooxml.ir.text_path import PathPoint
-from svg2ooxml.map.converter.text_pipeline import TextConversionPipeline
+from svg2ooxml.core.ir.text_pipeline import TextConversionPipeline
 from svg2ooxml.policy.text_policy import resolve_text_policy
 from svg2ooxml.services.fonts import FontEmbeddingEngine, FontEmbeddingResult, FontMatch, FontQuery, FontService
 

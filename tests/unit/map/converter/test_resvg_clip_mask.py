@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from lxml import etree
 
-from svg2ooxml.map.converter.core import IRConverter
+from svg2ooxml.core.parser import ParseResult
+from svg2ooxml.core.ir import IRConverter
 from svg2ooxml.map.converter.clipping import resolve_clip_ref, resolve_mask_ref
-from svg2ooxml.parser.result import ParseResult
 from svg2ooxml.services import configure_services
 
 

@@ -32,7 +32,7 @@ if not getattr(advanced_mod, "COLOR_ENGINE_AVAILABLE", False):
     advanced_mod.require_color_engine = _require_color_engine  # type: ignore[attr-defined]
 
 from svg2ooxml.core.pptx_exporter import SvgToPptxExporter
-from svg2ooxml.map.tracer import ConversionTracer
+from svg2ooxml.core.tracing import ConversionTracer
 
 
 def _render(svg: str):

@@ -6,7 +6,7 @@ pytest.importorskip("numpy")
 
 from lxml import etree
 
-from svg2ooxml.parser.geometry.matrix import Matrix2D
+from svg2ooxml.common.geometry import Matrix2D
 from svg2ooxml.render.normalize import normalize_svg
 from svg2ooxml.render.paint import LinearGradient
 

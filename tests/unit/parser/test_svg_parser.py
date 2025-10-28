@@ -1,7 +1,6 @@
 """Tests for the simplified SVG parser."""
 
-from svg2ooxml.parser import ParseResult, SVGParser
-from svg2ooxml.parser.svg_parser import ParserConfig
+from svg2ooxml.core.parser import ParseResult, ParserConfig, SVGParser
 
 
 def test_parse_returns_success_with_valid_svg() -> None:
@@ -129,7 +128,7 @@ def test_parse_emits_metrics(monkeypatch) -> None:
         return {"name": name, "payload": payload, "kwargs": kwargs}
 
     monkeypatch.setattr(
-        "svg2ooxml.parser.svg_parser.record_metric",
+        "svg2ooxml.core.parser.svg_parser.record_metric",
         fake_record_metric,
     )
 

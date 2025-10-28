@@ -5,12 +5,12 @@ from __future__ import annotations
 from lxml import etree
 
 from svg2ooxml.color.spaces import ColorSpaceResult
-from svg2ooxml.map.converter.coordinate_space import CoordinateSpace
-from svg2ooxml.map.converter.policy_hooks import PolicyHooksMixin
-from svg2ooxml.map.converter.shape_converters import ShapeConversionMixin
-from svg2ooxml.map.converter.styles import StyleExtractor
+from svg2ooxml.core.traversal.coordinate_space import CoordinateSpace
+from svg2ooxml.core.ir.policy_hooks import PolicyHooksMixin
+from svg2ooxml.core.ir.shape_converters import ShapeConversionMixin
+from svg2ooxml.core.styling.style_extractor import StyleExtractor
 from svg2ooxml.policy.constants import FALLBACK_EMF, FALLBACK_RASTERIZE
-from svg2ooxml.map.converter.resvg_paint_bridge import describe_gradient_element
+from svg2ooxml.drawingml.bridges import describe_gradient_element
 from svg2ooxml.services.setup import configure_services
 from svg2ooxml.services.color_service import ColorNormalizedImage
 from svg2ooxml.services.image_service import ImageResource

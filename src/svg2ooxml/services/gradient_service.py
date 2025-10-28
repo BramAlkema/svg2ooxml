@@ -11,7 +11,7 @@ from lxml import etree
 
 from svg2ooxml.color.models import Color
 from svg2ooxml.color.parsers import parse_color
-from svg2ooxml.map.converter.resvg_paint_bridge import (
+from svg2ooxml.drawingml.bridges import (
     GradientDescriptor,
     LinearGradientDescriptor,
     RadialGradientDescriptor,

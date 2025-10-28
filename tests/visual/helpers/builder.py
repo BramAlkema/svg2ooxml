@@ -9,7 +9,7 @@ from typing import Sequence
 from svg2ooxml.drawingml.writer import DrawingMLWriter
 from svg2ooxml.io.pptx_writer import PPTXPackageBuilder
 from svg2ooxml.map import convert_parser_output
-from svg2ooxml.parser.svg_parser import ParserConfig, SVGParser
+from svg2ooxml.core.parser import ParserConfig, SVGParser
 
 
 class VisualBuildError(RuntimeError):

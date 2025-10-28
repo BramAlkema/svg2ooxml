@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from svg2ooxml.map.converter.core import IRConverter
-from svg2ooxml.map.tracer import ConversionTracer
+from svg2ooxml.core.ir import IRConverter
+from svg2ooxml.core.tracing import ConversionTracer
 from svg2ooxml.policy.engine import PolicyContext
 from svg2ooxml.services.setup import configure_services
 from tests.unit.map.test_ir_converter import _build_parse_result
@@ -106,3 +106,9 @@ def test_tracer_records_stage_events() -> None:
     key = "parser:normalization"
     assert report.stage_totals.get(key) == 1
     assert any(event.action == "warning" and event.subject == "duplicate-id" for event in report.stage_events)
+
+
+def test_legacy_module_still_exposes_tracer() -> None:
+    from svg2ooxml.map import tracer as legacy_tracer
+
+    assert legacy_tracer.ConversionTracer is ConversionTracer

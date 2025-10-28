@@ -14,7 +14,7 @@ assessment requested before we continue porting additional functionality.
 | Concern | svg2pptx Implementation | svg2ooxml Status | Notes / Gaps |
 |---------|------------------------|------------------|--------------|
 | XML parsing & error recovery | `SplitXMLParser` with recover mode, statistics, validation | `dom_loader.XMLParser` mirrors config & stats | Parity achieved |
-| Safe iteration helpers | `core/xml/safe_iter.py` | Ported to `parser/xml/safe_iter.py` | Used by normalization |
+| Safe iteration helpers | `core/parser/xml_utils.py` | Formerly in `legacy/parser/xml/safe_iter.py`; now part of core parser | Used by normalization |
 | Normalization | `SafeSVGNormalizer` (namespace rebuild, attribute fixes, whitespace, structural pruning, encoding fixes, logging) | Ported version covers namespaces, attribute defaults, whitespace, comment filtering, basic pruning | Encoding fixes and logging fidelity still missing |
 | Style context & unit conversion | `StyleContextBuilder` + unit converter + CSS style resolver (`StyleResolver`) | Viewport + `ConversionContext` created, CSS resolver not yet wired | Text styling, em/% units, inheritance pending |
 | Clip/mask reference collection | `ClipPathExtractor` plus `_collect_*` helpers | `reference_collector.collect_references` gathers clip/mask/symbol/gradient/pattern/filter | Needs clip child processing, tie into IR converter |

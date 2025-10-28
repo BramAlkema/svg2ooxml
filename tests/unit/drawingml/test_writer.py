@@ -20,7 +20,7 @@ from svg2ooxml.ir.scene import (
 from svg2ooxml.ir.effects import CustomEffect
 from svg2ooxml.ir.shapes import Rectangle, Line, Polyline, Polygon
 from svg2ooxml.ir.text import EmbeddedFontPlan, Run, TextAnchor, TextFrame, WordArtCandidate
-from svg2ooxml.map.converter.core import IRScene
+from svg2ooxml.core.ir import IRScene
 
 
 def test_render_scene_from_ir_reports_slide_size() -> None:

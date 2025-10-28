@@ -3,10 +3,10 @@
 import pytest
 from lxml import etree
 
-from svg2ooxml.parser.validators import (
+from svg2ooxml.core.parser.validators import (
     ensure_namespaces,
-    ensure_svg_root,
-    has_basic_dimensions,
+   ensure_svg_root,
+   has_basic_dimensions,
 )
 
 

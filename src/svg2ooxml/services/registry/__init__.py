@@ -1,49 +1,45 @@
-"""Helpers for wiring default service providers."""
+"""Service registry helpers."""
 
 from __future__ import annotations
 
 from importlib import import_module
-from typing import Iterable
-
-DEFAULT_PROVIDER_MODULES: tuple[str, ...] = (
-    "svg2ooxml.services.providers.filter_provider",
-    "svg2ooxml.services.providers.gradient_provider",
-    "svg2ooxml.services.providers.pattern_provider",
-    "svg2ooxml.services.providers.image_provider",
-    "svg2ooxml.services.providers.mask_provider",
-    "svg2ooxml.services.providers.drawingml_provider",
-    "svg2ooxml.services.providers.marker_provider",
-    "svg2ooxml.services.providers.symbol_provider",
-    "svg2ooxml.services.providers.font_provider",
-    "svg2ooxml.services.providers.hyperlink_provider",
-    "svg2ooxml.services.providers.color_provider",
-)
-
-_extra_modules: list[str] = []
-_loaded: bool = False
+from typing import Callable, Dict, Iterable
 
 
-def ensure_default_providers() -> None:
-    """Import provider modules once so they register themselves."""
-    global _loaded
-    if _loaded:
-        return
-    modules: Iterable[str] = DEFAULT_PROVIDER_MODULES + tuple(_extra_modules)
-    for module in modules:
-        import_module(module)
-    _loaded = True
+_PROVIDERS: list[str] = [
+    "color_provider",
+    "font_provider",
+    "gradient_provider",
+    "filter_provider",
+    "marker_provider",
+    "pattern_provider",
+    "symbol_provider",
+    "drawingml_provider",
+    "image_provider",
+    "mask_provider",
+    "hyperlink_provider",
+]
+
+_REGISTRY: Dict[str, Callable[[], object]] = {}
+_LOADED: set[str] = set()
 
 
-def register_additional_providers(module: str) -> None:
-    """Allow tests or extensions to register extra provider modules."""
-    if not module:
-        raise ValueError("module must be non-empty")
-    if module in _extra_modules:
-        return
-    _extra_modules.append(module)
-    # If we've already loaded defaults, import immediately.
-    if _loaded:
-        import_module(module)
+def register_provider(name: str, factory: Callable[[], object]) -> None:
+    _REGISTRY[name] = factory
 
 
-__all__ = ["ensure_default_providers", "register_additional_providers"]
+def ensure_default_providers(modules: Iterable[str] | None = None) -> None:
+    entries = modules or list(_PROVIDERS)
+    for name in entries:
+        if name in _LOADED:
+            continue
+        import_module(f"svg2ooxml.services.providers.{name}")
+        _LOADED.add(name)
+
+
+def get_provider_factories() -> Dict[str, Callable[[], object]]:
+    ensure_default_providers()
+    return dict(_REGISTRY)
+
+
+__all__ = ["ensure_default_providers", "register_provider", "get_provider_factories"]

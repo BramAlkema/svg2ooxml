@@ -9,7 +9,7 @@ from svg2ooxml.drawingml.mask_generator import compute_mask_geometry
 from svg2ooxml.drawingml.paint_runtime import clip_rect_to_xml
 from svg2ooxml.ir.geometry import BezierSegment, LineSegment, Point, Rect, SegmentType
 from svg2ooxml.ir.scene import ClipRef, MaskRef
-from svg2ooxml.parser.geometry.matrix import Matrix2D
+from svg2ooxml.common.geometry import Matrix2D
 
 POINT_EPSILON = 1e-6
 

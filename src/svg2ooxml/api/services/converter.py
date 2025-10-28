@@ -6,10 +6,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Sequence
 
+from svg2ooxml.core.parser import ParserConfig, SVGParser
+from svg2ooxml.core.parser.preprocess.services import build_parser_services
 from svg2ooxml.core.pptx_exporter import SvgPageSource, SvgToPptxExporter
-from svg2ooxml.map.tracer import ConversionTracer
-from svg2ooxml.parser.svg_parser import ParserConfig, SVGParser
-from svg2ooxml.parser.preprocess.services import build_parser_services
+from svg2ooxml.core.tracing import ConversionTracer
 from svg2ooxml.services.fonts import FontMatch, FontQuery
 from svg2ooxml.services.fonts.providers.directory import DirectoryFontProvider
 

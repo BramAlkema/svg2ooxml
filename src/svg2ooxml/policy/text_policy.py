@@ -142,7 +142,7 @@ def _build_balanced_decision() -> TextPolicyDecision:
         ),
         wordart=WordArtPolicy(
             enable_detection=True,
-            prefer_native_wordart=True,
+            prefer_native_wordart=False,
             confidence_threshold=0.7,
             allow_outline_fallback=True,
         ),

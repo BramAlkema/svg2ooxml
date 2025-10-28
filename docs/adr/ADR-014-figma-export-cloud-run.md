@@ -43,6 +43,13 @@ Cloud Build will trigger on pushes to `main`, build the image via buildpacks,
 push it to Artifact Registry, and deploy the new revision to Cloud Run. Secrets
 (service account JSON, API keys) live in Secret Manager, mounted at runtime.
 
+For day-to-day operations we complement this ADR with [ADR-016](./ADR-016-gcloud-client-setup.md),
+which documents the gcloud CLI configuration required to interact with the
+deployment (running builds manually, tailing logs, inspecting Cloud Tasks, or
+hitting the Cloud Run URL from a developer workstation). Every engineer should
+complete the steps in ADR-016 when onboarding so the commands referenced here
+and in `tools/` work immediately.
+
 ## Alternatives considered
 
 - **Replit-based FastAPI service**: attractive for quick prototypes, but
@@ -86,3 +93,44 @@ push it to Artifact Registry, and deploy the new revision to Cloud Run. Secrets
    displays publish links and thumbnails.
 6. Define monitoring/alerts (Cloud Logging sinks, error rate dashboards) and a
    retention policy for exported decks.
+
+## Command Log (gcloud / gh)
+
+```
+# Cloud Build ↔ GitHub (Developer Connect)
+gcloud services enable cloudbuild.googleapis.com developerconnect.googleapis.com
+gcloud builds connections create github github-bram --region=europe-west1
+gcloud builds repositories create svg2ooxml \
+  --remote-uri=https://github.com/BramAlkema/svg2ooxml.git \
+  --connection=github-bram --region=europe-west1
+GRL=$(gcloud developer-connect connections git-repository-links list \
+  --connection=projects/powerful-layout-467812-p1/locations/europe-west1/connections/github-bram \
+  --location=europe-west1 --format='value(name)')
+gcloud alpha builds triggers create developer-connect \
+  --name=svg2ooxml-main --region=europe-west1 \
+  --git-repository-link="$GRL" --branch-pattern=main \
+  --build-config=cloudbuild.yaml
+
+# GitHub CLI checks
+gh auth status
+gh workflow list
+gh run list --workflow Tests --limit 5
+
+# Redis + VPC access for Huey queue
+gcloud services enable redis.googleapis.com vpcaccess.googleapis.com
+gcloud redis instances create svg2ooxml-queue --size=1 --tier=standard --region=europe-west1
+gcloud compute networks vpc-access connectors create svg2ooxml-connector \
+  --region=europe-west1 --network=default --range=10.8.0.0/28
+
+# Cloud Run deploys (web + worker)
+gcloud run deploy svg2ooxml-export \
+  --region=europe-west1 --image=${IMAGE} \
+  --set-env-vars=REDIS_URL=${REDIS_URL},SVG2OOXML_CACHE_VERSION=v1 \
+  --vpc-connector=svg2ooxml-connector --vpc-egress=all-traffic
+gcloud run deploy svg2ooxml-worker \
+  --region=europe-west1 --image=${IMAGE} \
+  --command=python --args=-m,src.svg2ooxml.api.background.worker \
+  --set-env-vars=REDIS_URL=${REDIS_URL},SVG2OOXML_CACHE_VERSION=v1 \
+  --vpc-connector=svg2ooxml-connector --vpc-egress=all-traffic \
+  --no-allow-unauthenticated
+```

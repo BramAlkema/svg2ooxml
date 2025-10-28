@@ -2,7 +2,7 @@
 
 from lxml import etree
 
-from svg2ooxml.parser.dom_loader import ParserOptions, XMLParser, load_dom
+from svg2ooxml.core.parser.dom_loader import ParserOptions, XMLParser, load_dom
 
 
 def test_load_dom_parses_valid_svg() -> None:

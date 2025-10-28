@@ -12,7 +12,7 @@ if TYPE_CHECKING:  # pragma: no cover - type checking only
     from lxml import etree
     from .conversion import ConversionServices
 
-from svg2ooxml.map.converter.markers import MarkerDefinition, parse_marker_definition
+from svg2ooxml.core.traversal.markers import MarkerDefinition, parse_marker_definition
 
 
 @dataclass

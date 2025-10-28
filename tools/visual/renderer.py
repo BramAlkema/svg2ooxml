@@ -118,9 +118,13 @@ class LibreOfficeRenderer:
 
 
 def default_renderer() -> LibreOfficeRenderer:
-    """Return a renderer instance using PATH or the configured soffice binary."""
+    """Return a renderer using an explicit path, macOS default, or PATH lookup."""
 
     soffice_override = os.getenv("SVG2OOXML_SOFFICE_PATH")
+    if not soffice_override:
+        mac_default = Path("/Applications/LibreOffice.app/Contents/MacOS/soffice")
+        if mac_default.exists():
+            soffice_override = str(mac_default)
     return LibreOfficeRenderer(soffice_path=soffice_override)
 
 

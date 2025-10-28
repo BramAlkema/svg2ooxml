@@ -9,7 +9,7 @@ from svg2ooxml.io.svg_reader import read_svg_shapes
 from svg2ooxml.ir.geometry import Rect
 from svg2ooxml.ir.paint import SolidPaint
 from svg2ooxml.ir.shapes import Rectangle
-from svg2ooxml.map.converter.core import IRScene
+from svg2ooxml.core.ir import IRScene
 
 
 def test_read_svg_shapes_returns_placeholder_shapes() -> None:

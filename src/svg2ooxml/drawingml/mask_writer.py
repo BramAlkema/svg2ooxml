@@ -10,13 +10,13 @@ from svg2ooxml.drawingml.raster_adapter import RasterAdapter
 from svg2ooxml.ir.geometry import Rect
 from svg2ooxml.ir.paint import SolidPaint
 from svg2ooxml.ir.scene import MaskInstance, MaskRef
-from svg2ooxml.map.converter.emf_adapter import EMFPathAdapter, PathStyle
+from svg2ooxml.drawingml.bridges import EMFPathAdapter, PathStyle
 from svg2ooxml.units.conversion import UnitConverter
 
 from .mask_store import MaskAssetStore
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
-    from svg2ooxml.map.tracer import ConversionTracer
+    from svg2ooxml.core.tracing import ConversionTracer
 
 
 @dataclass

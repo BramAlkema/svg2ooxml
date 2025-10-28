@@ -6,7 +6,7 @@ from lxml import etree
 
 from svg2ooxml.ir.geometry import LineSegment, Point
 from svg2ooxml.ir.scene import Path
-from svg2ooxml.map.converter.core import IRConverter
+from svg2ooxml.core.ir import IRConverter
 from svg2ooxml.services import configure_services
 from svg2ooxml.services.filter_types import FilterEffectResult
 

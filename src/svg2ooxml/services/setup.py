@@ -90,12 +90,12 @@ def configure_services(
         services.register("mask_service", StructuredMaskService(services))
 
     if services.resolve("emf_path_adapter") is None:
-        from svg2ooxml.map.converter.emf_adapter import EMFPathAdapter
+        from svg2ooxml.drawingml.bridges import EMFPathAdapter
 
         services.register("emf_path_adapter", EMFPathAdapter())
 
     if services.resolve("mask_processor") is None:
-        from svg2ooxml.map.converter.mask_processor import MaskProcessor
+        from svg2ooxml.core.masks import MaskProcessor
 
         services.register("mask_processor", MaskProcessor(services))
 

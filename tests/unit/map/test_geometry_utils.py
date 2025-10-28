@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import math
 
-from svg2ooxml.map.converter.geometry_utils import (
+from svg2ooxml.core.traversal.geometry_utils import (
     is_axis_aligned,
     scaled_corner_radius,
     transform_axis_aligned_rect,
 )
-from svg2ooxml.parser.geometry import Matrix2D
+from svg2ooxml.common.geometry import Matrix2D
 
 
 def test_is_axis_aligned_detects_simple_scale() -> None:

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import sys
 from pathlib import Path
 
@@ -16,22 +17,38 @@ for entry in (REPO_ROOT, SRC_ROOT):
 
 from tests.visual.helpers.builder import PptxBuilder
 from tests.visual.helpers.golden import GoldenRepository
-from tools.visual.renderer import LibreOfficeRenderer, VisualRendererError
+from tools.visual.renderer import LibreOfficeRenderer, VisualRendererError, default_renderer
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 logger = logging.getLogger("update_baselines")
 
 SCENARIOS = {
-    "rect_scene": Path("tests/visual/fixtures/simple_rect.svg"),
-    "svg2pptx_demo": Path("../svg2pptx/pipeline/validation_results/basic_rectangle_balanced.pptx"),
+    "rect_scene": {
+        "source": Path("tests/visual/fixtures/simple_rect.svg"),
+        "golden": Path("rect_scene"),
+    },
+    "struct-use-10-f": {
+        "source": Path("tests/svg/struct-use-10-f.svg"),
+        "golden": Path("w3c/struct-use-10-f"),
+    },
+    "svg2pptx_demo": {
+        "source": Path("../svg2pptx/pipeline/validation_results/basic_rectangle_balanced.pptx"),
+        "golden": Path("svg2pptx_demo"),
+    },
 }
 
 
 def generate_baseline(name: str, renderer: LibreOfficeRenderer, builder: PptxBuilder, golden: GoldenRepository) -> None:
-    fixture = SCENARIOS.get(name)
-    if fixture is None:
+    scenario = SCENARIOS.get(name)
+    if scenario is None:
         raise SystemExit(f"Unknown scenario {name!r}. Available: {', '.join(SCENARIOS)}")
-    fixture_path = Path(fixture)
+
+    if isinstance(scenario, dict):
+        fixture_path = Path(scenario.get("source"))
+        golden_subdir = scenario.get("golden")
+    else:
+        fixture_path = Path(scenario)
+        golden_subdir = None
 
     work_dir = Path(".visual_tmp") / name
     work_dir.mkdir(parents=True, exist_ok=True)
@@ -53,7 +70,8 @@ def generate_baseline(name: str, renderer: LibreOfficeRenderer, builder: PptxBui
     if not slide_set.images:
         raise SystemExit("Renderer produced no slides.")
 
-    target_dir = golden.ensure(name)
+    golden_subdir = scenario.get("golden") if isinstance(scenario, dict) else None
+    target_dir = golden.ensure(golden_subdir or name)
     for image in slide_set.images:
         target_path = target_dir / image.name
         logger.info("Writing %s", target_path)
@@ -74,7 +92,14 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    renderer = LibreOfficeRenderer(soffice_path=args.soffice)
+    if args.soffice:
+        renderer = LibreOfficeRenderer(soffice_path=args.soffice)
+    else:
+        soffice_override = os.getenv("SVG2OOXML_SOFFICE_PATH")
+        if soffice_override:
+            renderer = LibreOfficeRenderer(soffice_path=soffice_override)
+        else:
+            renderer = default_renderer()
     if not renderer.available:
         raise SystemExit("LibreOffice (soffice) is not available. Please install it first.")
 

@@ -15,12 +15,13 @@ pytest tests/unit/io/test_adapters.py -k pptx
 These tests ensure we emit a slide package, populate the expected DrawingML, and
 exercise the richer gradient/pattern/image processors via the unit suite.
 
-### Huey remains optional
+### Queue integration
 
-Huey is still guarded behind a `try/except` import in `parser.batch`. When Huey
-is not installed the tasks run inline and log a message, so local development
-does not require the queue. If you install Huey, `convert_single_svg_task`
-becomes available and the batch pipeline can enqueue jobs as before.
+Batch helpers now live under `svg2ooxml.core.parser.batch`. They execute inline
+by default so local development and regression tests do not require a queue.
+Production deployments should wrap `convert_single_svg` or `process_svg_batch`
+with their scheduling system (e.g., Google Cloud Tasks) when asynchronous
+processing is desired.
 
 ### Output locations
 

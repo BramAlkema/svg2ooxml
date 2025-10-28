@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from svg2ooxml.core.pptx_exporter import SvgPageSource, SvgToPptxExporter
-from svg2ooxml.map.tracer import ConversionTracer
+from svg2ooxml.core.tracing import ConversionTracer
 
 
 def test_exporter_returns_trace_report(tmp_path: Path) -> None:
