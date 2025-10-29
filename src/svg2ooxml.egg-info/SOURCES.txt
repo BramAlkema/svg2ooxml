@@ -28,6 +28,7 @@ src/svg2ooxml/api/services/converter.py
 src/svg2ooxml/api/services/dependencies.py
 src/svg2ooxml/api/services/export_service.py
 src/svg2ooxml/api/services/fakes.py
+src/svg2ooxml/api/services/slides_publisher.py
 src/svg2ooxml/batch/__init__.py
 src/svg2ooxml/clip/__init__.py
 src/svg2ooxml/clipmask/__init__.py

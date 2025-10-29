@@ -115,6 +115,8 @@ class JobStatusResponse(BaseModel):
         None,
         description="Information about fonts requested/resolved during conversion",
     )
+    slides_embed_url: Optional[str] = Field(None, description="Embeddable iframe URL for the Slides presentation")
+    slides_presentation_id: Optional[str] = Field(None, description="Google Slides file identifier")
 
 
 __all__ = [

@@ -19,6 +19,7 @@ from urllib.parse import urlparse
 from ..caching import job_status_cache
 from ..models import RequestedFont, SVGFrame
 from .converter import ConversionArtifacts, FontDiagnostics, render_pptx_for_frames
+from .slides_publisher import SlidesPublishResult, SlidesPublishingError, upload_pptx_to_slides
 from .dependencies import ExportServiceDependencies, build_export_service_dependencies
 from svg2ooxml.services.fonts import FontFetcher, FontSource
 
@@ -62,6 +63,7 @@ class ExportService:
         font_fetcher: FontFetcher | None = None,
     ) -> None:
         self.project_id = os.getenv("GCP_PROJECT") or os.getenv("GOOGLE_CLOUD_PROJECT")
+        self.slides_folder_id = os.getenv("GOOGLE_DRIVE_FOLDER_ID")
 
         base_dependencies = dependencies or build_export_service_dependencies(self.project_id)
         effective_dependencies = base_dependencies.with_overrides(
@@ -248,6 +250,27 @@ class ExportService:
 
             slides_url = None
             thumbnail_urls = None
+            slides_embed_url = None
+            slides_presentation_id = None
+
+            if str(job_data.get("output_format", "pptx")).lower() == "slides":
+                self.update_job_status(
+                    job_id=job_id,
+                    status=ExportStatus.PUBLISHING,
+                    message="Publishing presentation to Google Slides",
+                    progress=90.0,
+                    pptx_url=pptx_url,
+                )
+                slides_result = self._publish_to_slides(
+                    pptx_path,
+                    job_id=job_id,
+                    job_data=job_data,
+                    cache_key=cache_key,
+                )
+                slides_url = slides_result.web_view_link or slides_result.published_url
+                slides_embed_url = slides_result.embed_url
+                slides_presentation_id = slides_result.file_id
+                thumbnail_urls = list(slides_result.thumbnail_urls)
 
             self.update_job_status(
                 job_id=job_id,
@@ -260,6 +283,8 @@ class ExportService:
                 conversion_summary=summary["conversion"],
                 font_summary=summary["font"],
                 packaging_totals=summary["packaging"],
+                slides_embed_url=slides_embed_url,
+                slides_presentation_id=slides_presentation_id,
             )
         except Exception as exc:  # pragma: no cover - best effort logging
             logger.error("Job %s failed: %s", job_id, exc, exc_info=True)
@@ -280,6 +305,12 @@ class ExportService:
                 shutil.rmtree(tmp_dir, ignore_errors=True)
             if "font_prep" in locals() and font_prep.workspace:
                 shutil.rmtree(font_prep.workspace, ignore_errors=True)
+            if "slides_result" in locals():
+                logger.info(
+                    "Published Slides presentation %s for job %s",
+                    slides_result.file_id,
+                    job_id,
+                )
 
     # ------------------------------------------------------------------ #
     # Data loading helpers
@@ -610,6 +641,41 @@ class ExportService:
             # Fallback: make blob publicly readable and return public URL
             blob.make_public()
             return blob.public_url
+
+    def _publish_to_slides(
+        self,
+        pptx_path: Path,
+        *,
+        job_id: str,
+        job_data: dict[str, Any],
+        cache_key: str,
+    ) -> SlidesPublishResult:
+        """Upload ``pptx_path`` to Google Slides and return sharing metadata."""
+
+        presentation_title = job_data.get("figma_file_name") or job_data.get("figma_file_id") or f"Export {job_id}"
+        try:
+            result = upload_pptx_to_slides(
+                pptx_path,
+                presentation_title=presentation_title,
+                parent_folder_id=self.slides_folder_id,
+            )
+        except SlidesPublishingError as exc:
+            logger.error("Publishing job %s to Slides failed: %s", job_id, exc)
+            raise
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.error("Unexpected error publishing job %s to Slides: %s", job_id, exc)
+            raise SlidesPublishingError(str(exc)) from exc
+        try:
+            self.conversion_cache_collection.document(cache_key).update(
+                {
+                    "slides_file_id": result.file_id,
+                    "slides_web_view_link": result.web_view_link,
+                    "slides_published_url": result.published_url,
+                }
+            )
+        except Exception:  # pragma: no cover - cache is best-effort
+            logger.debug("Skipping cache update for Slides metadata on cache_key=%s", cache_key)
+        return result
 
 
 __all__ = ["ExportService", "ExportStatus", "JobNotFoundError"]
