@@ -7,7 +7,7 @@ from typing import Optional
 
 from lxml import etree
 
-from svg2ooxml.pipeline.navigation import NavigationSpec, parse_svg_navigation
+from svg2ooxml.core.pipeline.navigation import NavigationSpec, parse_svg_navigation
 from svg2ooxml.core.parser.xml_utils import children
 
 

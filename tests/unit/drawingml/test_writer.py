@@ -5,7 +5,7 @@ from __future__ import annotations
 from lxml import etree as ET
 
 from svg2ooxml.drawingml.writer import DrawingMLWriter, EMU_PER_PX
-from svg2ooxml.pipeline.navigation import NavigationKind, NavigationSpec, SlideTarget
+from svg2ooxml.core.pipeline.navigation import NavigationKind, NavigationSpec, SlideTarget
 from svg2ooxml.ir.geometry import Point, Rect, LineSegment, BezierSegment
 from svg2ooxml.ir.paint import SolidPaint, LinearGradientPaint, GradientStop, Stroke
 from svg2ooxml.ir.scene import (

@@ -2,7 +2,7 @@
 
 import pytest
 
-from svg2ooxml.units.conversion import (
+from svg2ooxml.common.units import (
     ConversionContext,
     UnitConverter,
     DEFAULT_DPI,

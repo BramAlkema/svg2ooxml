@@ -1,6 +1,15 @@
+"""Paint bridging utilities built during the render migration."""
 
-"""Compatibility wrapper for legacy paint package."""
+from svg2ooxml.paint.resvg_bridge import (
+    NormalizedPaints,
+    resolve_fill_paint,
+    resolve_paints_for_node,
+    resolve_stroke_style,
+)
 
-from svg2ooxml._legacy import redirect_package as _redirect_package
-
-_redirect_package("paint")
+__all__ = [
+    "NormalizedPaints",
+    "resolve_fill_paint",
+    "resolve_paints_for_node",
+    "resolve_stroke_style",
+]

@@ -13,6 +13,7 @@ from .preprocess.services import ParserServices, build_parser_services
 from .units import viewbox_to_px, ConversionContext, UnitConverter
 from .result import ParseResult
 from .svg_parser import ParserConfig, SVGParser
+from .sanitizers import sanitize_svg
 
 __all__ = [
     "ParserOptions",
@@ -42,4 +43,5 @@ __all__ = [
     "fix_encoding_issues",
     "ParserConfig",
     "SVGParser",
+    "sanitize_svg",
 ]

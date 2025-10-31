@@ -11,6 +11,7 @@ from .clipping import (
 from .markers import MarkerDefinition, MarkerInstance, MarkerTransform, apply_local_transform, build_marker_transform
 from .marker_runtime import apply_marker_metadata, build_marker_shapes
 from .traversal import ElementTraversal, TraverseCallback, navigation_from_attributes
+from .transform_parser import TransformParser
 from .runtime import (
     local_name,
     process_anchor,
@@ -47,4 +48,5 @@ __all__ = [
     "push_element_transform",
     "resolve_active_navigation",
     "TraversalHooksMixin",
+    "TransformParser",
 ]

@@ -10,10 +10,10 @@ from typing import Any, Optional
 from lxml import etree
 
 from svg2ooxml.core.parser.xml_utils import children
-from svg2ooxml.pipeline.navigation import NavigationSpec, parse_svg_navigation
+from svg2ooxml.core.pipeline.navigation import NavigationSpec, parse_svg_navigation
 
 from svg2ooxml.core.traversal.coordinate_space import CoordinateSpace
-from svg2ooxml.map.converter.transform_parser import TransformParser
+from svg2ooxml.core.traversal.transform_parser import TransformParser
 from svg2ooxml.core.traversal import runtime as traversal_runtime
 
 

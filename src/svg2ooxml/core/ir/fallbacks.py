@@ -14,12 +14,12 @@ from svg2ooxml.ir.geometry import Point, Rect, SegmentType
 from svg2ooxml.ir.paint import SolidPaint
 from svg2ooxml.ir.scene import ClipRef, Image, MaskInstance, MaskRef
 from svg2ooxml.policy.constants import FALLBACK_BITMAP, FALLBACK_EMF
-from svg2ooxml.units.conversion import UnitConverter
+from svg2ooxml.common.units import UnitConverter
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from svg2ooxml.core.traversal.coordinate_space import CoordinateSpace
     from svg2ooxml.core.styling.style_extractor import StyleResult
-    from svg2ooxml.units.conversion import ConversionContext
+    from svg2ooxml.common.units import ConversionContext
 
 _PATH_ADAPTER = EMFPathAdapter()
 

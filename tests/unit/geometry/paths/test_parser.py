@@ -2,7 +2,7 @@
 
 import pytest
 
-from svg2ooxml.geometry.paths import (
+from svg2ooxml.common.geometry.paths import (
     BezierSegment,
     LineSegment,
     Point,
@@ -73,4 +73,6 @@ def test_parse_arc_command() -> None:
 
     assert segments
     assert isinstance(segments[0], BezierSegment)
-    assert segments[-1].end == Point(10, 10)
+    end_point = segments[-1].end
+    assert end_point.x == pytest.approx(10.0)
+    assert end_point.y == pytest.approx(10.0)

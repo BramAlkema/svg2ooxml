@@ -5,8 +5,8 @@ from __future__ import annotations
 import pytest
 from lxml import etree
 
-from svg2ooxml.core.ir import IRConverter
-from svg2ooxml.map.ir_converter import IRScene, convert_parser_output
+from svg2ooxml.core.ir import IRConverter, IRScene
+from svg2ooxml.ir.entrypoints import convert_parser_output
 from svg2ooxml.ir.scene import Group, Image, Path, Rectangle
 from svg2ooxml.ir.text import TextFrame
 from svg2ooxml.ir.geometry import BezierSegment, LineSegment, Point, Rect

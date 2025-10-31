@@ -8,8 +8,12 @@ from typing import Iterable
 from lxml import etree
 
 from svg2ooxml.common.geometry import Matrix2D, parse_transform_list
+from svg2ooxml.core.traversal.viewbox import (
+    ViewBox,
+    ViewportEngine,
+    parse_viewbox_attribute,
+)
 from svg2ooxml.ir.geometry import Point
-from svg2ooxml.viewbox.core import ViewBox, ViewportEngine, parse_viewbox_attribute
 
 
 @dataclass(slots=True)

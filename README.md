@@ -4,10 +4,10 @@ SVG → Office Open XML conversion toolkit. The project is an evolution of the
 internal svg2pptx converter and is being rebuilt around a small, well-typed
 core that can run locally without GCP dependencies.
 
-- **Core pipeline** – normalises SVGs via resvg and orchestrates stage execution.
+- **Exporter + services** – ``SvgToPptxExporter`` drives parsing, IR mapping, and
+  PPTX packaging through the service graph.
 - **DrawingML writers** – generate PPTX/Slides artefacts (currently stubs).
 - **API surface** – FastAPI entry points with optional Firestore/Storage backends.
-- **Legacy bridge** – svg2pptx-era modules live under `svg2ooxml.legacy`.
 
 ## Getting Started
 
@@ -20,6 +20,51 @@ pip install -r requirements-dev.txt
 The developer requirements install svg2ooxml in editable mode with all runtime
 extras (API, worker, cloud, rendering, colour, slides) plus linting and test
 tooling. For a lean runtime-only stack use `pip install -r requirements.txt`.
+
+### Call the Cloud Run export API
+
+Once you have authenticated with `gcloud` (see
+[`ADR-016`](docs/adr/ADR-016-gcloud-client-setup.md)), you can exercise the live
+service directly. The example below posts the W3C `struct-use-10-f` fixture and
+requests a Google Slides deck:
+
+```bash
+TOKEN=$(gcloud auth print-identity-token)
+SERVICE_URL=https://svg2ooxml-export-sghya3t5ya-ew.a.run.app
+
+python - <<'PY' > payload.json
+import json
+from pathlib import Path
+
+payload = {
+    "frames": [
+        {
+            "name": "struct-use-10-f",
+            "svg_content": Path("tests/svg/struct-use-10-f.svg").read_text(),
+            "width": 480,
+            "height": 360,
+        }
+    ],
+    "figma_file_id": "w3c-struct-use-10-f",
+    "figma_file_name": "W3C struct use",
+    "output_format": "slides",
+}
+print(json.dumps(payload))
+PY
+
+curl -sS -X POST \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d @payload.json \
+  "$SERVICE_URL/api/v1/export"
+
+JOB_ID=...
+curl -sS -H "Authorization: Bearer $TOKEN" \
+  "$SERVICE_URL/api/v1/export/$JOB_ID" | jq
+```
+
+The status payload now includes `pptx_url`, `slides_url`, `slides_embed_url`,
+and `slides_presentation_id` when the Slides promotion succeeds.
 
 ## Development Workflow
 
@@ -45,14 +90,14 @@ The `pyproject.toml` declares optional extras—mix and match via
 Production code lives under `src/svg2ooxml/`:
 
 - `common/` – shared helpers (temporary dirs, interpolation, timing).
-- `core/` – converter entry points, pipeline orchestration, resvg integration.
+- `core/` – converter entry points (including ``SvgToPptxExporter``), traversal,
+  resvg integration, and the metadata describing the pipeline stages.
 - `drawingml/` – XML writers and asset registries.
 - `io/` – SVG/PPTX adapters and file/stream helpers.
 - `policy/` – tunable decisions and provider registries.
 - `api/` and `services/` – REST API, background services, and integrations.
-- `legacy/` – svg2pptx packages kept reachable during the migration; compatibility
-  shims expose them under their historic import paths. See `docs/porting.md` for
-  the remaining relocation plan.
+  shims used during the migration have now been removed; see `docs/legacyport.md`
+  for the historical port log.
 
 Supporting folders:
 

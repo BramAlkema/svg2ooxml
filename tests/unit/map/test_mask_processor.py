@@ -6,7 +6,7 @@ import pytest
 
 from svg2ooxml.ir.geometry import LineSegment, Point, Rect
 from svg2ooxml.ir.scene import MaskDefinition, MaskInstance, MaskRef, Path
-from svg2ooxml.map.converter.mask_processor import MaskProcessingResult, MaskProcessor
+from svg2ooxml.core.masks import MaskProcessingResult, MaskProcessor
 
 
 def _make_path(mask: MaskRef | None = None) -> Path:

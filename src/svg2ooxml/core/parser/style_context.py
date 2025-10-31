@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 from lxml import etree
 
-from svg2ooxml.viewbox import resolve_viewbox_dimensions
+from svg2ooxml.core.traversal.viewbox import resolve_viewbox_dimensions
 
 from .units import ConversionContext, UnitConverter
 

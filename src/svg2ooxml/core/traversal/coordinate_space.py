@@ -6,16 +6,7 @@ from dataclasses import dataclass, field
 
 from svg2ooxml.ir.geometry import BezierSegment, LineSegment, Point, SegmentType
 from svg2ooxml.common.geometry import Matrix2D
-from svg2ooxml.transforms import CoordinateSpace as TransformSpace, Matrix
-
-
-def _matrix2d_to_matrix(matrix: Matrix2D) -> Matrix:
-    return Matrix.from_values(matrix.a, matrix.b, matrix.c, matrix.d, matrix.e, matrix.f)
-
-
-def _matrix_to_matrix2d(matrix: Matrix) -> Matrix2D:
-    a, b, c, d, e, f = matrix.as_tuple()
-    return Matrix2D(a, b, c, d, e, f)
+from svg2ooxml.common.geometry.transforms import CoordinateSpace as TransformSpace
 
 
 @dataclass
@@ -29,7 +20,7 @@ class CoordinateSpace:
         if transform is None:
             self._space.push(None)
         else:
-            self._space.push(_matrix2d_to_matrix(transform))
+            self._space.push(transform)
 
     def pop(self) -> None:
         """Pop the latest CTM, leaving the viewport matrix intact."""
@@ -37,7 +28,7 @@ class CoordinateSpace:
 
     @property
     def current(self) -> Matrix2D:
-        return _matrix_to_matrix2d(self._space.current)
+        return self._space.current
 
     def apply_point(self, x: float, y: float) -> tuple[float, float]:
         return self._space.apply_point(x, y)

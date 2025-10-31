@@ -105,6 +105,7 @@ class JobStatusResponse(BaseModel):
     slides_url: Optional[str] = Field(None, description="Google Slides public URL")
     thumbnail_urls: Optional[List[str]] = Field(None, description="Slide thumbnail URLs")
     error: Optional[str] = Field(None, description="Error message if job failed")
+    slides_error: Optional[str] = Field(None, description="Error reported when Slides publishing failed")
     created_at: str
     updated_at: str
     conversion_summary: Optional[dict[str, Any]] = Field(

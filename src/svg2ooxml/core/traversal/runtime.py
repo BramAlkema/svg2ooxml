@@ -6,7 +6,7 @@ from typing import Callable, Iterable, List
 
 from lxml import etree
 
-from svg2ooxml.pipeline.navigation import NavigationSpec
+from svg2ooxml.core.pipeline.navigation import NavigationSpec
 
 
 

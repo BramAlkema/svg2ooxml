@@ -119,10 +119,14 @@ def test_descriptor_fallback_produces_placeholder_when_rendering_absent() -> Non
     assert placeholder.strategy in {"raster", "auto"}
     metadata = placeholder.metadata
     renderer = metadata.get("renderer")
+    assert renderer in {"placeholder", "skia", "resvg"}
     if renderer == "placeholder":
         assert metadata.get("placeholder") is True
+    elif renderer == "resvg":
+        assert metadata.get("render_passes", 0) >= 0
+        assert metadata.get("width_px", 0) > 0
+        assert metadata.get("height_px", 0) > 0
     else:
-        assert renderer == "skia"
         assert metadata.get("render_passes", 0) >= 1
     assets = metadata.get("fallback_assets")
     assert isinstance(assets, list) and assets[0].get("type") == "raster"

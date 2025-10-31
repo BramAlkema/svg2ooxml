@@ -1,123 +1,83 @@
-# Porting Checklist
+# Porting Checklist – svg2pptx → svg2ooxml
 
-The svg2ooxml codebase is mid-migration from svg2pptx. Packages that have not
-yet been fully ported live under `src/svg2ooxml/legacy/` and are exposed through
-compatibility shims so existing imports continue to function. This document
-tracks what remains to move and the decisions we still owe.
+The port is now focused on finishing the resvg-driven renderer and collapsing
+what is left of the legacy package tree. This document tracks the current
+status and the remaining work so we can finally delete `src/svg2ooxml/legacy`.
 
-## Recently Completed
-- Introduced `legacy/` to house svg2pptx-era packages while we carve out the
-  new `core/`, `drawingml/`, `policy/`, `io/`, and `common/` modules.
-- Deleted stale `*.bak` re-export files; the new structure relies on explicit
-  packages instead of auto-generated namespace lists.
-- Added README guidance (installation, testing, structure) for contributors.
-- Migrated the CSS style resolver to `src/svg2ooxml/common/style/`, the `<use>`
-  expansion helpers plus traversal mixins to `src/svg2ooxml/core/styling/` and
-  `src/svg2ooxml/core/traversal/`, and the DOM/normalisation/statistics utilities
-  to `src/svg2ooxml/core/parser/`, keeping legacy shims for callers during the
-  rollout.
-- Migrated the conversion tracer into `src/svg2ooxml/core/tracing/`, leaving
-  `svg2ooxml.map.tracer` as a compatibility shim while downstream imports move.
-- Promoted the mask processor and resvg clip/mask collectors into
-  `src/svg2ooxml/core/masks/` and `src/svg2ooxml/core/traversal/bridges/`,
-  keeping legacy shims while services and tests switch to the new modules.
-- Moved hyperlink processing into `src/svg2ooxml/core/hyperlinks/` with the
-  service provider and CLI now relying on the new module, leaving the legacy
-  shim for compatibility.
-- Promoted the resvg paint bridge and EMF path adapters into
-  `src/svg2ooxml/drawingml/bridges/`, keeping legacy re-exports for callers
-  still pointing at `legacy.map`.
-- Moved the policy hooks mixin into `src/svg2ooxml/core/ir/policy_hooks.py`
-  while leaving a legacy shim to ease the remaining mapper cleanup.
-- Promoted rectangle conversion, marker definitions/runtime, smart-font
-  bridging, shape conversion mixins, DOM traversal helpers, and geometry
-  fallbacks into the `core/ir` and `core/traversal` namespaces with legacy
-  shims pointing at the new surfaces.
+## Status Snapshot
+- Core traversal, `<use>` expansion, style resolution, and parser utilities now
+  live under `src/svg2ooxml/core/` and `src/svg2ooxml/common/`, with legacy
+  modules re-exporting the modern implementations.
+- The intermediate representation (scene, text, paint, geometry, animation) has
+  moved to `src/svg2ooxml/ir/`; the legacy shim has now been removed.
+- Masks, clip collection, hyperlinks, navigation, and service wiring run
+  through the new core packages; the mapper and pipeline shims have been
+  retired in favour of `core.pipeline`.
+- DrawingML bridges (paint, EMF helpers) now live in `src/svg2ooxml/drawingml`,
+  and the mapper package forwards to the new pipeline modules.
+- Filter primitives, registry, and the resvg bridge now live under
+  `src/svg2ooxml/filters/`; the legacy shim has been removed.
+- Rendering helpers (`geometry`, `normalize`, `paint`) sit in
+  `src/svg2ooxml/render/`, and the renderer pipeline (`filters`, `mask_clip`,
+  `markers`, `rasterizer`, `surface`) now wrap the ported pyportresvg
+  implementation.
+- The unused compatibility heuristics stubs have been retired; any future
+  cross-version adjustments should live under `core/compat/` with explicit docs.
+- Performance metrics now live under `src/svg2ooxml/performance/metrics.py`,
+  replacing the legacy redirect.
+- Preprocessing and presentation facades expose the parser sanitizers and PPTX
+  exporter directly without legacy shims.
+- Obsolete top-level packages (`animations`, `batch`, `clip`, `compat`, `fonts`,
+  `multipage`, `text`) have been removed along with their legacy counterparts.
+- Clip tessellation helpers now live under `src/svg2ooxml/common/geometry/clip/`
+  and are shared by the traversal runtime.
 
-## High‑Priority Migrations
+## Remaining Work at a Glance
 
-These are the “hot paths” still sitting in `legacy/` that block fidelity fixes
-and new features. Each entry calls out where the code should land, the work
-required, and the validation we expect before removing the shim.
+| Area | Current state | Next actions |
+| --- | --- | --- |
+| Renderer integration | Pipeline and filter execution now run on the ported pyportresvg renderer | Wire the renderer into the exporter surfaces, add end-to-end coverage, and gate feature usage where platform support is still missing (e.g., gradients without fallbacks). |
+| PPTX pipeline | `core/pipeline` exposes minimal scaffolding today | Decide whether to flesh out the modern pipeline API or steer callers to the higher-level exporter and document the supported surface. |
+| Legacy package sweep | Legacy modules removed | Track downstream consumers in docs and trim outstanding references. |
+| Documentation | Docs mention shims without pointing at the modern modules | Update references (this file, `docs/legacyport.md`, `docs/structure.md`) whenever a shim is removed or a new surface is stabilised. |
 
-| Legacy module                                     | Target package / module                           | Migration outline |
-|--------------------------------------------------|---------------------------------------------------|-------------------|
-| `legacy/css/resolver.py` + style helpers (used by IR converter, `<use>` expansion, text pipeline) | `src/svg2ooxml/common/style/resolver.py` | - ✅ Resolver now lives in `common/style/resolver.py`; legacy module re-exports for backward compatibility.<br>- Follow-up: collapse the `_legacy` redirect once callers move, and add focused tests under `tests/unit/common/test_style_resolver.py` covering inheritance/`!important`/clone scenarios.<br>- Update `StyleExtractor` to drop cache hacks when the new module is the only consumer. |
-| `legacy/map/converter` (styles_runtime, traversal_hooks, transform/parser helpers) | `src/svg2ooxml/core/styling/` and `src/svg2ooxml/core/traversal/` | - ✅ Traversal stack (hooks, runtime, clipping, coordinate space) now lives under `core` and re-exports for compatibility.<br>- TODO: migrate the DrawingML path generator wiring and retire the remaining legacy shims once callers swap. |
-| `legacy/parser/*` (DOM loader, `split` traversals, `svg_parser` workflows) | `src/svg2ooxml/core/parser/` (entry point + feature evaluators) | - ✅ Parser helpers (DOM loader, content sanitizer, color parsing, style context, references, result, normalization, statistics, services, units) now live under `core/parser`.<br>- ✅ Legacy shims removed; callers now import directly from the core surface. |
-| `legacy/ir` data classes | `src/svg2ooxml/common/ir/` | - Relocate IR models and their helpers; adjust imports in `core/` and tests; document the stable API surface. |
-| `legacy/geometry`, `legacy/units`, `legacy/transforms` | `src/svg2ooxml/common/geometry/`, `common/units/` | - Cherry-pick the minimal matrices/length utilities required by the new traversal/renderer.<br>- Introduce small, typed helpers and retire the broad legacy modules once consumers are migrated. |
-| Remaining pipeline glue (`legacy/presentation`, `legacy/pipeline`, `legacy/render`) | `src/svg2ooxml/core/pipeline/` + `drawingml/` writers | - As soon as the DrawingML writer stabilises, move the PPTX packaging steps out of `legacy/presentation` and delete the compatibility CLI.<br>- Replace legacy render fallbacks with the new renderer surface (or drop if obsolete). |
+## Legacy Package Cleanup
 
-## Outstanding Moves
-- `legacy/map`, `legacy.render`, `legacy.paint`, and
-  `legacy.filters` still implement the svg2pptx mapping pipeline. Plan the
-  extraction into the new `core`/`drawingml` layers, splitting functionality
-  into dedicated modules rather than monolithic translators.
-- `legacy.ir` contains the intermediate representation types. Decide whether
-  IR models remain shared under `common/` or evolve into a new dedicated
-  package.
-- `legacy.geometry`, `legacy.units`, and `legacy.transforms` power a lot of the
-  adapter math. Identify the minimal APIs the new pipeline needs and move them
-  into `common/geometry` helpers.
-- `legacy.performance`, `legacy.batch`, and `legacy.multipage` are not yet
-  wired into the new orchestrator. Confirm which surfaces we keep and whether
-  they graduate into `core` versus becoming optional extras.
-- `legacy.presentation` and `legacy.pipeline` currently feed the PPTX exporter.
-  Once the new `drawingml.writer` flow lands, fold the remaining pieces into
-  `io/` and retire the compatibility wrapper.
+All compatibility shims have been removed. The modern packages (`geometry`,
+`units`, `performance`, `preprocessing`, `presentation`, etc.) surface the real
+implementations, and the `legacy/` namespace no longer exists. Treat any
+backfill work as first-class modules under `src/svg2ooxml/`.
 
-## Legacy Map Migration Blueprint
+## Resvg Integration Plan
 
-To unblock the remaining moves, the legacy map pipeline will migrate in the
-following slices. Each batch keeps the compatibility re-exports in place until
-callers and tests can switch over.
+1. **Filter planner** – Bring over the pyportresvg filter planner and execution
+   pipeline. Populate `render.filters.plan_filter` / `apply_filter` and add unit
+   tests mirroring `tests/unit/filters`.
+2. **Mask/clip rasterisation** – Port the resvg mask and clip rasterisers into
+   `render.mask_clip`. Provide fast-failure guards while the implementation is
+   incomplete.
+3. **Render surface orchestration** – Flesh out `render.pipeline` and
+   `render.surface` to drive resvg-based rendering. Integrate with the DrawingML
+   export path behind a feature flag.
+4. **Exporter gating** – Ensure API/export services detect missing renderer
+   features and surface actionable errors instead of crashing.
+5. **Testing** – Expand `tests/unit/render` and add end-to-end validation under
+   `tests/integration/core/test_pipeline.py` once the new pipeline is wired in.
 
-### Target package layout
-- `src/svg2ooxml/core/ir/`: IR converter (`IRConverter`), scene models (`IRScene`,
-  element metadata), traversal orchestration, and tracing hooks.
-- `src/svg2ooxml/core/masks/`: mask and clip helpers (`MaskProcessor`, clip
-  usage tracking) that feed both IR conversion and DrawingML writers.
-- `src/svg2ooxml/core/hyperlinks/`: hyperlink processor plus DI glue currently
-  surfaced from services.
-- `src/svg2ooxml/core/traversal/bridges/`: `resvg` clip/mask collectors and
-  element lookup bridges shared by traversal and mask extraction.
-- `src/svg2ooxml/drawingml/bridges/`: `resvg` paint bridge, EMF fallbacks, and
-  DrawingML-specific geometry adapters.
-- `src/svg2ooxml/services/providers/`: service registration shims for masks,
-  hyperlinks, EMF adapters, and tracing to replace the legacy `services.resolve`
-  lookups.
+## Shim Retirement Playbook
+Use this checklist whenever a legacy package graduates to the modern tree:
+1. Promote the code and add unit tests that mirror the new module path.
+2. Replace legacy imports in production code and tests.
+3. Update docs (`porting.md`, `legacyport.md`, `structure.md`) to reflect the
+   new location.
+4. Remove the shim, run targeted tests (unit + relevant integration/visual
+   suites), and update documentation.
 
-### Migration batches
-1. **IR core move – ✅**: create `core/ir/` and relocate `IRScene`, `IRConverter`,
-   traversal mixins, and tracer preload logic. Update imports under
-   `core/parser`, `io/pptx_writer`, CLI, and tests to use the new surface.
-2. **Mask + clip services – ✅**: move `MaskProcessor`, clip/marker usage tracking,
-   and `collect_resvg_*` helpers into `core/masks/` and `core/traversal/bridges/`.
-   Teach the services setup to instantiate the new modules.
-3. **Hyperlink + service wiring – ✅**: migrate `HyperlinkProcessor` and the service
-   discovery helpers into `core/hyperlinks/` and concrete providers so callers
-   stop depending on `legacy.map`.
-4. **Resvg paint bridge / EMF adapters – ✅**: resvg paint bridge, gradient
-   descriptors, and EMF path adapters now live under `drawingml/bridges/` with
-   focused unit coverage in `tests/unit/drawingml`.
-5. **Pipeline and mapper cleanup**: collapse the remaining legacy mapper
-   wrappers into `core/pipeline/` entry points and delete the compatibility
-  layer once downstream packages import from `core` and `drawingml`.
+## Verification
+- Default dev loop: `pytest tests/unit -m "unit and not slow"`
+- Geometry/mask/map sweep: `pytest tests/unit/map`
+- Renderer placeholders: `pytest tests/unit/render`
+- End-to-end (once pipeline test exists): `pytest tests/integration/core/test_pipeline.py`
 
-### Test realignment
-- Duplicate `tests/unit/map/test_ir_converter.py`, `test_tracer.py`,
-  `test_mask_processor.py`, and related fixtures under mirrored `tests/unit/core`
-  or `tests/unit/drawingml` paths during each migration batch.
-- Add integration coverage in `tests/integration/core/test_pipeline.py` once the
-  new modules are live, ensuring compatibility shims can be removed without
-  regressing the PPTX exporter.
-
-## Follow-Up Actions
-- Each promotion out of `legacy/` should:
-  1. Add or update unit tests under `tests/unit/` mirroring the new module.
-  2. Document the change (and any removed APIs) here and in `docs/structure.md`.
-  3. Drop the compatibility shim once callers have moved to the new path.
-- Record open questions about GCP integration, batching, or fonts alongside
-  their owners so we maintain visibility on systems work required before the
-  first release.
+Keep coverage ≥70 % across `src/svg2ooxml`, document any skipped functionality,
+and capture follow-up bugs in `docs/legacyport.md` or the tracker.

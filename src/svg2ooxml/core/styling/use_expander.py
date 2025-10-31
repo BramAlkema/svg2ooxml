@@ -7,9 +7,12 @@ from typing import Iterable
 
 from lxml import etree
 
-from svg2ooxml.common.style.resolver import StyleResolver
 from svg2ooxml.common.geometry import Matrix2D
-from svg2ooxml.viewbox.core import parse_preserve_aspect_ratio, parse_viewbox_attribute
+from svg2ooxml.common.style.resolver import StyleResolver
+from svg2ooxml.core.traversal.viewbox import (
+    parse_preserve_aspect_ratio,
+    parse_viewbox_attribute,
+)
 
 
 def instantiate_use_target(converter, target: etree._Element, use_element: etree._Element) -> list[etree._Element]:

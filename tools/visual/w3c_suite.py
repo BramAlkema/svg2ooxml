@@ -4,9 +4,11 @@
 from __future__ import annotations
 
 import argparse
+import json
 import logging
+import urllib.request
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, TypedDict
 
 from tests.visual.helpers.builder import PptxBuilder
 from tests.visual.helpers.diff import ImageDiff, ImageDiffError
@@ -22,6 +24,12 @@ SCENARIOS = {
 }
 
 
+class ExportOptions(TypedDict):
+    service_url: str
+    auth_token: str | None
+    output_format: str
+
+
 def _resolve_scenarios(names: Iterable[str] | None) -> list[tuple[str, Path]]:
     if not names:
         return [(name, path) for name, path in SCENARIOS.items()]
@@ -34,7 +42,7 @@ def _resolve_scenarios(names: Iterable[str] | None) -> list[tuple[str, Path]]:
     return resolved
 
 
-def run_suite(names: Iterable[str] | None, output_dir: Path) -> None:
+def run_suite(names: Iterable[str] | None, output_dir: Path, export: ExportOptions | None = None) -> None:
     renderer = default_renderer()
     if not renderer.available:
         raise SystemExit(
@@ -69,6 +77,18 @@ def run_suite(names: Iterable[str] | None, output_dir: Path) -> None:
             logger.warning("%s: rendering failed – %s", name, exc)
             continue
         logger.info("%s: rendered %d slide image(s)", name, len(rendered.images))
+
+        if export is not None:
+            try:
+                job_payload = _submit_export_job(
+                    svg_text=svg_text,
+                    scenario_name=name,
+                    export_options=export,
+                )
+            except Exception as exc:  # pragma: no cover - network failure
+                logger.warning("%s: failed to submit export job – %s", name, exc)
+            else:
+                logger.info("%s: submitted export job %s", name, job_payload.get("job_id"))
 
         baseline_dir = golden.path_for(Path("w3c") / name)
         if not baseline_dir.exists() or not any(baseline_dir.glob("*.png")):
@@ -111,13 +131,98 @@ def main() -> None:
         action="store_true",
         help="Enable verbose logging",
     )
+    parser.add_argument(
+        "--export-service-url",
+        default=None,
+        help="Optional Cloud Run export API base URL (e.g. https://service.run.app)",
+    )
+    parser.add_argument(
+        "--auth-token",
+        default=None,
+        help="Bearer token for the export API (omit to send unauthenticated requests)",
+    )
+    parser.add_argument(
+        "--export-format",
+        choices=["pptx", "slides"],
+        default="slides",
+        help="Export format when posting scenarios to the API",
+    )
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO if not args.verbose else logging.DEBUG)
     output_dir = Path(args.output)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    run_suite(args.scenarios, output_dir)
+    export_opts: ExportOptions | None = None
+    if args.export_service_url:
+        export_opts = {
+            "service_url": args.export_service_url.rstrip("/"),
+            "auth_token": args.auth_token,
+            "output_format": args.export_format,
+        }
+
+    run_suite(args.scenarios, output_dir, export=export_opts)
+
+
+def _submit_export_job(*, svg_text: str, scenario_name: str, export_options: ExportOptions) -> dict[str, object]:
+    width, height = _extract_dimensions(svg_text)
+    payload = {
+        "frames": [
+            {
+                "name": scenario_name,
+                "svg_content": svg_text,
+                "width": width,
+                "height": height,
+            }
+        ],
+        "figma_file_id": f"w3c-{scenario_name}",
+        "figma_file_name": f"W3C {scenario_name}",
+        "output_format": export_options["output_format"],
+    }
+
+    request = urllib.request.Request(
+        f"{export_options['service_url']}/api/v1/export",
+        data=json.dumps(payload).encode("utf-8"),
+        method="POST",
+        headers={"Content-Type": "application/json"},
+    )
+    token = export_options.get("auth_token")
+    if token:
+        request.add_header("Authorization", f"Bearer {token}")
+
+    with urllib.request.urlopen(request, timeout=30) as response:
+        body = response.read().decode("utf-8")
+    return json.loads(body)
+
+
+def _extract_dimensions(svg_text: str) -> tuple[float, float]:
+    from xml.etree import ElementTree as ET
+
+    root = ET.fromstring(svg_text)
+    view_box_tokens = root.attrib.get("viewBox", "").split()
+    width = _parse_dimension(root.attrib.get("width", ""), view_box_tokens, 2)
+    height = _parse_dimension(root.attrib.get("height", ""), view_box_tokens, 3)
+    return width or 1.0, height or 1.0
+
+
+def _parse_dimension(token: str, view_box_tokens: list[str], fallback_index: int) -> float | None:
+    normalized = (token or "").strip()
+    if normalized.endswith("%") and len(view_box_tokens) == 4:
+        try:
+            return float(view_box_tokens[fallback_index])
+        except (ValueError, IndexError):
+            return None
+    if normalized:
+        try:
+            return float(normalized)
+        except ValueError:
+            return None
+    if len(view_box_tokens) == 4:
+        try:
+            return float(view_box_tokens[fallback_index])
+        except (ValueError, IndexError):
+            return None
+    return None
 
 
 if __name__ == "__main__":

@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any, Callable, Iterable, Mapping, Sequence
 
 from svg2ooxml.drawingml.generator import CustomGeometry, DrawingMLPathGenerator
-from svg2ooxml.geometry.paths.parser import parse_path_data
+from svg2ooxml.common.geometry.paths import parse_path_data
 from svg2ooxml.ir.geometry import BezierSegment, LineSegment, Point, SegmentType
 from svg2ooxml.common.geometry import Matrix2D
 

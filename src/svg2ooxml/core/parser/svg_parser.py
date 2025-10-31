@@ -290,7 +290,7 @@ class SVGParser:
             )
 
             try:
-                from svg2ooxml.map import convert_parser_output
+                from svg2ooxml.ir import convert_parser_output
 
                 ir_scene = convert_parser_output(
                     result,

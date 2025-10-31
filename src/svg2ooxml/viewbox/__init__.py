@@ -1,6 +1,30 @@
 
-"""Compatibility wrapper for legacy viewbox package."""
+"""Public viewBox helpers backed by the core traversal module."""
 
-from svg2ooxml._legacy import redirect_package as _redirect_package
+from __future__ import annotations
 
-_redirect_package("viewbox")
+from .core import (
+    PreserveAspectRatio,
+    ViewBox,
+    ViewBoxResult,
+    Viewport,
+    ViewportEngine,
+    compute_viewbox,
+    parse_preserve_aspect_ratio,
+    parse_viewbox_attribute,
+    resolve_viewbox,
+    resolve_viewbox_dimensions,
+)
+
+__all__ = [
+    "PreserveAspectRatio",
+    "ViewBox",
+    "ViewBoxResult",
+    "Viewport",
+    "ViewportEngine",
+    "compute_viewbox",
+    "parse_preserve_aspect_ratio",
+    "parse_viewbox_attribute",
+    "resolve_viewbox",
+    "resolve_viewbox_dimensions",
+]

@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from svg2ooxml.geometry.paths import normalize_path_to_segments, tessellate_path
-from svg2ooxml.geometry.transforms.matrix import Matrix2D
+from svg2ooxml.common.geometry import Matrix2D
+from svg2ooxml.common.geometry.paths import normalize_path_to_segments, tessellate_path
 
 
 def test_normalize_path_to_segments_applies_transform() -> None:

@@ -20,8 +20,8 @@ from svg2ooxml.ir.animation import (
 from svg2ooxml.drawingml.result import DrawingMLRenderResult
 from svg2ooxml.drawingml.writer import DrawingMLWriter
 from svg2ooxml.io.pptx_writer import PPTXPackageBuilder
-from svg2ooxml.map import convert_parser_output
-from svg2ooxml.core.ir import IRScene
+from svg2ooxml.core.ir.converter import IRScene
+from svg2ooxml.ir import convert_parser_output
 from svg2ooxml.core.tracing import ConversionTracer
 from svg2ooxml.core.parser import ParserConfig, SVGParser
 from svg2ooxml.policy import PolicyContext

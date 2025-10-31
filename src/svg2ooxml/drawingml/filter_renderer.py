@@ -10,7 +10,7 @@ from typing import Iterable, List
 from svg2ooxml.filters.base import FilterContext, FilterResult
 from svg2ooxml.ir.effects import CustomEffect
 from svg2ooxml.services.filter_types import FilterEffectResult
-from svg2ooxml.units.conversion import px_to_emu
+from svg2ooxml.common.units import px_to_emu
 from svg2ooxml.drawingml.emf_adapter import EMFAdapter, PaletteResolver
 from svg2ooxml.drawingml.raster_adapter import RasterAdapter
 

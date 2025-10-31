@@ -87,10 +87,13 @@ async def get_job_status(job_id: str) -> JobStatusResponse:
             slides_url=job_data.get("slides_url"),
             thumbnail_urls=job_data.get("thumbnail_urls"),
             error=job_data.get("error"),
+            slides_error=job_data.get("slides_error"),
             created_at=job_data["created_at"],
             updated_at=job_data["updated_at"],
             conversion_summary=job_data.get("conversion_summary"),
             font_summary=job_data.get("font_summary"),
+            slides_embed_url=job_data.get("slides_embed_url"),
+            slides_presentation_id=job_data.get("slides_presentation_id"),
         )
 
     except JobNotFoundError:

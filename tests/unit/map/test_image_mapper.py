@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from svg2ooxml.ir.geometry import Point, Rect
 from svg2ooxml.ir.scene import ClipRef, Image
-from svg2ooxml.map.mapper import ImageMapper, OutputFormat
+from svg2ooxml.core.pipeline.mappers import ImageMapper, OutputFormat
 from svg2ooxml.services import configure_services
 
 

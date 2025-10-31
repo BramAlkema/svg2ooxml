@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from svg2ooxml.geometry.algorithms import CurveTextPositioner, PathSamplingMethod
+from svg2ooxml.common.geometry.algorithms import CurveTextPositioner, PathSamplingMethod
 
 
 def test_sample_path_returns_points_for_simple_path() -> None:
@@ -26,7 +26,7 @@ def test_find_point_at_distance_interpolates() -> None:
     assert point.distance_along_path == 25.0
 
 
-from svg2ooxml.geometry.algorithms import PathWarpFitter, create_path_warp_fitter
+from svg2ooxml.common.geometry.algorithms import PathWarpFitter, create_path_warp_fitter
 
 
 def test_path_warp_fitter_returns_no_fit_for_flat_line() -> None:
@@ -35,4 +35,3 @@ def test_path_warp_fitter_returns_no_fit_for_flat_line() -> None:
     result = fitter.fit_path_to_warp("M0 0 L100 0", min_confidence=0.1)
 
     assert result.preset_type in {"none", "arch", "wave", "bulge"}
-

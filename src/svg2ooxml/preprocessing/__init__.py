@@ -1,6 +1,8 @@
 
-"""Compatibility wrapper for legacy preprocessing package."""
+"""Preprocessing helpers bridging into the parser stack."""
 
-from svg2ooxml._legacy import redirect_package as _redirect_package
+from __future__ import annotations
 
-_redirect_package("preprocessing")
+from .sanitizers import sanitize_svg
+
+__all__ = ["sanitize_svg"]

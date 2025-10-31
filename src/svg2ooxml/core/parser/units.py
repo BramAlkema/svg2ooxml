@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from svg2ooxml.units import ConversionContext, UnitConverter
+from svg2ooxml.common.units import ConversionContext, UnitConverter
 
 
 def viewbox_to_px(

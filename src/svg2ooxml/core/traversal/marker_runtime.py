@@ -15,7 +15,7 @@ from svg2ooxml.core.traversal.markers import (
     build_marker_transform,
     flatten_points,
 )
-from svg2ooxml.geometry.paths.parser import parse_path_data
+from svg2ooxml.common.geometry.paths import parse_path_data
 from svg2ooxml.ir.geometry import BezierSegment, LineSegment, Point, SegmentType
 from svg2ooxml.ir.paint import GradientPaintRef, PatternPaint, SolidPaint, Stroke
 from svg2ooxml.ir.scene import Path

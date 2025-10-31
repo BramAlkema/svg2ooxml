@@ -5,8 +5,12 @@ from __future__ import annotations
 import math
 import struct
 import zlib
+from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any, Iterable, Tuple
+
+import numpy as np
+from lxml import etree
 
 try:  # pragma: no cover - skia optional during transition
     import skia  # type: ignore
@@ -87,6 +91,170 @@ class RasterAdapter:
         width_px, height_px = self._derive_dimensions(context, default_size, descriptor, bounds)
         passes = self._pass_count(descriptor, complexity)
         scale = self._scale_factor(descriptor, bounds, complexity)
+
+        surface = self._render_preview_with_resvg(filter_element, filter_id, width_px, height_px)
+        if surface is not None:
+            self._counter += 1
+            relationship_id = f"rIdRaster{self._counter}"
+            filter_tag = getattr(filter_element, "tag", "")
+            filter_name = filter_tag.split("}")[-1] if isinstance(filter_tag, str) else "filter"
+            metadata = {
+                "filter_id": filter_id,
+                "renderer": "resvg",
+                "filter_tag": filter_name,
+                "width_px": surface.width,
+                "height_px": surface.height,
+                "primitives": primitive_tags,
+                "filter_units": filter_units,
+                "primitive_units": primitive_units,
+                "render_passes": passes,
+                "scale_factor": scale,
+                "complexity": complexity,
+            }
+            if descriptor:
+                metadata["descriptor"] = descriptor
+            if bounds:
+                metadata["bounds"] = bounds
+            return RasterResult(
+                image_bytes=_surface_to_png(surface),
+                relationship_id=relationship_id,
+                width_px=surface.width,
+                height_px=surface.height,
+                metadata=metadata,
+            )
+
+        return self._render_placeholder_preview(
+            filter_id=filter_id,
+            filter_element=filter_element,
+            primitive_tags=primitive_tags,
+            filter_units=filter_units,
+            primitive_units=primitive_units,
+            complexity=complexity,
+            width_px=width_px,
+            height_px=height_px,
+            passes=passes,
+            scale=scale,
+            descriptor=descriptor,
+            bounds=bounds,
+            default_size=default_size,
+        )
+
+    def generate_placeholder(
+        self,
+        *,
+        width_px: int = 64,
+        height_px: int = 64,
+        metadata: dict[str, Any] | None = None,
+    ) -> RasterResult:
+        self._counter += 1
+        gray = 64 + (self._counter % 128)
+        payload = _solid_gray_png(width_px, height_px, gray)
+        meta: dict[str, Any] = {
+            "placeholder": True,
+            "width_px": width_px,
+            "height_px": height_px,
+            "render_passes": 0,
+            "scale_factor": 1.0,
+        }
+        if metadata:
+            meta.update(metadata)
+        return RasterResult(
+            image_bytes=payload,
+            relationship_id=f"rIdRaster{self._counter}",
+            width_px=width_px,
+            height_px=height_px,
+            metadata=meta,
+        )
+
+    def _render_preview_with_resvg(
+        self,
+        filter_element,
+        filter_id: str,
+        width_px: int,
+        height_px: int,
+    ):
+        if skia is None:
+            return None
+        try:
+            from svg2ooxml.core.resvg.normalizer import normalize_svg_string
+            from svg2ooxml.render.pipeline import render
+        except Exception:  # pragma: no cover - renderer dependencies missing
+            return None
+
+        try:
+            filter_clone = deepcopy(filter_element)
+        except Exception:
+            return None
+
+        svg_ns = "http://www.w3.org/2000/svg"
+        if not isinstance(filter_clone.tag, str) or "}" not in filter_clone.tag:
+            filter_clone.tag = f"{{{svg_ns}}}filter"
+
+        preview_filter_id = filter_clone.get("id") or f"svg2ooxml_filter_{self._counter + 1}"
+        filter_clone.set("id", preview_filter_id)
+
+        svg_root = etree.Element(
+            f"{{{svg_ns}}}svg",
+            nsmap={None: svg_ns},
+            attrib={
+                "width": str(max(1, int(width_px))),
+                "height": str(max(1, int(height_px))),
+                "viewBox": f"0 0 {max(1, int(width_px))} {max(1, int(height_px))}",
+            },
+        )
+        defs = etree.SubElement(svg_root, f"{{{svg_ns}}}defs")
+        defs.append(filter_clone)
+        rect = etree.SubElement(
+            svg_root,
+            f"{{{svg_ns}}}rect",
+            attrib={
+                "x": "0",
+                "y": "0",
+                "width": "100%",
+                "height": "100%",
+                "fill": "#7F8CFF",
+                "filter": f"url(#{preview_filter_id})",
+            },
+        )
+        rect.set("opacity", "1")
+
+        svg_markup = etree.tostring(svg_root, encoding="unicode")
+        try:
+            normalized = normalize_svg_string(svg_markup)
+            return render(normalized.tree)
+        except Exception:  # pragma: no cover - renderer failure
+            return None
+
+    def _render_placeholder_preview(
+        self,
+        *,
+        filter_id: str,
+        filter_element,
+        primitive_tags: Tuple[str, ...],
+        filter_units,
+        primitive_units,
+        complexity: int,
+        width_px: int,
+        height_px: int,
+        passes: int,
+        scale: float,
+        descriptor: dict[str, Any] | None,
+        bounds: dict[str, float | Any] | None,
+        default_size: Tuple[int, int],
+    ) -> RasterResult:
+        if skia is None:
+            return self.generate_placeholder(
+                width_px=default_size[0],
+                height_px=default_size[1],
+                metadata={
+                    "filter_id": filter_id,
+                    "renderer": "placeholder",
+                    "primitives": primitive_tags,
+                    "filter_units": filter_units,
+                    "primitive_units": primitive_units,
+                    "complexity": complexity,
+                },
+            )
 
         try:
             surface = skia.Surface(int(max(1, width_px)), int(max(1, height_px)))
@@ -181,33 +349,6 @@ class RasterAdapter:
             width_px=width_px,
             height_px=height_px,
             metadata=metadata,
-        )
-
-    def generate_placeholder(
-        self,
-        *,
-        width_px: int = 64,
-        height_px: int = 64,
-        metadata: dict[str, Any] | None = None,
-    ) -> RasterResult:
-        self._counter += 1
-        gray = 64 + (self._counter % 128)
-        payload = _solid_gray_png(width_px, height_px, gray)
-        meta: dict[str, Any] = {
-            "placeholder": True,
-            "width_px": width_px,
-            "height_px": height_px,
-            "render_passes": 0,
-            "scale_factor": 1.0,
-        }
-        if metadata:
-            meta.update(metadata)
-        return RasterResult(
-            image_bytes=payload,
-            relationship_id=f"rIdRaster{self._counter}",
-            width_px=width_px,
-            height_px=height_px,
-            metadata=meta,
         )
 
     # ------------------------------------------------------------------ #
@@ -512,6 +653,25 @@ class RasterAdapter:
         else:
             r, g, b = v, p, q
         return r, g, b
+
+
+def _surface_to_png(surface) -> bytes:
+    rgba = surface.to_rgba8()
+    if rgba.dtype != np.uint8:
+        rgba = rgba.astype(np.uint8, copy=False)
+    height, width, _ = rgba.shape
+    header = b"\x89PNG\r\n\x1a\n"
+    ihdr = _png_chunk(
+        b"IHDR",
+        struct.pack(">IIBBBBB", width, height, 8, 6, 0, 0, 0),
+    )
+    row_bytes = bytearray()
+    for row in rgba:
+        row_bytes.append(0)
+        row_bytes.extend(row.tobytes())
+    idat = _png_chunk(b"IDAT", zlib.compress(bytes(row_bytes)))
+    iend = _png_chunk(b"IEND", b"")
+    return header + ihdr + idat + iend
 
 
 def _is_number(value: object) -> bool:

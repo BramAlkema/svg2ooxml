@@ -13,7 +13,7 @@ This repository currently exposes a placeholder implementation of the full svg2o
   Houses IR models, geometry helpers, paint definitions, and text layout primitives. These packages are empty wrappers right now to keep imports stable for upcoming ports.
 
 - **Mapping & Rendering** (`map/`, `filters/`, `multipage/`, `presentation/`, `drawingml/`)
-  Will contain the Clean Slate mapper, filter conversions, multi-slide splitting, and PPTX packaging logic. Stubs live in each directory so the complete pipeline can be wired as modules arrive.
+  Hosts ``SvgToPptxExporter`` (the canonical orchestration entry point), stage metadata, multi-slide helpers, and the resvg-powered traversal. Legacy stubs remain during the port.
   - `filters/effects/*` includes placeholders for displacement map, component transfer, and specular lighting conversions while `filters/image/color_adjustment.py` stands in for image-level color handling.
   - `drawingml/generator.py` and `map/ir_converter.py` anchor the DrawingML geometry path and IR conversion logic from svg2pptx.
 

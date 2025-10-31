@@ -9,7 +9,7 @@ from svg2ooxml.io.emf import DashPattern, EMFBlob
 from svg2ooxml.io.emf.path import flatten_segments
 from svg2ooxml.ir.geometry import BezierSegment, LineSegment, SegmentType
 from svg2ooxml.ir.paint import SolidPaint, Stroke, StrokeCap, StrokeJoin
-from svg2ooxml.units.conversion import ConversionContext, UnitConverter
+from svg2ooxml.common.units import ConversionContext, UnitConverter
 
 _EPSILON = 1e-6
 _FILL_MODE_ALTERNATE = 1  # even-odd

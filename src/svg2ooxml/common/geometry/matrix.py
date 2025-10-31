@@ -20,6 +20,22 @@ class Matrix2D:
     e: float = 0.0
     f: float = 0.0
 
+    # ------------------------------------------------------------------ #
+    # Constructors                                                        #
+    # ------------------------------------------------------------------ #
+
+    @classmethod
+    def from_values(
+        cls,
+        a: float,
+        b: float,
+        c: float,
+        d: float,
+        e: float,
+        f: float,
+    ) -> "Matrix2D":
+        return cls(a, b, c, d, e, f)
+
     def multiply(self, other: "Matrix2D") -> "Matrix2D":
         return Matrix2D(
             a=self.a * other.a + self.c * other.b,
@@ -30,10 +46,38 @@ class Matrix2D:
             f=self.b * other.e + self.d * other.f + self.f,
         )
 
+    def __matmul__(self, other: "Matrix2D") -> "Matrix2D":
+        return self.multiply(other)
+
+    def determinant(self) -> float:
+        return self.a * self.d - self.b * self.c
+
+    def inverse(self) -> "Matrix2D":
+        det = self.determinant()
+        if abs(det) < 1e-12:
+            raise ValueError("Matrix is not invertible")
+        inv_det = 1.0 / det
+        a = self.d * inv_det
+        b = -self.b * inv_det
+        c = -self.c * inv_det
+        d = self.a * inv_det
+        e = -(a * self.e + c * self.f)
+        f = -(b * self.e + d * self.f)
+        return Matrix2D(a, b, c, d, e, f)
+
+    # ------------------------------------------------------------------ #
+    # Geometry helpers                                                   #
+    # ------------------------------------------------------------------ #
+
+    def transform_xy(self, x: float, y: float) -> tuple[float, float]:
+        return (
+            x * self.a + y * self.c + self.e,
+            x * self.b + y * self.d + self.f,
+        )
+
     def transform_point(self, point: Point) -> Point:
         """Apply the matrix to an IR point."""
-        x = point.x * self.a + point.y * self.c + self.e
-        y = point.x * self.b + point.y * self.d + self.f
+        x, y = self.transform_xy(point.x, point.y)
         return Point(x, y)
 
     def transform_points(self, points: Iterable[Point | tuple[float, float]]) -> list[Point]:
@@ -61,6 +105,40 @@ class Matrix2D:
     @classmethod
     def identity(cls) -> "Matrix2D":
         return cls()
+
+    @classmethod
+    def translation(cls, tx: float, ty: float) -> "Matrix2D":
+        return cls(e=tx, f=ty)
+
+    @classmethod
+    def translate(cls, tx: float, ty: float = 0.0) -> "Matrix2D":
+        return cls.translation(tx, ty)
+
+    @classmethod
+    def scale(cls, sx: float, sy: float | None = None) -> "Matrix2D":
+        return cls(a=sx, d=sy if sy is not None else sx)
+
+    @classmethod
+    def rotation(cls, angle_deg: float, cx: float = 0.0, cy: float = 0.0) -> "Matrix2D":
+        angle = radians(angle_deg)
+        cos_a = cos(angle)
+        sin_a = sin(angle)
+        return cls(
+            a=cos_a,
+            b=sin_a,
+            c=-sin_a,
+            d=cos_a,
+            e=cx - cx * cos_a + cy * sin_a,
+            f=cy - cx * sin_a - cy * cos_a,
+        )
+
+    @classmethod
+    def skew_x(cls, angle_deg: float) -> "Matrix2D":
+        return cls(c=sin(radians(angle_deg)))
+
+    @classmethod
+    def skew_y(cls, angle_deg: float) -> "Matrix2D":
+        return cls(b=sin(radians(angle_deg)))
 
     @classmethod
     def from_transform(cls, name: str, values: Iterable[float]) -> "Matrix2D":
@@ -97,6 +175,13 @@ class Matrix2D:
             angle = radians(vals[0])
             return cls(b=sin(angle))
         return cls.identity()
+
+    @classmethod
+    def rotate(cls, angle_deg: float, cx: float = 0.0, cy: float = 0.0) -> "Matrix2D":
+        return cls.rotation(angle_deg, cx, cy)
+
+    def as_tuple(self) -> tuple[float, float, float, float, float, float]:
+        return self.a, self.b, self.c, self.d, self.e, self.f
 
 
 def parse_transform_list(transform: str | None) -> Matrix2D:

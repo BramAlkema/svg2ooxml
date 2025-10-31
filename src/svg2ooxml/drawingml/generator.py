@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Iterable, Tuple
 
-from svg2ooxml.geometry.paths.drawingml import (
+from svg2ooxml.common.geometry.paths.drawingml import (
     PathCommand,
     build_path_commands,
     compute_path_bounds,

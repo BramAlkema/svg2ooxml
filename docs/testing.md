@@ -49,7 +49,17 @@ python -m tools.visual.w3c_suite  # renders to reports/visual/w3c
 Provide scenario names (e.g. `python -m tools.visual.w3c_suite struct-use-10-f`)
 to focus on specific files. The script renders each SVG, drops artefacts to the
 output directory, and—when baselines exist under `tests/visual/golden/w3c/`—runs
-pixel diffs.
+pixel diffs. To forward scenarios to the Cloud Run export API while rendering,
+append:
+
+```bash
+python -m tools.visual.w3c_suite \
+  --export-service-url "https://svg2ooxml-export-…run.app" \
+  --auth-token "$(gcloud auth print-identity-token)"
+```
+
+Each scenario posts its SVG payload with the chosen `--export-format` (default
+`slides`) and logs the job ID returned by the service.
 
 CI jobs should keep visual tests in a dedicated stage so we can fan them out or
 gate them on render-specific dependencies.

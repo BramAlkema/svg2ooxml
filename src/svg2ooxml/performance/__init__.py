@@ -1,6 +1,8 @@
 
-"""Compatibility wrapper for legacy performance package."""
+"""Performance utilities for svg2ooxml."""
 
-from svg2ooxml._legacy import redirect_package as _redirect_package
+from __future__ import annotations
 
-_redirect_package("performance")
+from . import metrics
+
+__all__ = ["metrics"]

@@ -6,16 +6,18 @@ import pytest
 
 from dataclasses import dataclass
 
-from svg2ooxml.map.mapper import (
+from svg2ooxml.core.traversal.clip_geometry import (
     ClipComputeResult,
     ClipCustGeom,
     ClipFallback,
+    compute_clip_geometry,
+)
+from svg2ooxml.core.pipeline.mappers import (
     Mapper,
     MapperError,
     MapperResult,
     OutputFormat,
     clip_result_to_xml,
-    compute_clip_geometry,
     validate_mapper_result,
 )
 from svg2ooxml.ir.geometry import LineSegment, Point

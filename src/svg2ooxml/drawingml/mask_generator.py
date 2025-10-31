@@ -12,7 +12,7 @@ from svg2ooxml.drawingml.custgeom_generator import (
     apply_matrix_to_segments,
     segments_from_primitives,
 )
-from svg2ooxml.geometry.paths.drawingml import PathCommand, build_path_commands
+from svg2ooxml.common.geometry.paths.drawingml import PathCommand, build_path_commands
 from svg2ooxml.ir.geometry import BezierSegment, LineSegment, SegmentType
 from svg2ooxml.ir.scene import MaskDefinition, MaskRef
 from svg2ooxml.common.geometry import Matrix2D

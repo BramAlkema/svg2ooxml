@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from svg2ooxml.ir.geometry import LineSegment, Point
 from svg2ooxml.ir.scene import Path
-from svg2ooxml.map.mapper import PathMapper, OutputFormat
+from svg2ooxml.core.pipeline.mappers import PathMapper, OutputFormat
 
 
 def _path() -> Path:
@@ -30,7 +30,7 @@ def test_path_mapper_native_output() -> None:
 def test_path_mapper_emf_fallback() -> None:
     class FallbackPolicy:
         def decide_path(self, path: Path):
-            from svg2ooxml.map.mapper.path_mapper import PathDecision
+            from svg2ooxml.core.pipeline.mappers.path_mapper import PathDecision
 
             return PathDecision(use_native=False)
 

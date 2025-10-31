@@ -8,9 +8,10 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from svg2ooxml.services import ConversionServices, configure_services
+if TYPE_CHECKING:  # pragma: no cover - type checking only
+    from svg2ooxml.services import ConversionServices
 from svg2ooxml.policy import PolicyContext, PolicyEngine, build_policy_engine
 
 
@@ -18,7 +19,7 @@ from svg2ooxml.policy import PolicyContext, PolicyEngine, build_policy_engine
 class ParserServices:
     """Container exposing the service registry used by the parser."""
 
-    services: ConversionServices
+    services: "ConversionServices"
     policy_engine: PolicyEngine
     policy_context: PolicyContext
 
@@ -39,6 +40,8 @@ def build_parser_services(
         service_map.update(overrides)
     if service_overrides:
         service_map.update(service_overrides)
+
+    from svg2ooxml.services import configure_services  # local import to avoid circular dependency
 
     services = configure_services(service_map, include_defaults=include_defaults)
 

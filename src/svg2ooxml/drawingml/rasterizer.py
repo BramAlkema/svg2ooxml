@@ -27,7 +27,7 @@ except Exception:  # pragma: no cover - optional dependency
     skia = None  # type: ignore
     SKIA_AVAILABLE = False
 
-from svg2ooxml.geometry.paths.drawingml import compute_path_bounds
+from svg2ooxml.common.geometry.paths.drawingml import compute_path_bounds
 
 
 @dataclass(frozen=True)

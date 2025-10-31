@@ -8,8 +8,7 @@ from typing import Any, Callable, Iterable, Sequence
 
 from lxml import etree
 
-from svg2ooxml.geometry.paths.parser import PathParseError, parse_path_data
-from svg2ooxml.geometry.paths.resvg_bridge import normalize_path_to_segments
+from svg2ooxml.common.geometry.paths import PathParseError, normalize_path_to_segments, parse_path_data
 from svg2ooxml.ir.geometry import BezierSegment, LineSegment, Point, Rect, SegmentType
 from svg2ooxml.ir.paint import SolidPaint, Stroke
 from svg2ooxml.ir.scene import ClipRef, Group, Image, MaskInstance, MaskRef, Path

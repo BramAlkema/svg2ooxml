@@ -2,7 +2,7 @@
 
 import pytest
 
-from svg2ooxml.viewbox.core import (
+from svg2ooxml.core.traversal.viewbox import (
     PreserveAspectRatio,
     ViewportEngine,
     compute_viewbox,

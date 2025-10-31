@@ -6,7 +6,7 @@ from lxml import etree
 
 from svg2ooxml.services.filter_service import FilterService
 from svg2ooxml.services.filter_types import FilterEffectResult
-from svg2ooxml.units.conversion import px_to_emu
+from svg2ooxml.common.units import px_to_emu
 
 
 def _resolve(service: FilterService, markup: str) -> list[FilterEffectResult]:

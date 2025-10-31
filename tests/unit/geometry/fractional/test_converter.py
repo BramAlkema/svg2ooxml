@@ -2,13 +2,13 @@
 
 import pytest
 
-from svg2ooxml.geometry.fractional import (
+from svg2ooxml.common.geometry.fractional import (
     DEFAULT_DPI,
     EMU_PER_INCH,
     FractionalEMUConverter,
     PrecisionMode,
 )
-from svg2ooxml.geometry.fractional.errors import EMUBoundaryError
+from svg2ooxml.common.geometry.fractional.errors import EMUBoundaryError
 
 
 def test_pixels_to_emu_defaults() -> None:

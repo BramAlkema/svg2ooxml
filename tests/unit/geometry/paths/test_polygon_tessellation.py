@@ -9,8 +9,9 @@ from pathlib import Path
 from lxml import etree
 
 from svg2ooxml.core.parser import ParseResult
-from svg2ooxml.geometry.paths.segments import compute_segments_bbox
-from svg2ooxml.map.ir_converter import IRScene, convert_parser_output
+from svg2ooxml.common.geometry.paths import compute_segments_bbox
+from svg2ooxml.core.ir import IRScene
+from svg2ooxml.ir.entrypoints import convert_parser_output
 from svg2ooxml.services.setup import configure_services
 
 # TODO(ADR-geometry-ir): Replace with svg2pptx baseline comparison once tessellation data is ported.
@@ -51,7 +52,7 @@ def test_polygon_path_segments_match_bounding_box() -> None:
     if hasattr(element, "segments") and element.segments:
         segments = element.segments
     elif hasattr(element, "points"):
-        from svg2ooxml.geometry.paths.drawing import to_line_segments
+        from svg2ooxml.common.geometry.paths.drawing import to_line_segments
 
         segments = to_line_segments(element.points)
     else:

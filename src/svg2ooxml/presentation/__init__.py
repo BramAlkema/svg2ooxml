@@ -1,6 +1,22 @@
 
-"""Compatibility wrapper for legacy presentation package."""
+"""Public PPTX presentation helpers."""
 
-from svg2ooxml._legacy import redirect_package as _redirect_package
+from __future__ import annotations
 
-_redirect_package("presentation")
+from svg2ooxml.core.pptx_exporter import (
+    SvgConversionError,
+    SvgPageResult,
+    SvgPageSource,
+    SvgToPptxExporter,
+    SvgToPptxMultiResult,
+    SvgToPptxResult,
+)
+
+__all__ = [
+    "SvgConversionError",
+    "SvgPageResult",
+    "SvgPageSource",
+    "SvgToPptxExporter",
+    "SvgToPptxMultiResult",
+    "SvgToPptxResult",
+]

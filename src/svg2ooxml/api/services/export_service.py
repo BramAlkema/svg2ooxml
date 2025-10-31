@@ -225,10 +225,10 @@ class ExportService:
             pptx_path = tmp_dir / "presentation.pptx"
 
             cache_key = self._build_conversion_cache_key(frames, requested_fonts)
-            cached = self._maybe_load_cached_conversion(cache_key, pptx_path)
+            cached_summary, cached_slides = self._maybe_load_cached_conversion(cache_key, pptx_path)
 
-            if cached is not None:
-                summary = cached
+            if cached_summary is not None:
+                summary = cached_summary
             else:
                 conversion = render_pptx_for_frames(
                     frames,
@@ -249,33 +249,51 @@ class ExportService:
             pptx_url = self._upload_pptx(job_id, pptx_path)
 
             slides_url = None
-            thumbnail_urls = None
+            thumbnail_urls: list[str] | None = None
             slides_embed_url = None
             slides_presentation_id = None
+            slides_error = None
 
             if str(job_data.get("output_format", "pptx")).lower() == "slides":
-                self.update_job_status(
-                    job_id=job_id,
-                    status=ExportStatus.PUBLISHING,
-                    message="Publishing presentation to Google Slides",
-                    progress=90.0,
-                    pptx_url=pptx_url,
-                )
-                slides_result = self._publish_to_slides(
-                    pptx_path,
-                    job_id=job_id,
-                    job_data=job_data,
-                    cache_key=cache_key,
-                )
-                slides_url = slides_result.web_view_link or slides_result.published_url
-                slides_embed_url = slides_result.embed_url
-                slides_presentation_id = slides_result.file_id
-                thumbnail_urls = list(slides_result.thumbnail_urls)
+                if cached_slides and cached_slides.get("web_view_link"):
+                    logger.info("Reusing cached Slides presentation %s", cached_slides.get("file_id"))
+                    slides_url = cached_slides.get("web_view_link") or cached_slides.get("published_url")
+                    slides_embed_url = cached_slides.get("embed_url")
+                    slides_presentation_id = cached_slides.get("file_id")
+                    thumbnails = cached_slides.get("thumbnail_urls") or []
+                    thumbnail_urls = list(thumbnails)
+                else:
+                    self.update_job_status(
+                        job_id=job_id,
+                        status=ExportStatus.PUBLISHING,
+                        message="Publishing presentation to Google Slides",
+                        progress=90.0,
+                        pptx_url=pptx_url,
+                    )
+                    try:
+                        slides_result = self._publish_to_slides(
+                            pptx_path,
+                            job_id=job_id,
+                            job_data=job_data,
+                            cache_key=cache_key,
+                        )
+                    except SlidesPublishingError as exc:
+                        logger.warning("Job %s: Slides publishing failed (%s)", job_id, exc)
+                        slides_error = str(exc)
+                    else:
+                        slides_url = slides_result.web_view_link or slides_result.published_url
+                        slides_embed_url = slides_result.embed_url
+                        slides_presentation_id = slides_result.file_id
+                        thumbnail_urls = list(slides_result.thumbnail_urls)
+
+            final_message = "Export completed successfully"
+            if slides_error:
+                final_message = "Export completed (Slides publishing unavailable)"
 
             self.update_job_status(
                 job_id=job_id,
                 status=ExportStatus.COMPLETED,
-                message="Export completed successfully",
+                message=final_message,
                 progress=100.0,
                 pptx_url=pptx_url,
                 slides_url=slides_url,
@@ -285,6 +303,7 @@ class ExportService:
                 packaging_totals=summary["packaging"],
                 slides_embed_url=slides_embed_url,
                 slides_presentation_id=slides_presentation_id,
+                slides_error=slides_error,
             )
         except Exception as exc:  # pragma: no cover - best effort logging
             logger.error("Job %s failed: %s", job_id, exc, exc_info=True)
@@ -438,27 +457,43 @@ class ExportService:
         self,
         cache_key: str,
         target_path: Path,
-    ) -> dict[str, Any] | None:
-        """Download cached PPTX if available; return summary metadata."""
+    ) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+        """Download cached PPTX if available; return (summary, slides metadata)."""
 
         doc = self.conversion_cache_collection.document(cache_key).get()
         if not doc.exists:
-            return None
+            return None, None
 
         metadata = doc.to_dict()
         bucket = self.storage_client.bucket(self.bucket_name)
         blob = bucket.blob(f"exports/cache/{cache_key}.pptx")
         if not blob.exists():
             self.conversion_cache_collection.document(cache_key).delete()
-            return None
+            return None, None
 
         blob.download_to_filename(str(target_path))
         summary_json = metadata.get("summary")
+        summary: dict[str, Any] | None
         if isinstance(summary_json, str):
-            return json.loads(summary_json)
-        if isinstance(summary_json, dict):
-            return summary_json
-        return None
+            summary = json.loads(summary_json)
+        elif isinstance(summary_json, dict):
+            summary = summary_json
+        else:
+            summary = None
+
+        slides_metadata: dict[str, Any] | None = None
+        if summary is not None:
+            slides_metadata = {
+                "file_id": metadata.get("slides_file_id"),
+                "web_view_link": metadata.get("slides_web_view_link"),
+                "published_url": metadata.get("slides_published_url"),
+                "embed_url": metadata.get("slides_embed_url"),
+                "thumbnail_urls": metadata.get("slides_thumbnails") or [],
+            }
+            if not slides_metadata["file_id"]:
+                slides_metadata = None
+
+        return summary, slides_metadata
 
     def _store_conversion_cache(
         self,
@@ -671,6 +706,8 @@ class ExportService:
                     "slides_file_id": result.file_id,
                     "slides_web_view_link": result.web_view_link,
                     "slides_published_url": result.published_url,
+                    "slides_embed_url": result.embed_url,
+                    "slides_thumbnails": list(result.thumbnail_urls),
                 }
             )
         except Exception:  # pragma: no cover - cache is best-effort

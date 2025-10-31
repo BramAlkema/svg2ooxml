@@ -15,11 +15,11 @@ import os
 from svg2ooxml.css import StyleResolver
 from svg2ooxml.ir.scene import SceneGraph
 from svg2ooxml.clipmask.types import ClipDefinition, MaskInfo
-from svg2ooxml.core.parser import ParseResult, UnitConverter
 from svg2ooxml.common.geometry import Matrix2D, parse_transform_list
+from svg2ooxml.core.parser import ParseResult, UnitConverter
+from svg2ooxml.core.traversal.viewbox import ViewportEngine
 from svg2ooxml.policy import PolicyContext, PolicyEngine
 from svg2ooxml.services import ConversionServices
-from svg2ooxml.viewbox.core import ViewportEngine
 
 if TYPE_CHECKING:  # pragma: no cover - imported for type hints only
     from svg2ooxml.core.tracing import ConversionTracer
@@ -53,9 +53,9 @@ from svg2ooxml.drawingml.bridges import (
     describe_radial_gradient,
 )
 from svg2ooxml.core.ir.shape_converters import ShapeConversionMixin
-from svg2ooxml.map.converter.text import TextConverter
-from svg2ooxml.map.converter.traversal import ElementTraversal
-from svg2ooxml.map.converter.traversal_hooks import TraversalHooksMixin
+from svg2ooxml.core.ir.text_converter import TextConverter
+from svg2ooxml.core.traversal.traversal import ElementTraversal
+from svg2ooxml.core.traversal.hooks import TraversalHooksMixin
 
 
 @dataclass

@@ -8,7 +8,7 @@ from pathlib import Path
 from lxml import etree
 
 from svg2ooxml.core.parser import ParseResult
-from svg2ooxml.map.ir_converter import convert_parser_output
+from svg2ooxml.ir.entrypoints import convert_parser_output
 from svg2ooxml.policy.constants import FALLBACK_EMF
 from svg2ooxml.services.setup import configure_services
 

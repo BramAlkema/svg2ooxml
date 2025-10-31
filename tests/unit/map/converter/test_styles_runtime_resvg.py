@@ -5,7 +5,7 @@ from __future__ import annotations
 from lxml import etree
 
 from svg2ooxml.core.ir import IRConverter
-from svg2ooxml.map.converter import styles_runtime
+from svg2ooxml.core.styling import style_runtime as styles_runtime
 from svg2ooxml.ir.paint import LinearGradientPaint, SolidPaint
 from svg2ooxml.services import configure_services
 

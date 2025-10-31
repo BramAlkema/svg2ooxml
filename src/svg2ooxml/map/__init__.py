@@ -1,6 +1,16 @@
+"""Modern map package exposing converter, mapper, and tracer shims."""
 
-"""Compatibility wrapper for legacy map package."""
+from __future__ import annotations
 
-from svg2ooxml._legacy import redirect_package as _redirect_package
+from importlib import import_module
+import sys
 
-_redirect_package("map")
+converter = import_module("svg2ooxml.map.converter")
+mapper = import_module("svg2ooxml.map.mapper")
+tracer = import_module("svg2ooxml.map.tracer")
+
+sys.modules.setdefault("svg2ooxml.map.converter", converter)
+sys.modules.setdefault("svg2ooxml.map.mapper", mapper)
+sys.modules.setdefault("svg2ooxml.map.tracer", tracer)
+
+__all__ = ["converter", "mapper", "tracer"]

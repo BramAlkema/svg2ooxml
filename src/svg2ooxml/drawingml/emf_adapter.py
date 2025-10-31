@@ -8,7 +8,7 @@ from typing import Any, Callable, Mapping
 import math
 
 from svg2ooxml.io.emf import EMFBlob
-from svg2ooxml.units.conversion import px_to_emu
+from svg2ooxml.common.units import px_to_emu
 
 
 PaletteResolver = Callable[[str, str, Mapping[str, Any]], str | None]

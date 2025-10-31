@@ -42,7 +42,8 @@ render = [
 ]
 slides = [
   "python-pptx>=0.6.23",
-  "cryptography>=41.0"
+  "cryptography>=41.0",
+  "fonttools>=4.59.2"
 ]
 api = [
   "fastapi>=0.109.0",

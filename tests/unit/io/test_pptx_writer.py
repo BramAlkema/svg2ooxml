@@ -18,7 +18,7 @@ from svg2ooxml.ir.paint import SolidPaint
 from svg2ooxml.ir.shapes import Rectangle
 from svg2ooxml.ir.text import EmbeddedFontPlan, Run, TextAnchor, TextFrame
 from svg2ooxml.core.ir import IRScene
-from svg2ooxml.pipeline.navigation import NavigationKind, NavigationSpec, SlideTarget
+from svg2ooxml.core.pipeline.navigation import NavigationKind, NavigationSpec, SlideTarget
 
 
 def _build_scene_with_filter_assets() -> IRScene:

@@ -6,7 +6,7 @@ import html
 from typing import Callable
 
 from svg2ooxml.drawingml.assets import NavigationAsset
-from svg2ooxml.pipeline.navigation import (
+from svg2ooxml.core.pipeline.navigation import (
     BookmarkTarget,
     CustomShowTarget,
     NavigationAction,

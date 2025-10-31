@@ -5,7 +5,7 @@ from __future__ import annotations
 from lxml import etree
 
 from svg2ooxml.core.hyperlinks import HyperlinkProcessor
-from svg2ooxml.pipeline.navigation import NavigationKind
+from svg2ooxml.core.pipeline.navigation import NavigationKind
 
 
 def _build_element(svg: str):

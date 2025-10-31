@@ -7,10 +7,9 @@ from typing import Any, Dict, Iterable, List, Tuple
 from svg2ooxml.clipmask.types import ClipDefinition, MaskInfo
 from svg2ooxml.core.resvg.geometry.matrix import Matrix as ResvgMatrix
 from svg2ooxml.core.resvg.usvg_tree import BaseNode, Tree
-from svg2ooxml.geometry.paths import compute_segments_bbox
-from svg2ooxml.geometry.paths.resvg_bridge import normalize_path_to_segments
+from svg2ooxml.common.geometry.paths import compute_segments_bbox, normalize_path_to_segments
 from svg2ooxml.ir.geometry import BezierSegment, LineSegment, Point, Rect, SegmentType
-from svg2ooxml.map.converter.constants import DEFAULT_TOLERANCE
+from svg2ooxml.core.traversal.constants import DEFAULT_TOLERANCE
 from svg2ooxml.common.geometry import Matrix2D
 
 

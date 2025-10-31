@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from svg2ooxml.ir.geometry import Rect
 from svg2ooxml.ir.scene import ClipRef
-from svg2ooxml.map.mapper.clip_geometry import ClipComputeResult, ClipFallback
+from svg2ooxml.core.traversal.clip_geometry import ClipComputeResult, ClipFallback
 from svg2ooxml.services.clip_service import ClipAnalysis, StructuredClipService
 
 
@@ -45,6 +45,7 @@ def test_structured_clip_service_falls_back_to_bbox() -> None:
     assert result is not None
     assert result.used_bbox_rect is True
     assert result.custgeom is not None
+    assert result.strategy == ClipFallback.MIMIC
     assert result.custgeom.bbox_emu == (0, 0, 38100, 57150)
 
 
@@ -56,3 +57,16 @@ def test_structured_clip_service_respects_emf_requirement() -> None:
     result = service.compute(clip_ref, analysis)
     assert result is not None
     assert result.strategy == ClipFallback.EMF_SHAPE
+
+
+def test_structured_clip_service_respects_custom_fallback_order() -> None:
+    service = StructuredClipService()
+    clip_ref = ClipRef(clip_id="clip-raster-fallback", path_segments=None, bounding_box=Rect(0, 0, 5, 5))
+    analysis = ClipAnalysis(fallback_order=("raster",))
+
+    result = service.compute(clip_ref, analysis)
+
+    assert result is not None
+    assert result.strategy == ClipFallback.BITMAP
+    assert result.media is not None
+    assert result.xml_placeholder is not None

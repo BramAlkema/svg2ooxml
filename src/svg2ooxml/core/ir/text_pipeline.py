@@ -6,7 +6,7 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Sequence, Set, Tuple
 
-from svg2ooxml.geometry.algorithms import classify_text_path_warp
+from svg2ooxml.common.geometry.algorithms import classify_text_path_warp
 from svg2ooxml.ir.text import (
     EmbeddedFontPlan,
     Run,

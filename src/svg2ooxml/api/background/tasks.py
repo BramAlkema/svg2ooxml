@@ -7,24 +7,42 @@ import logging
 import os
 from typing import Any, Dict
 
-from google.cloud import tasks_v2
-from google.protobuf import duration_pb2
+try:  # pragma: no cover - optional dependency
+    from google.cloud import tasks_v2
+    from google.protobuf import duration_pb2
+except ImportError:  # pragma: no cover - allows local fallback without GCP SDK
+    tasks_v2 = None  # type: ignore[assignment]
+    duration_pb2 = None  # type: ignore[assignment]
 
 logger = logging.getLogger(__name__)
 
 
 class CloudTasksQueue:
-    """Wrapper for Google Cloud Tasks queue operations."""
+    """Wrapper for Google Cloud Tasks queue operations with local fallbacks."""
 
     def __init__(self) -> None:
         """Initialize Cloud Tasks client and queue configuration."""
-        self.project_id = os.getenv("GCP_PROJECT")
+        self.project_id = os.getenv("GCP_PROJECT") or os.getenv("GOOGLE_CLOUD_PROJECT")
         self.location = os.getenv("CLOUD_TASKS_LOCATION", "europe-west1")
         self.queue_name = os.getenv("CLOUD_TASKS_QUEUE", "svg2ooxml-jobs")
         self.service_url = os.getenv("SERVICE_URL")
 
-        if not self.project_id:
-            raise ValueError("GCP_PROJECT environment variable is required")
+        self.enabled = bool(self.project_id and self.service_url)
+        self.client: Any | None = None
+        self.queue_path: str | None = None
+
+        if not self.enabled:
+            logger.info(
+                "Cloud Tasks disabled (missing configuration). Jobs will run inline."
+            )
+            return
+
+        if tasks_v2 is None:
+            logger.warning(
+                "google-cloud-tasks not installed; processing jobs inline instead."
+            )
+            self.enabled = False
+            return
 
         self.client = tasks_v2.CloudTasksClient()
         self.queue_path = self.client.queue_path(
@@ -48,6 +66,14 @@ class CloudTasksQueue:
         Returns:
             Task name/ID from Cloud Tasks
         """
+        if not self.enabled:
+            logger.debug("Processing job %s inline (Cloud Tasks disabled)", job_id)
+            self._process_inline(job_id)
+            return f"inline:{job_id}"
+
+        if self.client is None or self.queue_path is None:
+            raise RuntimeError("Cloud Tasks client not initialised")
+
         # Construct the task
         task: Dict[str, Any] = {
             "http_request": {
@@ -65,7 +91,7 @@ class CloudTasksQueue:
         }
 
         # Add schedule delay if specified
-        if schedule_delay_seconds > 0:
+        if schedule_delay_seconds > 0 and duration_pb2 is not None:
             task["schedule_time"] = duration_pb2.Duration(
                 seconds=schedule_delay_seconds
             )
@@ -83,6 +109,18 @@ class CloudTasksQueue:
 
         except Exception as e:
             logger.error(f"Failed to create Cloud Task for job {job_id}: {e}")
+            raise
+
+    def _process_inline(self, job_id: str) -> None:
+        """Fallback execution when Cloud Tasks is unavailable."""
+
+        try:
+            from ..services.export_service import ExportService
+
+            export_service = ExportService()
+            export_service.process_job(job_id)
+        except Exception as exc:  # pragma: no cover - defensive logging
+            logger.error("Inline processing for job %s failed: %s", job_id, exc, exc_info=True)
             raise
 
 

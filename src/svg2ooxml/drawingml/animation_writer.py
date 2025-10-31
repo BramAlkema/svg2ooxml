@@ -8,7 +8,7 @@ from xml.sax.saxutils import escape
 
 from svg2ooxml.color.utils import color_to_hex
 from svg2ooxml.common.interpolation import BezierEasing
-from svg2ooxml.geometry.paths.parser import PathParseError, parse_path_data
+from svg2ooxml.common.geometry.paths import PathParseError, parse_path_data
 from svg2ooxml.ir.geometry import BezierSegment, LineSegment, Point
 from svg2ooxml.ir.animation import (
     AnimationDefinition,
@@ -18,7 +18,7 @@ from svg2ooxml.ir.animation import (
     CalcMode,
     TransformType,
 )
-from svg2ooxml.units.conversion import UnitConverter
+from svg2ooxml.common.units import UnitConverter
 
 if TYPE_CHECKING:
     from svg2ooxml.core.tracing import ConversionTracer

@@ -4,8 +4,12 @@ from __future__ import annotations
 
 from importlib import metadata
 
+from .common.compat import ensure_fonttools_harfbuzz_patch
+
 from .core.converter import ConvertResult, Converter
 from .core.pipeline import ConversionPipeline, DEFAULT_STAGE_NAMES
+
+ensure_fonttools_harfbuzz_patch()
 
 try:
     __version__ = metadata.version("svg2ooxml")
@@ -19,4 +23,3 @@ __all__ = [
     "DEFAULT_STAGE_NAMES",
     "__version__",
 ]
-

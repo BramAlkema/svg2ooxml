@@ -1,6 +1,26 @@
+"""Public pipeline API re-export."""
 
-"""Compatibility wrapper for legacy pipeline package."""
+from svg2ooxml.core.pipeline import ConversionPipeline, DEFAULT_STAGE_NAMES
+from svg2ooxml.core.pipeline import navigation as navigation
+from svg2ooxml.core.pipeline.navigation import (
+    BookmarkTarget,
+    CustomShowTarget,
+    NavigationAction,
+    NavigationKind,
+    NavigationSpec,
+    SlideTarget,
+    parse_svg_navigation,
+)
 
-from svg2ooxml._legacy import redirect_package as _redirect_package
-
-_redirect_package("pipeline")
+__all__ = [
+    "ConversionPipeline",
+    "DEFAULT_STAGE_NAMES",
+    "NavigationAction",
+    "NavigationKind",
+    "NavigationSpec",
+    "SlideTarget",
+    "BookmarkTarget",
+    "CustomShowTarget",
+    "parse_svg_navigation",
+    "navigation",
+]

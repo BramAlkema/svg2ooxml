@@ -11,7 +11,7 @@ from svg2ooxml.ir.geometry import Rect
 from svg2ooxml.ir.paint import SolidPaint
 from svg2ooxml.ir.scene import MaskInstance, MaskRef
 from svg2ooxml.drawingml.bridges import EMFPathAdapter, PathStyle
-from svg2ooxml.units.conversion import UnitConverter
+from svg2ooxml.common.units import UnitConverter
 
 from .mask_store import MaskAssetStore
 
@@ -420,8 +420,33 @@ def _fallback_sequence(mask_meta: dict) -> Tuple[str, ...]:
     if not order and isinstance(mask_meta.get("policy"), dict):
         order = mask_meta["policy"].get("fallback_order")
     if isinstance(order, (list, tuple)):
-        return tuple(str(item).lower() for item in order)
-    return ("native", "mimic", "emf", "raster")
+        requested = [str(item).lower() for item in order]
+    elif isinstance(order, str):
+        requested = [token.strip().lower() for token in order.split(",") if token.strip()]
+    else:
+        requested = []
+
+    canonical = ["native", "mimic", "emf", "raster"]
+    if not requested:
+        return tuple(canonical)
+
+    merged: list[str] = []
+    seen: set[str] = set()
+
+    # Preserve canonical priority for requested entries.
+    requested_set = {token for token in requested if token}
+    for token in canonical:
+        if token in requested_set and token not in seen:
+            merged.append(token)
+            seen.add(token)
+
+    # Append any additional, unrecognised entries at the end.
+    for token in requested:
+        if token and token not in seen:
+            merged.append(token)
+            seen.add(token)
+
+    return tuple(merged)
 
 
 def _format_message(mask_ref: MaskRef, message: str) -> str:

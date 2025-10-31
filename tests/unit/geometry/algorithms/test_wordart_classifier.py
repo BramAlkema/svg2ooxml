@@ -2,7 +2,7 @@
 
 import math
 
-from svg2ooxml.geometry.algorithms.wordart_classifier import (
+from svg2ooxml.common.geometry.algorithms.wordart_classifier import (
     WordArtClassificationResult,
     classify_text_path_warp,
 )

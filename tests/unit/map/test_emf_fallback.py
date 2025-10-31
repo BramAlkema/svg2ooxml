@@ -12,7 +12,7 @@ from svg2ooxml.ir.paint import SolidPaint, Stroke, StrokeCap, StrokeJoin
 from svg2ooxml.core.ir.fallbacks import render_emf_fallback
 from svg2ooxml.core.styling.style_extractor import StyleResult
 from svg2ooxml.core.traversal.coordinate_space import CoordinateSpace
-from svg2ooxml.units.conversion import UnitConverter
+from svg2ooxml.common.units import UnitConverter
 
 
 def _records(data: bytes) -> list[tuple[int, bytes]]:

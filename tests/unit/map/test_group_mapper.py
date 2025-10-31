@@ -5,7 +5,7 @@ from __future__ import annotations
 from svg2ooxml.ir.geometry import Point, Rect
 from svg2ooxml.ir.geometry import LineSegment, Point
 from svg2ooxml.ir.scene import Group, Path
-from svg2ooxml.map.mapper import GroupMapper, OutputFormat, PathMapper
+from svg2ooxml.core.pipeline.mappers import GroupMapper, OutputFormat, PathMapper
 
 
 def _child_path() -> Path:

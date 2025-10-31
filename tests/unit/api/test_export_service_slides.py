@@ -78,6 +78,7 @@ def test_process_job_publishes_slides(monkeypatch: pytest.MonkeyPatch, export_se
     assert status["slides_embed_url"] == "https://slides.example/embed"
     assert status["thumbnail_urls"] == ["https://slides.example/thumb1.png"]
     assert status["slides_presentation_id"] == "slides-file"
+    assert status.get("slides_error") is None
     assert "result" in captured
 
 
@@ -94,5 +95,6 @@ def test_process_job_failure_when_slides_publish_errors(
     export_service.process_job(job_id)
 
     status = export_service.get_job_status(job_id)
-    assert status["status"] == ExportStatus.FAILED.value
-    assert "Slides upload failed" in status.get("error", "")
+    assert status["status"] == ExportStatus.COMPLETED.value
+    assert status["slides_url"] is None
+    assert status["slides_error"] == "Slides upload failed"
