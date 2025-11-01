@@ -158,6 +158,7 @@ class FilterPrimitive:
     tag: str
     attributes: dict[str, str]
     styles: dict[str, str]
+    children: Tuple["FilterPrimitive", ...] = ()
 
 
 @dataclass(slots=True)
@@ -717,16 +718,7 @@ def _convert_node(node: SvgNode, parent: Optional[BaseNode] = None) -> BaseNode:
         marker.children = [_convert_node(child, marker) for child in node.children]
         return marker
     if tag_local == "filter":
-        primitives_list = []
-        for child in node.children:
-            child_tag = _strip_namespace(child.tag)
-            primitives_list.append(
-                FilterPrimitive(
-                    tag=child_tag,
-                    attributes=dict(child.attributes),
-                    styles=dict(child.styles),
-                )
-            )
+        primitives_list = [_build_filter_primitive(child) for child in node.children]
         return FilterNode(
             primitives=tuple(primitives_list),
             filter_units=attributes.get("filterUnits", "objectBoundingBox"),
@@ -748,6 +740,17 @@ def _convert_node(node: SvgNode, parent: Optional[BaseNode] = None) -> BaseNode:
     generic = GenericNode(**base_kwargs)
     generic.children = [_convert_node(child, generic) for child in node.children]
     return generic
+
+
+def _build_filter_primitive(node) -> FilterPrimitive:
+    child_tag = _strip_namespace(getattr(node, "tag", "") or "")
+    children = tuple(_build_filter_primitive(child) for child in getattr(node, "children", []) or [])
+    return FilterPrimitive(
+        tag=child_tag,
+        attributes=dict(getattr(node, "attributes", {}) or {}),
+        styles=dict(getattr(node, "styles", {}) or {}),
+        children=children,
+    )
 
 
 def _collect_ids(node: BaseNode, ids: Dict[str, BaseNode]) -> None:

@@ -10,6 +10,7 @@ from svg2ooxml.drawingml.writer import DrawingMLWriter
 from svg2ooxml.io.pptx_writer import PPTXPackageBuilder
 from svg2ooxml.ir.entrypoints import convert_parser_output
 from svg2ooxml.core.parser import ParserConfig, SVGParser
+from svg2ooxml.services import configure_services
 
 
 class VisualBuildError(RuntimeError):
@@ -25,10 +26,11 @@ class PptxBuildResult:
 class PptxBuilder:
     """Build PPTX packages from SVG snippets using the svg2ooxml pipeline."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, filter_strategy: str | None = "resvg") -> None:
         self._parser = SVGParser(ParserConfig())
         self._writer = DrawingMLWriter()
         self._builder = PPTXPackageBuilder()
+        self._filter_strategy = filter_strategy
 
     def build_from_svg(self, svg_text: str, output_path: Path) -> PptxBuildResult:
         """Parse *svg_text*, convert to IR, and materialise a PPTX file."""
@@ -37,7 +39,13 @@ class PptxBuilder:
         if not parse_result.success or parse_result.svg_root is None:
             raise VisualBuildError(f"SVG parsing failed: {parse_result.error_message}")
 
-        scene = convert_parser_output(parse_result)
+        services = configure_services(filter_strategy=self._filter_strategy)
+        if parse_result.width_px is not None:
+            setattr(services, "viewport_width", parse_result.width_px)
+        if parse_result.height_px is not None:
+            setattr(services, "viewport_height", parse_result.height_px)
+
+        scene = convert_parser_output(parse_result, services=services)
         render_result = self._writer.render_scene_from_ir(scene)
 
         pptx_path = self._builder.build_from_results([render_result], output_path)

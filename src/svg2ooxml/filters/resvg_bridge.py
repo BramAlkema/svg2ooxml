@@ -7,6 +7,7 @@ from typing import Optional
 
 from lxml import etree
 
+from svg2ooxml.core.resvg.parser.presentation import Presentation
 from svg2ooxml.core.resvg.usvg_tree import FilterNode, FilterPrimitive, Tree
 
 
@@ -17,6 +18,7 @@ class FilterPrimitiveDescriptor:
     tag: str
     attributes: dict[str, str]
     styles: dict[str, str]
+    children: tuple["FilterPrimitiveDescriptor", ...] = ()
 
 
 @dataclass(slots=True)
@@ -33,14 +35,7 @@ class ResolvedFilter:
 def resolve_filter_node(filter_node: FilterNode) -> ResolvedFilter:
     """Convert a FilterNode into a ResolvedFilter descriptor."""
 
-    descriptors = [
-        FilterPrimitiveDescriptor(
-            tag=primitive.tag,
-            attributes=dict(primitive.attributes),
-            styles=dict(primitive.styles),
-        )
-        for primitive in filter_node.primitives
-    ]
+    descriptors = [_descriptor_from_primitive(primitive) for primitive in filter_node.primitives]
     region = _extract_region(filter_node)
     return ResolvedFilter(
         filter_id=filter_node.id,
@@ -76,29 +71,9 @@ def resolve_filter_element(filter_element: etree._Element) -> ResolvedFilter:
 
     primitives: list[FilterPrimitiveDescriptor] = []
     for child in filter_element:
-        tag = _local_name(getattr(child, "tag", ""))
-        if not tag:
-            continue
-        attributes = {
-            key: value
-            for key, value in child.attrib.items()
-            if key != "style"
-        }
-        styles: dict[str, str] = {}
-        style_attr = child.get("style")
-        if style_attr:
-            for item in style_attr.split(";"):
-                if not item or ":" not in item:
-                    continue
-                key, value = item.split(":", 1)
-                styles[key.strip()] = value.strip()
-        primitives.append(
-            FilterPrimitiveDescriptor(
-                tag=tag,
-                attributes=attributes,
-                styles=styles,
-            )
-        )
+        descriptor = _descriptor_from_element(child)
+        if descriptor is not None:
+            primitives.append(descriptor)
 
     return ResolvedFilter(
         filter_id=filter_id,
@@ -125,14 +100,101 @@ def build_filter_element(resolved: ResolvedFilter) -> etree._Element:
         element.set(attr, str(value))
 
     for primitive in resolved.primitives:
-        child = etree.SubElement(element, primitive.tag)
-        child.attrib.update(primitive.attributes)
-        if primitive.styles:
-            style_value = ";".join(f"{key}:{value}" for key, value in primitive.styles.items())
-            if style_value:
-                child.set("style", style_value)
+        _append_primitive_element(element, primitive)
 
     return element
+
+
+def build_filter_node(resolved: ResolvedFilter) -> FilterNode:
+    presentation = Presentation(
+        fill=None,
+        stroke=None,
+        stroke_width=None,
+        fill_opacity=None,
+        stroke_opacity=None,
+        opacity=None,
+        transform=None,
+        font_family=None,
+        font_size=None,
+        font_style=None,
+        font_weight=None,
+    )
+    attributes: dict[str, str] = {}
+    for key, value in (resolved.region or {}).items():
+        if value is None:
+            continue
+        attributes[key] = str(value)
+    primitives = tuple(_primitive_from_descriptor(descriptor) for descriptor in resolved.primitives)
+    return FilterNode(
+        tag="filter",
+        id=resolved.filter_id,
+        presentation=presentation,
+        attributes=attributes,
+        styles={},
+        children=[],
+        primitives=primitives,
+        filter_units=resolved.filter_units,
+        primitive_units=resolved.primitive_units,
+    )
+
+
+def _descriptor_from_primitive(primitive: FilterPrimitive) -> FilterPrimitiveDescriptor:
+    return FilterPrimitiveDescriptor(
+        tag=primitive.tag,
+        attributes=dict(primitive.attributes),
+        styles=dict(primitive.styles),
+        children=tuple(_descriptor_from_primitive(child) for child in primitive.children),
+    )
+
+
+def _descriptor_from_element(element: etree._Element) -> FilterPrimitiveDescriptor | None:
+    tag = _local_name(getattr(element, "tag", ""))
+    if not tag:
+        return None
+    attributes = {
+        key: value
+        for key, value in element.attrib.items()
+        if key != "style"
+    }
+    styles: dict[str, str] = {}
+    style_attr = element.get("style")
+    if style_attr:
+        for item in style_attr.split(";"):
+            if not item or ":" not in item:
+                continue
+            key, value = item.split(":", 1)
+            styles[key.strip()] = value.strip()
+    children: list[FilterPrimitiveDescriptor] = []
+    for child in element:
+        descriptor = _descriptor_from_element(child)
+        if descriptor is not None:
+            children.append(descriptor)
+    return FilterPrimitiveDescriptor(
+        tag=tag,
+        attributes=attributes,
+        styles=styles,
+        children=tuple(children),
+    )
+
+
+def _primitive_from_descriptor(descriptor: FilterPrimitiveDescriptor) -> FilterPrimitive:
+    return FilterPrimitive(
+        tag=descriptor.tag,
+        attributes=dict(descriptor.attributes),
+        styles=dict(descriptor.styles),
+        children=tuple(_primitive_from_descriptor(child) for child in descriptor.children),
+    )
+
+
+def _append_primitive_element(parent: etree._Element, primitive: FilterPrimitiveDescriptor) -> None:
+    child = etree.SubElement(parent, primitive.tag)
+    child.attrib.update(primitive.attributes)
+    if primitive.styles:
+        style_value = ";".join(f"{key}:{value}" for key, value in primitive.styles.items())
+        if style_value:
+            child.set("style", style_value)
+    for nested in primitive.children:
+        _append_primitive_element(child, nested)
 
 
 def _extract_reference_id(value: str | None) -> str | None:
@@ -183,5 +245,6 @@ __all__ = [
     "resolve_filter_node",
     "resolve_filter_reference",
     "resolve_filter_element",
+    "build_filter_node",
     "build_filter_element",
 ]

@@ -26,6 +26,7 @@ from svg2ooxml.core.tracing import ConversionTracer
 from svg2ooxml.core.parser import ParserConfig, SVGParser
 from svg2ooxml.policy import PolicyContext
 from svg2ooxml.core.slide_orchestrator import expand_page_with_variants, derive_variants_from_trace
+from svg2ooxml.services import configure_services
 
 
 class SvgConversionError(RuntimeError):
@@ -83,6 +84,7 @@ class SvgToPptxExporter:
         animation_parser_factory: Type[SMILParser] | None = None,
         timeline_sampler: TimelineSampler | None = None,
         timeline_config: TimelineSamplingConfig | None = None,
+        filter_strategy: str | None = None,
     ) -> None:
         self._parser = parser or SVGParser(ParserConfig())
         self._writer = writer or DrawingMLWriter()
@@ -92,6 +94,7 @@ class SvgToPptxExporter:
             self._timeline_sampler = timeline_sampler
         else:
             self._timeline_sampler = TimelineSampler(timeline_config)
+        self._filter_strategy = filter_strategy
 
     # ------------------------------------------------------------------
     # Single document conversion
@@ -250,10 +253,25 @@ class SvgToPptxExporter:
     ) -> tuple[DrawingMLRenderResult, IRScene]:
         """Convert SVG text into a rendered DrawingML payload."""
 
+        if self._filter_strategy and tracer is not None:
+            tracer.record_stage_event(
+                stage="filter",
+                action="strategy_configured",
+                metadata={"strategy": self._filter_strategy},
+            )
+
         parse_result = self._parser.parse(svg_text, tracer=tracer)
         if not parse_result.success or parse_result.svg_root is None:
             message = parse_result.error_message or "SVG parsing failed."
             raise SvgConversionError(message)
+
+        services_override = None
+        if self._filter_strategy is not None:
+            services_override = configure_services(filter_strategy=self._filter_strategy)
+            if parse_result.width_px is not None:
+                setattr(services_override, "viewport_width", parse_result.width_px)
+            if parse_result.height_px is not None:
+                setattr(services_override, "viewport_height", parse_result.height_px)
 
         animations = []
         timeline_scenes: list[AnimationScene] = []
@@ -273,6 +291,7 @@ class SvgToPptxExporter:
             animation_policy_options = policy_context.get("animation")
         scene = convert_parser_output(
             parse_result,
+            services=services_override,
             policy_engine=parse_result.policy_engine,
             policy_context=policy_context,
             tracer=tracer,

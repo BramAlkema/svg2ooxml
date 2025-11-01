@@ -571,7 +571,7 @@ def test_filter_reference_marks_bitmap_fallback() -> None:
     assert isinstance(filters_meta, list)
     entry = next(iter(filters_meta))
     assert entry['id'] == 'glow'
-    assert entry['strategy'] in {'native', 'raster', 'auto'}
+    assert entry['strategy'] in {'native', 'raster', 'auto', 'resvg'}
     # Entry may omit fallback when a native strategy is selected
     if entry.get('fallback'):
         assert entry['fallback'] in {'bitmap', 'emf', 'vector'}

@@ -50,19 +50,15 @@ backfill work as first-class modules under `src/svg2ooxml/`.
 
 ## Resvg Integration Plan
 
-1. **Filter planner** – Bring over the pyportresvg filter planner and execution
-   pipeline. Populate `render.filters.plan_filter` / `apply_filter` and add unit
-   tests mirroring `tests/unit/filters`.
-2. **Mask/clip rasterisation** – Port the resvg mask and clip rasterisers into
-   `render.mask_clip`. Provide fast-failure guards while the implementation is
-   incomplete.
-3. **Render surface orchestration** – Flesh out `render.pipeline` and
-   `render.surface` to drive resvg-based rendering. Integrate with the DrawingML
-   export path behind a feature flag.
-4. **Exporter gating** – Ensure API/export services detect missing renderer
-   features and surface actionable errors instead of crashing.
-5. **Testing** – Expand `tests/unit/render` and add end-to-end validation under
-   `tests/integration/core/test_pipeline.py` once the new pipeline is wired in.
+1. **Filter planner** – ✅ Ported and exercised via `render.filters` with
+   lighting/turbulence support and service integration.
+2. **Mask/clip rasterisation** – ✅ Ported into `render.mask_clip` and wired
+   through traversal and services.
+3. **Render surface orchestration** – ✅ The resvg render pipeline owns shape /
+   filter / mask processing.
+4. **Exporter gating** – 🚧 In progress (see “Exporter & Policy Gating Plan”).
+5. **Testing** – 🚧 End-to-end harness still needs a resvg-only integration
+   suite and refreshed visual baselines.
 
 ## Shim Retirement Playbook
 Use this checklist whenever a legacy package graduates to the modern tree:
@@ -81,3 +77,27 @@ Use this checklist whenever a legacy package graduates to the modern tree:
 
 Keep coverage ≥70 % across `src/svg2ooxml`, document any skipped functionality,
 and capture follow-up bugs in `docs/legacyport.md` or the tracker.
+
+## Exporter & Policy Gating Plan
+
+| Step | What | Owner / Notes |
+| --- | --- | --- |
+| 1 | Expose a `filter_strategy` toggle on `SvgToPptxExporter` (completed) | parser and exporter now pass the strategy to `configure_services`. |
+| 2 | Shape the policy surface | extend `policy.rules` so filter policies can force `legacy`, `resvg`, or `resvg-only` modes per document. |
+| 3 | Trace gating decisions | update `FilterService` and exporters so `ConversionTracer` logs `resvg_attempt`, `resvg_success`, and any fallbacks when strategy overrides apply. |
+| 4 | Feature compatibility checks | layer policy-guard rails (e.g., disable resvg when lighting/turbulence unsupported) and surface explicit errors through the exporter. |
+
+## End-to-End & Visual Validation Plan
+
+1. **Dedicated resvg pipeline tests** – add `tests/integration/core/test_pipeline.py`
+   that spins the render pipeline directly (no PPTX export) using small SVGs
+   covering filters, masks, and clips. Gate it behind the resvg strategy so we
+   can run it in CI.
+2. **Visual baselines** – regenerate `tests/visual/golden/` assets with the
+   resvg renderer enabled (`SVG2OOXML_VISUAL_FILTER_STRATEGY=resvg` when running
+   `tools/visual/update_baselines.py`). Capture before/after notes for
+   filters/masks and land the updated PNGs alongside a short changelog in
+   `tools/visual/update_baselines.md`.
+3. **Docs & toggles** – add a short guide (`docs/resvg.md`) outlining when to
+   choose the resvg path, how to enable it via policy/exporter flags, and known
+   gaps (e.g., performance costs, primitives still rasterised).

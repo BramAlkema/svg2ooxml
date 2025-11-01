@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import pytest
 from lxml import etree
 
 from svg2ooxml.filters.registry import FilterRegistry
@@ -73,6 +74,7 @@ def test_filter_service_binds_policy_engine_from_services() -> None:
 def test_descriptor_fallback_prefers_vector_hint() -> None:
     service = FilterService(registry=_NoopRegistry())
     service.register_filter("vectorish", _make_descriptor("<filter id='vectorish'><feComponentTransfer/></filter>"))
+    service.set_strategy("vector")
 
     context = {
         "policy": {},
@@ -99,6 +101,7 @@ def test_descriptor_fallback_prefers_vector_hint() -> None:
 def test_descriptor_fallback_produces_placeholder_when_rendering_absent() -> None:
     service = FilterService(registry=_NoopRegistry())
     service.register_filter("rasterish", _make_descriptor("<filter id='rasterish'><feGaussianBlur/></filter>"))
+    service.set_strategy("raster")
 
     context = {
         "resvg_descriptor": {
@@ -119,7 +122,7 @@ def test_descriptor_fallback_produces_placeholder_when_rendering_absent() -> Non
     assert placeholder.strategy in {"raster", "auto"}
     metadata = placeholder.metadata
     renderer = metadata.get("renderer")
-    assert renderer in {"placeholder", "skia", "resvg"}
+    assert renderer in {"placeholder", "skia", "resvg", "raster"}
     if renderer == "placeholder":
         assert metadata.get("placeholder") is True
     elif renderer == "resvg":
@@ -138,6 +141,7 @@ def test_raster_adapter_produces_png_asset() -> None:
         "<filter id='skiaTest'><feGaussianBlur stdDeviation='8'/></filter>"
     )
     service.register_filter("skiaTest", filter_descriptor)
+    service.set_strategy("raster")
 
     results = service.resolve_effects("skiaTest")
     assert results
@@ -153,3 +157,53 @@ def test_raster_adapter_produces_png_asset() -> None:
     assert isinstance(raw, (bytes, bytearray))
     # PNG header check
     assert raw[:8] == b"\x89PNG\r\n\x1a\n"
+
+
+def test_resvg_path_returns_bitmap_result() -> None:
+    pytest.importorskip("skia")
+
+    service = FilterService(registry=_NoopRegistry())
+    descriptor = _make_descriptor(
+        "<filter id='resvg'><feFlood flood-color='#336699' result='flood'/><feBlend in='SourceGraphic' in2='flood' mode='lighten'/></filter>"
+    )
+    service.register_filter("resvg", descriptor)
+
+    context = {
+        "ir_bbox": {"x": 0.0, "y": 0.0, "width": 32.0, "height": 24.0},
+    }
+
+    results = service.resolve_effects("resvg", context=context)
+
+    assert results
+    effect = next((result for result in results if result.strategy == "resvg"), None)
+    assert effect is not None
+    metadata = effect.metadata or {}
+    assert metadata.get("renderer") == "resvg"
+    assets = metadata.get("fallback_assets") or []
+    assert assets and assets[0].get("format") == "png"
+
+
+def test_legacy_strategy_skips_resvg_path() -> None:
+    service = FilterService(registry=_NoopRegistry())
+    service.set_strategy("legacy")
+    descriptor = _make_descriptor("<filter id='legacy'><feGaussianBlur stdDeviation='2'/></filter>")
+    service.register_filter("legacy", descriptor)
+
+    results = service.resolve_effects("legacy")
+
+    assert results
+    assert all(result.strategy != "resvg" for result in results)
+
+
+def test_resvg_strategy_prefers_resvg_only() -> None:
+    pytest.importorskip("skia")
+
+    service = FilterService(registry=_NoopRegistry())
+    service.set_strategy("resvg")
+    descriptor = _make_descriptor("<filter id='r'><feFlood flood-color='#112233'/></filter>")
+    service.register_filter("r", descriptor)
+
+    results = service.resolve_effects("r")
+
+    assert len(results) == 1
+    assert results[0].strategy == "resvg"

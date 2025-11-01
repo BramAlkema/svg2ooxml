@@ -11,6 +11,7 @@ __all__ = [
     'FilterResult',
     'ResolvedFilter',
     'build_filter_element',
+    'build_filter_node',
     'resolve_filter_element',
     'resolve_filter_node',
     'resolve_filter_reference',
@@ -24,7 +25,7 @@ __all__ = [
 ]
 
 # map symbol -> relative module
-_symbol_map = {'FilterContext': 'base', 'Filter': 'base', 'FilterResult': 'base', 'FilterRegistry': 'registry', 'resolve_filter_node': 'resvg_bridge', 'build_filter_element': 'resvg_bridge', 'resolve_filter_element': 'resvg_bridge', 'ResolvedFilter': 'resvg_bridge', 'FilterPrimitiveDescriptor': 'resvg_bridge', 'resolve_filter_reference': 'resvg_bridge'}
+_symbol_map = {'FilterContext': 'base', 'Filter': 'base', 'FilterResult': 'base', 'FilterRegistry': 'registry', 'resolve_filter_node': 'resvg_bridge', 'build_filter_element': 'resvg_bridge', 'build_filter_node': 'resvg_bridge', 'resolve_filter_element': 'resvg_bridge', 'ResolvedFilter': 'resvg_bridge', 'FilterPrimitiveDescriptor': 'resvg_bridge', 'resolve_filter_reference': 'resvg_bridge'}
 _module_map = {'base': 'base', 'effects': 'effects', 'image': 'image', 'primitives': 'primitives', 'registry': 'registry', 'resvg_bridge': 'resvg_bridge', 'utils': 'utils'}
 
 

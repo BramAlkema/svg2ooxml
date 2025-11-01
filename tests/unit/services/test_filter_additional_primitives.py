@@ -123,36 +123,37 @@ def test_convolve_matrix_tracks_kernel() -> None:
     assert assets[0].get("metadata", {}).get("filter_type") == "convolve_matrix"
 
 
-def test_displacement_map_fallback_emits_emf_asset() -> None:
+def test_displacement_map_resvg_path() -> None:
     service = FilterService()
     results = _resolve(
         service,
         "<filter id='f'>"
+        "  <feFlood flood-color='#ff8080' result='map'/>"
         "  <feDisplacementMap in='SourceGraphic' in2='map' scale='18' xChannelSelector='R' yChannelSelector='G'/>"
         "</filter>",
     )
     assert results
-    effect = results[0]
-    assert effect.fallback == "emf"
-    assets = effect.metadata.get("fallback_assets")
-    assert assets and assets[0]["type"] == "emf"
-    assert assets[0].get("metadata", {}).get("filter_type") == "displacement_map"
+    effect = next((res for res in results if res.strategy == "resvg"), None)
+    assert effect is not None
+    assets = effect.metadata.get("fallback_assets") or []
+    assert assets and assets[0]["type"] == "raster"
+    plan_primitives = effect.metadata.get("plan_primitives")
+    assert plan_primitives and plan_primitives[-1]["tag"].lower() == "fedisplacementmap"
 
 
-def test_turbulence_fallback_emits_emf_asset() -> None:
+def test_turbulence_resvg_path() -> None:
     service = FilterService()
     results = _resolve(
         service,
         "<filter id='f'>"
-        "  <feTurbulence baseFrequency='0.05 0.15' numOctaves='3' seed='4.2' type='fractalNoise' stitchTiles='stitch'/>"
+        "  <feTurbulence baseFrequency='0.04 0.08' numOctaves='2' seed='3' type='fractalNoise'/>"
         "</filter>",
     )
-    assert results
-    effect = results[0]
-    assert effect.fallback == "emf"
-    assets = effect.metadata.get("fallback_assets")
-    assert assets and assets[0]["type"] == "emf"
-    assert assets[0].get("metadata", {}).get("filter_type") == "turbulence"
+    effect = next((res for res in results if res.strategy == "resvg"), None)
+    assert effect is not None
+    metadata = effect.metadata or {}
+    assert metadata.get("renderer") == "resvg"
+    assert metadata.get("primitives")
 
 
 def test_tile_delegates_to_prior_result_when_available() -> None:
@@ -192,7 +193,39 @@ def test_merge_combines_inputs_and_preserves_order() -> None:
     assert blur.metadata.get("filter_type") == "gaussian_blur"
     assert flood.metadata.get("filter_type") == "flood"
     assert merge.metadata.get("filter_type") == "merge"
-    assert merge.effect.drawingml == ""
+    expected = flood.effect.drawingml + blur.effect.drawingml
+    assert merge.effect.drawingml == expected
+
+
+def test_diffuse_lighting_resvg_path() -> None:
+    service = FilterService()
+    results = _resolve(
+        service,
+        "<filter id='f'>"
+        "  <feGaussianBlur stdDeviation='1' result='height'/>"
+        "  <feDiffuseLighting in='height' surfaceScale='2' diffuseConstant='1.3' lighting-color='#ffeeaa'>"
+        "    <feDistantLight azimuth='45' elevation='45'/>"
+        "  </feDiffuseLighting>"
+        "</filter>",
+    )
+    effect = next((res for res in results if res.strategy == "resvg"), None)
+    assert effect is not None
+    assert effect.metadata.get("renderer") == "resvg"
+
+
+def test_specular_lighting_resvg_path() -> None:
+    service = FilterService()
+    results = _resolve(
+        service,
+        "<filter id='f'>"
+        "  <feSpecularLighting surfaceScale='3' specularConstant='1' specularExponent='8' lighting-color='#aaddff'>"
+        "    <feSpotLight x='20' y='15' z='30' pointsAtX='20' pointsAtY='15' pointsAtZ='0' limitingConeAngle='35'/>"
+        "  </feSpecularLighting>"
+        "</filter>",
+    )
+    effect = next((res for res in results if res.strategy == "resvg"), None)
+    assert effect is not None
+    assert effect.metadata.get("renderer") == "resvg"
 
 
 def test_image_without_href_warns_and_falls_back() -> None:

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+import os
 
 import pytest
 
@@ -30,7 +31,8 @@ def visual_tools() -> VisualTestTools:
 
     golden = GoldenRepository()
     diff = ImageDiff()
-    builder = PptxBuilder()
+    filter_strategy = os.getenv("SVG2OOXML_VISUAL_FILTER_STRATEGY", "resvg")
+    builder = PptxBuilder(filter_strategy=filter_strategy)
     renderer = default_renderer()
     return VisualTestTools(golden=golden, diff=diff, builder=builder, renderer=renderer)
 

@@ -163,6 +163,7 @@ class TraversalHooksMixin:
             filter_entry = {"id": filter_id}
             filters_meta.append(filter_entry)
 
+        tracer = getattr(self, "_tracer", None)
         filter_service = getattr(self._services, "filter_service", None)
         effect_results: list[FilterEffectResult] = []
         descriptor_payload = None
@@ -197,6 +198,8 @@ class TraversalHooksMixin:
                     filter_context_payload["ir_bbox"] = bbox_dict
                 if descriptor_payload is not None:
                     filter_context_payload["resvg_descriptor"] = descriptor_payload
+                if tracer is not None:
+                    filter_context_payload["tracer"] = tracer
 
                 effect_results = filter_service.resolve_effects(
                     filter_id,
@@ -215,7 +218,6 @@ class TraversalHooksMixin:
                 )
             ]
 
-        tracer = getattr(self, "_tracer", None)
         if tracer is not None:
             for result in effect_results:
                 decision = result.fallback or result.strategy or "native"

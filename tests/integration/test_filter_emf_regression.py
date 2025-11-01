@@ -12,7 +12,7 @@ from svg2ooxml.services.filter_service import FilterService
 EXPECTED_EMF_DIGESTS: dict[str, str] = {
     "combo": "b9a266b65511ec45fa1ed63caabb3f91395f2a6e",
     "blend": "d0fece35a0303436280fa0f1c8caba92d6ba716c",
-    "comp": "4985b41c0bba61f4df05797dd99a2dd5765d8a63",
+    "comp": "73c40c0f08dafe2f6afa61dab666ef3f063c8b4f",
     "cmm": "dfdadbfe00d1dce897d50c8421e8db3558fc698e",
     "disp": "1e2a7fd86413497baa990a8f4c503db365112b1e",
     "diff": "4212f8bac5070e1d6cde2e1939b358c0667e41c1",

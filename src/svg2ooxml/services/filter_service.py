@@ -3,30 +3,36 @@
 from __future__ import annotations
 
 import logging
+import math
 from collections.abc import Iterable, Mapping
 from dataclasses import replace
 from typing import TYPE_CHECKING, Any, cast
 
+import numpy as np
 from lxml import etree
 
 from svg2ooxml.drawingml.emf_adapter import PaletteResolver
 from svg2ooxml.drawingml.filter_renderer import FilterRenderer
-from svg2ooxml.drawingml.raster_adapter import RasterAdapter
+from svg2ooxml.drawingml.raster_adapter import RasterAdapter, _surface_to_png
 from svg2ooxml.filters.base import FilterContext, FilterResult
 from svg2ooxml.filters.registry import FilterRegistry
 from svg2ooxml.filters.resvg_bridge import (
     ResolvedFilter,
     build_filter_element,
+    build_filter_node,
     resolve_filter_element,
 )
 from svg2ooxml.ir.effects import CustomEffect
+from svg2ooxml.render.filters import UnsupportedPrimitiveError, apply_filter, plan_filter
+from svg2ooxml.render.rasterizer import Viewport
+from svg2ooxml.render.surface import Surface
 from svg2ooxml.services.filter_types import FilterEffectResult
 
 if TYPE_CHECKING:  # pragma: no cover - type checking only
     from .conversion import ConversionServices
 
 
-ALLOWED_STRATEGIES = {"auto", "native", "vector", "raster", "emf"}
+ALLOWED_STRATEGIES = {"auto", "native", "vector", "raster", "emf", "legacy", "resvg", "resvg-only"}
 
 # Primitive tags that hint at preferred fallback strategies when native rendering fails.
 _VECTOR_HINT_TAGS = {
@@ -69,6 +75,7 @@ class FilterService:
         self._palette_resolver: PaletteResolver | None = palette_resolver
         self._renderer = FilterRenderer(logger=self._logger, palette_resolver=palette_resolver)
         self._raster_adapter = raster_adapter or RasterAdapter()
+        self._resvg_counter: int = 0
 
     # ------------------------------------------------------------------ #
     # Binding & cloning                                                  #
@@ -94,6 +101,7 @@ class FilterService:
         )
         clone._descriptors = dict(self._descriptors)
         clone._materialized_filters = dict(self._materialized_filters)
+        clone._resvg_counter = self._resvg_counter
         return clone
 
     # ------------------------------------------------------------------ #
@@ -168,17 +176,28 @@ class FilterService:
         descriptor_payload, bounds_payload = self._descriptor_payload(filter_context, descriptor)
         results: list[FilterEffectResult] = []
         emf_sources: list[FilterEffectResult] = []
+        raster_results_cache: list[FilterEffectResult] = []
         strategy = self._resolve_strategy(filter_context)
 
-        if strategy in {"auto", "native"}:
+        resvg_enabled = strategy not in {"legacy", "vector", "emf", "raster"}
+        resvg_preferred = strategy in {"resvg", "resvg-only"}
+        resvg_only = strategy == "resvg-only"
+
+        resvg_result: FilterEffectResult | None = None
+        if resvg_enabled:
+            resvg_result = self._render_resvg_filter(descriptor, filter_context, filter_ref)
+            if resvg_result is not None and resvg_only:
+                return [resvg_result]
+
+        if strategy in {"auto", "native", "legacy", "resvg", "resvg-only"}:
             native_results = self._render_native(filter_element, filter_context)
             if native_results:
                 results.extend(native_results)
                 emf_sources.extend(result for result in native_results if result.fallback == "emf")
-                if strategy == "native":
+                if strategy == "native" and not resvg_preferred:
                     return results
 
-        if strategy in {"vector", "emf"} or (not results and strategy == "auto"):
+        if strategy in {"vector", "emf"} or (not results and strategy in {"auto", "legacy"}):
             computed_vector = self._render_vector(filter_element, filter_context)
             if computed_vector:
                 emf_sources.extend(result for result in computed_vector if result.fallback == "emf")
@@ -186,7 +205,7 @@ class FilterService:
                     results.extend(computed_vector)
                 else:
                     results = list(computed_vector)
-                if strategy in {"vector", "emf"}:
+                if strategy in {"vector", "emf"} and not resvg_preferred:
                     return results
 
         descriptor_results = self._descriptor_fallback(
@@ -200,14 +219,23 @@ class FilterService:
             if emf_sources:
                 self._attach_emf_metadata(results, emf_sources)
 
-        if strategy in {"auto", "raster"}:
+        if strategy in {"auto", "raster", "legacy"}:
             raster_results = self._render_raster(filter_element, filter_context, filter_ref, strategy=strategy)
             if raster_results:
+                raster_results_cache = list(raster_results)
                 if descriptor_results:
                     self._attach_raster_metadata(results, raster_results)
                 else:
                     results.extend(raster_results)
-
+        if resvg_result is not None and resvg_preferred:
+            preferred_results = [resvg_result]
+            if emf_sources:
+                self._attach_emf_metadata(preferred_results, emf_sources)
+            if raster_results_cache:
+                self._attach_raster_metadata(preferred_results, raster_results_cache)
+            return preferred_results
+        if resvg_result is not None and resvg_enabled:
+            results.append(resvg_result)
         return results
 
     # ------------------------------------------------------------------ #
@@ -287,14 +315,214 @@ class FilterService:
             return []
         drawingml = result.drawingml or f"<!-- svg2ooxml:raster rel={filter_id} -->"
         effect = CustomEffect(drawingml=drawingml)
+        metadata = dict(result.metadata or {})
+        metadata.setdefault("renderer", "raster")
         return [
             FilterEffectResult(
                 effect=effect,
                 strategy=strategy if strategy in {"raster", "auto"} else "raster",
-                metadata=dict(result.metadata or {}),
+                metadata=metadata,
                 fallback=result.fallback or "bitmap",
             )
         ]
+
+    def _render_resvg_filter(
+        self,
+        descriptor: ResolvedFilter,
+        filter_context: FilterContext,
+        filter_id: str,
+    ) -> FilterEffectResult | None:
+        options_map = getattr(filter_context, "options", {})
+        tracer = options_map.get("tracer") if isinstance(options_map, dict) else None
+
+        def _trace(action: str, **meta: Any) -> None:
+            if tracer is not None:
+                payload = dict(meta)
+                payload.setdefault("strategy", self._strategy)
+                tracer.record_stage_event(
+                    stage="filter",
+                    action=action,
+                    subject=filter_id,
+                    metadata=payload,
+                )
+
+        _trace("resvg_attempt")
+        try:
+            filter_node = build_filter_node(descriptor)
+        except Exception as exc:  # pragma: no cover - defensive
+            self._logger.debug("Failed to construct filter node for %s", filter_id, exc_info=True)
+            _trace("resvg_build_failed", error=str(exc))
+            return None
+
+        plan = plan_filter(filter_node)
+        if plan is None:
+            _trace("resvg_plan_unsupported")
+            return None
+
+        try:
+            bounds = self._resvg_bounds(options_map, descriptor)
+            viewport = self._resvg_viewport(bounds)
+        except Exception as exc:  # pragma: no cover - defensive
+            self._logger.debug("Failed to compute resvg viewport for %s", filter_id, exc_info=True)
+            _trace("resvg_viewport_failed", error=str(exc))
+            return None
+
+        source_surface = self._seed_source_surface(viewport.width, viewport.height)
+        try:
+            result_surface = apply_filter(source_surface, plan, bounds, viewport)
+        except UnsupportedPrimitiveError as exc:
+            _trace("resvg_unsupported_primitive", primitive=str(exc))
+            return None
+        except Exception as exc:  # pragma: no cover - defensive
+            self._logger.debug("Resvg filter application failed for %s", filter_id, exc_info=True)
+            _trace("resvg_execution_failed", error=str(exc))
+            return None
+
+        png_bytes = _surface_to_png(result_surface)
+        self._resvg_counter += 1
+        relationship_id = f"rIdResvgFilter{self._resvg_counter}"
+
+        descriptor_payload = self._serialize_descriptor(descriptor)
+        primitives = [primitive.tag for primitive in descriptor.primitives]
+        metadata: dict[str, Any] = {
+            "renderer": "resvg",
+            "filter_id": filter_id,
+            "filter_units": descriptor.filter_units,
+            "primitive_units": descriptor.primitive_units,
+            "primitives": primitives,
+            "width_px": viewport.width,
+            "height_px": viewport.height,
+            "descriptor": descriptor_payload,
+            "bounds": {
+                "x": bounds[0],
+                "y": bounds[1],
+                "width": bounds[2] - bounds[0],
+                "height": bounds[3] - bounds[1],
+            },
+            "plan_primitives": [
+                {
+                    "tag": primitive_plan.tag,
+                    "inputs": list(primitive_plan.inputs),
+                    "result": primitive_plan.result_name,
+                }
+                for primitive_plan in plan.primitives
+            ],
+        }
+        metadata["fallback_assets"] = [
+            {
+                "type": "raster",
+                "format": "png",
+                "data": png_bytes,
+                "relationship_id": relationship_id,
+                "width_px": viewport.width,
+                "height_px": viewport.height,
+            }
+        ]
+
+        effect = CustomEffect(drawingml=f"<!-- svg2ooxml:resvg filter={filter_id} -->")
+        _trace(
+            "resvg_success",
+            primitive_count=len(plan.primitives),
+            width_px=viewport.width,
+            height_px=viewport.height,
+        )
+        return FilterEffectResult(
+            effect=effect,
+            strategy="resvg",
+            metadata=metadata,
+            fallback="bitmap",
+        )
+
+    def _resvg_bounds(
+        self,
+        options: Mapping[str, Any] | None,
+        descriptor: ResolvedFilter,
+    ) -> tuple[float, float, float, float]:
+        bbox: Mapping[str, Any] = {}
+        if isinstance(options, Mapping):
+            candidate = options.get("ir_bbox")
+            if isinstance(candidate, Mapping):
+                bbox = candidate
+
+        x = self._coerce_float(bbox.get("x"), 0.0)
+        y = self._coerce_float(bbox.get("y"), 0.0)
+        width = self._coerce_float(bbox.get("width"), 0.0)
+        height = self._coerce_float(bbox.get("height"), 0.0)
+
+        region = descriptor.region or {}
+        region_width = self._coerce_float(region.get("width"), 0.0)
+        region_height = self._coerce_float(region.get("height"), 0.0)
+
+        base_width = width if width > 0 else 128.0
+        base_height = height if height > 0 else 96.0
+
+        if descriptor.filter_units == "objectBoundingBox" and region_width > 0:
+            width = max(width, region_width * base_width)
+        elif region_width > 0:
+            width = max(width, region_width)
+        if descriptor.filter_units == "objectBoundingBox" and region_height > 0:
+            height = max(height, region_height * base_height)
+        elif region_height > 0:
+            height = max(height, region_height)
+
+        if width <= 0:
+            width = base_width
+        if height <= 0:
+            height = base_height
+
+        width = max(width, 1.0)
+        height = max(height, 1.0)
+        return (x, y, x + width, y + height)
+
+    def _resvg_viewport(self, bounds: tuple[float, float, float, float]) -> Viewport:
+        min_x, min_y, max_x, max_y = bounds
+        width = max(max_x - min_x, 1.0)
+        height = max(max_y - min_y, 1.0)
+        width_px = max(1, int(math.ceil(width)))
+        height_px = max(1, int(math.ceil(height)))
+        scale_x = width_px / width
+        scale_y = height_px / height
+        return Viewport(
+            width=width_px,
+            height=height_px,
+            min_x=min_x,
+            min_y=min_y,
+            scale_x=scale_x,
+            scale_y=scale_y,
+        )
+
+    def _seed_source_surface(self, width: int, height: int) -> Surface:
+        width = max(1, width)
+        height = max(1, height)
+        surface = Surface.make(width, height)
+        xs = np.linspace(0.0, 1.0, width, dtype=np.float32)[None, :]
+        ys = np.linspace(0.0, 1.0, height, dtype=np.float32)[:, None]
+
+        red = 0.15 + 0.75 * xs
+        green = 0.2 + 0.6 * (1.0 - ys)
+        radial = np.sqrt((xs - 0.5) ** 2 + (ys - 0.5) ** 2)
+        blue = np.clip(0.9 - 0.8 * radial, 0.1, 0.9)
+
+        base_alpha = np.clip(0.6 + 0.4 * (1.0 - radial * 1.2), 0.25, 1.0)
+        stripe = ((xs + ys) % 0.25) < 0.02
+        base_alpha = np.where(stripe, np.minimum(base_alpha, 0.4), base_alpha)
+
+        surface.data[..., 0] = red
+        surface.data[..., 1] = green
+        surface.data[..., 2] = blue
+        surface.data[..., 3] = base_alpha
+        surface.data[..., :3] *= surface.data[..., 3:4]
+        return surface
+
+    @staticmethod
+    def _coerce_float(value: Any, default: float) -> float:
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            return default
+        if math.isnan(number) or math.isinf(number):
+            return default
+        return number
 
     def _rasterize_filter(
         self,
@@ -525,6 +753,11 @@ class FilterService:
         assets = metadata.setdefault("fallback_assets", [])
         for raster in raster_results:
             raster_meta = raster.metadata if isinstance(raster.metadata, dict) else {}
+            if "renderer" in raster_meta:
+                metadata.setdefault("renderer", raster_meta.get("renderer"))
+            for key in ("width_px", "height_px", "filter_units", "primitive_units", "descriptor"):
+                if key in raster_meta and key not in metadata:
+                    metadata[key] = raster_meta[key]
             for asset in raster_meta.get("fallback_assets", []) or []:
                 assets.append(asset)
         existing_results[-1] = FilterEffectResult(

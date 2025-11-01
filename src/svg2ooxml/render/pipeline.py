@@ -18,7 +18,7 @@ from svg2ooxml.core.resvg.geometry.tessellation import TessellationResult, Tesse
 from svg2ooxml.core.resvg.painting.gradients import GradientStop, LinearGradient, PatternPaint, RadialGradient
 from svg2ooxml.core.resvg.painting.paint import Color, FillStyle, StrokeStyle
 from svg2ooxml.core.resvg.usvg_tree import BaseNode, PathNode, PatternNode, Tree
-from svg2ooxml.render.filters import apply_filter, plan_filter
+from svg2ooxml.render.filters import UnsupportedPrimitiveError, apply_filter, plan_filter
 from svg2ooxml.render.mask_clip import (
     ClipPathContext,
     MaskContext,
@@ -165,7 +165,10 @@ def _render_fill(
     layer = _draw_path_with_skia(sk_path, paint, viewport)
 
     if filter_plan is not None and bounds is not None:
-        layer = apply_filter(layer, filter_plan, bounds, viewport)
+        try:
+            layer = apply_filter(layer, filter_plan, bounds, viewport)
+        except UnsupportedPrimitiveError:
+            pass
 
     if mask_alpha is not None:
         layer = apply_mask(layer, mask_alpha)
@@ -205,7 +208,10 @@ def _render_stroke(
     layer = _draw_path_with_skia(sk_path, paint, viewport)
 
     if filter_plan is not None and bounds is not None:
-        layer = apply_filter(layer, filter_plan, bounds, viewport)
+        try:
+            layer = apply_filter(layer, filter_plan, bounds, viewport)
+        except UnsupportedPrimitiveError:
+            pass
 
     if mask_alpha is not None:
         layer = apply_mask(layer, mask_alpha)

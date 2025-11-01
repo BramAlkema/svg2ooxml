@@ -103,7 +103,8 @@ def main() -> None:
     if not renderer.available:
         raise SystemExit("LibreOffice (soffice) is not available. Please install it first.")
 
-    builder = PptxBuilder()
+    filter_strategy = os.getenv("SVG2OOXML_VISUAL_FILTER_STRATEGY", "resvg")
+    builder = PptxBuilder(filter_strategy=filter_strategy)
     golden = GoldenRepository()
 
     for scenario in args.scenarios:
