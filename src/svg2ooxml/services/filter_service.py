@@ -698,6 +698,9 @@ class FilterService:
         if isinstance(context.options, dict):
             policy_options = context.options.get("policy") or {}
 
+        if self._strategy != "auto":
+            return self._strategy
+
         policy_strategy = policy_options.get("strategy")
         if isinstance(policy_strategy, str):
             normalized = policy_strategy.strip().lower()
