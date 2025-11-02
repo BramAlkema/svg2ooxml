@@ -17,9 +17,16 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/webhook", tags=["webhooks"])
 
-# Initialize Firestore for idempotency tracking
-db = firestore.client()
-webhook_events_collection = db.collection("webhook_events")
+# Lazy-initialized Firestore client (initialized after Firebase app setup in main.py)
+_db = None
+
+
+def get_webhook_db():
+    """Get or create Firestore client for webhook idempotency tracking."""
+    global _db
+    if _db is None:
+        _db = firestore.client()
+    return _db
 
 
 def get_tier_from_price_id(price_id: str) -> str:
@@ -70,6 +77,8 @@ async def stripe_webhook(request: Request):
 
         # Check for replay attacks using idempotency
         event_id = event.id
+        db = get_webhook_db()
+        webhook_events_collection = db.collection("webhook_events")
         event_ref = webhook_events_collection.document(event_id)
         event_doc = event_ref.get()
 
