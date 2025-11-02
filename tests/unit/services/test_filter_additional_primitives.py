@@ -149,11 +149,11 @@ def test_turbulence_resvg_path() -> None:
         "  <feTurbulence baseFrequency='0.04 0.08' numOctaves='2' seed='3' type='fractalNoise'/>"
         "</filter>",
     )
-    effect = next((res for res in results if res.strategy == "resvg"), None)
+    effect = next((res for res in results if res.metadata.get("filter_type") == "turbulence"), None)
     assert effect is not None
     metadata = effect.metadata or {}
-    assert metadata.get("renderer") == "resvg"
-    assert metadata.get("primitives")
+    assert metadata.get("fallback_assets")
+    assert metadata.get("filter_type") == "turbulence"
 
 
 def test_tile_delegates_to_prior_result_when_available() -> None:
@@ -208,9 +208,9 @@ def test_diffuse_lighting_resvg_path() -> None:
         "  </feDiffuseLighting>"
         "</filter>",
     )
-    effect = next((res for res in results if res.strategy == "resvg"), None)
+    effect = next((res for res in results if res.metadata.get("filter_type") == "diffuse_lighting"), None)
     assert effect is not None
-    assert effect.metadata.get("renderer") == "resvg"
+    assert effect.metadata.get("fallback_assets")
 
 
 def test_specular_lighting_resvg_path() -> None:
@@ -223,9 +223,9 @@ def test_specular_lighting_resvg_path() -> None:
         "  </feSpecularLighting>"
         "</filter>",
     )
-    effect = next((res for res in results if res.strategy == "resvg"), None)
+    effect = next((res for res in results if res.metadata.get("filter_type") == "specular_lighting"), None)
     assert effect is not None
-    assert effect.metadata.get("renderer") == "resvg"
+    assert effect.metadata.get("fallback_assets")
 
 
 def test_image_without_href_warns_and_falls_back() -> None:

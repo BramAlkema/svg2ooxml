@@ -29,16 +29,6 @@
       ]
     },
     {
-      "collectionGroup": "users",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "stripeCustomerId",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
       "collectionGroup": "usage",
       "queryScope": "COLLECTION",
       "fields": [
@@ -48,16 +38,6 @@
         },
         {
           "fieldPath": "monthYear",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "webhook_events",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "expires_at",
           "order": "ASCENDING"
         }
       ]
