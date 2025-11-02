@@ -11,6 +11,9 @@ logger = logging.getLogger(__name__)
 def _get_encryption_key() -> bytes:
     """Get encryption key from environment/secret.
 
+    Fernet keys are already base64-encoded 32-byte keys.
+    The environment variable should contain the key as-is from Fernet.generate_key().
+
     Raises:
         ValueError: If TOKEN_ENCRYPTION_KEY not set
     """
@@ -18,10 +21,8 @@ def _get_encryption_key() -> bytes:
     if not key_b64:
         raise ValueError("TOKEN_ENCRYPTION_KEY environment variable not set")
 
-    try:
-        return base64.urlsafe_b64decode(key_b64)
-    except Exception as e:
-        raise ValueError(f"Invalid TOKEN_ENCRYPTION_KEY format: {e}")
+    # Fernet keys are already base64-encoded, use directly
+    return key_b64.encode('utf-8')
 
 
 def encrypt_token(token: str) -> str:
