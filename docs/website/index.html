@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>svg2ooxml - SVG to Google Slides Converter</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+        header {
+            background: white;
+            padding: 40px;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+            margin-bottom: 30px;
+            text-align: center;
+        }
+        h1 {
+            color: #667eea;
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+        .tagline {
+            color: #666;
+            font-size: 1.2em;
+            margin-bottom: 30px;
+        }
+        .features {
+            background: white;
+            padding: 40px;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+            margin-bottom: 30px;
+        }
+        .feature {
+            margin-bottom: 25px;
+        }
+        .feature h3 {
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 1.3em;
+        }
+        .feature p {
+            color: #666;
+            line-height: 1.8;
+        }
+        .cta {
+            background: #667eea;
+            color: white;
+            padding: 15px 40px;
+            border-radius: 8px;
+            text-decoration: none;
+            display: inline-block;
+            font-weight: bold;
+            transition: background 0.3s;
+        }
+        .cta:hover {
+            background: #764ba2;
+        }
+        footer {
+            background: white;
+            padding: 30px 40px;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+        footer a {
+            color: #667eea;
+            text-decoration: none;
+            margin: 0 15px;
+            font-weight: 500;
+        }
+        footer a:hover {
+            text-decoration: underline;
+        }
+        .logo {
+            font-weight: bold;
+            font-size: 1.2em;
+            color: #667eea;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="logo">svg2ooxml</div>
+            <h1>SVG to Google Slides</h1>
+            <p class="tagline">Convert your SVG designs to editable Google Slides presentations with high fidelity</p>
+            <a href="https://github.com/BramAlkema/svg2ooxml" class="cta">View on GitHub</a>
+        </header>
+
+        <div class="features">
+            <div class="feature">
+                <h3>High-Fidelity Conversion</h3>
+                <p>Preserve your SVG designs with accurate shape, text, and filter rendering in Google Slides format.</p>
+            </div>
+
+            <div class="feature">
+                <h3>Figma Plugin Integration</h3>
+                <p>Export directly from Figma to Google Slides with our browser-based plugin. No server uploads required.</p>
+            </div>
+
+            <div class="feature">
+                <h3>Secure Authentication</h3>
+                <p>Sign in with your Google account using Firebase Authentication. Your credentials are encrypted and never stored permanently.</p>
+            </div>
+
+            <div class="feature">
+                <h3>Advanced Filter Support</h3>
+                <p>Supporting SVG filters including drop shadows, blurs, lighting effects, and more through our resvg rendering pipeline.</p>
+            </div>
+
+            <div class="feature">
+                <h3>Open Source</h3>
+                <p>Built with Python, FastAPI, and modern web technologies. Available on GitHub under an open source license.</p>
+            </div>
+        </div>
+
+        <footer>
+            <p>
+                <a href="/privacy.html">Privacy Policy</a> |
+                <a href="/terms.html">Terms of Service</a> |
+                <a href="https://github.com/BramAlkema/svg2ooxml">GitHub</a>
+            </p>
+            <p style="margin-top: 20px; color: #999; font-size: 0.9em;">
+                &copy; 2025 svg2ooxml. All rights reserved.
+            </p>
+        </footer>
+    </div>
+</body>
+</html>
