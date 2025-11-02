@@ -60,10 +60,7 @@ cloud = [
   "google-auth>=2.26",
   "google-auth-oauthlib>=1.2.0"
 ]
-worker = [
-  "huey>=2.4.5",
-  "redis>=5.0.1"
-]
+# worker dependencies removed - now using Cloud Tasks instead
 
 [tool.setuptools.packages.find]
 where = ["src"]

@@ -20,9 +20,7 @@ google-api-python-client>=2.130
 google-auth>=2.26
 google-auth-oauthlib>=1.2.0
 
-# Worker (kept for compatibility, but using Cloud Tasks instead)
-huey>=2.4.5
-redis>=5.0.1
+# Worker dependencies removed - using Cloud Tasks instead
 
 # Rendering
 skia-python>=87.5
