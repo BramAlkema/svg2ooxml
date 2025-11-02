@@ -24,7 +24,7 @@ class SubscriptionRepository:
     # Users
     # ============================================================================
 
-    async def get_user(self, firebase_uid: str) -> Optional[Dict[str, Any]]:
+    def get_user(self, firebase_uid: str) -> Optional[Dict[str, Any]]:
         """Get user by Firebase UID.
 
         Args:
@@ -45,7 +45,7 @@ class SubscriptionRepository:
             logger.error(f"Failed to get user {firebase_uid}: {e}")
             return None
 
-    async def create_or_update_user(
+    def create_or_update_user(
         self,
         firebase_uid: str,
         email: str,
@@ -91,7 +91,7 @@ class SubscriptionRepository:
     # Subscriptions
     # ============================================================================
 
-    async def get_active_subscription(
+    def get_active_subscription(
         self, firebase_uid: str
     ) -> Optional[Dict[str, Any]]:
         """Get active subscription for user.
@@ -121,7 +121,7 @@ class SubscriptionRepository:
             logger.error(f"Failed to get active subscription for {firebase_uid}: {e}")
             return None
 
-    async def create_or_update_subscription(
+    def create_or_update_subscription(
         self,
         stripe_subscription_id: str,
         user_id: str,
@@ -178,7 +178,7 @@ class SubscriptionRepository:
             logger.error(f"Failed to create/update subscription: {e}")
             raise
 
-    async def get_subscription(
+    def get_subscription(
         self, stripe_subscription_id: str
     ) -> Optional[Dict[str, Any]]:
         """Get subscription by Stripe ID.
@@ -209,7 +209,7 @@ class SubscriptionRepository:
     # Usage Tracking
     # ============================================================================
 
-    async def get_usage(
+    def get_usage(
         self, firebase_uid: str, month_year: str
     ) -> Optional[Dict[str, Any]]:
         """Get usage for specific month.
@@ -234,7 +234,7 @@ class SubscriptionRepository:
             logger.error(f"Failed to get usage for {firebase_uid}/{month_year}: {e}")
             return None
 
-    async def increment_usage(
+    def increment_usage(
         self, firebase_uid: str, month_year: str
     ) -> Dict[str, Any]:
         """Increment usage count for current month.
@@ -301,7 +301,7 @@ class SubscriptionRepository:
             logger.error(f"Failed to increment usage: {e}")
             raise
 
-    async def get_user_by_stripe_customer(
+    def get_user_by_stripe_customer(
         self, stripe_customer_id: str
     ) -> Optional[Dict[str, Any]]:
         """Find user by Stripe customer ID.

@@ -76,19 +76,16 @@ async def create_export_job(
 
         # Check subscription and usage limits
         from datetime import datetime
-        import asyncio
 
         current_month = datetime.now().strftime("%Y-%m")
 
-        # Run both queries in parallel for better performance
+        # Get subscription and usage (synchronous Firestore calls)
         repo = get_subscription_repo()
-        subscription, usage = await asyncio.gather(
-            run_in_threadpool(
-                repo.get_active_subscription, firebase_uid
-            ),
-            run_in_threadpool(
-                repo.get_usage, firebase_uid, current_month
-            ),
+        subscription = await run_in_threadpool(
+            repo.get_active_subscription, firebase_uid
+        )
+        usage = await run_in_threadpool(
+            repo.get_usage, firebase_uid, current_month
         )
         export_count = usage["exportCount"] if usage else 0
 

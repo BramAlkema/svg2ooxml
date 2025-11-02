@@ -74,24 +74,26 @@ async def get_subscription_status(
         firebase_uid = current_user["uid"]
 
         # Ensure user exists in database
-        user = await repo.get_user(firebase_uid)
+        from fastapi.concurrency import run_in_threadpool
+
+        user = await run_in_threadpool(repo.get_user, firebase_uid)
         if not user:
             # Create user record
             user_record = auth.get_user(firebase_uid)
-            user = await repo.create_or_update_user(
-                firebase_uid=firebase_uid,
-                email=user_record.email or "unknown@example.com",
+            user = await run_in_threadpool(
+                repo.create_or_update_user,
+                firebase_uid,
+                user_record.email or "unknown@example.com"
             )
 
         current_month = datetime.now().strftime("%Y-%m")
 
-        # Run both queries in parallel for better performance
-        import asyncio
-        from fastapi.concurrency import run_in_threadpool
-
-        subscription, usage = await asyncio.gather(
-            run_in_threadpool(repo.get_active_subscription, firebase_uid),
-            run_in_threadpool(repo.get_usage, firebase_uid, current_month),
+        # Get subscription and usage (synchronous Firestore calls in threadpool)
+        subscription = await run_in_threadpool(
+            repo.get_active_subscription, firebase_uid
+        )
+        usage = await run_in_threadpool(
+            repo.get_usage, firebase_uid, current_month
         )
         export_count = usage["exportCount"] if usage else 0
 
@@ -148,12 +150,15 @@ async def create_checkout(
         firebase_uid = current_user["uid"]
 
         # Get or create user
-        user = await repo.get_user(firebase_uid)
+        from fastapi.concurrency import run_in_threadpool
+
+        user = await run_in_threadpool(repo.get_user, firebase_uid)
         if not user:
             user_record = auth.get_user(firebase_uid)
-            user = await repo.create_or_update_user(
-                firebase_uid=firebase_uid,
-                email=user_record.email or "unknown@example.com",
+            user = await run_in_threadpool(
+                repo.create_or_update_user,
+                firebase_uid,
+                user_record.email or "unknown@example.com"
             )
 
         # Create Stripe customer if doesn't exist
@@ -162,10 +167,11 @@ async def create_checkout(
                 email=user["email"],
                 firebase_uid=firebase_uid,
             )
-            user = await repo.create_or_update_user(
-                firebase_uid=firebase_uid,
-                email=user["email"],
-                stripe_customer_id=customer_id,
+            user = await run_in_threadpool(
+                repo.create_or_update_user,
+                firebase_uid,
+                user["email"],
+                customer_id
             )
         else:
             customer_id = user["stripeCustomerId"]
@@ -200,7 +206,9 @@ async def create_portal(
         firebase_uid = current_user["uid"]
 
         # Get user
-        user = await repo.get_user(firebase_uid)
+        from fastapi.concurrency import run_in_threadpool
+
+        user = await run_in_threadpool(repo.get_user, firebase_uid)
         if not user or not user.get("stripeCustomerId"):
             raise HTTPException(
                 status_code=400,
