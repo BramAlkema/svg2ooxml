@@ -79,6 +79,53 @@ Phase 2 – *Promotion & Policy (complete)*
 - [x] Ensure tracer reports include the source of each decision (strategy vs policy)
       via structured `resvg_promoted_emf` / `resvg_promotion_policy_blocked` events.
 
+### Native promotion targets (Figma baseline)
+
+To reach parity for the “everyday” effects produced by Figma exports we will
+build explicit DrawingML emitters for the primitives below. The intent is to
+keep the chain editable whenever PowerPoint provides a matching construct.
+
+1. **`feComposite` operators**
+   - `over`: splice the upstream `<a:effectLst>` fragments without introducing
+     a fallback. When both inputs provide effect lists, concatenate them and
+     preserve result metadata (`pipeline_state`) so downstream primitives can
+     reuse the merged fragment.
+   - `in`, `out`, `atop`, `xor`: implement these as alpha masks on top of the
+     combined effect using DrawingML alpha primitives (`<a:alphaBiLevel>`,
+     `<a:alphaModFix>`, `<a:blend>`). Fall back to EMF only when the mask input
+     is missing.
+   - `arithmetic`: remains a fallback path (policy can promote later), but
+     make sure the metadata records the coefficients for telemetry.
+   - Implementation lives in `src/svg2ooxml/filters/primitives/composite.py`
+     with helpers under `src/svg2ooxml/drawingml/filter_renderer.py` to merge
+     multiple `<a:effectLst>` payloads and propagate source metadata.
+
+2. **`feBlend` modes**
+   - `normal`: identical to `over`; merge the two effect lists directly.
+   - `multiply`, `screen`, `lighten`, `darken`: emit `<a:fillOverlay>` with the
+     corresponding `blend` attribute (`mult`, `screen`, `lighten`, `darken`) and
+     a `<a:srgbClr>` that reflects the second input’s colour when available.
+   - Any unsupported mode continues to fall back to EMF, but metadata should
+     record the requested mode and the source effect IDs.
+   - Code entry point: new DrawingML builder in
+     `src/svg2ooxml/filters/primitives/blend.py` with renderer support to turn
+     the placeholder into real XML (`filter_renderer._build_blend`).
+
+3. **`feFlood` / `feOffset` propagation**
+   - When a flood feeds directly into composite/blend primitives, bubble its
+     colour/opacity metadata forward so the final effect retains the same
+     `<a:solidFill>` definition (no redundant fallback assets).
+   - Offsets that remain in the vector path should surface their EMU offsets on
+     the merged effect (use `<a:outerShdw>` with zero blur as today, but ensure
+     composite/blend export keeps the offset instead of replacing it with a
+     comment).
+
+These builders require additions to the promotion table in
+`src/svg2ooxml/services/filter_service.py` so resvg promotions can select the
+native path whenever the upstream fragments have already been converted to
+DrawingML. Tests belong under `tests/unit/services/` (per-primitive) and
+`tests/integration/` (end-to-end blur+offset+blend chains).
+
 Phase 3 – *Coverage & Validation*
 - [x] Complete resvg handlers for remaining primitives, including spot/distant
       lighting edge cases and turbulence stitching.
