@@ -108,6 +108,31 @@ def test_tracer_records_stage_events() -> None:
     assert any(event.action == "warning" and event.subject == "duplicate-id" for event in report.stage_events)
 
 
+def test_tracer_reports_resvg_metrics() -> None:
+    tracer = ConversionTracer()
+    tracer.record_stage_event(stage="filter", action="resvg_attempt")
+    tracer.record_stage_event(stage="filter", action="resvg_plan_characterised")
+    tracer.record_stage_event(stage="filter", action="resvg_promoted_emf")
+    tracer.record_stage_event(stage="filter", action="resvg_promotion_policy_blocked")
+    tracer.record_stage_event(stage="filter", action="resvg_lighting_candidate")
+    tracer.record_stage_event(stage="filter", action="resvg_success")
+    tracer.record_stage_event(stage="filter", action="resvg_lighting_promoted")
+    tracer.record_stage_event(stage="filter", action="resvg_plan_unsupported")
+
+    report = tracer.report().to_dict()
+    metrics = report.get("resvg_metrics")
+    assert metrics == {
+        "attempts": 1,
+        "plan_characterised": 1,
+        "promotions": 1,
+        "policy_blocks": 1,
+        "lighting_candidates": 1,
+        "lighting_promotions": 1,
+        "successes": 1,
+        "failures": 1,
+    }
+
+
 def test_legacy_module_still_exposes_tracer() -> None:
     from svg2ooxml.map import tracer as legacy_tracer
 

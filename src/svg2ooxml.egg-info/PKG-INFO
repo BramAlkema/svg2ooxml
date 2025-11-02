@@ -29,11 +29,13 @@ Requires-Dist: numpy>=1.24; extra == "render"
 Provides-Extra: slides
 Requires-Dist: python-pptx>=0.6.23; extra == "slides"
 Requires-Dist: cryptography>=41.0; extra == "slides"
+Requires-Dist: fonttools>=4.59.2; extra == "slides"
 Provides-Extra: api
 Requires-Dist: fastapi>=0.109.0; extra == "api"
 Requires-Dist: uvicorn[standard]>=0.27.0; extra == "api"
 Requires-Dist: pydantic>=2.5.3; extra == "api"
 Requires-Dist: python-multipart>=0.0.6; extra == "api"
+Requires-Dist: firebase-admin>=6.5.0; extra == "api"
 Provides-Extra: cloud
 Requires-Dist: google-cloud-firestore>=2.14.0; extra == "cloud"
 Requires-Dist: google-cloud-storage>=2.14.0; extra == "cloud"
@@ -42,9 +44,6 @@ Requires-Dist: google-cloud-tasks>=2.16.0; extra == "cloud"
 Requires-Dist: google-api-python-client>=2.130; extra == "cloud"
 Requires-Dist: google-auth>=2.26; extra == "cloud"
 Requires-Dist: google-auth-oauthlib>=1.2.0; extra == "cloud"
-Provides-Extra: worker
-Requires-Dist: huey>=2.4.5; extra == "worker"
-Requires-Dist: redis>=5.0.1; extra == "worker"
 
 # svg2ooxml
 
@@ -60,9 +59,8 @@ core that can run locally without GCP dependencies.
 ## Getting Started
 
 ```bash
-python -m venv .venv
+./tools/bootstrap_venv.sh
 source .venv/bin/activate
-pip install -r requirements-dev.txt
 ```
 
 The developer requirements install svg2ooxml in editable mode with all runtime
@@ -138,14 +136,14 @@ The `pyproject.toml` declares optional extras—mix and match via
 Production code lives under `src/svg2ooxml/`:
 
 - `common/` – shared helpers (temporary dirs, interpolation, timing).
-- `core/` – converter entry points, pipeline orchestration, resvg integration.
+- `core/` – converter entry points (including ``SvgToPptxExporter``), traversal,
+  resvg integration, and the metadata describing the pipeline stages.
 - `drawingml/` – XML writers and asset registries.
 - `io/` – SVG/PPTX adapters and file/stream helpers.
 - `policy/` – tunable decisions and provider registries.
 - `api/` and `services/` – REST API, background services, and integrations.
-- `legacy/` – svg2pptx packages kept reachable during the migration; compatibility
-  shims expose them under their historic import paths. See `docs/porting.md` for
-  the remaining relocation plan.
+  shims used during the migration have now been removed; see `docs/legacyport.md`
+  for the historical port log.
 
 Supporting folders:
 

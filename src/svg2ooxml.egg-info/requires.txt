@@ -10,6 +10,7 @@ fastapi>=0.109.0
 uvicorn[standard]>=0.27.0
 pydantic>=2.5.3
 python-multipart>=0.0.6
+firebase-admin>=6.5.0
 
 [cloud]
 google-cloud-firestore>=2.14.0
@@ -41,7 +42,4 @@ numpy>=1.24
 [slides]
 python-pptx>=0.6.23
 cryptography>=41.0
-
-[worker]
-huey>=2.4.5
-redis>=5.0.1
+fonttools>=4.59.2

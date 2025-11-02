@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import struct
 from dataclasses import dataclass
 from enum import IntEnum
@@ -38,6 +39,7 @@ class EMFRecordType(IntEnum):
     EMR_RECTANGLE = 43
     EMR_FILLRGN = 71
     EMR_CREATEDIBPATTERNBRUSHPT = 94
+    EMR_STRETCHDIBITS = 65
     EMR_EOF = 14
 
 
@@ -101,9 +103,21 @@ class EMFBlob:
         self._next_handle = 1
         self._brush_cache: Dict[BrushSpec, int] = {}
         self._pen_cache: Dict[PenSpec, int] = {}
+        self._dib_brush_cache: Dict[tuple[int, bytes], int] = {}
         self._clip_depth = 0
         self._poly_fill_mode = 1  # 1 = ALTERNATE, 2 = WINDING
         self._init_header()
+
+    @staticmethod
+    def _align4(value: int) -> int:
+        return (value + 3) & ~3
+
+    @staticmethod
+    def _pad4(data: bytes) -> bytes:
+        padding = (-len(data)) % 4
+        if padding:
+            data += b"\x00" * padding
+        return data
 
     # ------------------------------------------------------------------
     # Public helpers
@@ -159,6 +173,101 @@ class EMFBlob:
             handle = self.create_solid_brush(rgb)
             self._brush_cache[spec] = handle
         return handle
+
+    def create_dib_pattern_brush(self, bmp_bytes: bytes, *, usage: int = 0) -> int:
+        """Create a DIB pattern brush from a BMP payload."""
+
+        if not bmp_bytes.startswith(b"BM"):
+            raise ValueError("bmp_bytes must be a little-endian BMP payload")
+
+        data_index = struct.unpack_from("<I", bmp_bytes, 10)[0]
+        header_size = struct.unpack_from("<I", bmp_bytes, 14)[0]
+        bmi = bmp_bytes[14 : 14 + header_size]
+        bits = bmp_bytes[data_index:]
+
+        bmi_padded = self._pad4(bmi)
+        bits_padded = self._pad4(bits)
+
+        handle = self._allocate_handle()
+        off_bmi = 8 + 6 * 4  # header + payload fields
+        off_bits = off_bmi + len(bmi_padded)
+        payload = struct.pack(
+            "<IIIIII",
+            handle,
+            usage,
+            off_bmi,
+            len(bmi),
+            off_bits,
+            len(bits),
+        )
+        payload += bmi_padded + bits_padded
+        self._append_record(EMFRecordType.EMR_CREATEDIBPATTERNBRUSHPT, payload)
+        return handle
+
+    def get_dib_pattern_brush(self, bmp_bytes: bytes, *, usage: int = 0) -> int:
+        """Return a cached DIB pattern brush, creating it if necessary."""
+
+        digest = hashlib.sha1(bmp_bytes).digest()
+        key = (usage, digest)
+        handle = self._dib_brush_cache.get(key)
+        if handle is None:
+            handle = self.create_dib_pattern_brush(bmp_bytes, usage=usage)
+            self._dib_brush_cache[key] = handle
+        return handle
+
+    def draw_bitmap(
+        self,
+        dest_left: int,
+        dest_top: int,
+        dest_width: int,
+        dest_height: int,
+        src_left: int,
+        src_top: int,
+        src_width: int,
+        src_height: int,
+        bmp_bytes: bytes,
+        *,
+        rop: int = 0x00CC0020,
+    ) -> None:
+        """Render a bitmap using EMR_STRETCHDIBITS."""
+
+        if not bmp_bytes.startswith(b"BM"):
+            raise ValueError("bmp_bytes must be a little-endian BMP payload")
+
+        data_index = struct.unpack_from("<I", bmp_bytes, 10)[0]
+        header_size = struct.unpack_from("<I", bmp_bytes, 14)[0]
+        bmi = bmp_bytes[14 : 14 + header_size]
+        bits = bmp_bytes[data_index:]
+
+        bmi_padded = self._pad4(bmi)
+        bits_padded = self._pad4(bits)
+
+        off_bmi = 8 + 18 * 4
+        off_bits = off_bmi + len(bmi_padded)
+
+        payload = struct.pack(
+            "<" + "i" * 18,
+            int(dest_left),
+            int(dest_top),
+            int(dest_left + dest_width),
+            int(dest_top + dest_height),
+            int(dest_left),
+            int(dest_top),
+            int(src_left),
+            int(src_top),
+            int(src_width),
+            int(src_height),
+            int(off_bmi),
+            int(len(bmi)),
+            int(off_bits),
+            int(len(bits)),
+            0,
+            int(rop),
+            int(dest_width),
+            int(dest_height),
+        )
+        payload += bmi_padded + bits_padded
+        self._append_record(EMFRecordType.EMR_STRETCHDIBITS, payload)
 
     def get_pen(
         self,

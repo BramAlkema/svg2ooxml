@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="48">
+  <defs>
+    <filter id="lighting">
+      <feDiffuseLighting lighting-color="#ffeeaa" surfaceScale="3" diffuseConstant="1.2" result="lighting">
+        <fePointLight x="5" y="12" z="8"/>
+      </feDiffuseLighting>
+      <feComposite in="SourceGraphic" in2="lighting" operator="over"/>
+    </filter>
+  </defs>
+  <rect x="0" y="0" width="64" height="48" fill="#445566" filter="url(#lighting)"/>
+</svg>

@@ -19,6 +19,7 @@ google-cloud-tasks>=2.16.0
 google-api-python-client>=2.130
 google-auth>=2.26
 google-auth-oauthlib>=1.2.0
+firebase-admin>=6.5.0
 
 # Worker dependencies removed - using Cloud Tasks instead
 

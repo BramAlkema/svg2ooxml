@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="48">
+  <defs>
+    <filter id="lightingSpec">
+      <feSpecularLighting surfaceScale="4" specularConstant="0.9" specularExponent="12" lighting-color="#88ccff" result="spec">
+        <feSpotLight x="10" y="-6" z="20" pointsAtX="32" pointsAtY="24" pointsAtZ="0" limitingConeAngle="35"/>
+      </feSpecularLighting>
+      <feComposite in="spec" in2="SourceGraphic" operator="over"/>
+    </filter>
+  </defs>
+  <rect x="0" y="0" width="64" height="48" fill="#223344" filter="url(#lightingSpec)"/>
+</svg>

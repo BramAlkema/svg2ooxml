@@ -40,5 +40,10 @@ jobs:
           if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
 
       - name: Run test suite
+        env:
+          # Mock Firebase for tests (Firebase emulator not required for unit tests)
+          FIREBASE_AUTH_EMULATOR_HOST: localhost:9099
+          # Test encryption key (base64-encoded 32-byte key for testing)
+          TOKEN_ENCRYPTION_KEY: dGVzdC1lbmNyeXB0aW9uLWtleS0zMi1ieXRlcy10ZXN0LWtleQo=
         run: |
           python -m pytest -m "not visual" --maxfail=1 --disable-warnings

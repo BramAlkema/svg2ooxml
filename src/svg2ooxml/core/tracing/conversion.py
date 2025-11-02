@@ -6,7 +6,7 @@ import json
 import logging
 from collections import Counter
 from dataclasses import dataclass, field
-from typing import Any, Dict, List
+from typing import Any, Dict, Iterable, List
 
 
 def _stringify(value: Any) -> str:
@@ -24,6 +24,47 @@ def _sanitize(payload: Any) -> Any:
         if isinstance(payload, (list, tuple)):
             return [_stringify(item) for item in payload]
         return _stringify(payload)
+
+
+def _derive_resvg_metrics(stage_totals: Iterable[tuple[str, int]]) -> dict[str, int]:
+    metrics: dict[str, int] = {
+        "attempts": 0,
+        "plan_characterised": 0,
+        "promotions": 0,
+        "policy_blocks": 0,
+        "lighting_candidates": 0,
+        "lighting_promotions": 0,
+        "successes": 0,
+        "failures": 0,
+    }
+    failure_actions = {
+        "resvg_build_failed",
+        "resvg_plan_unsupported",
+        "resvg_viewport_failed",
+        "resvg_unsupported_primitive",
+        "resvg_execution_failed",
+    }
+    for key, count in stage_totals:
+        if not key.startswith("filter:"):
+            continue
+        _, action = key.split(":", 1)
+        if action == "resvg_attempt":
+            metrics["attempts"] += count
+        elif action == "resvg_plan_characterised":
+            metrics["plan_characterised"] += count
+        elif action == "resvg_promoted_emf":
+            metrics["promotions"] += count
+        elif action == "resvg_promotion_policy_blocked":
+            metrics["policy_blocks"] += count
+        elif action == "resvg_lighting_candidate":
+            metrics["lighting_candidates"] += count
+        elif action == "resvg_lighting_promoted":
+            metrics["lighting_promotions"] += count
+        elif action == "resvg_success":
+            metrics["successes"] += count
+        elif action in failure_actions:
+            metrics["failures"] += count
+    return {key: value for key, value in metrics.items() if value}
 
 
 @dataclass(slots=True)
@@ -52,6 +93,7 @@ class TraceReport:
     stage_events: List["StageTrace"]
 
     def to_dict(self) -> dict[str, Any]:
+        resvg_metrics = _derive_resvg_metrics(self.stage_totals.items())
         return {
             "geometry_totals": dict(self.geometry_totals),
             "paint_totals": dict(self.paint_totals),
@@ -83,6 +125,7 @@ class TraceReport:
                 }
                 for event in self.stage_events
             ],
+            "resvg_metrics": resvg_metrics,
         }
 
 
@@ -194,4 +237,3 @@ class ConversionTracer:
 
 
 __all__ = ["ConversionTracer", "TraceReport", "GeometryTrace", "PaintTrace", "StageTrace"]
-

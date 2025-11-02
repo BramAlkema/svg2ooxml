@@ -853,10 +853,15 @@ def _apply_turbulence(
     num_octaves = max(1, min(num_octaves, 8))
     seed = int(params.get("seed", 0))
     turbulence_type = params.get("turbulence_type", "turbulence")
+    stitch_tiles = str(params.get("stitch", "noStitch")).strip().lower() == "stitch"
 
     rng = np.random.default_rng(seed)
-    x = (np.arange(width, dtype=np.float32) + 0.5) / max(width, 1)
-    y = (np.arange(height, dtype=np.float32) + 0.5) / max(height, 1)
+    if stitch_tiles:
+        x = np.linspace(0.0, 1.0, num=max(width, 1), endpoint=False, dtype=np.float32)
+        y = np.linspace(0.0, 1.0, num=max(height, 1), endpoint=False, dtype=np.float32)
+    else:
+        x = (np.arange(width, dtype=np.float32) + 0.5) / max(width, 1)
+        y = (np.arange(height, dtype=np.float32) + 0.5) / max(height, 1)
     grid_x, grid_y = np.meshgrid(x, y)
 
     total = np.zeros((height, width), dtype=np.float32)
@@ -871,6 +876,11 @@ def _apply_turbulence(
         freq_mul = 2 ** octave
         fx = base_freq_x * freq_mul
         fy = base_freq_y * freq_mul
+        if stitch_tiles:
+            if width > 0:
+                fx = round(fx * width) / max(width, 1)
+            if height > 0:
+                fy = round(fy * height) / max(height, 1)
         sample = (
             np.sin(2.0 * math.pi * fx * grid_x + phase[0])
             + np.sin(2.0 * math.pi * fy * grid_y + phase[1])
@@ -885,6 +895,10 @@ def _apply_turbulence(
 
     total -= total.min()
     total /= total.max() + _EPSILON
+    if stitch_tiles:
+        total[:, -1] = total[:, 0]
+        total[-1, :] = total[0, :]
+
     surface = Surface.make(width, height)
     if linear:
         surface.data[..., :3] = total[..., None]
@@ -905,10 +919,11 @@ def _apply_diffuse_lighting(
     diffuse_constant = float(params.get("constant", 1.0))
     kernel_length = params.get("kernel_length", (1.0, 1.0))
 
-    luminance = surface.data[..., 3]
-    height_map = luminance * surface_scale
-    spacing_x = kernel_length[0] if kernel_length else 1.0
-    spacing_y = kernel_length[1] if kernel_length else 1.0
+    height_map = _height_map_from_surface(surface) * surface_scale
+    spacing_x = float(kernel_length[0]) if kernel_length else 1.0
+    spacing_y = float(kernel_length[1]) if kernel_length else 1.0
+    spacing_x = max(spacing_x, _EPSILON) * (units.scale_x or 1.0)
+    spacing_y = max(spacing_y, _EPSILON) * (units.scale_y or 1.0)
 
     grad_y, grad_x = np.gradient(height_map, spacing_y, spacing_x, edge_order=1)
     normal = np.stack((-grad_x, -grad_y, np.ones_like(height_map)), axis=-1)
@@ -934,16 +949,18 @@ def _apply_specular_lighting(
     units: PrimitiveUnitScale,
 ) -> Surface:
     light = params.get("light", {})
+    light_type = params.get("light_type")
     color = np.array(params.get("lighting_color", (1.0, 1.0, 1.0)), dtype=np.float32)
     surface_scale = float(params.get("surface_scale", 1.0))
     specular_constant = float(params.get("constant", 1.0))
     specular_exponent = float(params.get("exponent", 1.0))
     kernel_length = params.get("kernel_length", (1.0, 1.0))
 
-    luminance = surface.data[..., 3]
-    height_map = luminance * surface_scale
-    spacing_x = kernel_length[0] if kernel_length else 1.0
-    spacing_y = kernel_length[1] if kernel_length else 1.0
+    height_map = _height_map_from_surface(surface) * surface_scale
+    spacing_x = float(kernel_length[0]) if kernel_length else 1.0
+    spacing_y = float(kernel_length[1]) if kernel_length else 1.0
+    spacing_x = max(spacing_x, _EPSILON) * (units.scale_x or 1.0)
+    spacing_y = max(spacing_y, _EPSILON) * (units.scale_y or 1.0)
 
     grad_y, grad_x = np.gradient(height_map, spacing_y, spacing_x, edge_order=1)
     normal = np.stack((-grad_x, -grad_y, np.ones_like(height_map)), axis=-1)
@@ -963,6 +980,8 @@ def _apply_specular_lighting(
         0.0, reflection[..., 0] * view[0] + reflection[..., 1] * view[1] + reflection[..., 2] * view[2]
     )
     intensity = specular_constant * np.power(spec_amount, specular_exponent)
+    if light_type == "spot":
+        intensity *= light_weight
     intensity *= light_weight
     intensity = np.clip(intensity, 0.0, 1.0)
 
@@ -972,6 +991,24 @@ def _apply_specular_lighting(
     result.data[..., 3] = intensity.astype(np.float32)
     result.data[..., :3] *= result.data[..., 3:4]
     return result
+
+
+def _height_map_from_surface(surface: Surface) -> np.ndarray:
+    alpha = np.clip(surface.data[..., 3], 0.0, 1.0)
+    rgb = surface.data[..., :3]
+    safe_alpha = np.maximum(alpha, _EPSILON)
+    unpremult = np.zeros_like(rgb)
+    mask = alpha > _EPSILON
+    if np.any(mask):
+        unpremult[mask] = rgb[mask] / safe_alpha[mask, None]
+    luminance = (
+        0.2126 * unpremult[..., 0]
+        + 0.7152 * unpremult[..., 1]
+        + 0.0722 * unpremult[..., 2]
+    )
+    # fall back to alpha when no colour is present
+    height_map = np.where(mask, luminance, alpha)
+    return np.clip(height_map, 0.0, 1.0).astype(np.float32)
 
 
 def _light_direction(
@@ -989,8 +1026,8 @@ def _light_direction(
 
     scale_x = units.scale_x if units.scale_x else 1.0
     scale_y = units.scale_y if units.scale_y else 1.0
-    user_x = (np.arange(width, dtype=np.float32) + 0.5) / scale_x
-    user_y = (np.arange(height, dtype=np.float32) + 0.5) / scale_y
+    user_x = (np.arange(width, dtype=np.float32) + 0.5) / max(scale_x, _EPSILON)
+    user_y = (np.arange(height, dtype=np.float32) + 0.5) / max(scale_y, _EPSILON)
     grid_x, grid_y = np.meshgrid(user_x, user_y)
 
     if light.get("type") == "distant":

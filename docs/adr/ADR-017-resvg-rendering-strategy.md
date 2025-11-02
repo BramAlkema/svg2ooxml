@@ -1,6 +1,6 @@
 # ADR-017: Resvg Rendering Strategy and Migration Plan
 
-- **Status:** Proposed
+- **Status:** Accepted (in progress)
 - **Date:** 2025-03-04
 - **Owners:** Renderer/Exporter Group
 - **Depends on:** ADR-012 (pyportresvg render refactor), ADR-filter-port, ADR-policy-map
@@ -61,27 +61,32 @@ Implementation requirements:
 
 ## Work Plan
 
-Phase 1 – *Parity & Telemetry (in progress)*
+> Detailed execution items live in [`docs/resvg_migration_plan.md`](../resvg_migration_plan.md).
+
+Phase 1 – *Parity & Telemetry (complete)*
 - [x] Port resvg filter/mask/clip execution (`render/filters.py`, `render/pipeline.py`).
 - [x] Wire `FilterService` to try native → resvg → legacy; expose strategy toggles.
 - [x] Add `tests/integration/core/test_pipeline.py` and update visual baselines.
-- [ ] Document resvg strategy (`docs/resvg.md`)  *(done)*.
+- [x] Document resvg strategy (`docs/resvg.md`).
 
-Phase 2 – *Promotion & Policy*
-- [ ] Promote simple resvg primitives (flood, blends, composites) to EMF/vector
-      instead of PNG where fidelity allows.
-- [ ] Extend policy rules (`filter` target) so per-primitive overrides
+Phase 2 – *Promotion & Policy (complete)*
+- [x] Promote simple resvg primitives (flood, blends, composites, morphology/tile,
+      offset, merge, component-transfer, convolve) to EMF/vector instead of PNG
+      where fidelity allows.
+- [x] Extend policy rules (`filter` target) so per-primitive overrides
       (e.g., disable lighting or force raster beyond thresholds) integrate with
       the new strategy.
-- [ ] Ensure tracer reports include the source of each decision (strategy vs policy).
+- [x] Ensure tracer reports include the source of each decision (strategy vs policy)
+      via structured `resvg_promoted_emf` / `resvg_promotion_policy_blocked` events.
 
 Phase 3 – *Coverage & Validation*
-- [ ] Complete resvg handlers for remaining primitives, including spot/distant
-      lighting edge-cases, turbulence stitching, etc.
+- [x] Complete resvg handlers for remaining primitives, including spot/distant
+      lighting edge cases and turbulence stitching.
 - [ ] Expand integration/visual suites with complex filters; compare resvg vs
-      legacy output to quantify wins.
-- [ ] Gather telemetry from staging runs to confirm resvg handles the majority of
-      effects without regressions.
+      legacy output to quantify wins (lighting scene visual diff landed; broader
+      coverage pending).
+- [ ] Gather telemetry from staging runs (using the new `resvg_metrics` counters)
+      to confirm resvg handles the majority of effects without regressions.
 
 Phase 4 – *Default to resvg*
 - [ ] Flip exporter default to `resvg` once parity is proven; keep legacy only as

@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.concurrency import run_in_threadpool
 
+from ..auth.middleware import verify_firebase_token
 from ..background import enqueue_export_job
 from ..models import ExportRequest, ExportResponse, JobStatusResponse
 from ..services.export_service import ExportService, ExportStatus, JobNotFoundError
@@ -19,14 +20,32 @@ router = APIRouter()
 export_service = ExportService()
 
 
-@router.post("/export", response_model=ExportResponse, status_code=status.HTTP_202_ACCEPTED)
+@router.post(
+    "/export",
+    response_model=ExportResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    responses={
+        401: {"description": "Unauthorized - Invalid or missing authentication token"},
+        403: {"description": "Forbidden - Insufficient permissions"},
+    },
+)
 async def create_export_job(
     request: ExportRequest,
+    user: dict = Depends(verify_firebase_token),
 ) -> ExportResponse:
     """
     Create a new export job to convert Figma SVG frames to PowerPoint/Slides.
 
     The conversion runs asynchronously. Use the returned job_id to poll for status.
+
+    **Authentication Required**: Include Firebase ID token in Authorization header:
+    ```
+    Authorization: Bearer <firebase-id-token>
+    ```
+
+    The token must include the following OAuth scopes:
+    - `https://www.googleapis.com/auth/drive.file`
+    - `https://www.googleapis.com/auth/presentations`
 
     - **frames**: List of SVG frames with content and dimensions
     - **output_format**: Either "pptx" (download PPTX) or "slides" (publish to Google Slides)
@@ -36,10 +55,11 @@ async def create_export_job(
         logger.info(
             f"Creating export job: {len(request.frames)} frames, "
             f"format={request.output_format}, "
-            f"file_id={request.figma_file_id}"
+            f"file_id={request.figma_file_id}, "
+            f"user_id={user['uid']}"
         )
 
-        # Create job in Firestore
+        # Create job in Firestore with user authentication
         job_id = await run_in_threadpool(
             export_service.create_job,
             frames=request.frames,
@@ -47,6 +67,7 @@ async def create_export_job(
             figma_file_name=request.figma_file_name,
             output_format=request.output_format,
             fonts=request.fonts,
+            user=user,  # Pass user info for authentication
         )
 
         # Queue background processing
