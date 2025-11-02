@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Payment Cancelled - svg2ooxml</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+      background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    .container {
+      background: white;
+      border-radius: 12px;
+      padding: 48px;
+      max-width: 500px;
+      width: 100%;
+      text-align: center;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+    }
+
+    .cancel-icon {
+      width: 80px;
+      height: 80px;
+      background: #FFA726;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 24px;
+      animation: scale-in 0.5s ease-out;
+    }
+
+    .cancel-icon svg {
+      width: 48px;
+      height: 48px;
+      stroke: white;
+      stroke-width: 3;
+      fill: none;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    @keyframes scale-in {
+      from {
+        transform: scale(0);
+        opacity: 0;
+      }
+      to {
+        transform: scale(1);
+        opacity: 1;
+      }
+    }
+
+    h1 {
+      font-size: 28px;
+      font-weight: 700;
+      color: #1a1a1a;
+      margin-bottom: 12px;
+    }
+
+    p {
+      font-size: 16px;
+      color: #666;
+      line-height: 1.6;
+      margin-bottom: 24px;
+    }
+
+    .info-box {
+      background: #FFF3E0;
+      border-radius: 8px;
+      padding: 20px;
+      margin: 24px 0;
+      text-align: left;
+    }
+
+    .info-box p {
+      margin-bottom: 0;
+      color: #E65100;
+    }
+
+    .buttons {
+      display: flex;
+      gap: 12px;
+      flex-direction: column;
+      margin-top: 24px;
+    }
+
+    .button {
+      display: inline-block;
+      padding: 14px 32px;
+      border-radius: 8px;
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 16px;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    .button.primary {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+    }
+
+    .button.primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4);
+    }
+
+    .button.secondary {
+      background: #f8f9fa;
+      color: #666;
+      border: 1px solid #e0e0e0;
+    }
+
+    .button.secondary:hover {
+      background: #e9ecef;
+    }
+
+    .footer {
+      margin-top: 32px;
+      padding-top: 24px;
+      border-top: 1px solid #e0e0e0;
+      font-size: 14px;
+      color: #999;
+    }
+
+    .footer a {
+      color: #667eea;
+      text-decoration: none;
+    }
+
+    .footer a:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="cancel-icon">
+      <svg viewBox="0 0 24 24">
+        <line x1="18" y1="6" x2="6" y2="18"></line>
+        <line x1="6" y1="6" x2="18" y2="18"></line>
+      </svg>
+    </div>
+
+    <h1>Payment Cancelled</h1>
+    <p>Your payment was cancelled. No charges have been made to your account.</p>
+
+    <div class="info-box">
+      <p>
+        <strong>Need more time to decide?</strong><br>
+        You can continue using the free plan (5 exports/month) or upgrade anytime from the plugin.
+      </p>
+    </div>
+
+    <div class="buttons">
+      <a href="javascript:history.back()" class="button primary">Try Again</a>
+      <a href="/" class="button secondary">Return to svg2ooxml</a>
+    </div>
+
+    <div class="footer">
+      Questions? <a href="mailto:support@svg2ooxml.com">Contact Support</a>
+    </div>
+  </div>
+
+  <script>
+    // Auto-close window after 10 seconds
+    setTimeout(() => {
+      window.close();
+    }, 10000);
+  </script>
+</body>
+</html>

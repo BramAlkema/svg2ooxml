@@ -40,7 +40,8 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         self.header_name = header_name
 
     async def dispatch(self, request: Request, call_next: Callable[[Request], Response]) -> Response:
-        if request.method == "OPTIONS":
+        # Skip rate limiting for OPTIONS and webhook endpoints
+        if request.method == "OPTIONS" or request.url.path.startswith("/api/webhook"):
             return await call_next(request)
 
         ip = request.headers.get(self.header_name)

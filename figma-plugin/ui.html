@@ -154,39 +154,111 @@
       transition: width 0.3s;
       width: 0%;
     }
+
+    .subscription-card {
+      padding: 16px;
+      background: var(--figma-color-bg-secondary);
+      border-radius: 8px;
+      margin-bottom: 12px;
+    }
+
+    .subscription-tier {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .badge.free {
+      background: #E0E0E0;
+      color: #424242;
+    }
+
+    .badge.pro {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+    }
+
+    .badge.enterprise {
+      background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+      color: white;
+    }
+
+    #tier-name {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--figma-color-text);
+    }
+
+    .usage-info {
+      margin-top: 12px;
+    }
+
+    .usage-bar-container {
+      width: 100%;
+      height: 6px;
+      background: var(--figma-color-bg);
+      border-radius: 3px;
+      overflow: hidden;
+      margin-bottom: 8px;
+    }
+
+    .usage-bar {
+      height: 100%;
+      background: #18A0FB;
+      transition: width 0.3s, background-color 0.3s;
+      border-radius: 3px;
+    }
+
+    .usage-bar.warning {
+      background: #FFA726;
+    }
+
+    .usage-bar.danger {
+      background: #EF5350;
+    }
+
+    .usage-bar.unlimited {
+      background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+    }
+
+    .usage-text {
+      font-size: 12px;
+      color: var(--figma-color-text-secondary);
+      text-align: center;
+    }
+
+    .upgrade-message {
+      padding: 12px;
+      background: #FFF3E0;
+      border-radius: 6px;
+      margin: 12px 0;
+      font-size: 12px;
+      color: #E65100;
+      line-height: 1.5;
+    }
+
+    .upgrade-message strong {
+      display: block;
+      margin-bottom: 4px;
+      color: #BF360C;
+    }
   </style>
 
-  <script type="module">
-    // Import Firebase modules from CDN
-    import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
-    import {
-      getAuth,
-      signInWithPopup,
-      GoogleAuthProvider,
-      signOut
-    } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
-
-    // Firebase configuration
-    const firebaseConfig = {
-      apiKey: "REDACTED_FIREBASE_API_KEY",
-      authDomain: "powerful-layout-467812-p1.firebaseapp.com",
-      projectId: "powerful-layout-467812-p1",
-      storageBucket: "powerful-layout-467812-p1.firebasestorage.app",
-      messagingSenderId: "237932518206",
-      appId: "1:237932518206:web:101f15382174b93f09aa6f"
-    };
-
-    // Initialize Firebase
-    const app = initializeApp(firebaseConfig);
-    const auth = getAuth(app);
-
-    // Make globally available
-    window.firebaseAuth = auth;
-    window.GoogleAuthProvider = GoogleAuthProvider;
-    window.signInWithPopup = signInWithPopup;
-    window.signOut = signOut;
-
-    console.log("Firebase initialized successfully");
+  <script>
+    // Firebase Auth is handled externally via auth.html popup window
+    // No Firebase SDK needed in the plugin iframe
+    console.log("svg2ooxml plugin loaded - using external OAuth flow");
   </script>
 </head>
 <body>
@@ -209,6 +281,32 @@
   </div>
 
   <div class="divider"></div>
+
+  <!-- Subscription Section -->
+  <div id="subscription-section" class="section" style="display: none;">
+    <div class="subscription-card">
+      <div class="subscription-tier">
+        <span id="tier-badge" class="badge">Free</span>
+        <span id="tier-name">Free Plan</span>
+      </div>
+      <div class="usage-info">
+        <div class="usage-bar-container">
+          <div id="usage-bar" class="usage-bar"></div>
+        </div>
+        <div id="usage-text" class="usage-text">0 / 5 exports this month</div>
+      </div>
+    </div>
+
+    <button id="upgrade-btn" class="primary" style="display: none;">
+      ⚡ Upgrade to Pro - $9/month
+    </button>
+
+    <button id="manage-subscription-btn" class="secondary" style="display: none;">
+      Manage Subscription
+    </button>
+  </div>
+
+  <div class="divider" id="export-divider" style="display: none;"></div>
 
   <!-- Export Section -->
   <div id="export-section" class="section" style="display: none;">
