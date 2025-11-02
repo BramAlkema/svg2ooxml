@@ -6,6 +6,8 @@ from typing import Dict
 import firebase_admin
 from firebase_admin import auth as firebase_auth
 from firebase_admin import credentials
+from google.auth.transport import requests
+from google.oauth2 import id_token
 
 logger = logging.getLogger(__name__)
 
@@ -46,44 +48,113 @@ def initialize_firebase() -> None:
         raise
 
 
-def verify_id_token(id_token: str) -> Dict[str, any]:
-    """Verify Firebase ID token and return decoded claims.
+def verify_google_identity_token(token: str) -> Dict[str, any]:
+    """Verify Google Identity token (from gcloud auth print-identity-token).
+
+    This is used for internal testing/development with gcloud CLI.
 
     Args:
-        id_token: Firebase ID token from client
+        token: Google Identity token
+
+    Returns:
+        Dictionary with user claims:
+        - uid: User ID (from 'sub' claim)
+        - email: User email
+        - email_verified: Whether email is verified
+
+    Raises:
+        ValueError: If token is invalid or expired
+    """
+    try:
+        # Verify token signature and claims
+        # This accepts Google Identity tokens with various audiences
+        request = requests.Request()
+        claims = id_token.verify_oauth2_token(token, request)
+
+        # Extract user info in Firebase-compatible format
+        user_info = {
+            "uid": claims["sub"],  # Subject claim = user ID
+            "email": claims.get("email"),
+            "email_verified": claims.get("email_verified", False),
+            "aud": claims.get("aud"),
+            "iss": claims.get("iss"),
+        }
+
+        logger.info(
+            "Google Identity token verified successfully",
+            extra={
+                "user_id": user_info["uid"],
+                "email": user_info.get("email", "unknown"),
+                "token_type": "google_identity"
+            }
+        )
+
+        return user_info
+
+    except Exception as e:
+        logger.warning(f"Google Identity token verification failed: {e}")
+        raise ValueError(f"Invalid Google Identity token: {e}") from e
+
+
+def verify_id_token(token_str: str) -> Dict[str, any]:
+    """Verify ID token - supports both Firebase and Google Identity tokens.
+
+    Args:
+        token_str: Firebase ID token OR Google Identity token (from gcloud)
 
     Returns:
         Dictionary with user claims:
         - uid: User ID
         - email: User email (if available)
         - email_verified: Whether email is verified
-        - auth_time: Authentication timestamp
+        - auth_time: Authentication timestamp (Firebase tokens only)
         - exp: Expiration timestamp
 
     Raises:
         firebase_admin.auth.InvalidIdTokenError: If token is invalid
         firebase_admin.auth.ExpiredIdTokenError: If token is expired
         firebase_admin.auth.RevokedIdTokenError: If token is revoked
+        ValueError: If Google Identity token is invalid
     """
     try:
-        # Verify the token (includes signature, expiration, etc.)
-        decoded_token = firebase_auth.verify_id_token(id_token)
+        # First try Firebase token verification (for production Figma plugin users)
+        decoded_token = firebase_auth.verify_id_token(token_str)
 
         logger.info(
-            "Token verified successfully",
+            "Firebase token verified successfully",
             extra={
                 "user_id": decoded_token["uid"],
-                "email": decoded_token.get("email", "unknown")
+                "email": decoded_token.get("email", "unknown"),
+                "token_type": "firebase"
             }
         )
 
         return decoded_token
 
+    except firebase_auth.InvalidIdTokenError as e:
+        # If Firebase verification fails due to audience mismatch,
+        # try Google Identity token (for gcloud development/testing)
+        error_msg = str(e)
+        if "incorrect \"aud\"" in error_msg or "audience" in error_msg.lower():
+            logger.info("Attempting Google Identity token verification (gcloud fallback)")
+            try:
+                return verify_google_identity_token(token_str)
+            except ValueError as google_error:
+                # Both verification methods failed
+                logger.warning(
+                    f"Token verification failed for both Firebase and Google Identity: "
+                    f"Firebase error: {e}, Google error: {google_error}"
+                )
+                raise firebase_auth.InvalidIdTokenError(
+                    f"Token verification failed. Not a valid Firebase or Google Identity token."
+                ) from e
+        else:
+            # Firebase error for a different reason (expired, revoked, etc.)
+            logger.warning(f"Firebase token verification failed: {e}")
+            raise
+
     except firebase_auth.ExpiredIdTokenError:
         logger.warning("Token verification failed: expired")
-        raise
-    except firebase_auth.InvalidIdTokenError as e:
-        logger.warning(f"Token verification failed: invalid - {e}")
         raise
     except firebase_auth.RevokedIdTokenError:
         logger.warning("Token verification failed: revoked")

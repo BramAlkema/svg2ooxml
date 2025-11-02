@@ -87,7 +87,7 @@ def test_process_job_failure_when_slides_publish_errors(
     monkeypatch: pytest.MonkeyPatch,
     export_service: ExportService,
 ) -> None:
-    def fake_publish(self, pptx_path, *, job_id, job_data, cache_key):
+    def fake_publish(self, pptx_path, *, job_id, job_data, cache_key, user_token=None):
         raise SlidesPublishingError("Slides upload failed")
 
     monkeypatch.setattr(ExportService, "_publish_to_slides", fake_publish)
