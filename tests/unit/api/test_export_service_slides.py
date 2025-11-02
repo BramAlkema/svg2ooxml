@@ -55,7 +55,7 @@ def _create_slides_job(service: ExportService) -> str:
 def test_process_job_publishes_slides(monkeypatch: pytest.MonkeyPatch, export_service: ExportService) -> None:
     captured: dict[str, SlidesPublishResult] = {}
 
-    def fake_publish(self, pptx_path, *, job_id, job_data, cache_key):
+    def fake_publish(self, pptx_path, *, job_id, job_data, cache_key, user_token=None):
         result = SlidesPublishResult(
             file_id="slides-file",
             web_view_link="https://slides.example/view",
