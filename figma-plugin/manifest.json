@@ -1,0 +1,17 @@
+{
+  "name": "SVG to Google Slides",
+  "id": "svg2ooxml",
+  "api": "1.0.0",
+  "main": "code.js",
+  "ui": "ui.html",
+  "networkAccess": {
+    "allowedDomains": [
+      "https://svg2ooxml-export-sghya3t5ya-ew.a.run.app",
+      "https://*.googleapis.com",
+      "https://*.firebaseapp.com",
+      "https://*.google.com",
+      "https://www.gstatic.com"
+    ]
+  },
+  "editorType": ["figma"]
+}
