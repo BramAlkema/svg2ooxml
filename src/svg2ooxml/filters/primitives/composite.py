@@ -76,6 +76,18 @@ class CompositeFilter(Filter):
                 metadata=metadata,
                 warnings=propagated_warnings,
             )
+        if params.operator in {"in", "out", "atop", "xor"} and len(inputs) == 2:
+            drawingml, fallback = self._combine_masking(params.operator, inputs)
+            metadata["native_support"] = drawingml != ""
+            if fallback:
+                metadata["fallback_reason"] = fallback
+            return FilterResult(
+                success=True,
+                drawingml=drawingml,
+                fallback=None if drawingml else "emf",
+                metadata=metadata,
+                warnings=(),
+            )
 
         if inputs:
             metadata["native_support"] = False
@@ -200,6 +212,55 @@ class CompositeFilter(Filter):
         if start == -1 or end == -1 or end <= start:
             return drawingml
         return drawingml[start + 1 : end]
+
+    def _combine_masking(
+        self,
+        operator: str,
+        inputs: list[tuple[str, FilterResult]],
+    ) -> tuple[str, str | None]:
+        source_graphic = None
+        mask_input = None
+        for name, result in inputs:
+            if name == "SourceGraphic":
+                source_graphic = result
+            else:
+                mask_input = result
+
+        if mask_input is None:
+            return "", "missing_mask"
+
+        source_fragment = (source_graphic.drawingml or "").strip() if source_graphic else ""
+        mask_fragment = (mask_input.drawingml or "").strip()
+        if not mask_fragment:
+            return "", "mask_empty"
+
+        mask_children = self._extract_effect_children(mask_fragment) if self._looks_like_effect_list(mask_fragment) else ""
+        if not mask_children:
+            return "", "mask_missing_effects"
+
+        alpha_tag = self._alpha_tag_for_operator(operator)
+        base_fragments = []
+        if source_fragment:
+            if self._looks_like_effect_list(source_fragment):
+                base_fragments.append(self._extract_effect_children(source_fragment))
+            else:
+                base_fragments.append(source_fragment)
+        alpha_fragment = (
+            f"<a:{alpha_tag}><a:cont/><a:effectLst>{mask_children}</a:effectLst></a:{alpha_tag}>"
+        )
+        base_fragments.append(alpha_fragment)
+        combined = "".join(base_fragments)
+        return f"<a:effectLst>{combined}</a:effectLst>", None
+
+    @staticmethod
+    def _alpha_tag_for_operator(operator: str) -> str:
+        mapping = {
+            "in": "alphaModFix",
+            "out": "alphaMod",
+            "atop": "alphaModFix",
+            "xor": "alphaMod",
+        }
+        return mapping.get(operator, "alphaModFix")
 
 
 __all__ = ["CompositeFilter"]
