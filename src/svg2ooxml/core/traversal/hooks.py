@@ -2,13 +2,31 @@
 
 from __future__ import annotations
 
+import copy
 from typing import Any, Iterable
 
 from lxml import etree
 
 from svg2ooxml.common.style.resolver import StyleContext as CSSStyleContext
 from svg2ooxml.ir.effects import CustomEffect
-from svg2ooxml.ir.scene import ClipRef, Group, MaskInstance, MaskRef
+from svg2ooxml.ir.scene import ClipRef, Group, MaskInstance, MaskRef, Path as IRShapePath
+from svg2ooxml.ir.shapes import (
+    Circle as IRShapeCircle,
+    Ellipse as IRShapeEllipse,
+    Line as IRShapeLine,
+    Polygon as IRShapePolygon,
+    Polyline as IRShapePolyline,
+    Rectangle as IRShapeRectangle,
+)
+from svg2ooxml.ir.geometry import Rect as IRRect, LineSegment, BezierSegment, SegmentType
+from svg2ooxml.ir.paint import (
+    GradientPaintRef,
+    LinearGradientPaint,
+    PatternPaint,
+    RadialGradientPaint,
+    SolidPaint,
+    Stroke,
+)
 from svg2ooxml.services.filter_types import FilterEffectResult
 from svg2ooxml.common.geometry import Matrix2D
 from svg2ooxml.core.parser.switch_evaluator import SwitchEvaluator
@@ -17,6 +35,8 @@ from svg2ooxml.core.traversal import clipping
 from svg2ooxml.core.traversal.constants import DEFAULT_TOLERANCE
 from svg2ooxml.core.traversal.coordinate_space import CoordinateSpace
 from svg2ooxml.core.traversal.geometry_utils import is_axis_aligned
+from svg2ooxml.core.ir.shape_converters import _ellipse_segments, _points_to_segments
+from svg2ooxml.core.ir.rectangles import _rounded_rect_segments, _rect_segments
 
 
 class TraversalHooksMixin:
@@ -194,6 +214,9 @@ class TraversalHooksMixin:
                     }
 
                 filter_context_payload = {"element": element, "policy": filter_policy}
+                filter_inputs = self._collect_filter_inputs(ir_object)
+                if filter_inputs:
+                    filter_context_payload["filter_inputs"] = filter_inputs
                 if bbox_dict is not None:
                     filter_context_payload["ir_bbox"] = bbox_dict
                 if descriptor_payload is not None:
@@ -301,6 +324,264 @@ class TraversalHooksMixin:
             filter_entry.setdefault("bounds", bbox_dict)
         if descriptor_payload is not None:
             filter_entry.setdefault("descriptor", descriptor_payload)
+
+    def _collect_filter_inputs(self, ir_object: Any) -> dict[str, Any]:
+        descriptor = self._shape_descriptor(ir_object)
+        if descriptor is None:
+            return {}
+
+        graphic_meta = copy.deepcopy(descriptor)
+        alpha_meta = {
+            "shape_type": descriptor.get("shape_type"),
+            "geometry": copy.deepcopy(descriptor.get("geometry")),
+            "bbox": copy.deepcopy(descriptor.get("bbox")),
+            "alpha_source": "SourceGraphic",
+        }
+        return {
+            "SourceGraphic": graphic_meta,
+            "SourceAlpha": alpha_meta,
+        }
+
+    def _shape_descriptor(self, ir_object: Any) -> dict[str, Any] | None:
+        if isinstance(ir_object, list):
+            if not ir_object:
+                return None
+            return self._shape_descriptor(ir_object[0])
+
+        if isinstance(ir_object, IRShapePath):
+            return self._path_descriptor(ir_object)
+        if isinstance(ir_object, IRShapeRectangle):
+            return self._rectangle_descriptor(ir_object)
+        if isinstance(ir_object, IRShapeCircle):
+            return self._circle_descriptor(ir_object)
+        if isinstance(ir_object, IRShapeEllipse):
+            return self._ellipse_descriptor(ir_object)
+        if isinstance(ir_object, IRShapePolygon):
+            return self._polygon_descriptor(ir_object)
+        if isinstance(ir_object, IRShapePolyline):
+            return self._polyline_descriptor(ir_object)
+        if isinstance(ir_object, IRShapeLine):
+            return self._line_descriptor(ir_object)
+        return None
+
+    def _path_descriptor(self, path: IRShapePath) -> dict[str, Any]:
+        return {
+            "shape_type": "Path",
+            "geometry": self._serialize_segments(path.segments),
+            "closed": path.is_closed,
+            "fill": self._serialize_paint(path.fill),
+            "stroke": self._serialize_stroke(path.stroke),
+            "opacity": getattr(path, "opacity", 1.0),
+            "transform": self._serialize_matrix(getattr(path, "transform", None)),
+            "bbox": self._serialize_rect(path.bbox),
+        }
+
+    def _rectangle_descriptor(self, rect: IRShapeRectangle) -> dict[str, Any]:
+        if rect.is_rounded:
+            segments = _rounded_rect_segments(
+                rect.bounds.x,
+                rect.bounds.y,
+                rect.bounds.width,
+                rect.bounds.height,
+                rect.corner_radius,
+                rect.corner_radius,
+            )
+        else:
+            segments = _rect_segments(rect.bounds.x, rect.bounds.y, rect.bounds.width, rect.bounds.height)
+        return {
+            "shape_type": "Rectangle",
+            "geometry": self._serialize_segments(segments),
+            "closed": True,
+            "bounds": self._serialize_rect(rect.bounds),
+            "corner_radius": rect.corner_radius,
+            "fill": self._serialize_paint(rect.fill),
+            "stroke": self._serialize_stroke(rect.stroke),
+            "opacity": getattr(rect, "opacity", 1.0),
+            "transform": None,
+            "bbox": self._serialize_rect(rect.bbox),
+        }
+
+    def _circle_descriptor(self, circle: IRShapeCircle) -> dict[str, Any]:
+        segments = _ellipse_segments(circle.center.x, circle.center.y, circle.radius, circle.radius)
+        return {
+            "shape_type": "Circle",
+            "geometry": self._serialize_segments(segments),
+            "closed": True,
+            "center": self._point_tuple(circle.center),
+            "radius": circle.radius,
+            "fill": self._serialize_paint(circle.fill),
+            "stroke": self._serialize_stroke(circle.stroke),
+            "opacity": getattr(circle, "opacity", 1.0),
+            "transform": None,
+            "bbox": self._serialize_rect(circle.bbox),
+        }
+
+    def _ellipse_descriptor(self, ellipse: IRShapeEllipse) -> dict[str, Any]:
+        segments = _ellipse_segments(ellipse.center.x, ellipse.center.y, ellipse.radius_x, ellipse.radius_y)
+        return {
+            "shape_type": "Ellipse",
+            "geometry": self._serialize_segments(segments),
+            "closed": True,
+            "center": self._point_tuple(ellipse.center),
+            "radius_x": ellipse.radius_x,
+            "radius_y": ellipse.radius_y,
+            "fill": self._serialize_paint(ellipse.fill),
+            "stroke": self._serialize_stroke(ellipse.stroke),
+            "opacity": getattr(ellipse, "opacity", 1.0),
+            "transform": None,
+            "bbox": self._serialize_rect(ellipse.bbox),
+        }
+
+    def _polygon_descriptor(self, polygon: IRShapePolygon) -> dict[str, Any]:
+        segments = _points_to_segments(polygon.points, closed=True)
+        return {
+            "shape_type": "Polygon",
+            "geometry": self._serialize_segments(segments),
+            "closed": True,
+            "points": [self._point_tuple(pt) for pt in polygon.points],
+            "fill": self._serialize_paint(polygon.fill),
+            "stroke": self._serialize_stroke(polygon.stroke),
+            "opacity": getattr(polygon, "opacity", 1.0),
+            "transform": None,
+            "bbox": self._serialize_rect(polygon.bbox),
+        }
+
+    def _polyline_descriptor(self, polyline: IRShapePolyline) -> dict[str, Any]:
+        segments = _points_to_segments(polyline.points, closed=False)
+        return {
+            "shape_type": "Polyline",
+            "geometry": self._serialize_segments(segments),
+            "closed": False,
+            "points": [self._point_tuple(pt) for pt in polyline.points],
+            "fill": self._serialize_paint(polyline.fill),
+            "stroke": self._serialize_stroke(polyline.stroke),
+            "opacity": getattr(polyline, "opacity", 1.0),
+            "transform": None,
+            "bbox": self._serialize_rect(polyline.bbox),
+        }
+
+    def _line_descriptor(self, line: IRShapeLine) -> dict[str, Any]:
+        segment = LineSegment(line.start, line.end)
+        return {
+            "shape_type": "Line",
+            "geometry": self._serialize_segments([segment]),
+            "closed": False,
+            "points": [self._point_tuple(line.start), self._point_tuple(line.end)],
+            "stroke": self._serialize_stroke(line.stroke),
+            "opacity": getattr(line, "opacity", 1.0),
+            "transform": None,
+            "bbox": self._serialize_rect(line.bbox),
+        }
+
+    def _serialize_segments(self, segments: Iterable[SegmentType]) -> list[dict[str, Any]]:
+        serialized: list[dict[str, Any]] = []
+        for segment in segments:
+            if isinstance(segment, LineSegment):
+                serialized.append(
+                    {
+                        "type": "line",
+                        "start": self._point_tuple(segment.start),
+                        "end": self._point_tuple(segment.end),
+                    }
+                )
+            elif isinstance(segment, BezierSegment):
+                serialized.append(
+                    {
+                        "type": "cubic",
+                        "start": self._point_tuple(segment.start),
+                        "control1": self._point_tuple(segment.control1),
+                        "control2": self._point_tuple(segment.control2),
+                        "end": self._point_tuple(segment.end),
+                    }
+                )
+        return serialized
+
+    @staticmethod
+    def _point_tuple(point: Any | None) -> tuple[float, float] | None:
+        if point is None:
+            return None
+        return (float(point.x), float(point.y))
+
+    @staticmethod
+    def _serialize_rect(rect: IRRect | None) -> dict[str, float] | None:
+        if rect is None:
+            return None
+        return {
+            "x": float(rect.x),
+            "y": float(rect.y),
+            "width": float(rect.width),
+            "height": float(rect.height),
+        }
+
+    def _serialize_paint(self, paint: Any) -> dict[str, Any] | None:
+        if paint is None:
+            return None
+        if isinstance(paint, SolidPaint):
+            return {"type": "solid", "rgb": paint.rgb, "opacity": paint.opacity}
+        if isinstance(paint, LinearGradientPaint):
+            return {
+                "type": "linearGradient",
+                "stops": [
+                    {"offset": stop.offset, "rgb": stop.rgb, "opacity": stop.opacity}
+                    for stop in paint.stops
+                ],
+                "start": tuple(paint.start),
+                "end": tuple(paint.end),
+                "transform": self._serialize_matrix(paint.transform),
+                "gradient_id": paint.gradient_id,
+            }
+        if isinstance(paint, RadialGradientPaint):
+            return {
+                "type": "radialGradient",
+                "stops": [
+                    {"offset": stop.offset, "rgb": stop.rgb, "opacity": stop.opacity}
+                    for stop in paint.stops
+                ],
+                "center": tuple(paint.center),
+                "radius": float(paint.radius),
+                "focal_point": tuple(paint.focal_point) if paint.focal_point else None,
+                "transform": self._serialize_matrix(paint.transform),
+                "gradient_id": paint.gradient_id,
+            }
+        if isinstance(paint, PatternPaint):
+            return {
+                "type": "pattern",
+                "pattern_id": paint.pattern_id,
+                "transform": self._serialize_matrix(paint.transform),
+                "preset": paint.preset,
+                "foreground": paint.foreground,
+                "background": paint.background,
+            }
+        if isinstance(paint, GradientPaintRef):
+            return {
+                "type": "gradientRef",
+                "gradient_id": paint.gradient_id,
+                "gradient_type": paint.gradient_type,
+                "transform": self._serialize_matrix(paint.transform),
+            }
+        return {"type": type(paint).__name__}
+
+    def _serialize_stroke(self, stroke: Stroke | None) -> dict[str, Any] | None:
+        if stroke is None:
+            return None
+        return {
+            "width": stroke.width,
+            "paint": self._serialize_paint(stroke.paint),
+            "join": stroke.join.value,
+            "cap": stroke.cap.value,
+            "miter_limit": stroke.miter_limit,
+            "dash_array": list(stroke.dash_array) if stroke.dash_array else None,
+            "dash_offset": stroke.dash_offset,
+            "opacity": stroke.opacity,
+        }
+
+    @staticmethod
+    def _serialize_matrix(matrix: Any) -> list[list[float]] | None:
+        if matrix is None:
+            return None
+        if hasattr(matrix, "tolist"):
+            return matrix.tolist()
+        return None
 
     def expand_use(
         self,

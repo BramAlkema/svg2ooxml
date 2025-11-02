@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import copy
 from typing import Any, Dict, Iterable, List, Optional
 
 from lxml import etree
@@ -88,7 +89,7 @@ class FilterRegistry:
         if pipeline is None:
             pipeline = {}
             context.pipeline_state = pipeline
-        self._seed_base_inputs(pipeline)
+        self._seed_base_inputs(pipeline, context)
 
         for index, node in enumerate(filter_element):
             if not hasattr(node, "tag"):
@@ -140,18 +141,47 @@ class FilterRegistry:
             counter += 1
         return candidate
 
-    def _seed_base_inputs(self, pipeline: Dict[str, FilterResult]) -> None:
+    def _seed_base_inputs(self, pipeline: Dict[str, FilterResult], context: FilterContext) -> None:
+        filter_inputs: dict[str, Any] = {}
+        options = context.options if isinstance(context.options, dict) else {}
+        raw_inputs = options.get("filter_inputs")
+        if isinstance(raw_inputs, dict):
+            filter_inputs = raw_inputs
+
+        source_graphic_meta: dict[str, Any] = {}
         if "SourceGraphic" not in pipeline:
+            candidate = filter_inputs.get("SourceGraphic")
+            if isinstance(candidate, dict):
+                source_graphic_meta = copy.deepcopy(candidate)
+            metadata = {"ref": "SourceGraphic"}
+            if source_graphic_meta:
+                metadata.update(source_graphic_meta)
             pipeline["SourceGraphic"] = FilterResult(
                 success=True,
                 drawingml=build_exporter_hook("sourceGraphic", {"ref": "SourceGraphic"}),
-                metadata={"ref": "SourceGraphic"},
+                metadata=metadata,
             )
+        else:
+            existing = pipeline.get("SourceGraphic")
+            if existing is not None and isinstance(existing.metadata, dict):
+                source_graphic_meta = dict(existing.metadata)
+
         if "SourceAlpha" not in pipeline:
+            candidate_alpha = filter_inputs.get("SourceAlpha")
+            if isinstance(candidate_alpha, dict):
+                alpha_meta = copy.deepcopy(candidate_alpha)
+            else:
+                alpha_meta = copy.deepcopy(source_graphic_meta) if source_graphic_meta else {}
+                alpha_meta.pop("fill", None)
+                if alpha_meta:
+                    alpha_meta["alpha_source"] = "SourceGraphic"
+            metadata_alpha = {"ref": "SourceAlpha"}
+            if alpha_meta:
+                metadata_alpha.update(alpha_meta)
             pipeline["SourceAlpha"] = FilterResult(
                 success=True,
                 drawingml=build_exporter_hook("sourceAlpha", {"ref": "SourceAlpha"}),
-                metadata={"ref": "SourceAlpha"},
+                metadata=metadata_alpha,
             )
 
     def clone(self) -> "FilterRegistry":

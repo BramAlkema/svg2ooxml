@@ -120,6 +120,24 @@ keep the chain editable whenever PowerPoint provides a matching construct.
      composite/blend export keeps the offset instead of replacing it with a
      comment).
 
+#### Hybrid eligibility rules
+
+We will only emit native DrawingML when the inputs satisfy strict predicates;
+otherwise resvg continues to produce EMF (or raster) fallbacks. This keeps the
+output editable without sacrificing fidelity.
+
+- **Simple fill (blend “top” input)** — solid or gradient fill, optional stroke,
+  no nested effects, no image/pattern fills, and no references to prior filter
+  results. If this test fails, the blend remains EMF.
+- **Crisp mask (composite mask input)** — geometry-only mask with binary alpha
+  (no blur/soft edges, no images). Allowed primitives include path geometry,
+  optional hard threshold `feComponentTransfer`. Anything else falls back to EMF.
+- **Boolean success** — path operations (intersect/subtract) must succeed and
+  produce non-empty geometry; degeneracies trigger EMF.
+
+Telemetry counters (e.g., `composite_in_vector`, `blend_emf_top_complex`) record
+why a primitive stayed vector or fell back so we can tune heuristics later.
+
 These builders require additions to the promotion table in
 `src/svg2ooxml/services/filter_service.py` so resvg promotions can select the
 native path whenever the upstream fragments have already been converted to
