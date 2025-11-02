@@ -9,7 +9,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException
 from firebase_admin import auth
 
-from ..auth.middleware import require_auth
+from ..auth.middleware import verify_firebase_token
 from ..models.subscription import (
     CheckoutRequest,
     CheckoutResponse,
@@ -62,7 +62,7 @@ def get_tier_from_price_id(price_id: str) -> str:
 
 @router.get("/status", response_model=SubscriptionStatusResponse)
 async def get_subscription_status(
-    current_user: dict = Depends(require_auth),
+    current_user: dict = Depends(verify_firebase_token),
     repo: SubscriptionRepository = Depends(get_subscription_repo),
 ):
     """Get current user's subscription status and usage.
@@ -132,7 +132,7 @@ async def get_subscription_status(
 @router.post("/checkout", response_model=CheckoutResponse)
 async def create_checkout(
     request: CheckoutRequest,
-    current_user: dict = Depends(require_auth),
+    current_user: dict = Depends(verify_firebase_token),
     repo: SubscriptionRepository = Depends(get_subscription_repo),
     stripe_service: StripeService = Depends(get_stripe_service),
 ):
@@ -187,7 +187,7 @@ async def create_checkout(
 
 @router.post("/portal", response_model=PortalResponse)
 async def create_portal(
-    current_user: dict = Depends(require_auth),
+    current_user: dict = Depends(verify_firebase_token),
     repo: SubscriptionRepository = Depends(get_subscription_repo),
     stripe_service: StripeService = Depends(get_stripe_service),
 ):
