@@ -261,6 +261,13 @@ def _draw_path_with_skia(path: skia.Path, paint: skia.Paint, viewport: Viewport)
 
     image = surface.makeImageSnapshot()
     rgba = image.toarray().astype(np.float32) / 255.0
+
+    # Handle platform-specific color channel ordering
+    # Some Skia builds use BGRA instead of RGBA
+    if image.colorType() == skia.ColorType.kBGRA_8888_ColorType:
+        # Swap R and B channels: BGRA -> RGBA
+        rgba[:, :, [0, 2]] = rgba[:, :, [2, 0]]
+
     rgba[..., :3] *= rgba[..., 3:4]
     return Surface(width=viewport.width, height=viewport.height, data=rgba)
 
