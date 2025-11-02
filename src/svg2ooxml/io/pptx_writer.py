@@ -307,9 +307,13 @@ class PPTXPackageBuilder:
                     self._write_mask_parts(temp_path, all_masks)
                     packaged_fonts = self._write_font_parts(temp_path, font_assets)
 
-                    self._update_presentation_parts(temp_path, slide_entries, packaged_fonts)
-                    self._write_content_types(temp_path, slide_entries, all_media, packaged_fonts, all_masks)
-                    self._trace_packaging(
+                # Determine presentation slide size from first slide
+                # (all slides should have the same dimensions)
+                presentation_slide_size = render_results[0].slide_size if render_results else None
+
+                self._update_presentation_parts(temp_path, slide_entries, packaged_fonts, presentation_slide_size)
+                self._write_content_types(temp_path, slide_entries, all_media, packaged_fonts, all_masks)
+                self._trace_packaging(
                         "content_types_updated",
                         metadata={
                             "slide_count": len(slide_entries),
@@ -561,11 +565,28 @@ class PPTXPackageBuilder:
         package_root: Path,
         slide_entries: Sequence[_SlideEntry],
         fonts: Sequence[_PackagedFont],
+        slide_size: tuple[int, int] | None = None,
     ) -> None:
         presentation_path = package_root / "ppt" / "presentation.xml"
         tree = ET.parse(presentation_path)
         root = tree.getroot()
         ns = {"p": P_NS, "r": R_DOC_NS}
+
+        # Update slide dimensions if provided
+        if slide_size is not None:
+            slide_sz = root.find("p:sldSz", ns)
+            if slide_sz is not None:
+                slide_sz.set("cx", str(slide_size[0]))
+                slide_sz.set("cy", str(slide_size[1]))
+                self._trace_packaging(
+                    "presentation_dimensions_updated",
+                    metadata={
+                        "width_emu": slide_size[0],
+                        "height_emu": slide_size[1],
+                        "width_inches": slide_size[0] / 914400,
+                        "height_inches": slide_size[1] / 914400,
+                    },
+                )
 
         slide_list = root.find("p:sldIdLst", ns)
         if slide_list is None:
