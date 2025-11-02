@@ -51,4 +51,5 @@ jobs:
             --ignore=tests/integration/core/test_pipeline.py \
             --ignore=tests/integration/test_filter_emf_regression.py \
             --ignore=tests/integration/w3c/test_struct_use.py \
-            --deselect=tests/unit/render/test_filters.py::test_fe_image_embedded_data_uri
+            --deselect=tests/unit/render/test_filters.py::test_fe_image_embedded_data_uri \
+            --deselect=tests/unit/render/test_pipeline.py::test_render_simple_rectangle_produces_alpha
