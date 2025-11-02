@@ -250,6 +250,35 @@ def test_image_with_href_avoids_fallback() -> None:
     assert effect.effect.drawingml.startswith("<!-- svg2ooxml:image")
 
 
+def test_composite_over_reuses_native_inputs() -> None:
+    service = FilterService()
+    results = _resolve(
+        service,
+        "<filter id='f'>"
+        "  <feFlood flood-color='#222244' flood-opacity='0.6' result='flood'/>"
+        "  <feComposite in='flood' in2='SourceAlpha' operator='in' result='masked'/>"
+        "  <feGaussianBlur in='masked' stdDeviation='2' result='blurred'/>"
+        "  <feOffset in='blurred' dx='3' dy='4' result='shadow'/>"
+        "  <feComposite in='SourceGraphic' in2='shadow' operator='over'/>"
+        "</filter>",
+    )
+    composites = [
+        effect
+        for effect in results
+        if effect.metadata.get("filter_type") == "composite"
+        and effect.metadata.get("operator") == "over"
+    ]
+    assert composites, "expected over composite result"
+    final = composites[-1]
+    assert final.fallback is None
+    assert final.effect.drawingml.startswith("<a:effectLst>")
+    assert "<a:outerShdw" in final.effect.drawingml
+    assert final.metadata.get("native_support") is True
+    assert final.metadata.get("inputs") == ["shadow"]
+    source_meta = final.metadata.get("source_metadata", {})
+    assert source_meta.get("shadow", {}).get("filter_type") == "offset"
+
+
 def test_diffuse_lighting_captures_light_source() -> None:
     service = FilterService()
     results = _resolve(

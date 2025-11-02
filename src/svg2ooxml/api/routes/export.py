@@ -11,13 +11,18 @@ from ..auth.middleware import verify_firebase_token
 from ..background import enqueue_export_job
 from ..models import ExportRequest, ExportResponse, JobStatusResponse
 from ..services.export_service import ExportService, ExportStatus, JobNotFoundError
+from ..services.subscription_repository import SubscriptionRepository
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-# Initialize service
+# Initialize services
 export_service = ExportService()
+subscription_repo = SubscriptionRepository()
+
+# Free tier limit
+FREE_TIER_LIMIT = 5
 
 
 @router.post(
@@ -52,12 +57,51 @@ async def create_export_job(
     - **fonts**: Optional list of font names to download/cache
     """
     try:
+        firebase_uid = user['uid']
+
         logger.info(
             f"Creating export job: {len(request.frames)} frames, "
             f"format={request.output_format}, "
             f"file_id={request.figma_file_id}, "
-            f"user_id={user['uid']}"
+            f"user_id={firebase_uid}"
         )
+
+        # Check subscription and usage limits
+        from datetime import datetime
+        import asyncio
+
+        current_month = datetime.now().strftime("%Y-%m")
+
+        # Run both queries in parallel for better performance
+        subscription, usage = await asyncio.gather(
+            run_in_threadpool(
+                subscription_repo.get_active_subscription, firebase_uid
+            ),
+            run_in_threadpool(
+                subscription_repo.get_usage, firebase_uid, current_month
+            ),
+        )
+        export_count = usage["exportCount"] if usage else 0
+
+        # Check if user has exceeded free tier limit
+        if not subscription or subscription.get("status") != "active":
+            # Free tier user - check limit
+            if export_count >= FREE_TIER_LIMIT:
+                logger.warning(
+                    f"User {firebase_uid} exceeded free tier limit: {export_count}/{FREE_TIER_LIMIT}"
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                    detail={
+                        "error": "quota_exceeded",
+                        "message": f"You've reached your monthly limit of {FREE_TIER_LIMIT} exports. "
+                                   "Upgrade to Pro for unlimited exports.",
+                        "usage": {
+                            "current": export_count,
+                            "limit": FREE_TIER_LIMIT,
+                        },
+                    },
+                )
 
         # Create job in Firestore with user authentication
         job_id = await run_in_threadpool(
@@ -70,8 +114,18 @@ async def create_export_job(
             user=user,  # Pass user info for authentication
         )
 
+        # Increment usage counter
+        await run_in_threadpool(
+            subscription_repo.increment_usage, firebase_uid, current_month
+        )
+
         # Queue background processing
         enqueue_export_job(job_id)
+
+        logger.info(
+            f"Export job {job_id} created for user {firebase_uid} "
+            f"(usage: {export_count + 1}, tier: {subscription.get('tier', 'free') if subscription else 'free'})"
+        )
 
         return ExportResponse(
             job_id=job_id,
@@ -79,6 +133,9 @@ async def create_export_job(
             message=f"Export job created with {len(request.frames)} frame(s)",
         )
 
+    except HTTPException:
+        # Re-raise HTTP exceptions (e.g., 402 Payment Required)
+        raise
     except Exception as e:
         logger.error(f"Failed to create export job: {e}", exc_info=True)
         raise HTTPException(

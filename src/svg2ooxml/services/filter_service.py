@@ -31,6 +31,7 @@ from svg2ooxml.filters.primitives.component_transfer import ComponentTransferFil
 from svg2ooxml.filters.primitives.composite import CompositeFilter
 from svg2ooxml.filters.primitives.convolve_matrix import ConvolveMatrixFilter
 from svg2ooxml.filters.primitives.flood import FloodFilter
+from svg2ooxml.filters.primitives.gaussian_blur import GaussianBlurFilter
 from svg2ooxml.filters.primitives.lighting import DiffuseLightingFilter, SpecularLightingFilter
 from svg2ooxml.filters.primitives.merge import MergeFilter
 from svg2ooxml.filters.primitives.morphology import MorphologyFilter
@@ -80,6 +81,7 @@ _PROMOTION_FILTER_FACTORIES = {
     "feconvolvematrix": ConvolveMatrixFilter,
     "fediffuselighting": DiffuseLightingFilter,
     "fespecularlighting": SpecularLightingFilter,
+    "fegaussianblur": GaussianBlurFilter,
 }
 
 

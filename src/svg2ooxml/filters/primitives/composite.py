@@ -7,7 +7,6 @@ from dataclasses import dataclass
 from lxml import etree
 
 from svg2ooxml.filters.base import Filter, FilterContext, FilterResult
-from svg2ooxml.filters.utils import build_exporter_hook
 
 
 SUPPORTED_OPERATORS = {
@@ -57,23 +56,40 @@ class CompositeFilter(Filter):
                 }
             )
 
+        metadata["inputs"] = [name for name, _ in inputs]
         if inputs:
-            metadata["inputs"] = [name for name, _ in inputs]
-            metadata["native_support"] = False
-            metadata["fallback_reason"] = f"operator:{params.operator}"
-            drawingml = ""
-            fallback = "emf"
+            metadata["source_metadata"] = {
+                name: dict(candidate.metadata or {})
+                for name, candidate in inputs
+                if candidate.metadata
+            }
+
+        if params.operator == "over":
+            drawingml, fallback, propagated_warnings = self._combine_over(inputs)
+            metadata["native_support"] = bool(drawingml) or fallback is None
+            if fallback:
+                metadata["fallback_reason"] = f"from_inputs:{fallback}"
             return FilterResult(
                 success=True,
                 drawingml=drawingml,
                 fallback=fallback,
+                metadata=metadata,
+                warnings=propagated_warnings,
+            )
+
+        if inputs:
+            metadata["native_support"] = False
+            metadata["fallback_reason"] = f"operator:{params.operator}"
+            return FilterResult(
+                success=True,
+                drawingml="",
+                fallback="emf",
                 metadata=metadata,
                 warnings=["feComposite requires vector fallback; EMF placeholder scheduled"],
             )
 
         metadata["native_support"] = False
         metadata["fallback_reason"] = f"operator:{params.operator}"
-        metadata["inputs"] = metadata.get("inputs") or []
         return FilterResult(
             success=True,
             drawingml="",
@@ -130,14 +146,60 @@ class CompositeFilter(Filter):
                 resolved.append((name, candidate))
         return resolved
 
-    def _placeholder_drawingml(self, params: CompositeParams) -> str:
-        return build_exporter_hook(
-            "composite",
-            {
-                "operator": params.operator,
-                "status": "fallback",
-            },
-        )
+    def _combine_over(
+        self,
+        inputs: list[tuple[str, FilterResult]],
+    ) -> tuple[str, str | None, tuple[str, ...]]:
+        if not inputs:
+            return "", None, ()
+
+        parts: list[str] = []
+        fallback: str | None = None
+        warnings: list[str] = []
+        for name, result in inputs:
+            snippet = (result.drawingml or "").strip()
+            if snippet:
+                parts.append(snippet)
+            fallback = self._merge_fallback(fallback, result.fallback)
+            if result.warnings:
+                warnings.extend(list(result.warnings))
+
+        if not parts:
+            return "", fallback, tuple(warnings)
+
+        if len(parts) == 1:
+            return parts[0], fallback, tuple(warnings)
+
+        if all(self._looks_like_effect_list(part) for part in parts):
+            inner = "".join(self._extract_effect_children(part) for part in parts)
+            return f"<a:effectLst>{inner}</a:effectLst>", fallback, tuple(warnings)
+
+        return "".join(parts), fallback, tuple(warnings)
+
+    @staticmethod
+    def _merge_fallback(current: str | None, new_value: str | None) -> str | None:
+        if new_value is None:
+            return current
+        if current is None:
+            return new_value
+        precedence = {"bitmap": 3, "raster": 3, "emf": 2, "vector": 1}
+        current_rank = precedence.get(current, 0)
+        new_rank = precedence.get(new_value, 0)
+        return new_value if new_rank > current_rank else current
+
+    @staticmethod
+    def _looks_like_effect_list(drawingml: str) -> bool:
+        return drawingml.startswith("<a:effectLst")
+
+    @staticmethod
+    def _extract_effect_children(drawingml: str) -> str:
+        if drawingml.endswith("/>"):
+            return ""
+        start = drawingml.find(">")
+        end = drawingml.rfind("</a:effectLst>")
+        if start == -1 or end == -1 or end <= start:
+            return drawingml
+        return drawingml[start + 1 : end]
 
 
 __all__ = ["CompositeFilter"]

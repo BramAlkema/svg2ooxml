@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Auth Status</title>
+    <meta http-equiv="Access-Control-Allow-Origin" content="*">
+</head>
+<body>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+
+    <script>
+        // Parse URL parameters
+        const urlParams = new URLSearchParams(window.location.search);
+        const authKey = urlParams.get('key');
+
+        // Firebase configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyBO14gjDcansf4U7Ue9D_A28fEC_ur_5cY",
+            authDomain: "powerful-layout-467812-p1.firebaseapp.com",
+            projectId: "powerful-layout-467812-p1",
+            storageBucket: "powerful-layout-467812-p1.firebasestorage.app",
+            messagingSenderId: "237932518206",
+            appId: "1:237932518206:web:101f15382174b93f09aa6f",
+            databaseURL: "https://auth-tokens-db.europe-west1.firebasedatabase.app"
+        };
+
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        const database = firebase.database();
+
+        // Check token status
+        async function checkTokenStatus() {
+            if (!authKey) {
+                return {
+                    status: 'error',
+                    error: 'Missing key parameter'
+                };
+            }
+
+            try {
+                const snapshot = await database.ref(`auth-tokens/${authKey}`).once('value');
+
+                if (!snapshot.exists()) {
+                    return {
+                        status: 'not_found',
+                        error: 'Invalid or already used auth key'
+                    };
+                }
+
+                const data = snapshot.val();
+                const now = Date.now();
+
+                // Check if token expired
+                if (data.expires < now) {
+                    // Delete expired token
+                    await database.ref(`auth-tokens/${authKey}`).remove();
+                    return {
+                        status: 'expired',
+                        error: 'Auth session expired after 5 minutes'
+                    };
+                }
+
+                // Token is ready - delete it (single-use) and return
+                await database.ref(`auth-tokens/${authKey}`).remove();
+
+                return {
+                    status: 'ready',
+                    token: data.token,
+                    refreshToken: data.refreshToken,
+                    email: data.email
+                };
+
+            } catch (error) {
+                console.error('Error checking token status:', error);
+                return {
+                    status: 'error',
+                    error: error.message || 'Failed to check auth status'
+                };
+            }
+        }
+
+        // Execute and output JSON response
+        checkTokenStatus().then(result => {
+            // Set content type header
+            document.contentType = 'application/json';
+
+            // Output JSON
+            document.write(JSON.stringify(result));
+
+            // Close document to ensure response is sent
+            document.close();
+        });
+    </script>
+</body>
+</html>

@@ -2,12 +2,17 @@
 
 // API Configuration
 const API_URL = 'https://svg2ooxml-export-sghya3t5ya-ew.a.run.app';
+const AUTH_URL = 'https://powerful-layout-467812-p1.web.app';
 const API_TIMEOUT = 180000; // 3 minutes
 const POLL_INTERVAL = 3000; // 3 seconds
+const AUTH_POLL_INTERVAL = 2000; // 2 seconds for auth polling
+const AUTH_TIMEOUT = 120000; // 2 minutes for auth
 
 // Current user state
 let currentUser = null;
 let currentToken = null;
+let currentRefreshToken = null;
+let currentSubscription = null;
 
 // UI Elements
 const signInBtn = document.getElementById('sign-in-btn');
@@ -15,33 +20,139 @@ const signOutBtn = document.getElementById('sign-out-btn');
 const userInfo = document.getElementById('user-info');
 const userEmail = document.getElementById('user-email');
 const authSection = document.getElementById('auth-section');
+const subscriptionSection = document.getElementById('subscription-section');
 const exportSection = document.getElementById('export-section');
+const exportDivider = document.getElementById('export-divider');
 const exportBtn = document.getElementById('export-btn');
 const statusDiv = document.getElementById('status');
 const progressDiv = document.getElementById('progress');
 const progressBar = document.getElementById('progress-bar');
+const tierBadge = document.getElementById('tier-badge');
+const tierName = document.getElementById('tier-name');
+const usageBar = document.getElementById('usage-bar');
+const usageText = document.getElementById('usage-text');
+const upgradeBtn = document.getElementById('upgrade-btn');
+const manageSubscriptionBtn = document.getElementById('manage-subscription-btn');
 
 // ============================================================================
 // Authentication
 // ============================================================================
 
-// Sign in with Google
+// Generate secure random auth key
+function generateAuthKey() {
+  const array = new Uint8Array(16);
+  crypto.getRandomValues(array);
+  return Array.from(array, byte =>
+    byte.toString(16).padStart(2, '0')
+  ).join('');
+}
+
+// Browser-compatible sign-in flow
+async function signInBrowserFlow() {
+  const authKey = generateAuthKey();
+
+  // Open auth window
+  const authWindow = window.open(
+    `${AUTH_URL}/auth.html?key=${authKey}`,
+    '_blank',
+    'width=500,height=600,menubar=no,toolbar=no,location=no'
+  );
+
+  if (!authWindow) {
+    throw new Error('Popup blocked. Please allow popups and try again.');
+  }
+
+  showStatus('Complete sign-in in the popup window...', 'info');
+
+  // Poll for token
+  const result = await pollForAuthToken(authKey, authWindow);
+
+  currentUser = { email: result.email };
+  currentToken = result.token;
+  currentRefreshToken = result.refreshToken;
+}
+
+// Desktop sign-in flow (fallback)
+async function signInDesktopFlow() {
+  const provider = new window.GoogleAuthProvider();
+
+  // Request required OAuth scopes
+  provider.addScope('https://www.googleapis.com/auth/drive.file');
+  provider.addScope('https://www.googleapis.com/auth/presentations');
+
+  // Show Google sign-in popup
+  const result = await window.signInWithPopup(window.firebaseAuth, provider);
+
+  // Get user info
+  currentUser = result.user;
+  currentToken = await result.user.getIdToken();
+}
+
+// Poll for auth token
+async function pollForAuthToken(authKey, authWindow) {
+  const startTime = Date.now();
+  let attempts = 0;
+  const maxAttempts = AUTH_TIMEOUT / AUTH_POLL_INTERVAL;
+
+  while (Date.now() - startTime < AUTH_TIMEOUT) {
+    attempts++;
+
+    // Check if window was closed
+    if (authWindow.closed) {
+      throw new Error('Sign-in window was closed before completing authentication');
+    }
+
+    try {
+      const response = await fetch(`${AUTH_URL}/auth-status.html?key=${authKey}`);
+      const data = await response.json();
+
+      if (data.status === 'ready') {
+        // Close auth window
+        if (!authWindow.closed) {
+          authWindow.close();
+        }
+        return {
+          token: data.token,
+          refreshToken: data.refreshToken,
+          email: data.email
+        };
+      }
+
+      if (data.status === 'expired' || data.status === 'not_found') {
+        if (!authWindow.closed) {
+          authWindow.close();
+        }
+        throw new Error('Authentication failed or expired');
+      }
+
+    } catch (error) {
+      // Ignore polling errors, continue trying
+      if (error.message.includes('failed') || error.message.includes('expired')) {
+        throw error;
+      }
+    }
+
+    showStatus(`Waiting for authentication... (${attempts}/${maxAttempts})`, 'info');
+    await sleep(AUTH_POLL_INTERVAL);
+  }
+
+  if (!authWindow.closed) {
+    authWindow.close();
+  }
+  throw new Error('Authentication timeout');
+}
+
+// Sign in with Google (unified handler)
 signInBtn.addEventListener('click', async () => {
   try {
     showStatus('Opening sign-in window...', 'info');
+    signInBtn.disabled = true;
 
-    const provider = new window.GoogleAuthProvider();
+    // Use browser-compatible flow (works in both browser and desktop)
+    await signInBrowserFlow();
 
-    // Request required OAuth scopes
-    provider.addScope('https://www.googleapis.com/auth/drive.file');
-    provider.addScope('https://www.googleapis.com/auth/presentations');
-
-    // Show Google sign-in popup
-    const result = await window.signInWithPopup(window.firebaseAuth, provider);
-
-    // Get user info
-    currentUser = result.user;
-    currentToken = await result.user.getIdToken();
+    // Save session for future plugin opens
+    await saveSession(currentToken, currentRefreshToken, currentUser.email);
 
     // Update UI
     updateUIForSignedInUser();
@@ -53,24 +164,27 @@ signInBtn.addEventListener('click', async () => {
   } catch (error) {
     console.error('Sign-in error:', error);
 
-    if (error.code === 'auth/popup-blocked') {
+    if (error.message.includes('Popup blocked')) {
       showStatus('Popup blocked. Please allow popups for this plugin and try again.', 'error');
-    } else if (error.code === 'auth/popup-closed-by-user') {
+    } else if (error.message.includes('closed before completing')) {
       showStatus('Sign-in cancelled.', 'info');
       setTimeout(() => hideStatus(), 2000);
-    } else if (error.code === 'auth/cancelled-popup-request') {
-      // User closed popup - this is fine, don't show error
-      hideStatus();
     } else {
       showStatus(`Sign-in failed: ${error.message}`, 'error');
     }
+
+  } finally {
+    signInBtn.disabled = false;
   }
 });
 
 // Sign out
 signOutBtn.addEventListener('click', async () => {
   try {
-    await window.signOut(window.firebaseAuth);
+    // Clear session from storage
+    await clearSession();
+
+    // Clear user state
     currentUser = null;
     currentToken = null;
     updateUIForSignedOutUser();
@@ -83,29 +197,227 @@ signOutBtn.addEventListener('click', async () => {
 });
 
 // Update UI for signed-in state
-function updateUIForSignedInUser() {
+async function updateUIForSignedInUser() {
   signInBtn.style.display = 'none';
   userInfo.style.display = 'block';
   userEmail.textContent = currentUser.email;
+  subscriptionSection.style.display = 'block';
+  exportDivider.style.display = 'block';
   exportSection.style.display = 'block';
+
+  // Fetch subscription status
+  await fetchSubscriptionStatus();
 }
 
 // Update UI for signed-out state
 function updateUIForSignedOutUser() {
   signInBtn.style.display = 'block';
   userInfo.style.display = 'none';
+  subscriptionSection.style.display = 'none';
+  exportDivider.style.display = 'none';
   exportSection.style.display = 'none';
 }
 
-// Check for existing session on load
-window.firebaseAuth.onAuthStateChanged(async (user) => {
-  if (user) {
-    currentUser = user;
-    currentToken = await user.getIdToken();
-    updateUIForSignedInUser();
-    console.log('Session restored:', user.email);
+// ============================================================================
+// Session Persistence
+// ============================================================================
+
+// Save session to Figma storage
+async function saveSession(token, refreshToken, email) {
+  parent.postMessage({
+    pluginMessage: {
+      type: 'save-session',
+      token: token,
+      refreshToken: refreshToken,
+      email: email
+    }
+  }, '*');
+}
+
+// Clear session from Figma storage
+async function clearSession() {
+  parent.postMessage({
+    pluginMessage: { type: 'clear-session' }
+  }, '*');
+}
+
+// Request session restoration on load
+parent.postMessage({
+  pluginMessage: { type: 'restore-session' }
+}, '*');
+
+// ============================================================================
+// Subscription Management
+// ============================================================================
+
+// Fetch subscription status from API
+async function fetchSubscriptionStatus() {
+  try {
+    // Refresh token to ensure it's fresh
+    try {
+      await refreshIdToken();
+    } catch (error) {
+      console.error('Token refresh failed:', error);
+      throw new Error('Session expired. Please sign in again.');
+    }
+
+    const response = await fetch(`${API_URL}/api/v1/subscription/status`, {
+      headers: {
+        'Authorization': `Bearer ${currentToken}`
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch subscription: ${response.status}`);
+    }
+
+    const data = await response.json();
+    currentSubscription = data;
+
+    // Update UI with subscription info
+    updateSubscriptionUI(data);
+
+  } catch (error) {
+    console.error('Subscription fetch error:', error);
+    // Show error but don't block the UI
+    showStatus(`Could not load subscription status: ${error.message}`, 'error');
+    setTimeout(() => hideStatus(), 3000);
+  }
+}
+
+// Update subscription UI with fetched data
+function updateSubscriptionUI(subscription) {
+  const tier = subscription.tier || 'free';
+  const usage = subscription.usage || {};
+  const current = usage.exports_this_month || 0;
+  const limit = usage.limit || 5;
+  const unlimited = usage.unlimited || false;
+
+  // Update tier badge and name
+  tierBadge.className = `badge ${tier}`;
+  tierBadge.textContent = tier.toUpperCase();
+
+  if (tier === 'free') {
+    tierName.textContent = 'Free Plan';
+  } else if (tier === 'pro') {
+    tierName.textContent = 'Pro Plan';
+  } else if (tier === 'enterprise') {
+    tierName.textContent = 'Enterprise Plan';
+  }
+
+  // Update usage bar and text
+  if (unlimited) {
+    usageBar.className = 'usage-bar unlimited';
+    usageBar.style.width = '100%';
+    usageText.textContent = '∞ Unlimited exports';
   } else {
-    updateUIForSignedOutUser();
+    const percentage = Math.min((current / limit) * 100, 100);
+    usageBar.style.width = `${percentage}%`;
+
+    // Change color based on usage
+    if (percentage >= 100) {
+      usageBar.className = 'usage-bar danger';
+    } else if (percentage >= 80) {
+      usageBar.className = 'usage-bar warning';
+    } else {
+      usageBar.className = 'usage-bar';
+    }
+
+    usageText.textContent = `${current} / ${limit} exports this month`;
+  }
+
+  // Show/hide upgrade button
+  if (tier === 'free') {
+    upgradeBtn.style.display = 'block';
+    manageSubscriptionBtn.style.display = 'none';
+  } else {
+    upgradeBtn.style.display = 'none';
+    manageSubscriptionBtn.style.display = 'block';
+  }
+}
+
+// Handle upgrade button click
+upgradeBtn.addEventListener('click', async () => {
+  try {
+    upgradeBtn.disabled = true;
+    showStatus('Opening checkout...', 'info');
+
+    // Refresh token
+    await refreshIdToken();
+
+    // Create checkout session
+    const response = await fetch(`${API_URL}/api/v1/subscription/checkout`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${currentToken}`
+      },
+      body: JSON.stringify({
+        tier: 'pro',
+        success_url: `${AUTH_URL}/payment-success.html`,
+        cancel_url: `${AUTH_URL}/payment-cancel.html`
+      })
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.detail || `Checkout failed: ${response.status}`);
+    }
+
+    const data = await response.json();
+
+    // Open Stripe checkout in new window
+    window.open(data.checkout_url, '_blank');
+
+    showStatus('Complete checkout in the new window. Refresh to see your new plan.', 'info');
+
+  } catch (error) {
+    console.error('Upgrade error:', error);
+    showStatus(`Upgrade failed: ${error.message}`, 'error');
+  } finally {
+    upgradeBtn.disabled = false;
+  }
+});
+
+// Handle manage subscription button click
+manageSubscriptionBtn.addEventListener('click', async () => {
+  try {
+    manageSubscriptionBtn.disabled = true;
+    showStatus('Opening subscription management...', 'info');
+
+    // Refresh token
+    await refreshIdToken();
+
+    // Create portal session
+    const response = await fetch(`${API_URL}/api/v1/subscription/portal`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${currentToken}`
+      },
+      body: JSON.stringify({
+        return_url: `${AUTH_URL}/index.html`
+      })
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.detail || `Portal failed: ${response.status}`);
+    }
+
+    const data = await response.json();
+
+    // Open Stripe portal in new window
+    window.open(data.portal_url, '_blank');
+
+    showStatus('Manage your subscription in the new window.', 'info');
+    setTimeout(() => hideStatus(), 3000);
+
+  } catch (error) {
+    console.error('Manage subscription error:', error);
+    showStatus(`Failed to open portal: ${error.message}`, 'error');
+  } finally {
+    manageSubscriptionBtn.disabled = false;
   }
 });
 
@@ -129,6 +441,19 @@ exportBtn.addEventListener('click', async () => {
 // Handle messages from Figma plugin backend (code.js)
 window.onmessage = async (event) => {
   const message = event.data.pluginMessage;
+
+  if (message.type === 'session-restored') {
+    // Restore session from storage
+    if (message.token && message.refreshToken && message.email) {
+      currentToken = message.token;
+      currentRefreshToken = message.refreshToken;
+      currentUser = { email: message.email };
+      updateUIForSignedInUser();
+      console.log('Session restored:', currentUser.email);
+    } else {
+      updateUIForSignedOutUser();
+    }
+  }
 
   if (message.type === 'svg-content') {
     // Received SVG content from Figma
@@ -159,7 +484,12 @@ async function handleExport(frames, fileKey, fileName) {
 
   } catch (error) {
     console.error('Export error:', error);
-    showStatus(`Export failed: ${error.message}`, 'error');
+
+    // Don't show duplicate error for quota exceeded (already shown)
+    if (error.message !== 'QUOTA_EXCEEDED') {
+      showStatus(`Export failed: ${error.message}`, 'error');
+    }
+
     hideProgress();
 
   } finally {
@@ -167,14 +497,51 @@ async function handleExport(frames, fileKey, fileName) {
   }
 }
 
+// Refresh ID token using refresh token
+async function refreshIdToken() {
+  if (!currentRefreshToken) {
+    throw new Error('No refresh token available');
+  }
+
+  const response = await fetch(
+    'https://securetoken.googleapis.com/v1/token?key=AIzaSyBO14gjDcansf4U7Ue9D_A28fEC_ur_5cY',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        grant_type: 'refresh_token',
+        refresh_token: currentRefreshToken
+      })
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error('Failed to refresh token');
+  }
+
+  const data = await response.json();
+  currentToken = data.id_token;
+  currentRefreshToken = data.refresh_token;
+
+  // Save updated tokens
+  await saveSession(currentToken, currentRefreshToken, currentUser.email);
+
+  return currentToken;
+}
+
 // Create export job via API
 async function createExportJob(frames, fileKey, fileName) {
   showStatus('Creating export job...', 'info');
   showProgress(10);
 
-  // Refresh token to ensure it's valid
-  if (currentUser) {
-    currentToken = await currentUser.getIdToken(true);
+  // Refresh token to ensure it's fresh (Firebase ID tokens expire after 1 hour)
+  // With refresh token, this allows indefinite session duration
+  try {
+    await refreshIdToken();
+  } catch (error) {
+    // If refresh fails, user needs to sign in again
+    console.error('Token refresh failed:', error);
+    throw new Error('Session expired. Please sign in again.');
   }
 
   const response = await fetch(`${API_URL}/api/v1/export`, {
@@ -198,6 +565,25 @@ async function createExportJob(frames, fileKey, fileName) {
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
+
+    // Handle quota exceeded error (402 Payment Required)
+    if (response.status === 402 && errorData.detail?.error === 'quota_exceeded') {
+      const usage = errorData.detail?.usage || {};
+      const message = errorData.detail?.message || 'You have reached your monthly export limit.';
+
+      // Show upgrade prompt
+      showStatus(
+        `<strong>Quota Exceeded</strong><br>${message}<br><br>` +
+        `<span style="font-weight: 600;">Current usage: ${usage.current || 0} / ${usage.limit || 5} exports</span>`,
+        'error'
+      );
+
+      // Show upgrade button prominently
+      upgradeBtn.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+      throw new Error('QUOTA_EXCEEDED'); // Special error to prevent generic error message
+    }
+
     throw new Error(errorData.detail || `API error: ${response.status}`);
   }
 

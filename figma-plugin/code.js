@@ -15,6 +15,33 @@ figma.ui.onmessage = async (msg) => {
       await handleGetSVGContent();
     }
 
+    if (msg.type === 'save-session') {
+      // Save session to Figma's clientStorage
+      await figma.clientStorage.setAsync('auth_token', msg.token);
+      await figma.clientStorage.setAsync('auth_refresh_token', msg.refreshToken);
+      await figma.clientStorage.setAsync('auth_email', msg.email);
+    }
+
+    if (msg.type === 'clear-session') {
+      // Clear session from Figma's clientStorage
+      await figma.clientStorage.deleteAsync('auth_token');
+      await figma.clientStorage.deleteAsync('auth_refresh_token');
+      await figma.clientStorage.deleteAsync('auth_email');
+    }
+
+    if (msg.type === 'restore-session') {
+      // Restore session from Figma's clientStorage
+      const token = await figma.clientStorage.getAsync('auth_token');
+      const refreshToken = await figma.clientStorage.getAsync('auth_refresh_token');
+      const email = await figma.clientStorage.getAsync('auth_email');
+      figma.ui.postMessage({
+        type: 'session-restored',
+        token: token,
+        refreshToken: refreshToken,
+        email: email
+      });
+    }
+
     if (msg.type === 'export-complete') {
       figma.notify('✅ Exported to Google Slides!');
     }

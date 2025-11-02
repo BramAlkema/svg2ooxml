@@ -1,0 +1,52 @@
+name: Deploy Firebase
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - 'public/**'
+      - 'firestore.rules'
+      - 'firestore.indexes.json'
+      - 'firebase.json'
+      - '.github/workflows/deploy-firebase.yml'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Firebase CLI
+        run: npm install -g firebase-tools
+
+      - name: Deploy to Firebase
+        env:
+          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+        run: |
+          firebase deploy \
+            --only hosting,firestore:rules,firestore:indexes \
+            --project powerful-layout-467812-p1 \
+            --token "$FIREBASE_TOKEN" \
+            --non-interactive
+
+      - name: Deployment Summary
+        run: |
+          echo "### Firebase Deployment Complete! 🚀" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Deployed Components:**" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Firebase Hosting (payment pages)" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Firestore Security Rules" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Firestore Indexes" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**URLs:**" >> $GITHUB_STEP_SUMMARY
+          echo "- Auth: https://powerful-layout-467812-p1.web.app/auth.html" >> $GITHUB_STEP_SUMMARY
+          echo "- Success: https://powerful-layout-467812-p1.web.app/payment-success.html" >> $GITHUB_STEP_SUMMARY
+          echo "- Cancel: https://powerful-layout-467812-p1.web.app/payment-cancel.html" >> $GITHUB_STEP_SUMMARY

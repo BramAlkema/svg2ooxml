@@ -13,6 +13,8 @@ from fastapi.responses import JSONResponse
 
 from src.svg2ooxml.api.routes.export import router as export_router
 from src.svg2ooxml.api.routes.tasks import router as tasks_router
+from src.svg2ooxml.api.routes.subscription import router as subscription_router
+from src.svg2ooxml.api.routes.webhooks import router as webhooks_router
 from src.svg2ooxml.api.middleware import RateLimiter, RateLimitMiddleware
 from src.svg2ooxml.api.auth.firebase import initialize_firebase
 
@@ -61,18 +63,33 @@ app = FastAPI(
 )
 
 # Configure CORS for Figma plugin
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
+# Only allow specific origins for security
+ENVIRONMENT = os.getenv("ENVIRONMENT", "production")
+
+if ENVIRONMENT == "development":
+    # Development: Allow localhost
+    allowed_origins = [
         "https://www.figma.com",
         "https://figma.com",
-        # Add localhost for development
-        "http://localhost:*",
-        "http://127.0.0.1:*",
-    ],
+        "http://localhost:3000",
+        "http://localhost:8000",
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:8000",
+    ]
+else:
+    # Production: Only allow Figma
+    allowed_origins = [
+        "https://www.figma.com",
+        "https://figma.com",
+    ]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=allowed_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "DELETE"],  # Only needed methods
+    allow_headers=["Authorization", "Content-Type"],  # Only needed headers
+    max_age=3600,  # Cache preflight requests for 1 hour
 )
 
 # Basic per-client rate limiting middleware
@@ -82,6 +99,8 @@ app.add_middleware(RateLimitMiddleware, limiter=rate_limiter)
 # Include routers
 app.include_router(export_router, prefix="/api/v1", tags=["export"])
 app.include_router(tasks_router, prefix="/api/v1/tasks", tags=["tasks"])
+app.include_router(subscription_router, prefix="/api/v1", tags=["subscription"])
+app.include_router(webhooks_router, prefix="/api", tags=["webhooks"])
 
 
 @app.get("/")

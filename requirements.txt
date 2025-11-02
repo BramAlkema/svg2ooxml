@@ -33,3 +33,6 @@ colorspacious>=1.1.0
 python-pptx>=0.6.23
 cryptography>=41.0
 fonttools>=4.59.2
+
+# Payments
+stripe>=8.0.0
