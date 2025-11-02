@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import importlib.util
 import sys
 import types
 
 
-if "google.cloud" not in sys.modules:  # pragma: no cover - used for test isolation
+if importlib.util.find_spec("google.cloud") is None:  # pragma: no cover - used for test isolation
     cloud_pkg = types.ModuleType("google.cloud")
+    cloud_pkg.__path__ = []  # type: ignore[attr-defined]
 
     class _StubClient:  # pragma: no cover - simple stub
         def __init__(self, *args, **kwargs):

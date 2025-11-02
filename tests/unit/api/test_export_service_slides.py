@@ -55,7 +55,7 @@ def _create_slides_job(service: ExportService) -> str:
 def test_process_job_publishes_slides(monkeypatch: pytest.MonkeyPatch, export_service: ExportService) -> None:
     captured: dict[str, SlidesPublishResult] = {}
 
-    def fake_publish(self, pptx_path, *, job_id, job_data, cache_key):
+    def fake_publish(self, pptx_path, *, job_id, job_data, cache_key, user_token):
         result = SlidesPublishResult(
             file_id="slides-file",
             web_view_link="https://slides.example/view",
@@ -87,7 +87,7 @@ def test_process_job_failure_when_slides_publish_errors(
     monkeypatch: pytest.MonkeyPatch,
     export_service: ExportService,
 ) -> None:
-    def fake_publish(self, pptx_path, *, job_id, job_data, cache_key):
+    def fake_publish(self, pptx_path, *, job_id, job_data, cache_key, user_token):
         raise SlidesPublishingError("Slides upload failed")
 
     monkeypatch.setattr(ExportService, "_publish_to_slides", fake_publish)

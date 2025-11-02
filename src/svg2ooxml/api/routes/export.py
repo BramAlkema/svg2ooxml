@@ -19,10 +19,18 @@ router = APIRouter()
 
 # Initialize services
 export_service = ExportService()
-subscription_repo = SubscriptionRepository()
+subscription_repo = None  # Lazy initialized on first use
 
 # Free tier limit
 FREE_TIER_LIMIT = 5
+
+
+def get_subscription_repo() -> SubscriptionRepository:
+    """Get or create the subscription repository instance."""
+    global subscription_repo
+    if subscription_repo is None:
+        subscription_repo = SubscriptionRepository()
+    return subscription_repo
 
 
 @router.post(
@@ -73,12 +81,13 @@ async def create_export_job(
         current_month = datetime.now().strftime("%Y-%m")
 
         # Run both queries in parallel for better performance
+        repo = get_subscription_repo()
         subscription, usage = await asyncio.gather(
             run_in_threadpool(
-                subscription_repo.get_active_subscription, firebase_uid
+                repo.get_active_subscription, firebase_uid
             ),
             run_in_threadpool(
-                subscription_repo.get_usage, firebase_uid, current_month
+                repo.get_usage, firebase_uid, current_month
             ),
         )
         export_count = usage["exportCount"] if usage else 0
@@ -116,7 +125,7 @@ async def create_export_job(
 
         # Increment usage counter
         await run_in_threadpool(
-            subscription_repo.increment_usage, firebase_uid, current_month
+            repo.increment_usage, firebase_uid, current_month
         )
 
         # Queue background processing

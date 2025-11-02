@@ -3,6 +3,9 @@ substitutions:
   _SERVICE: svg2ooxml-export
   _REPOSITORY: svg2ooxml
   _IMAGE: svg2ooxml-service
+  _STRIPE_SECRET_KEY: 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
+  _STRIPE_PRICE_ID_PRO: price_1SP750FYNR8EjxcIGX5RQ2uQ
+  _STRIPE_PRICE_ID_ENTERPRISE: price_1SP75JFYNR8EjxcI0bnw5tIb
 
 options:
   logging: CLOUD_LOGGING_ONLY
@@ -27,11 +30,10 @@ steps:
   - name: gcr.io/k8s-skaffold/pack
     args:
       - build
-      - $_REGION-docker.pkg.dev/$PROJECT_ID/$_REPOSITORY/$_IMAGE:$COMMIT_SHA
+      - $_REGION-docker.pkg.dev/$PROJECT_ID/$_REPOSITORY/$_IMAGE:latest
       - --path=.
       - --builder=gcr.io/buildpacks/builder:v1
       - --run-image=$_REGION-docker.pkg.dev/$PROJECT_ID/$_REPOSITORY/run:latest
-      - --tag=$_REGION-docker.pkg.dev/$PROJECT_ID/$_REPOSITORY/$_IMAGE:latest
       - --publish
 
   - name: gcr.io/google.com/cloudsdktool/cloud-sdk
@@ -40,12 +42,12 @@ steps:
       - run
       - deploy
       - $_SERVICE
-      - --image=$_REGION-docker.pkg.dev/$PROJECT_ID/$_REPOSITORY/$_IMAGE:$COMMIT_SHA
+      - --image=$_REGION-docker.pkg.dev/$PROJECT_ID/$_REPOSITORY/$_IMAGE:latest
       - --region=$_REGION
       - --platform=managed
       - --service-account=svg2ooxml-runner@$PROJECT_ID.iam.gserviceaccount.com
       - --allow-unauthenticated
-      - --set-env-vars=PYTHONPATH=/workspace/src,GCP_PROJECT=$PROJECT_ID,CLOUD_TASKS_LOCATION=$_REGION,CLOUD_TASKS_QUEUE=svg2ooxml-jobs,FIREBASE_PROJECT_ID=$PROJECT_ID,FIREBASE_SERVICE_ACCOUNT_PATH=/secrets/firebase-service-account
+      - --set-env-vars=PYTHONPATH=/workspace/src,GCP_PROJECT=$PROJECT_ID,CLOUD_TASKS_LOCATION=$_REGION,CLOUD_TASKS_QUEUE=svg2ooxml-jobs,FIREBASE_PROJECT_ID=$PROJECT_ID,FIREBASE_SERVICE_ACCOUNT_PATH=/secrets/firebase-service-account,ENVIRONMENT=production,STRIPE_SECRET_KEY=${_STRIPE_SECRET_KEY},STRIPE_PRICE_ID_PRO=${_STRIPE_PRICE_ID_PRO},STRIPE_PRICE_ID_ENTERPRISE=${_STRIPE_PRICE_ID_ENTERPRISE}
       - --update-secrets=/secrets/firebase-service-account=firebase-service-account:latest,TOKEN_ENCRYPTION_KEY=token-encryption-key:latest
 
   # Update SERVICE_URL after deployment (get actual URL from Cloud Run)

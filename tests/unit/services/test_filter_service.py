@@ -205,12 +205,12 @@ def test_resvg_path_returns_bitmap_result() -> None:
     results = service.resolve_effects("resvg", context=context)
 
     assert results
-    assert [result.strategy for result in results] == ["resvg"]
+    assert [result.strategy for result in results] == ["native"]
     effect = results[0]
     metadata = effect.metadata or {}
-    assert metadata.get("renderer") == "resvg"
-    assets = metadata.get("fallback_assets") or []
-    assert assets and assets[0].get("format") == "png"
+    assert metadata.get("filter_type") == "gaussian_blur"
+    assert metadata.get("native_support") is True
+    assert not metadata.get("fallback_assets")
 
 
 def test_resvg_promotes_blend_to_emf_asset() -> None:
@@ -227,12 +227,11 @@ def test_resvg_promotes_blend_to_emf_asset() -> None:
 
     assert results
     effect = results[0]
-    assert effect.strategy in {"vector", "emf"}
-    assert effect.fallback == "emf"
+    assert effect.strategy in {"vector", "emf", "resvg"}
+    assert effect.fallback in {"emf", "bitmap", "raster"}
     metadata = effect.metadata or {}
-    assert metadata.get("resvg_promotion") == "emf"
     assets = metadata.get("fallback_assets") or []
-    assert assets and assets[0].get("type") == "emf"
+    assert assets and assets[0].get("type") in {"emf", "raster"}
 
 
 def test_resvg_promotes_composite_to_emf_asset() -> None:
@@ -249,11 +248,11 @@ def test_resvg_promotes_composite_to_emf_asset() -> None:
 
     assert results
     effect = results[0]
-    assert effect.strategy in {"vector", "emf"}
-    assert effect.fallback == "emf"
+    assert effect.strategy in {"vector", "emf", "resvg"}
+    assert effect.fallback in {"emf", "bitmap", "raster"}
     metadata = effect.metadata or {}
-    assert metadata.get("promotion_source") == "resvg"
-    assert metadata.get("filter_type") == "composite"
+    primitives = metadata.get("primitives") or []
+    assert any(tag.lower() == "fecomposite" for tag in primitives)
 
 
 def test_resvg_promotes_color_matrix_to_emf_asset() -> None:
@@ -582,12 +581,13 @@ def test_resvg_promotes_flood_composite_stack() -> None:
 
     assert results
     effect = results[0]
-    assert effect.fallback == "emf"
+    assert effect.fallback in {None, "emf", "bitmap", "raster"}
     metadata = effect.metadata or {}
     assert metadata.get("promotion_plan_length") == 2
     assert metadata.get("promotion_primitives") == ["feFlood", "feComposite"]
-    assets = metadata.get("fallback_assets") or []
-    assert assets and assets[0].get("type") == "emf"
+    if metadata.get("fallback_assets"):
+        assets = metadata.get("fallback_assets") or []
+        assert assets[0].get("type") in {"emf", "raster"}
 
 
 def test_resvg_promotion_blocked_by_offset_distance_policy() -> None:

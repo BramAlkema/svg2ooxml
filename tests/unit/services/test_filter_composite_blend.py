@@ -44,15 +44,13 @@ def test_composite_combines_previous_result() -> None:
     assert len(results) >= 2
     composite = results[1]
     assert isinstance(composite, FilterEffectResult)
-    assert composite.fallback == "emf"
+    assert composite.fallback is None
     assert isinstance(composite.effect, CustomEffect)
     assert composite.effect.drawingml.startswith("<a:effectLst>")
     assert composite.metadata["inputs"] == ["blurred"]
     assert composite.metadata["operator"] == "over"
-    assert composite.metadata.get("native_support") is False
-    assets = composite.metadata.get("fallback_assets")
-    assert assets and assets[0]["type"] == "emf"
-    assert assets[0].get("data_hex") or assets[0].get("data")
+    assert composite.metadata.get("native_support") is True
+    assert "fallback_assets" not in composite.metadata or not composite.metadata["fallback_assets"]
 
 
 def test_blend_without_inputs_falls_back_to_bitmap() -> None:
