@@ -57,7 +57,7 @@ Get your plugin running in **5 minutes**!
 
 ### "User not authorized"
 - Your Google account must be added as a test user
-- Contact admin to add you: https://console.firebase.google.com/project/powerful-layout-467812-p1/authentication/settings
+- Add test users here: https://console.cloud.google.com/auth/audience?project=powerful-layout-467812-p1
 
 ### "Please select at least one frame"
 - Make sure you've selected a **frame** (not just layers)
