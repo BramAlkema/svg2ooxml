@@ -5,7 +5,14 @@ import sys
 import types
 
 
-if importlib.util.find_spec("google.cloud") is None:  # pragma: no cover - used for test isolation
+# Check if google package exists first, then check google.cloud
+if importlib.util.find_spec("google") is None or importlib.util.find_spec("google.cloud") is None:  # pragma: no cover - used for test isolation
+    # Create google namespace package if it doesn't exist
+    if "google" not in sys.modules:
+        google_pkg = types.ModuleType("google")
+        google_pkg.__path__ = []  # type: ignore[attr-defined]
+        sys.modules["google"] = google_pkg
+
     cloud_pkg = types.ModuleType("google.cloud")
     cloud_pkg.__path__ = []  # type: ignore[attr-defined]
 
