@@ -35,8 +35,6 @@ from svg2ooxml.core.traversal import clipping
 from svg2ooxml.core.traversal.constants import DEFAULT_TOLERANCE
 from svg2ooxml.core.traversal.coordinate_space import CoordinateSpace
 from svg2ooxml.core.traversal.geometry_utils import is_axis_aligned
-from svg2ooxml.core.ir.shape_converters import _ellipse_segments, _points_to_segments
-from svg2ooxml.core.ir.rectangles import _rounded_rect_segments, _rect_segments
 
 
 class TraversalHooksMixin:
@@ -764,6 +762,41 @@ class TraversalHooksMixin:
             if node_id:
                 index[node_id] = node
         return index
+
+
+def _ellipse_segments(cx: float, cy: float, rx: float, ry: float):
+    from svg2ooxml.core.ir.shape_converters import _ellipse_segments as _impl
+
+    globals()["_ellipse_segments"] = _impl
+    return _impl(cx, cy, rx, ry)
+
+
+def _points_to_segments(points, *, closed: bool):
+    from svg2ooxml.core.ir.shape_converters import _points_to_segments as _impl
+
+    globals()["_points_to_segments"] = _impl
+    return _impl(points, closed=closed)
+
+
+def _rect_segments(x: float, y: float, width: float, height: float):
+    from svg2ooxml.core.ir.rectangles import _rect_segments as _impl
+
+    globals()["_rect_segments"] = _impl
+    return _impl(x, y, width, height)
+
+
+def _rounded_rect_segments(
+    x: float,
+    y: float,
+    width: float,
+    height: float,
+    radius_x: float,
+    radius_y: float,
+):
+    from svg2ooxml.core.ir.rectangles import _rounded_rect_segments as _impl
+
+    globals()["_rounded_rect_segments"] = _impl
+    return _impl(x, y, width, height, radius_x, radius_y)
 
 
 __all__ = ["TraversalHooksMixin"]
