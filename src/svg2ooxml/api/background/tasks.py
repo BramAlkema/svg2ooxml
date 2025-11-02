@@ -74,6 +74,24 @@ class CloudTasksQueue:
         if self.client is None or self.queue_path is None:
             raise RuntimeError("Cloud Tasks client not initialised")
 
+        # Fetch job data to check for encrypted token
+        try:
+            from google.cloud import firestore
+            db = firestore.Client(project=self.project_id)
+            job_doc = db.collection("exports").document(job_id).get()
+            job_data = job_doc.to_dict() if job_doc.exists else {}
+        except Exception as e:
+            logger.warning(f"Could not fetch job data for {job_id}: {e}")
+            job_data = {}
+
+        # Build task payload
+        task_payload = {"job_id": job_id}
+
+        # Include encrypted token if present
+        if "auth_token_encrypted" in job_data:
+            task_payload["auth_token_encrypted"] = job_data["auth_token_encrypted"]
+            logger.debug(f"Including encrypted auth token in Cloud Task for job {job_id}")
+
         # Construct the task
         task: Dict[str, Any] = {
             "http_request": {
@@ -82,7 +100,7 @@ class CloudTasksQueue:
                 "headers": {
                     "Content-Type": "application/json",
                 },
-                "body": json.dumps({"job_id": job_id}).encode(),
+                "body": json.dumps(task_payload).encode(),
                 "oidc_token": {
                     # Use the service account for authentication
                     "service_account_email": f"svg2ooxml-runner@{self.project_id}.iam.gserviceaccount.com",

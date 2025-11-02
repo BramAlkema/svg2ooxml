@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64">
+  <defs>
+    <filter id="stitch">
+      <feTurbulence baseFrequency="0.08 0.12" numOctaves="3" seed="7" stitchTiles="stitch" result="noise"/>
+      <feComposite in="SourceGraphic" in2="noise" operator="atop"/>
+    </filter>
+  </defs>
+  <rect x="0" y="0" width="64" height="64" fill="#cccccc" filter="url(#stitch)"/>
+</svg>

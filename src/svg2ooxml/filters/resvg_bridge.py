@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
 
 from lxml import etree
@@ -18,6 +18,7 @@ class FilterPrimitiveDescriptor:
     tag: str
     attributes: dict[str, str]
     styles: dict[str, str]
+    extras: dict[str, str] = field(default_factory=dict)
     children: tuple["FilterPrimitiveDescriptor", ...] = ()
 
 
@@ -139,10 +140,13 @@ def build_filter_node(resolved: ResolvedFilter) -> FilterNode:
 
 
 def _descriptor_from_primitive(primitive: FilterPrimitive) -> FilterPrimitiveDescriptor:
+    attributes = dict(primitive.attributes)
+    extras = _collect_lighting_metadata(primitive.tag, primitive.attributes, primitive.children)
     return FilterPrimitiveDescriptor(
         tag=primitive.tag,
-        attributes=dict(primitive.attributes),
+        attributes=attributes,
         styles=dict(primitive.styles),
+        extras=extras,
         children=tuple(_descriptor_from_primitive(child) for child in primitive.children),
     )
 
@@ -156,6 +160,7 @@ def _descriptor_from_element(element: etree._Element) -> FilterPrimitiveDescript
         for key, value in element.attrib.items()
         if key != "style"
     }
+    extras = _collect_lighting_metadata_from_element(tag, element)
     styles: dict[str, str] = {}
     style_attr = element.get("style")
     if style_attr:
@@ -173,6 +178,7 @@ def _descriptor_from_element(element: etree._Element) -> FilterPrimitiveDescript
         tag=tag,
         attributes=attributes,
         styles=styles,
+        extras=extras,
         children=tuple(children),
     )
 
@@ -188,13 +194,82 @@ def _primitive_from_descriptor(descriptor: FilterPrimitiveDescriptor) -> FilterP
 
 def _append_primitive_element(parent: etree._Element, primitive: FilterPrimitiveDescriptor) -> None:
     child = etree.SubElement(parent, primitive.tag)
-    child.attrib.update(primitive.attributes)
+    child.attrib.update(_filter_element_attributes(primitive.attributes))
     if primitive.styles:
         style_value = ";".join(f"{key}:{value}" for key, value in primitive.styles.items())
         if style_value:
             child.set("style", style_value)
     for nested in primitive.children:
         _append_primitive_element(child, nested)
+
+
+_LIGHT_CHILD_TAGS = {"fedistantlight", "fepointlight", "fespotlight"}
+
+
+def _collect_lighting_metadata(tag: str, attributes: Mapping[str, str], children: tuple[FilterPrimitive, ...]) -> dict[str, str]:
+    if tag.lower() not in {"fediffuselighting", "fespecularlighting"}:
+        return {}
+    extras: dict[str, str] = {
+        "surface_scale": attributes.get("surfaceScale", ""),
+        "lighting_color": attributes.get("lighting-color", ""),
+    }
+    if tag.lower() == "fediffuselighting":
+        extras["diffuse_constant"] = attributes.get("diffuseConstant", "")
+    else:
+        extras["specular_constant"] = attributes.get("specularConstant", "")
+        extras["specular_exponent"] = attributes.get("specularExponent", "")
+    kernel = attributes.get("kernelUnitLength")
+    if kernel:
+        extras["kernel_unit_length"] = kernel
+
+    idx = 0
+    for child in children:
+        child_tag = child.tag.lower()
+        if child_tag not in _LIGHT_CHILD_TAGS:
+            continue
+        prefix = child_tag.removeprefix("fe")
+        suffix = "" if idx == 0 else str(idx)
+        extras[f"light_type{suffix}"] = prefix
+        for name, value in child.attributes.items():
+            extras[f"{prefix}{suffix}_{name}"] = value
+        idx += 1
+    return {key: value for key, value in extras.items() if value not in {"", None}}
+
+
+def _collect_lighting_metadata_from_element(tag: str, element: etree._Element) -> dict[str, str]:
+    if tag.lower() not in {"fediffuselighting", "fespecularlighting"}:
+        return {}
+    attrs = element.attrib
+    dummy_children = tuple(
+        FilterPrimitive(
+            tag=_local_name(child.tag),
+            attributes=dict(child.attrib),
+            styles={},
+            children=(),
+        )
+        for child in element
+    )
+    return _collect_lighting_metadata(tag, attrs, dummy_children)
+
+
+def _filter_element_attributes(attributes: Mapping[str, str]) -> dict[str, str]:
+    filtered: dict[str, str] = {}
+    for key, value in attributes.items():
+        if key.startswith("light_") or key.startswith("lighting_") and "-" not in key:
+            continue
+        filtered[key] = value
+    return filtered
+
+
+__all__ = [
+    "FilterPrimitiveDescriptor",
+    "ResolvedFilter",
+    "resolve_filter_node",
+    "resolve_filter_reference",
+    "resolve_filter_element",
+    "build_filter_element",
+    "build_filter_node",
+]
 
 
 def _extract_reference_id(value: str | None) -> str | None:

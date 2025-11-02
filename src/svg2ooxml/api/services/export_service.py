@@ -117,8 +117,18 @@ class ExportService:
         figma_file_name: Optional[str],
         output_format: str,
         fonts: Optional[Sequence[RequestedFont]],
+        user: Optional[dict] = None,
     ) -> str:
-        """Register a new export job."""
+        """Register a new export job.
+
+        Args:
+            frames: SVG frames to convert
+            figma_file_id: Figma file identifier
+            figma_file_name: Figma file name
+            output_format: Output format (pptx or slides)
+            fonts: Optional fonts to download
+            user: Optional user authentication info from Firebase (uid, email, token, token_hash)
+        """
 
         job_id = str(uuid.uuid4())
         now = datetime.now(timezone.utc).isoformat()
@@ -149,8 +159,29 @@ class ExportService:
             ],
         }
 
+        # Add user authentication info if provided
+        if user:
+            from ..auth.encryption import encrypt_token
+
+            job_data["user"] = {
+                "uid": user["uid"],
+                "email": user.get("email"),
+                "token_hash": user["token_hash"],
+            }
+
+            # Encrypt and store token for background processing
+            job_data["auth_token_encrypted"] = encrypt_token(user["token"])
+
+            logger.info(
+                "Created job %s with %d frame(s) for user %s",
+                job_id,
+                len(frames),
+                user["uid"],
+            )
+        else:
+            logger.info("Created job %s with %d frame(s)", job_id, len(frames))
+
         self.jobs_collection.document(job_id).set(job_data)
-        logger.info("Created job %s with %d frame(s)", job_id, len(frames))
 
         svg_collection = self.jobs_collection.document(job_id).collection("svgs")
         for idx, frame in enumerate(frames):
@@ -204,8 +235,13 @@ class ExportService:
     # Conversion pipeline
     # ------------------------------------------------------------------ #
 
-    def process_job(self, job_id: str) -> None:
-        """Execute the conversion pipeline for a job."""
+    def process_job(self, job_id: str, user_token: str | None = None) -> None:
+        """Execute the conversion pipeline for a job.
+
+        Args:
+            job_id: Unique identifier for the export job
+            user_token: Optional decrypted Firebase ID token for user authentication
+        """
 
         try:
             self.update_job_status(
@@ -276,6 +312,7 @@ class ExportService:
                             job_id=job_id,
                             job_data=job_data,
                             cache_key=cache_key,
+                            user_token=user_token,
                         )
                     except SlidesPublishingError as exc:
                         logger.warning("Job %s: Slides publishing failed (%s)", job_id, exc)
@@ -589,6 +626,7 @@ class ExportService:
         stage_totals = conversion.aggregated_trace.get("stage_totals", {})
         geometry_totals = conversion.aggregated_trace.get("geometry_totals", {})
         paint_totals = conversion.aggregated_trace.get("paint_totals", {})
+        resvg_metrics = conversion.aggregated_trace.get("resvg_metrics", {})
 
         font_diag: FontDiagnostics = conversion.font_diagnostics
         requested_names = [font.family for font in requested_fonts]
@@ -605,6 +643,7 @@ class ExportService:
             "stage_totals": stage_totals,
             "geometry_totals": geometry_totals,
             "paint_totals": paint_totals,
+            "resvg_metrics": resvg_metrics,
             "page_titles": conversion.page_titles,
         }
 
@@ -684,8 +723,17 @@ class ExportService:
         job_id: str,
         job_data: dict[str, Any],
         cache_key: str,
+        user_token: str | None = None,
     ) -> SlidesPublishResult:
-        """Upload ``pptx_path`` to Google Slides and return sharing metadata."""
+        """Upload ``pptx_path`` to Google Slides and return sharing metadata.
+
+        Args:
+            pptx_path: Path to PPTX file to upload
+            job_id: Job identifier
+            job_data: Job metadata from Firestore
+            cache_key: Cache key for the conversion
+            user_token: Optional decrypted Firebase ID token for user authentication
+        """
 
         presentation_title = job_data.get("figma_file_name") or job_data.get("figma_file_id") or f"Export {job_id}"
         try:
@@ -693,6 +741,7 @@ class ExportService:
                 pptx_path,
                 presentation_title=presentation_title,
                 parent_folder_id=self.slides_folder_id,
+                user_token=user_token,
             )
         except SlidesPublishingError as exc:
             logger.error("Publishing job %s to Slides failed: %s", job_id, exc)

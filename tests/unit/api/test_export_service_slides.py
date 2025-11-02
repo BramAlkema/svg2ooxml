@@ -79,6 +79,7 @@ def test_process_job_publishes_slides(monkeypatch: pytest.MonkeyPatch, export_se
     assert status["thumbnail_urls"] == ["https://slides.example/thumb1.png"]
     assert status["slides_presentation_id"] == "slides-file"
     assert status.get("slides_error") is None
+    assert status["conversion_summary"].get("resvg_metrics", {}) == {}
     assert "result" in captured
 
 

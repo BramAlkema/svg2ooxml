@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 
 try:  # pragma: no cover - optional dependency
     import google.auth
+    from google.oauth2.credentials import Credentials as UserCredentials
     from googleapiclient.discovery import build
     from googleapiclient.errors import HttpError
     from googleapiclient.http import MediaFileUpload
@@ -22,6 +23,7 @@ try:  # pragma: no cover - optional dependency
     _GOOGLE_AVAILABLE = True
 except ImportError:  # pragma: no cover - environment without Google client libs
     google = None  # type: ignore[assignment]
+    UserCredentials = object  # type: ignore[assignment]
     build = None  # type: ignore[assignment]
     HttpError = Exception  # type: ignore[assignment]
     MediaFileUpload = object  # type: ignore[assignment]
@@ -55,11 +57,19 @@ def upload_pptx_to_slides(
     *,
     presentation_title: str | None = None,
     parent_folder_id: str | None = None,
+    user_token: str | None = None,
 ) -> SlidesPublishResult:
     """
     Upload ``pptx_path`` to Google Drive and promote it to Google Slides.
 
-    Returns a :class:`SlidesPublishResult` describing the uploaded presentation.
+    Args:
+        pptx_path: Path to PPTX file to upload
+        presentation_title: Optional title for the presentation
+        parent_folder_id: Optional Google Drive folder ID
+        user_token: Optional Firebase ID token for user authentication
+
+    Returns:
+        SlidesPublishResult describing the uploaded presentation.
     """
 
     if not _GOOGLE_AVAILABLE:
@@ -72,8 +82,14 @@ def upload_pptx_to_slides(
     if not pptx_path.exists():
         raise SlidesPublishingError(f"PPTX path does not exist: {pptx_path}")
 
+    # Build credentials: user token if provided, otherwise service account
     try:
-        credentials, _ = google.auth.default(scopes=SLIDES_SCOPES)  # type: ignore[attr-defined]
+        if user_token:
+            credentials = _build_user_credentials(user_token)
+            logger.info("Using user credentials for Slides upload")
+        else:
+            credentials, _ = google.auth.default(scopes=SLIDES_SCOPES)  # type: ignore[attr-defined]
+            logger.info("Using service account credentials for Slides upload (fallback)")
     except Exception as exc:  # pragma: no cover - defensive
         raise SlidesPublishingError(f"Failed to obtain Google credentials: {exc}") from exc
 
@@ -157,6 +173,30 @@ def upload_pptx_to_slides(
         embed_url=embed_url,
         thumbnail_urls=tuple(thumbnails),
     )
+
+
+def _build_user_credentials(id_token: str) -> UserCredentials:
+    """
+    Build user credentials from Firebase ID token.
+
+    Args:
+        id_token: Firebase ID token from authenticated user
+
+    Returns:
+        Google OAuth2 user credentials
+
+    Note:
+        Firebase ID tokens can be used directly with Google APIs that support
+        OpenID Connect (like Drive/Slides). These credentials will expire after
+        1 hour. For long-running jobs, consider implementing refresh logic.
+    """
+    if not _GOOGLE_AVAILABLE:
+        raise SlidesPublishingError("Google API client libraries not available")
+
+    # Firebase ID tokens are OpenID Connect tokens that work with Google APIs
+    credentials = UserCredentials(token=id_token)
+
+    return credentials
 
 
 __all__ = ["SlidesPublishResult", "SlidesPublishingError", "upload_pptx_to_slides"]

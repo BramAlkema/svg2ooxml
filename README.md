@@ -12,9 +12,8 @@ core that can run locally without GCP dependencies.
 ## Getting Started
 
 ```bash
-python -m venv .venv
+./tools/bootstrap_venv.sh
 source .venv/bin/activate
-pip install -r requirements-dev.txt
 ```
 
 The developer requirements install svg2ooxml in editable mode with all runtime

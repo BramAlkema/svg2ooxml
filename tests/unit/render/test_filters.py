@@ -277,6 +277,30 @@ def test_apply_filter_turbulence_deterministic() -> None:
     assert np.var(result_a.data[..., 0]) > 0.0
 
 
+def test_apply_filter_turbulence_stitch_tiles_edges_match() -> None:
+    turbulence = FilterPrimitive(
+        tag="feTurbulence",
+        attributes={
+            "baseFrequency": "0.08 0.12",
+            "numOctaves": "3",
+            "seed": "5",
+            "stitchTiles": "stitch",
+        },
+        styles={},
+    )
+    filter_node = _make_filter_node([turbulence])
+    plan = plan_filter(filter_node)
+    assert plan is not None
+
+    surface = Surface.make(24, 16)
+    bounds = (0.0, 0.0, 24.0, 16.0)
+    viewport = Viewport(width=24, height=16, min_x=0.0, min_y=0.0, scale_x=1.0, scale_y=1.0)
+    result = apply_filter(surface, plan, bounds, viewport)
+
+    np.testing.assert_allclose(result.data[:, 0, :], result.data[:, -1, :], atol=1e-3)
+    np.testing.assert_allclose(result.data[0, :, :], result.data[-1, :, :], atol=1e-3)
+
+
 def test_apply_filter_diffuse_lighting_basic() -> None:
     diffuse = FilterPrimitive(
         tag="feDiffuseLighting",

@@ -12,8 +12,11 @@ policy.
    succeeds so PPTX consumers can edit the effect directly.
 2. **Resvg promotion** – when a primitive (or stack of primitives) cannot be
    expressed natively, we ask the resvg planner/executor to render just that
-   portion. Today we package the result as a bounded bitmap; future work will
-   promote resvg output to EMF when we can preserve fidelity.
+   portion. Simple vector-friendly cases – for example `feFlood` + `feComposite`,
+   chains that add `feOffset` or `feMerge`, standalone `feBlend`, `feComposite`,
+   `feColorMatrix`, `feComponentTransfer`, or `feConvolveMatrix` – are promoted
+   straight to EMF so the effect stays editable; more complex plans fall back to
+   bounded PNGs while parity work continues.
 3. **Legacy raster fallback** – only if both native and resvg fail do we fall
    back to the original rasterisation path (skia/placeholder glyphs).</br>
 
@@ -23,7 +26,8 @@ Every `FilterEffectResult` contains:
   `resvg`, `raster`, …).
 - `fallback` – the actual asset type (`emf`, `bitmap`, `placeholder`).
 - `metadata` – `renderer` (resvg/skia/native), the primitives that were executed,
-  and any raster attachments.
+  any raster attachments, and the resvg planner summary (`plan_primitives`,
+  serialised `descriptor`) captured for telemetry.
 
 The tracer (`ConversionTracer`) records the decisions (`resvg_attempt`,
 `resvg_success`, `filter_effect`, etc.) so we can audit why a particular effect
@@ -50,6 +54,34 @@ Available values:
 | `legacy`       | Skip resvg and rely on the classic registry/raster path.                |
 | `vector`, `emf`| Force vector fallbacks (used by policy sandboxes).                      |
 | `raster`       | Force raster fallbacks.                                                 |
+
+Per-primitive policy overrides can further control promotion:
+
+- `allow_promotion` – set `false` to keep a primitive on the bitmap path even
+  when an EMF promotion is available.
+- `max_arithmetic_coeff` – caps absolute coefficient values for
+  `feComposite(operator="arithmetic")`; exceeding the limit forces the
+  pipeline back to the raster lane.
+- `max_offset_distance` – bounds `feOffset` promotions by total pixel distance.
+- `max_merge_inputs` – limits how many inputs `feMerge` can fold into a
+  promoted chain.
+- `max_component_functions` / `max_component_table_values` – cap the complexity
+  of `feComponentTransfer` promotions (number of functions and table samples).
+- `max_convolve_kernel` / `max_convolve_order` – restrict the kernel footprint
+  for `feConvolveMatrix` before falling back to raster.
+
+Promotion metadata records the resolved resvg descriptor plus the planner
+summary (`plan_primitives`) so tracers and downstream telemetry can see the
+inputs, intermediate results, and why a promotion was accepted or declined.
+When a policy override or limit blocks a promotion, the tracer emits
+`resvg_promotion_policy_blocked` with the primitive, violated rule, limit, and
+observed value so downstream consumers can tell why the chain reverted to a
+raster fallback.
+
+Conversion summaries expose aggregated `resvg_metrics` counters (attempts,
+plans, promotions, policy blocks, lighting candidates, successes, failures) so
+dashboards can track adoption and hot spots directly from Firestore job
+records. See `docs/telemetry/resvg_metrics.md` for ingestion examples.
 
 The exporter also records a `filter` stage event named `strategy_configured`
 whenever the explicit flag is set.
@@ -99,6 +131,14 @@ print([event.decision for event in report.paint_events if event.paint_type == "f
 Expect to see:
 
 - `resvg_attempt` / `resvg_success` when the planner executed successfully.
+- `resvg_plan_characterised` summarising the primitive stack (tags, inputs,
+  extra metadata) emitted before promotion/rasterisation.
+- `resvg_promoted_emf` when a promotion stays vector/EMF; metadata captures the
+  primitive chain and planner extras.
+- `resvg_promotion_policy_blocked` when a policy override forces the stack back
+  to raster (includes the violated rule and thresholds).
+- `resvg_lighting_promoted` / `resvg_lighting_candidate` when lighting primitives
+  enter the promotion path (prototype coverage for diffuse/specular lighting).
 - `filter_effect` when legacy/native registry handled a primitive.
 - `media_registered` / `geometry_rasterized` when a bitmap asset was generated.
 

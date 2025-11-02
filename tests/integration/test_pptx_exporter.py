@@ -22,6 +22,7 @@ def test_convert_string_produces_slide_with_expected_fill(tmp_path) -> None:
     assert result.slide_count == 1
     stage_totals = result.trace_report.get("stage_totals", {})
     assert stage_totals.get("parser:normalization") == 1
+    assert isinstance(result.trace_report.get("resvg_metrics", {}), dict)
 
     with zipfile.ZipFile(output_path, "r") as archive:
         slide_xml = archive.read("ppt/slides/slide1.xml").decode("utf-8")
@@ -58,6 +59,7 @@ def test_convert_pages_creates_multi_slide_package(tmp_path) -> None:
 
     aggregated_totals = multi_result.aggregated_trace_report.get("stage_totals", {})
     assert aggregated_totals.get("parser:normalization") == len(pages)
+    assert isinstance(multi_result.aggregated_trace_report.get("resvg_metrics", {}), dict)
 
     packaging_totals = multi_result.packaging_report.get("stage_totals", {})
     assert packaging_totals.get("packaging:slide_xml_written") == len(pages)

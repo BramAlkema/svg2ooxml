@@ -21,6 +21,7 @@ class TaskRequest(BaseModel):
     """Request payload from Cloud Tasks."""
 
     job_id: str
+    auth_token_encrypted: str | None = None  # Optional encrypted OAuth token
 
 
 @router.post("/process-export", status_code=status.HTTP_200_OK)
@@ -32,18 +33,42 @@ async def process_export_task(request: TaskRequest) -> dict:
     asynchronously. It should only be accessible from Cloud Tasks.
 
     Args:
-        request: Task request containing job_id
+        request: Task request containing job_id and optional encrypted token
 
     Returns:
         Success status
     """
     job_id = request.job_id
+    encrypted_token = request.auth_token_encrypted
 
     try:
         logger.info(f"Processing export job from Cloud Tasks: {job_id}")
 
+        # Decrypt user token if present
+        user_token = None
+        if encrypted_token:
+            try:
+                from ..auth.encryption import decrypt_token
+                user_token = decrypt_token(encrypted_token)
+                logger.debug(f"Decrypted user token for job {job_id}")
+            except Exception as e:
+                logger.warning(f"Failed to decrypt token for job {job_id}: {e}")
+                # Continue without token (service account fallback)
+
         # Process the job synchronously (within this request)
-        export_service.process_job(job_id)
+        export_service.process_job(job_id, user_token=user_token)
+
+        # Delete encrypted token from job document after successful processing
+        if encrypted_token:
+            try:
+                from google.cloud import firestore
+                db = firestore.Client()
+                db.collection("exports").document(job_id).update({
+                    "auth_token_encrypted": firestore.DELETE_FIELD
+                })
+                logger.debug(f"Deleted encrypted token for job {job_id}")
+            except Exception as e:
+                logger.warning(f"Could not delete encrypted token for job {job_id}: {e}")
 
         logger.info(f"Successfully processed export job: {job_id}")
 

@@ -14,6 +14,7 @@ from fastapi.responses import JSONResponse
 from src.svg2ooxml.api.routes.export import router as export_router
 from src.svg2ooxml.api.routes.tasks import router as tasks_router
 from src.svg2ooxml.api.middleware import RateLimiter, RateLimitMiddleware
+from src.svg2ooxml.api.auth.firebase import initialize_firebase
 
 
 RATE_LIMIT = int(os.getenv("SVG2OOXML_RATE_LIMIT", "60"))
@@ -34,6 +35,16 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     logger.info("Starting svg2ooxml-export service")
     logger.info(f"Project ID: {os.getenv('GCP_PROJECT', 'not set')}")
     logger.info(f"Environment: {os.getenv('ENVIRONMENT', 'production')}")
+
+    # Initialize Firebase Admin SDK
+    try:
+        initialize_firebase()
+        logger.info("Firebase Admin SDK initialized successfully")
+    except Exception as e:
+        logger.error(f"Failed to initialize Firebase: {e}")
+        # Note: We don't raise here to allow the service to start even if Firebase init fails
+        # This allows for graceful degradation (PPTX export will still work)
+        logger.warning("Service starting without Firebase authentication")
 
     yield
 

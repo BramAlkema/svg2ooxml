@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="96">
+  <defs>
+    <filter id="diffuseSpec">
+      <feDiffuseLighting surfaceScale="3" diffuseConstant="1.1" lighting-color="#ffeeaa" result="diff">
+        <fePointLight x="10" y="12" z="16"/>
+      </feDiffuseLighting>
+      <feComposite in="SourceGraphic" in2="diff" operator="over" result="lit"/>
+      <feSpecularLighting surfaceScale="2" specularConstant="0.9" specularExponent="10" lighting-color="#88bbff" result="spec">
+        <feSpotLight x="64" y="-20" z="30" pointsAtX="64" pointsAtY="48" pointsAtZ="0" limitingConeAngle="35"/>
+      </feSpecularLighting>
+      <feComposite in="spec" in2="lit" operator="over"/>
+    </filter>
+  </defs>
+  <rect x="8" y="8" width="112" height="80" rx="12" fill="#334455" filter="url(#diffuseSpec)"/>
+</svg>

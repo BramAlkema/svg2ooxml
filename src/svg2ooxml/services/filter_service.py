@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import copy
 import logging
 import math
+import struct
+from collections import defaultdict
 from collections.abc import Iterable, Mapping
 from dataclasses import replace
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, Callable, cast
 
 import numpy as np
 from lxml import etree
@@ -22,8 +25,20 @@ from svg2ooxml.filters.resvg_bridge import (
     build_filter_node,
     resolve_filter_element,
 )
+from svg2ooxml.filters.primitives.blend import BlendFilter
+from svg2ooxml.filters.primitives.color_matrix import ColorMatrixFilter
+from svg2ooxml.filters.primitives.component_transfer import ComponentTransferFilter
+from svg2ooxml.filters.primitives.composite import CompositeFilter
+from svg2ooxml.filters.primitives.convolve_matrix import ConvolveMatrixFilter
+from svg2ooxml.filters.primitives.flood import FloodFilter
+from svg2ooxml.filters.primitives.lighting import DiffuseLightingFilter, SpecularLightingFilter
+from svg2ooxml.filters.primitives.merge import MergeFilter
+from svg2ooxml.filters.primitives.morphology import MorphologyFilter
+from svg2ooxml.filters.primitives.offset import OffsetFilter
+from svg2ooxml.filters.primitives.tile import TileFilter
 from svg2ooxml.ir.effects import CustomEffect
-from svg2ooxml.render.filters import UnsupportedPrimitiveError, apply_filter, plan_filter
+from svg2ooxml.io.emf.blob import EMFBlob, EMU_PER_INCH
+from svg2ooxml.render.filters import FilterPlan, UnsupportedPrimitiveError, apply_filter, plan_filter
 from svg2ooxml.render.rasterizer import Viewport
 from svg2ooxml.render.surface import Surface
 from svg2ooxml.services.filter_types import FilterEffectResult
@@ -50,6 +65,21 @@ _VECTOR_HINT_TAGS = {
 }
 _RASTER_HINT_TAGS = {
     "feimage",
+}
+
+_PROMOTION_FILTER_FACTORIES = {
+    "feflood": FloodFilter,
+    "feblend": BlendFilter,
+    "fecomposite": CompositeFilter,
+    "fecolormatrix": ColorMatrixFilter,
+    "femorphology": MorphologyFilter,
+    "fetile": TileFilter,
+    "femerge": MergeFilter,
+    "feoffset": OffsetFilter,
+    "fecomponenttransfer": ComponentTransferFilter,
+    "feconvolvematrix": ConvolveMatrixFilter,
+    "fediffuselighting": DiffuseLightingFilter,
+    "fespecularlighting": SpecularLightingFilter,
 }
 
 
@@ -177,6 +207,7 @@ class FilterService:
         results: list[FilterEffectResult] = []
         emf_sources: list[FilterEffectResult] = []
         raster_results_cache: list[FilterEffectResult] = []
+        descriptor_results: list[FilterEffectResult] | None = None
         strategy = self._resolve_strategy(filter_context)
 
         resvg_enabled = strategy not in {"legacy", "vector", "emf", "raster"}
@@ -185,7 +216,7 @@ class FilterService:
 
         resvg_result: FilterEffectResult | None = None
         if resvg_enabled:
-            resvg_result = self._render_resvg_filter(descriptor, filter_context, filter_ref)
+            resvg_result = self._render_resvg_filter(descriptor, filter_element, filter_context, filter_ref)
             if resvg_result is not None and resvg_only:
                 return [resvg_result]
 
@@ -197,36 +228,40 @@ class FilterService:
                 if strategy == "native" and not resvg_preferred:
                     return results
 
-        if strategy in {"vector", "emf"} or (not results and strategy in {"auto", "legacy"}):
-            computed_vector = self._render_vector(filter_element, filter_context)
-            if computed_vector:
-                emf_sources.extend(result for result in computed_vector if result.fallback == "emf")
-                if results:
-                    results.extend(computed_vector)
-                else:
-                    results = list(computed_vector)
-                if strategy in {"vector", "emf"} and not resvg_preferred:
-                    return results
+        skip_legacy = resvg_result is not None and not resvg_preferred and not results
 
-        descriptor_results = self._descriptor_fallback(
-            descriptor_payload,
-            bounds_payload,
-            filter_ref,
-            strategy_hint=strategy,
-        )
-        if descriptor_results:
-            results.extend(descriptor_results)
-            if emf_sources:
-                self._attach_emf_metadata(results, emf_sources)
+        if not skip_legacy:
+            if strategy in {"vector", "emf"} or (not results and strategy in {"auto", "legacy"}):
+                computed_vector = self._render_vector(filter_element, filter_context)
+                if computed_vector:
+                    emf_sources.extend(result for result in computed_vector if result.fallback == "emf")
+                    if results:
+                        results.extend(computed_vector)
+                    else:
+                        results = list(computed_vector)
+                    if strategy in {"vector", "emf"} and not resvg_preferred:
+                        return results
 
-        if strategy in {"auto", "raster", "legacy"}:
-            raster_results = self._render_raster(filter_element, filter_context, filter_ref, strategy=strategy)
-            if raster_results:
-                raster_results_cache = list(raster_results)
-                if descriptor_results:
-                    self._attach_raster_metadata(results, raster_results)
-                else:
-                    results.extend(raster_results)
+            descriptor_results = self._descriptor_fallback(
+                descriptor_payload,
+                bounds_payload,
+                filter_ref,
+                strategy_hint=strategy,
+            )
+            if descriptor_results:
+                results.extend(descriptor_results)
+                if emf_sources:
+                    self._attach_emf_metadata(results, emf_sources)
+
+            if strategy in {"auto", "raster", "legacy"}:
+                raster_results = self._render_raster(filter_element, filter_context, filter_ref, strategy=strategy)
+                if raster_results:
+                    raster_results_cache = list(raster_results)
+                    if descriptor_results:
+                        self._attach_raster_metadata(results, raster_results)
+                    else:
+                        results.extend(raster_results)
+
         if resvg_result is not None and resvg_preferred:
             preferred_results = [resvg_result]
             if emf_sources:
@@ -235,6 +270,8 @@ class FilterService:
                 self._attach_raster_metadata(preferred_results, raster_results_cache)
             return preferred_results
         if resvg_result is not None and resvg_enabled:
+            if not results:
+                return [resvg_result]
             results.append(resvg_result)
         return results
 
@@ -329,6 +366,7 @@ class FilterService:
     def _render_resvg_filter(
         self,
         descriptor: ResolvedFilter,
+        filter_element: etree._Element,
         filter_context: FilterContext,
         filter_id: str,
     ) -> FilterEffectResult | None:
@@ -359,6 +397,26 @@ class FilterService:
             _trace("resvg_plan_unsupported")
             return None
 
+        plan_summary = [
+            {
+                key: value
+                for key, value in {
+                    "tag": primitive_plan.tag,
+                    "inputs": list(primitive_plan.inputs),
+                    "result": primitive_plan.result_name,
+                    "metadata": self._serialise_plan_extra(primitive_plan.extra) if primitive_plan.extra else None,
+                }.items()
+                if value is not None and value != []
+            }
+            for primitive_plan in plan.primitives
+        ]
+        _trace(
+            "resvg_plan_characterised",
+            primitive_count=len(plan.primitives),
+            primitive_tags=[primitive.tag for primitive in plan.primitives],
+            plan_primitives=plan_summary,
+        )
+
         try:
             bounds = self._resvg_bounds(options_map, descriptor)
             viewport = self._resvg_viewport(bounds)
@@ -366,6 +424,33 @@ class FilterService:
             self._logger.debug("Failed to compute resvg viewport for %s", filter_id, exc_info=True)
             _trace("resvg_viewport_failed", error=str(exc))
             return None
+
+        policy_overrides = self._policy_primitive_overrides(filter_context)
+
+        policy_block_reason = self._resvg_policy_block(plan, viewport, filter_context, policy_overrides)
+        if policy_block_reason is not None:
+            _trace("resvg_policy_blocked", reason=policy_block_reason)
+            return None
+
+        promotion = self._promote_resvg_plan(
+            plan,
+            filter_element,
+            filter_context,
+            viewport,
+            policy_overrides,
+            descriptor,
+            trace=_trace,
+        )
+        if promotion is not None:
+            _trace(
+                "resvg_promoted_emf",
+                primitive=plan.primitives[0].tag,
+                width_px=viewport.width,
+                height_px=viewport.height,
+                primitive_count=len(plan.primitives),
+                primitives=[primitive.tag for primitive in plan.primitives],
+            )
+            return promotion
 
         source_surface = self._seed_source_surface(viewport.width, viewport.height)
         try:
@@ -377,6 +462,20 @@ class FilterService:
             self._logger.debug("Resvg filter application failed for %s", filter_id, exc_info=True)
             _trace("resvg_execution_failed", error=str(exc))
             return None
+
+        if self._plan_has_turbulence(plan):
+            try:
+                emf_effect = self._turbulence_emf_effect(result_surface, viewport, plan, filter_id)
+            except Exception:  # pragma: no cover - fall back to raster
+                _trace("resvg_turbulence_emf_failed")
+            else:
+                _trace(
+                    "resvg_turbulence_emf",
+                    primitive_count=len(plan.primitives),
+                    width_px=viewport.width,
+                    height_px=viewport.height,
+                )
+                return emf_effect
 
         png_bytes = _surface_to_png(result_surface)
         self._resvg_counter += 1
@@ -399,14 +498,7 @@ class FilterService:
                 "width": bounds[2] - bounds[0],
                 "height": bounds[3] - bounds[1],
             },
-            "plan_primitives": [
-                {
-                    "tag": primitive_plan.tag,
-                    "inputs": list(primitive_plan.inputs),
-                    "result": primitive_plan.result_name,
-                }
-                for primitive_plan in plan.primitives
-            ],
+            "plan_primitives": plan_summary,
         }
         metadata["fallback_assets"] = [
             {
@@ -513,6 +605,541 @@ class FilterService:
         surface.data[..., 3] = base_alpha
         surface.data[..., :3] *= surface.data[..., 3:4]
         return surface
+
+    def _promote_resvg_plan(
+        self,
+        plan: FilterPlan,
+        filter_element: etree._Element,
+        context: FilterContext,
+        viewport: Viewport,
+        overrides: dict[str, dict[str, Any]] | None,
+        descriptor: ResolvedFilter,
+        *,
+        trace: Callable[..., None] | None = None,
+    ) -> FilterEffectResult | None:
+        if not plan.primitives:
+            return None
+
+        matched_elements = self._match_plan_elements(filter_element, plan)
+        if matched_elements is None:
+            return None
+
+        pipeline_state: dict[str, FilterResult] = {}
+        if isinstance(context.pipeline_state, dict):
+            pipeline_state.update(context.pipeline_state)
+        original_pipeline = context.pipeline_state
+        context.pipeline_state = pipeline_state
+
+        lighting_candidates: list[str] = []
+        lighting_primitives: list[str] = []
+        try:
+            stage_results: list[FilterResult] = []
+            for primitive_plan, element in zip(plan.primitives, matched_elements):
+                tag = primitive_plan.tag.lower()
+                entry_override = (overrides or {}).get(tag)
+                if entry_override and entry_override.get("allow_promotion") is False:
+                    if trace is not None:
+                        trace(
+                            "resvg_promotion_policy_blocked",
+                            primitive=tag,
+                            reason="allow_promotion=false",
+                        )
+                    return None
+
+                promoter = self._promotion_filter(tag)
+                if promoter is None:
+                    if trace is not None:
+                        if tag in {"fediffuselighting", "fespecularlighting"}:
+                            trace(
+                                "resvg_lighting_candidate",
+                                primitive=tag,
+                                plan_extra=self._serialise_plan_extra(primitive_plan.extra) if primitive_plan.extra else {},
+                            )
+                        else:
+                            trace(
+                                "resvg_promotion_missing_handler",
+                                primitive=tag,
+                            )
+                    if tag in {"fediffuselighting", "fespecularlighting"}:
+                        lighting_candidates.append(tag)
+                    return None
+
+                promoted_result = promoter.apply(copy.deepcopy(element), context)
+                if trace is not None and tag in {"fediffuselighting", "fespecularlighting"}:
+                    trace(
+                        "resvg_lighting_promoted",
+                        primitive=tag,
+                        plan_extra=self._serialise_plan_extra(primitive_plan.extra) if primitive_plan.extra else {},
+                    )
+                    lighting_primitives.append(tag)
+                elif tag in {"fediffuselighting", "fespecularlighting"}:
+                    lighting_primitives.append(tag)
+                violation = None
+                if entry_override:
+                    violation = self._promotion_policy_violation(tag, promoted_result, entry_override)
+                    if violation is not None and trace is not None:
+                        trace(
+                            "resvg_promotion_policy_blocked",
+                            primitive=tag,
+                            **violation,
+                        )
+                if violation is not None:
+                    return None
+
+                if primitive_plan.result_name:
+                    pipeline_state[primitive_plan.result_name] = promoted_result
+                stage_results.append(promoted_result)
+
+            final_result = stage_results[-1]
+            if final_result.fallback not in {"emf", "vector", None}:
+                return None
+            if final_result.fallback is None:
+                drawingml_payload = final_result.drawingml or ""
+                if not drawingml_payload.strip():
+                    return None
+
+            rendered = self._renderer.render([final_result], context=context)
+            if not rendered:
+                return None
+
+            effect = rendered[0]
+            metadata = dict(effect.metadata or {})
+            assets = metadata.get("fallback_assets")
+            if isinstance(assets, list):
+                metadata["fallback_assets"] = list(assets)
+            self._inject_promotion_metadata(metadata, plan, viewport)
+            metadata.setdefault("renderer", "resvg")
+            metadata.setdefault("resvg_promotion", final_result.fallback or "vector")
+            metadata.setdefault("promotion_source", "resvg")
+            metadata.setdefault("promotion_primitives", [primitive.tag for primitive in plan.primitives])
+            metadata.setdefault("descriptor", self._serialize_descriptor(descriptor))
+            metadata.setdefault("primitives", [primitive.tag for primitive in descriptor.primitives])
+            if lighting_candidates:
+                metadata.setdefault("resvg_lighting_candidate", lighting_candidates)
+            if lighting_primitives:
+                metadata.setdefault("lighting_primitives", lighting_primitives)
+            if descriptor.filter_id:
+                metadata.setdefault("filter_id", descriptor.filter_id)
+            metadata.setdefault("filter_units", descriptor.filter_units)
+            metadata.setdefault("primitive_units", descriptor.primitive_units)
+            return FilterEffectResult(
+                effect=effect.effect,
+                strategy=effect.strategy,
+                metadata=metadata,
+                fallback=effect.fallback,
+            )
+        finally:
+            context.pipeline_state = original_pipeline
+
+    @staticmethod
+    def _promotion_filter(tag: str):
+        factory = _PROMOTION_FILTER_FACTORIES.get(tag)
+        if factory is None:
+            return None
+        return factory()
+
+    @staticmethod
+    def _match_plan_elements(
+        filter_element: etree._Element,
+        plan: FilterPlan,
+    ) -> list[etree._Element] | None:
+        buckets: dict[str, list[etree._Element]] = defaultdict(list)
+        results: dict[str, etree._Element] = {}
+        for child in filter_element:
+            local = child.tag.split("}", 1)[-1].lower() if "}" in child.tag else child.tag.lower()
+            buckets[local].append(child)
+            result_name = child.get("result")
+            if result_name:
+                token = result_name.strip()
+                if token and token not in results:
+                    results[token] = child
+
+        ordered: list[etree._Element] = []
+        used: set[etree._Element] = set()
+        for primitive in plan.primitives:
+            local = primitive.tag.lower()
+            candidate: etree._Element | None = None
+            if primitive.result_name:
+                candidate = results.get(primitive.result_name)
+                if candidate in used:
+                    candidate = None
+            if candidate is None:
+                bucket = buckets.get(local)
+                while bucket:
+                    contender = bucket.pop(0)
+                    if contender not in used:
+                        candidate = contender
+                        break
+            if candidate is None:
+                return None
+            ordered.append(candidate)
+            used.add(candidate)
+        return ordered
+
+    @staticmethod
+    def _promotion_policy_violation(
+        tag: str,
+        result: FilterResult,
+        policy_entry: Mapping[str, Any],
+    ) -> dict[str, Any] | None:
+        if not isinstance(policy_entry, Mapping):
+            return None
+        metadata = result.metadata if isinstance(result.metadata, dict) else {}
+
+        max_coeff = policy_entry.get("max_arithmetic_coeff")
+        if (
+            tag == "fecomposite"
+            and metadata.get("operator") == "arithmetic"
+            and isinstance(max_coeff, (int, float))
+        ):
+            limit = abs(float(max_coeff))
+            for key in ("k1", "k2", "k3", "k4"):
+                coeff = metadata.get(key)
+                if isinstance(coeff, (int, float)) and abs(coeff) > limit:
+                    return {
+                        "rule": "max_arithmetic_coeff",
+                        "limit": limit,
+                        "coefficient": key,
+                        "observed": float(coeff),
+                    }
+
+        if tag == "feoffset":
+            max_distance = policy_entry.get("max_offset_distance")
+            if isinstance(max_distance, (int, float)):
+                dx = metadata.get("dx")
+                dy = metadata.get("dy")
+                dx_val = float(dx) if isinstance(dx, (int, float)) else 0.0
+                dy_val = float(dy) if isinstance(dy, (int, float)) else 0.0
+                distance = math.hypot(dx_val, dy_val)
+                if distance > float(max_distance):
+                    return {
+                        "rule": "max_offset_distance",
+                        "limit": float(max_distance),
+                        "observed": distance,
+                        "dx": dx_val,
+                        "dy": dy_val,
+                    }
+
+        if tag == "femerge":
+            max_inputs = policy_entry.get("max_merge_inputs")
+            if isinstance(max_inputs, (int, float)):
+                inputs = metadata.get("inputs")
+                count = len(inputs) if isinstance(inputs, (list, tuple)) else 0
+                if count > int(max_inputs):
+                    return {
+                        "rule": "max_merge_inputs",
+                        "limit": int(max_inputs),
+                        "observed": count,
+                    }
+
+        if tag == "fecomponenttransfer":
+            functions = metadata.get("functions")
+            if isinstance(functions, list):
+                max_functions = policy_entry.get("max_component_functions")
+                if isinstance(max_functions, (int, float)) and len(functions) > int(max_functions):
+                    return {
+                        "rule": "max_component_functions",
+                        "limit": int(max_functions),
+                        "observed": len(functions),
+                    }
+                max_table_values = policy_entry.get("max_component_table_values")
+                if isinstance(max_table_values, (int, float)):
+                    limit = int(max_table_values)
+                    for func in functions:
+                        params = func.get("params") if isinstance(func, Mapping) else None
+                        values = params.get("values") if isinstance(params, Mapping) else None
+                        if isinstance(values, list) and len(values) > limit:
+                            return {
+                                "rule": "max_component_table_values",
+                                "limit": limit,
+                                "observed": len(values),
+                                "channel": func.get("channel"),
+                            }
+
+        if tag == "feconvolvematrix":
+            max_kernel = policy_entry.get("max_convolve_kernel")
+            if isinstance(max_kernel, (int, float)):
+                kernel = metadata.get("kernel")
+                count = len(kernel) if isinstance(kernel, list) else 0
+                if count > int(max_kernel):
+                    return {
+                        "rule": "max_convolve_kernel",
+                        "limit": int(max_kernel),
+                        "observed": count,
+                    }
+            max_order = policy_entry.get("max_convolve_order")
+            if isinstance(max_order, (int, float)):
+                order = metadata.get("order")
+                if isinstance(order, (list, tuple)) and order:
+                    span = 1
+                    numeric = True
+                    for axis in order:
+                        if isinstance(axis, (int, float)):
+                            span *= int(axis)
+                        else:
+                            numeric = False
+                            break
+                    if numeric and span > int(max_order):
+                        return {
+                            "rule": "max_convolve_order",
+                            "limit": int(max_order),
+                            "observed": span,
+                        }
+
+        return None
+
+    @staticmethod
+    def _promotion_policy_allows(
+        tag: str,
+        result: FilterResult,
+        policy_entry: Mapping[str, Any],
+    ) -> bool:
+        violation = FilterService._promotion_policy_violation(tag, result, policy_entry)
+        return violation is None
+
+    @staticmethod
+    def _inject_promotion_metadata(metadata: dict[str, Any], plan: FilterPlan, viewport: Viewport) -> None:
+        metadata.setdefault("width_px", viewport.width)
+        metadata.setdefault("height_px", viewport.height)
+        metadata.setdefault("promotion_plan_length", len(plan.primitives))
+        plan_summary = []
+        for primitive_plan in plan.primitives:
+            entry = {
+                "tag": primitive_plan.tag,
+                "inputs": list(primitive_plan.inputs),
+                "result": primitive_plan.result_name,
+            }
+            if primitive_plan.extra:
+                entry["metadata"] = FilterService._serialise_plan_extra(primitive_plan.extra)
+            plan_summary.append(entry)
+        metadata.setdefault("plan_primitives", plan_summary)
+
+    def _resvg_policy_block(
+        self,
+        plan: "FilterPlan",
+        viewport: Viewport,
+        context: FilterContext,
+        overrides: dict[str, dict[str, Any]] | None = None,
+    ) -> str | None:
+        if overrides is None:
+            overrides = self._policy_primitive_overrides(context)
+        if not overrides:
+            return None
+        pixels = viewport.width * viewport.height
+        for primitive_plan in plan.primitives:
+            tag = primitive_plan.tag.lower()
+            policy_entry = overrides.get(tag)
+            if not policy_entry:
+                continue
+            if policy_entry.get("allow_resvg") is False:
+                return f"{tag}:disabled"
+            max_pixels = policy_entry.get("max_pixels")
+            if isinstance(max_pixels, (int, float)) and max_pixels > 0 and pixels > max_pixels:
+                return f"{tag}:max_pixels_exceeded"
+        return None
+
+    def _policy_primitive_overrides(self, context: FilterContext) -> dict[str, dict[str, Any]]:
+        options = context.options if isinstance(context.options, dict) else {}
+        policy = options.get("policy")
+        if not isinstance(policy, Mapping):
+            return {}
+        primitives = policy.get("primitives")
+        if not isinstance(primitives, Mapping):
+            return {}
+        overrides: dict[str, dict[str, Any]] = {}
+        for name, config in primitives.items():
+            key = str(name).strip().lower()
+            if not key:
+                continue
+            if not isinstance(config, Mapping):
+                continue
+            entry: dict[str, Any] = {}
+            if "allow_resvg" in config:
+                allow_value = config.get("allow_resvg")
+                if isinstance(allow_value, str):
+                    token = allow_value.strip().lower()
+                    if token in {"true", "1", "yes", "on"}:
+                        entry["allow_resvg"] = True
+                    elif token in {"false", "0", "no", "off"}:
+                        entry["allow_resvg"] = False
+                elif isinstance(allow_value, bool):
+                    entry["allow_resvg"] = allow_value
+                elif allow_value is not None:
+                    entry["allow_resvg"] = bool(allow_value)
+            if "allow_promotion" in config:
+                promote_value = config.get("allow_promotion")
+                if isinstance(promote_value, str):
+                    token = promote_value.strip().lower()
+                    if token in {"true", "1", "yes", "on"}:
+                        entry["allow_promotion"] = True
+                    elif token in {"false", "0", "no", "off"}:
+                        entry["allow_promotion"] = False
+                elif isinstance(promote_value, bool):
+                    entry["allow_promotion"] = promote_value
+                elif promote_value is not None:
+                    entry["allow_promotion"] = bool(promote_value)
+            if "max_pixels" in config:
+                try:
+                    value = float(config.get("max_pixels"))
+                except (TypeError, ValueError):
+                    value = None
+                if value is not None and value > 0:
+                    entry["max_pixels"] = int(value)
+            if "max_arithmetic_coeff" in config:
+                try:
+                    coeff_value = float(config.get("max_arithmetic_coeff"))
+                except (TypeError, ValueError):
+                    coeff_value = None
+                if coeff_value is not None and coeff_value >= 0:
+                    entry["max_arithmetic_coeff"] = float(coeff_value)
+            if "max_offset_distance" in config:
+                try:
+                    distance = float(config.get("max_offset_distance"))
+                except (TypeError, ValueError):
+                    distance = None
+                if distance is not None and distance >= 0:
+                    entry["max_offset_distance"] = float(distance)
+            if "max_merge_inputs" in config:
+                try:
+                    merge_inputs = float(config.get("max_merge_inputs"))
+                except (TypeError, ValueError):
+                    merge_inputs = None
+                if merge_inputs is not None and merge_inputs >= 0:
+                    entry["max_merge_inputs"] = int(merge_inputs)
+            if "max_component_functions" in config:
+                try:
+                    func_limit = float(config.get("max_component_functions"))
+                except (TypeError, ValueError):
+                    func_limit = None
+                if func_limit is not None and func_limit >= 0:
+                    entry["max_component_functions"] = int(func_limit)
+            if "max_component_table_values" in config:
+                try:
+                    table_limit = float(config.get("max_component_table_values"))
+                except (TypeError, ValueError):
+                    table_limit = None
+                if table_limit is not None and table_limit >= 0:
+                    entry["max_component_table_values"] = int(table_limit)
+            if "max_convolve_kernel" in config:
+                try:
+                    kernel_limit = float(config.get("max_convolve_kernel"))
+                except (TypeError, ValueError):
+                    kernel_limit = None
+                if kernel_limit is not None and kernel_limit >= 0:
+                    entry["max_convolve_kernel"] = int(kernel_limit)
+            if "max_convolve_order" in config:
+                try:
+                    order_limit = float(config.get("max_convolve_order"))
+                except (TypeError, ValueError):
+                    order_limit = None
+                if order_limit is not None and order_limit >= 0:
+                    entry["max_convolve_order"] = int(order_limit)
+            if entry:
+                overrides[key] = entry
+        return overrides
+
+    @staticmethod
+    def _serialise_plan_extra(extra: Mapping[str, Any]) -> dict[str, Any]:
+        def _coerce(value: Any) -> Any:
+            if isinstance(value, (str, int, float, bool)) or value is None:
+                return value
+            if isinstance(value, Mapping):
+                return {k: _coerce(v) for k, v in value.items()}
+            if isinstance(value, (list, tuple)):
+                return [_coerce(v) for v in value]
+            return str(value)
+
+        return {key: _coerce(val) for key, val in extra.items()}
+
+    @staticmethod
+    def _plan_has_turbulence(plan: FilterPlan) -> bool:
+        return any(primitive.tag.lower() == "feturbulence" for primitive in plan.primitives)
+
+    @staticmethod
+    def _surface_to_bmp(surface: Surface) -> bytes:
+        data = np.clip(surface.data, 0.0, 1.0)
+        rgb = data[..., :3]
+        alpha = data[..., 3:4]
+        safe_alpha = np.where(alpha > 1e-6, alpha, 1.0)
+        unpremult = np.where(alpha > 1e-6, rgb / safe_alpha, 0.0)
+        unpremult = np.clip(unpremult, 0.0, 1.0)
+        bgr = (unpremult[..., ::-1] * 255.0 + 0.5).astype(np.uint8)
+        height, width = bgr.shape[:2]
+        row_stride = (width * 3 + 3) & ~3
+        padding = row_stride - width * 3
+        pad_bytes = b"\x00" * padding
+        rows = []
+        for y in range(height - 1, -1, -1):
+            rows.append(bgr[y].tobytes() + pad_bytes)
+        pixel_data = b"".join(rows)
+        header_size = 40
+        dib_header = struct.pack(
+            "<IIIHHIIIIII",
+            header_size,
+            width,
+            height,
+            1,
+            24,
+            0,
+            len(pixel_data),
+            int(96 / 0.0254),
+            int(96 / 0.0254),
+            0,
+            0,
+        )
+        file_header = b"BM" + struct.pack(
+            "<IHHI",
+            14 + len(dib_header) + len(pixel_data),
+            0,
+            0,
+            14 + len(dib_header),
+        )
+        return file_header + dib_header + pixel_data
+
+    def _turbulence_emf_effect(
+        self,
+        surface: Surface,
+        viewport: Viewport,
+        plan: FilterPlan,
+        filter_id: str,
+    ) -> FilterEffectResult:
+        width_px = max(1, int(round(viewport.width)))
+        height_px = max(1, int(round(viewport.height)))
+        bmp_bytes = self._surface_to_bmp(surface)
+        width_emu = max(1, int(round(width_px * EMU_PER_INCH / 96)))
+        height_emu = max(1, int(round(height_px * EMU_PER_INCH / 96)))
+        blob = EMFBlob(width_emu=width_emu, height_emu=height_emu)
+        blob.draw_bitmap(
+            0,
+            0,
+            width_emu,
+            height_emu,
+            0,
+            0,
+            width_px,
+            height_px,
+            bmp_bytes,
+        )
+        emf_bytes = blob.finalize()
+        metadata: dict[str, Any] = {
+            "renderer": "resvg",
+            "resvg_promotion": "emf",
+            "promotion_source": "resvg",
+            "promotion_primitives": [primitive.tag for primitive in plan.primitives],
+            "fallback_assets": [
+                {
+                    "type": "emf",
+                    "format": "emf",
+                    "data": emf_bytes,
+                    "width_px": width_px,
+                    "height_px": height_px,
+                }
+            ],
+            "turbulence_emf": True,
+            "filter_id": filter_id,
+        }
+        effect = CustomEffect(drawingml="")
+        return FilterEffectResult(effect=effect, strategy="vector", metadata=metadata, fallback="emf")
 
     @staticmethod
     def _coerce_float(value: Any, default: float) -> float:
@@ -803,6 +1430,7 @@ class FilterService:
             "primitive_count": len(descriptor.primitives),
             "primitive_tags": [primitive.tag for primitive in descriptor.primitives],
             "filter_region": dict(descriptor.region or {}),
+            "primitive_metadata": [dict(primitive.extras) for primitive in descriptor.primitives],
         }
 
     @staticmethod
