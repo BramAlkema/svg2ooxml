@@ -8,12 +8,29 @@ options:
   logging: CLOUD_LOGGING_ONLY
 
 steps:
+  # Build custom run image with OpenGL libraries for skia-python
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - -f
+      - run.Dockerfile
+      - -t
+      - $_REGION-docker.pkg.dev/$PROJECT_ID/$_REPOSITORY/run:latest
+      - .
+
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - push
+      - $_REGION-docker.pkg.dev/$PROJECT_ID/$_REPOSITORY/run:latest
+
+  # Build application using buildpacks with custom run image
   - name: gcr.io/k8s-skaffold/pack
     args:
       - build
       - $_REGION-docker.pkg.dev/$PROJECT_ID/$_REPOSITORY/$_IMAGE:$COMMIT_SHA
       - --path=.
       - --builder=gcr.io/buildpacks/builder:v1
+      - --run-image=$_REGION-docker.pkg.dev/$PROJECT_ID/$_REPOSITORY/run:latest
       - --tag=$_REGION-docker.pkg.dev/$PROJECT_ID/$_REPOSITORY/$_IMAGE:latest
       - --publish
 
