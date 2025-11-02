@@ -1,0 +1,6 @@
+steps:
+  # Deploy to Firebase Hosting using community builder
+  - name: 'gcr.io/powerful-layout-467812-p1/firebase'
+    args: ['deploy', '--project=powerful-layout-467812-p1', '--only=hosting']
+
+timeout: 600s
