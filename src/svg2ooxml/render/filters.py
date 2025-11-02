@@ -459,6 +459,7 @@ def _plan_image_primitive(primitive: FilterPrimitive) -> Dict[str, Any]:
     image = skia.Image.MakeFromEncoded(data)
     if image is None:
         raise UnsupportedPrimitiveError(primitive.tag, "failed to decode feImage payload", primitive=primitive)
+
     try:
         pixels = image.tobytes()
     except Exception as exc:  # pragma: no cover - defensive
@@ -469,6 +470,12 @@ def _plan_image_primitive(primitive: FilterPrimitive) -> Dict[str, Any]:
         .astype(np.float32)
         / 255.0
     )
+
+    # Handle platform-specific color channel ordering
+    # Some Skia builds use BGRA instead of RGBA
+    if image.colorType() == skia.ColorType.kBGRA_8888_ColorType:
+        # Swap R and B channels: BGRA -> RGBA
+        array[:, :, [0, 2]] = array[:, :, [2, 0]]
     return {
         "surface": Surface(image.width(), image.height(), array),
         "mime": mime,
