@@ -265,13 +265,17 @@ class SvgToPptxExporter:
             message = parse_result.error_message or "SVG parsing failed."
             raise SvgConversionError(message)
 
-        services_override = None
-        if self._filter_strategy is not None:
+        # Use the parser's services which includes the StyleResolver with loaded CSS rules
+        services_override = parse_result.services
+        if services_override is None:
             services_override = configure_services(filter_strategy=self._filter_strategy)
-            if parse_result.width_px is not None:
-                setattr(services_override, "viewport_width", parse_result.width_px)
-            if parse_result.height_px is not None:
-                setattr(services_override, "viewport_height", parse_result.height_px)
+        elif self._filter_strategy and services_override.filter_service is not None:
+            services_override.filter_service.set_strategy(self._filter_strategy)
+
+        if parse_result.width_px is not None:
+            setattr(services_override, "viewport_width", parse_result.width_px)
+        if parse_result.height_px is not None:
+            setattr(services_override, "viewport_height", parse_result.height_px)
 
         animations = []
         timeline_scenes: list[AnimationScene] = []
