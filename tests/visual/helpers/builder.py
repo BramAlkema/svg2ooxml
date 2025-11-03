@@ -39,7 +39,13 @@ class PptxBuilder:
         if not parse_result.success or parse_result.svg_root is None:
             raise VisualBuildError(f"SVG parsing failed: {parse_result.error_message}")
 
-        services = configure_services(filter_strategy=self._filter_strategy)
+        # Use the parser's services which includes the StyleResolver with loaded CSS rules
+        services = parse_result.services
+        if services is None:
+            services = configure_services(filter_strategy=self._filter_strategy)
+        elif self._filter_strategy and services.filter_service is not None:
+            services.filter_service.set_strategy(self._filter_strategy)
+
         if parse_result.width_px is not None:
             setattr(services, "viewport_width", parse_result.width_px)
         if parse_result.height_px is not None:
