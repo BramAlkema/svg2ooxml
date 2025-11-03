@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from lxml import etree
 
 from svg2ooxml.filters.base import Filter, FilterContext, FilterResult
+from svg2ooxml.filters.utils.dml import extract_effect_children, is_effect_list, merge_effect_fragments
 
 
 SUPPORTED_OPERATORS = {
@@ -38,7 +39,12 @@ class CompositeFilter(Filter):
     def apply(self, primitive: etree._Element, context: FilterContext) -> FilterResult:
         params = self._parse_params(primitive)
         pipeline = context.pipeline_state or {}
-        inputs = self._resolve_inputs(pipeline, params)
+        input_1_name = params.input_1 or "SourceGraphic"
+        input_2_name = params.input_2 or ("SourceAlpha" if params.operator in {"in", "out"} else "SourceGraphic")
+
+        input_1 = self._lookup_input(pipeline, input_1_name)
+        input_2 = self._lookup_input(pipeline, input_2_name)
+
         metadata = {
             "filter_type": self.filter_type,
             "operator": params.operator,
@@ -56,16 +62,19 @@ class CompositeFilter(Filter):
                 }
             )
 
-        metadata["inputs"] = [name for name, _ in inputs]
-        if inputs:
+        metadata["inputs"] = [name for name in (input_1_name, input_2_name) if name]
+        source_metadata: dict[str, dict[str, object]] = {}
+        if input_1 is not None and input_1.metadata:
+            source_metadata[input_1_name] = dict(input_1.metadata)
+        if input_2 is not None and input_2.metadata and input_2_name != input_1_name:
+            source_metadata[input_2_name] = dict(input_2.metadata)
+        if source_metadata:
             metadata["source_metadata"] = {
-                name: dict(candidate.metadata or {})
-                for name, candidate in inputs
-                if candidate.metadata
+                key: value for key, value in source_metadata.items()
             }
 
         if params.operator == "over":
-            drawingml, fallback, propagated_warnings = self._combine_over(inputs)
+            drawingml, fallback, propagated_warnings = self._combine_over(input_1, input_2)
             metadata["native_support"] = bool(drawingml) or fallback is None
             if fallback:
                 metadata["fallback_reason"] = f"from_inputs:{fallback}"
@@ -76,8 +85,8 @@ class CompositeFilter(Filter):
                 metadata=metadata,
                 warnings=propagated_warnings,
             )
-        if params.operator in {"in", "out", "atop", "xor"} and len(inputs) == 2:
-            drawingml, fallback = self._combine_masking(params.operator, inputs)
+        if params.operator in {"in", "out", "atop", "xor"}:
+            drawingml, fallback = self._combine_masking(params.operator, input_1, input_2)
             metadata["native_support"] = drawingml != ""
             if fallback:
                 metadata["fallback_reason"] = fallback
@@ -89,7 +98,7 @@ class CompositeFilter(Filter):
                 warnings=(),
             )
 
-        if inputs:
+        if input_1 is not None or input_2 is not None:
             metadata["native_support"] = False
             metadata["fallback_reason"] = f"operator:{params.operator}"
             return FilterResult(
@@ -144,31 +153,31 @@ class CompositeFilter(Filter):
         except ValueError:
             return 0.0
 
-    def _resolve_inputs(
+    def _lookup_input(
         self,
         pipeline: dict[str, FilterResult],
-        params: CompositeParams,
-    ) -> list[tuple[str, FilterResult]]:
-        resolved: list[tuple[str, FilterResult]] = []
-        for name in (params.input_1, params.input_2):
-            if not name or name in {"SourceGraphic", "SourceAlpha"}:
-                continue
-            candidate = pipeline.get(name)
-            if candidate is not None:
-                resolved.append((name, candidate))
-        return resolved
+        name: str,
+    ) -> FilterResult | None:
+        if not name:
+            return None
+        candidate = pipeline.get(name)
+        if candidate is not None:
+            return candidate
+        if name in {"SourceGraphic", "SourceAlpha"}:
+            return pipeline.get(name)
+        return None
 
     def _combine_over(
         self,
-        inputs: list[tuple[str, FilterResult]],
+        input_1: FilterResult | None,
+        input_2: FilterResult | None,
     ) -> tuple[str, str | None, tuple[str, ...]]:
-        if not inputs:
-            return "", None, ()
-
         parts: list[str] = []
         fallback: str | None = None
         warnings: list[str] = []
-        for name, result in inputs:
+        for result in (input_1, input_2):
+            if result is None:
+                continue
             snippet = (result.drawingml or "").strip()
             if snippet:
                 parts.append(snippet)
@@ -182,10 +191,9 @@ class CompositeFilter(Filter):
         if len(parts) == 1:
             return parts[0], fallback, tuple(warnings)
 
-        if all(self._looks_like_effect_list(part) for part in parts):
-            inner = "".join(self._extract_effect_children(part) for part in parts)
-            return f"<a:effectLst>{inner}</a:effectLst>", fallback, tuple(warnings)
-
+        merged = merge_effect_fragments(*parts)
+        if merged:
+            return merged, fallback, tuple(warnings)
         return "".join(parts), fallback, tuple(warnings)
 
     @staticmethod
@@ -199,50 +207,29 @@ class CompositeFilter(Filter):
         new_rank = precedence.get(new_value, 0)
         return new_value if new_rank > current_rank else current
 
-    @staticmethod
-    def _looks_like_effect_list(drawingml: str) -> bool:
-        return drawingml.startswith("<a:effectLst")
-
-    @staticmethod
-    def _extract_effect_children(drawingml: str) -> str:
-        if drawingml.endswith("/>"):
-            return ""
-        start = drawingml.find(">")
-        end = drawingml.rfind("</a:effectLst>")
-        if start == -1 or end == -1 or end <= start:
-            return drawingml
-        return drawingml[start + 1 : end]
-
     def _combine_masking(
         self,
         operator: str,
-        inputs: list[tuple[str, FilterResult]],
+        source: FilterResult | None,
+        mask: FilterResult | None,
     ) -> tuple[str, str | None]:
-        source_graphic = None
-        mask_input = None
-        for name, result in inputs:
-            if name == "SourceGraphic":
-                source_graphic = result
-            else:
-                mask_input = result
-
-        if mask_input is None:
+        if mask is None:
             return "", "missing_mask"
 
-        source_fragment = (source_graphic.drawingml or "").strip() if source_graphic else ""
-        mask_fragment = (mask_input.drawingml or "").strip()
+        source_fragment = (source.drawingml or "").strip() if source else ""
+        mask_fragment = (mask.drawingml or "").strip()
         if not mask_fragment:
             return "", "mask_empty"
 
-        mask_children = self._extract_effect_children(mask_fragment) if self._looks_like_effect_list(mask_fragment) else ""
+        mask_children = extract_effect_children(mask_fragment) if is_effect_list(mask_fragment) else ""
         if not mask_children:
             return "", "mask_missing_effects"
 
         alpha_tag = self._alpha_tag_for_operator(operator)
         base_fragments = []
         if source_fragment:
-            if self._looks_like_effect_list(source_fragment):
-                base_fragments.append(self._extract_effect_children(source_fragment))
+            if is_effect_list(source_fragment):
+                base_fragments.append(extract_effect_children(source_fragment))
             else:
                 base_fragments.append(source_fragment)
         alpha_fragment = (

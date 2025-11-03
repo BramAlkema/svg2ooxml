@@ -27,6 +27,44 @@ def build_exporter_hook(
     return f"<!-- svg2ooxml:{name}{suffix} -->"
 
 
+def is_effect_list(fragment: str | None) -> bool:
+    """Return True when *fragment* looks like a DrawingML effect list."""
+
+    if not fragment:
+        return False
+    return fragment.lstrip().startswith("<a:effectLst")
+
+
+def extract_effect_children(fragment: str) -> str:
+    """Return the inner XML of an effect list fragment."""
+
+    text = fragment.strip()
+    if not is_effect_list(text):
+        return text
+    if text.endswith("/>"):
+        return ""
+    start = text.find(">")
+    end = text.rfind("</a:effectLst>")
+    if start == -1 or end == -1 or end <= start:
+        return text
+    return text[start + 1 : end]
+
+
+def merge_effect_fragments(*fragments: str | None) -> str:
+    """Merge zero or more effect-list fragments into a single effect list."""
+
+    children: list[str] = []
+    for fragment in fragments:
+        if not fragment:
+            continue
+        inner = extract_effect_children(fragment) if is_effect_list(fragment) else fragment
+        if inner:
+            children.append(inner)
+    if not children:
+        return ""
+    return f"<a:effectLst>{''.join(children)}</a:effectLst>"
+
+
 def _format_value(value: object) -> str:
     if isinstance(value, float):
         return f"{value:.6g}"
@@ -39,4 +77,4 @@ def _escape(value: str) -> str:
     return value.replace('"', "&quot;")
 
 
-__all__ = ["build_exporter_hook"]
+__all__ = ["build_exporter_hook", "is_effect_list", "extract_effect_children", "merge_effect_fragments"]
