@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
+from enum import IntEnum
 from typing import TYPE_CHECKING, Any
 
 from lxml import etree
@@ -17,6 +18,21 @@ PropertyHandler = Callable[[str], object]
 
 _DEFAULT_FONT_SIZE_PT = 12.0
 _DEFAULT_FILL = "#000000"
+
+
+class CSSOrigin(IntEnum):
+    """CSS cascade origin levels per CSS Cascade 4 spec.
+
+    Higher values win in normal (non-!important) cascade.
+    For !important declarations, the order is reversed.
+
+    Note: PRESENTATION_ATTR and INLINE are both part of the author origin,
+    but we track them separately to apply correct specificity and ordering.
+    """
+    USER_AGENT = 1      # Browser/UA default styles
+    AUTHOR = 2          # Stylesheet rules
+    PRESENTATION_ATTR = 3  # SVG presentation attributes (author origin, specificity 0)
+    INLINE = 4          # Inline style="" attributes (author origin, highest specificity)
 
 
 def _strip_quotes(value: str) -> str:
@@ -121,6 +137,7 @@ class CSSDeclaration:
     name: str
     value: str
     important: bool
+    origin: CSSOrigin = CSSOrigin.AUTHOR
 
 
 @dataclass(frozen=True)
@@ -130,6 +147,7 @@ class CSSRule:
     selectors: tuple[CompiledSelector, ...]
     declarations: tuple[CSSDeclaration, ...]
     order: int
+    origin: CSSOrigin = CSSOrigin.AUTHOR
 
 
 class StyleResolver:
@@ -178,33 +196,47 @@ class StyleResolver:
     ) -> dict[str, Any]:
         style = dict(parent_style) if parent_style else self.default_text_style()
         importance: dict[str, bool] = {}
+        origin_level: dict[str, CSSOrigin] = {}
         skip_stylesheet = element.get("data-svg2ooxml-use-clone") == "true"
 
+        # Presentation attributes (author origin, specificity 0)
         for attr, descriptor in self._TEXT_ATTRIBUTE_MAP.items():
             raw = element.get(attr)
             if raw is None:
                 continue
             self._apply_text_property(style, descriptor, raw, context)
             importance[attr] = False
+            origin_level[attr] = CSSOrigin.PRESENTATION_ATTR
 
+        # Stylesheet rules (author origin, with specificity)
         if not skip_stylesheet:
-            importance = self.apply_stylesheet_text(
+            importance, origin_level = self.apply_stylesheet_text(
                 element,
                 style=style,
                 context=context,
                 importance_map=importance,
+                origin_map=origin_level,
             )
 
+        # Inline styles (author origin, highest precedence)
         inline = element.get("style")
         if inline:
             for name, value, _important in self._parse_inline_declarations(inline):
                 descriptor = self._TEXT_CSS_MAP.get(name)
                 if descriptor and value is not None:
-                    prev = importance.get(name, False)
-                    if prev and not _important:
+                    prev_important = importance.get(name, False)
+
+                    # Skip only if previous declaration was !important and this one is not
+                    # (Within inline styles, !important always wins over non-!important)
+                    if prev_important and not _important:
                         continue
+                    # For same importance level: inline styles (INLINE origin) always override
+                    # earlier origins due to cascade rules. Within the same inline style attribute,
+                    # source order applies (later wins), so we always apply.
+
                     self._apply_text_property(style, descriptor, value, context)
                     importance[name] = _important
+                    origin_level[name] = CSSOrigin.INLINE
 
         return style
 
@@ -227,6 +259,7 @@ class StyleResolver:
             "opacity": 1.0,
         }
         importance: dict[str, bool] = {}
+        origin_level: dict[str, CSSOrigin] = {}
         skip_stylesheet = element.get("data-svg2ooxml-use-clone") == "true"
 
         def current_fill() -> str:
@@ -235,7 +268,7 @@ class StyleResolver:
                 return fill
             return _DEFAULT_FILL
 
-        def apply_fill(value: str | None, importance_flag: bool = False) -> None:
+        def apply_fill(value: str | None, importance_flag: bool = False, origin: CSSOrigin = CSSOrigin.AUTHOR) -> None:
             if value is None:
                 return
             token = value.strip()
@@ -244,15 +277,18 @@ class StyleResolver:
             if token.lower() == "none":
                 style["fill"] = None
                 importance["fill"] = importance_flag
+                origin_level["fill"] = origin
                 return
             if token.startswith("url("):
                 style["fill"] = token
                 importance["fill"] = importance_flag
+                origin_level["fill"] = origin
                 return
             style["fill"] = self._resolve_color(token, current_fill())
             importance["fill"] = importance_flag
+            origin_level["fill"] = origin
 
-        def apply_stroke(value: str | None, importance_flag: bool = False) -> None:
+        def apply_stroke(value: str | None, importance_flag: bool = False, origin: CSSOrigin = CSSOrigin.AUTHOR) -> None:
             if value is None:
                 return
             token = value.strip()
@@ -261,69 +297,91 @@ class StyleResolver:
             if token.lower() == "none":
                 style["stroke"] = None
                 importance["stroke"] = importance_flag
+                origin_level["stroke"] = origin
                 return
             if token.startswith("url("):
                 style["stroke"] = token
                 importance["stroke"] = importance_flag
+                origin_level["stroke"] = origin
                 return
             style["stroke"] = self._resolve_color(token, style.get("stroke") or _DEFAULT_FILL)
             importance["stroke"] = importance_flag
+            origin_level["stroke"] = origin
 
-        apply_fill(element.get("fill"), False)
-        apply_stroke(element.get("stroke"), False)
+        # Presentation attributes (author origin, specificity 0)
+        apply_fill(element.get("fill"), False, CSSOrigin.PRESENTATION_ATTR)
+        apply_stroke(element.get("stroke"), False, CSSOrigin.PRESENTATION_ATTR)
 
         fill_opacity = element.get("fill-opacity")
         if fill_opacity is not None:
             style["fill_opacity"] = self._parse_float(fill_opacity, default=style.get("fill_opacity", 1.0))
             importance["fill-opacity"] = False
+            origin_level["fill-opacity"] = CSSOrigin.PRESENTATION_ATTR
 
         stroke_opacity = element.get("stroke-opacity")
         if stroke_opacity is not None:
             style["stroke_opacity"] = self._parse_float(stroke_opacity, default=style.get("stroke_opacity", 1.0))
             importance["stroke-opacity"] = False
+            origin_level["stroke-opacity"] = CSSOrigin.PRESENTATION_ATTR
 
         stroke_width = element.get("stroke-width")
         if stroke_width is not None:
             style["stroke_width_px"] = self._length_to_px(stroke_width, context, axis="x")
             importance["stroke-width"] = False
+            origin_level["stroke-width"] = CSSOrigin.PRESENTATION_ATTR
 
         opacity = element.get("opacity")
         if opacity is not None:
             style["opacity"] = self._parse_float(opacity, default=style.get("opacity", 1.0))
             importance["opacity"] = False
+            origin_level["opacity"] = CSSOrigin.PRESENTATION_ATTR
 
+        # Stylesheet rules (author origin, with specificity)
         if not skip_stylesheet:
-            importance = self.apply_stylesheet_paints(
+            importance, origin_level = self.apply_stylesheet_paints(
                 element,
                 apply_fill=apply_fill,
                 apply_stroke=apply_stroke,
                 style=style,
                 context=context,
                 importance_map=importance,
+                origin_map=origin_level,
             )
 
+        # Inline styles (author origin, highest precedence)
         inline = element.get("style")
         if inline:
             for name, value, _important in self._parse_inline_declarations(inline):
-                prev = importance.get(name, False)
-                if prev and not _important:
+                prev_important = importance.get(name, False)
+
+                # Skip only if previous declaration was !important and this one is not
+                # (Within inline styles, !important always wins over non-!important)
+                if prev_important and not _important:
                     continue
+                # For same importance level: inline styles (INLINE origin) always override
+                # earlier origins due to cascade rules. Within the same inline style attribute,
+                # source order applies (later wins), so we always apply.
+
                 if name == "fill":
-                    apply_fill(value, _important)
+                    apply_fill(value, _important, CSSOrigin.INLINE)
                 elif name == "fill-opacity":
                     style["fill_opacity"] = self._parse_float(value, default=style.get("fill_opacity", 1.0))
                     importance["fill-opacity"] = _important
+                    origin_level["fill-opacity"] = CSSOrigin.INLINE
                 elif name == "stroke":
-                    apply_stroke(value, _important)
+                    apply_stroke(value, _important, CSSOrigin.INLINE)
                 elif name == "stroke-opacity":
                     style["stroke_opacity"] = self._parse_float(value, default=style.get("stroke_opacity", 1.0))
                     importance["stroke-opacity"] = _important
+                    origin_level["stroke-opacity"] = CSSOrigin.INLINE
                 elif name == "stroke-width":
                     style["stroke_width_px"] = self._length_to_px(value, context, axis="x")
                     importance["stroke-width"] = _important
+                    origin_level["stroke-width"] = CSSOrigin.INLINE
                 elif name == "opacity":
                     style["opacity"] = self._parse_float(value, default=style.get("opacity", 1.0))
                     importance["opacity"] = _important
+                    origin_level["opacity"] = CSSOrigin.INLINE
 
         return style
 
@@ -522,23 +580,45 @@ class StyleResolver:
         if not self._css_rules:
             return []
 
-        matches: list[tuple[CSSDeclaration, tuple[int, int, int], int, int]] = []
+        matches: list[tuple[CSSDeclaration, tuple[int, int, int], int, int, CSSOrigin]] = []
         for rule in self._css_rules:
             for selector in rule.selectors:
                 if not selector.matches(element):
                     continue
                 for index, declaration in enumerate(rule.declarations):
-                    matches.append((declaration, selector.specificity, rule.order, index))
+                    matches.append((declaration, selector.specificity, rule.order, index, rule.origin))
 
         if not matches:
             return []
 
+        def cascade_precedence(origin: CSSOrigin, important: bool) -> int:
+            """Calculate cascade precedence per CSS Cascade 4 spec.
+
+            Since we don't have a separate "user" origin, our ordering is:
+            - Normal: UA(1) < Author(2) < Presentation(3) < Inline(4)
+            - Important: UA(1) !important < Inline(4) !important < Presentation(3) !important < Author(2) !important
+
+            For !important, we reverse the author-origin cascade (Inline/Presentation/Author)
+            while keeping UA at the bottom in both tiers.
+            """
+            if important:
+                if origin == CSSOrigin.USER_AGENT:
+                    # UA !important stays at bottom (loses to any author !important)
+                    return 1
+                # Author origins reverse for !important: Inline < Presentation < Author
+                # Map: Author(2)->14, Presentation(3)->13, Inline(4)->12
+                # So higher origin values get lower precedence when !important
+                return 16 - int(origin)
+            else:
+                # Normal order: higher origin wins
+                return int(origin)
+
         matches.sort(
             key=lambda item: (
-                1 if item[0].important else 0,
-                item[1],
-                item[2],
-                item[3],
+                cascade_precedence(item[4], item[0].important),  # Origin + importance
+                item[1],  # Specificity (ids, classes, tags)
+                item[2],  # Rule order (source order)
+                item[3],  # Declaration index
             )
         )
         return [item[0] for item in matches]
@@ -552,35 +632,43 @@ class StyleResolver:
         style: dict[str, Any],
         context: StyleContext | None,
         importance_map: dict[str, bool] | None = None,
-    ) -> dict[str, bool]:
-        """Apply styles defined in <style> elements respecting CSS cascade."""
+        origin_map: dict[str, CSSOrigin] | None = None,
+    ) -> tuple[dict[str, bool], dict[str, CSSOrigin]]:
+        """Apply styles defined in <style> elements respecting CSS cascade.
 
-        applied = importance_map if importance_map is not None else {}
+        The declarations are already sorted by _collect_css_declarations() in
+        cascade order, so we apply them all and let later ones override earlier ones.
+        """
+
+        applied_importance = importance_map if importance_map is not None else {}
+        applied_origin = origin_map if origin_map is not None else {}
+
         for decl in self._collect_css_declarations(element):
             name = decl.name
             value = decl.value
-            previous = applied.get(name, False)
-            if previous and not decl.important:
-                continue
+
             if name == "fill":
-                apply_fill(value, decl.important)
+                apply_fill(value, decl.important, decl.origin)
             elif name == "fill-opacity":
                 style["fill_opacity"] = self._parse_float(value, default=style.get("fill_opacity", 1.0))
-                applied["fill-opacity"] = decl.important
+                applied_importance["fill-opacity"] = decl.important
+                applied_origin["fill-opacity"] = decl.origin
             elif name == "stroke":
-                apply_stroke(value, decl.important)
+                apply_stroke(value, decl.important, decl.origin)
             elif name == "stroke-opacity":
                 style["stroke_opacity"] = self._parse_float(value, default=style.get("stroke_opacity", 1.0))
-                applied["stroke-opacity"] = decl.important
+                applied_importance["stroke-opacity"] = decl.important
+                applied_origin["stroke-opacity"] = decl.origin
             elif name == "stroke-width":
                 style["stroke_width_px"] = self._length_to_px(value, context, axis="x")
-                applied["stroke-width"] = decl.important
+                applied_importance["stroke-width"] = decl.important
+                applied_origin["stroke-width"] = decl.origin
             elif name == "opacity":
                 style["opacity"] = self._parse_float(value, default=style.get("opacity", 1.0))
-                applied["opacity"] = decl.important
-            if name in {"fill", "stroke"}:
-                applied[name] = decl.important
-        return applied
+                applied_importance["opacity"] = decl.important
+                applied_origin["opacity"] = decl.origin
+
+        return applied_importance, applied_origin
 
     def apply_stylesheet_text(
         self,
@@ -589,20 +677,27 @@ class StyleResolver:
         style: dict[str, Any],
         context: StyleContext | None,
         importance_map: dict[str, bool] | None = None,
-    ) -> dict[str, bool]:
-        """Apply text-related stylesheet declarations to ``style``."""
+        origin_map: dict[str, CSSOrigin] | None = None,
+    ) -> tuple[dict[str, bool], dict[str, CSSOrigin]]:
+        """Apply text-related stylesheet declarations to ``style``.
 
-        applied = importance_map if importance_map is not None else {}
+        The declarations are already sorted by _collect_css_declarations() in
+        cascade order, so we apply them all and let later ones override earlier ones.
+        """
+
+        applied_importance = importance_map if importance_map is not None else {}
+        applied_origin = origin_map if origin_map is not None else {}
+
         for decl in self._collect_css_declarations(element):
             descriptor = self._TEXT_CSS_MAP.get(decl.name)
             if descriptor is None:
                 continue
-            previous = applied.get(decl.name, False)
-            if previous and not decl.important:
-                continue
+
             self._apply_text_property(style, descriptor, decl.value, context)
-            applied[decl.name] = decl.important
-        return applied
+            applied_importance[decl.name] = decl.important
+            applied_origin[decl.name] = decl.origin
+
+        return applied_importance, applied_origin
 
 
 def _parse_selector(selector: str) -> list[SelectorPart]:

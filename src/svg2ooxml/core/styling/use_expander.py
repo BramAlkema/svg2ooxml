@@ -67,6 +67,10 @@ def apply_use_attributes(converter, use_element: etree._Element, target: etree._
 
 
 def _apply_computed_presentation(converter, source: etree._Element, clone: etree._Element) -> None:
+    # Skip if already processed (prevents double-application if called multiple times)
+    if clone.get("data-svg2ooxml-use-clone") == "true":
+        return
+
     clone.set("data-svg2ooxml-use-clone", "true")
     style_resolver: StyleResolver | None = getattr(converter, "_style_resolver", None)
     if style_resolver is None:
@@ -77,36 +81,41 @@ def _apply_computed_presentation(converter, source: etree._Element, clone: etree
     except Exception:  # pragma: no cover - defensive
         return
 
-    def maybe_set(attr: str, value: object) -> None:
-        if value is None:
-            return
-        if clone.get(attr) is not None:
-            return
-        clone.set(attr, str(value))
+    # Build inline style from computed paint style
+    # This ensures the computed styles take precedence over any inherited styles
+    style_parts = []
 
     fill_value = paint_style.get("fill")
     if isinstance(fill_value, str) and fill_value:
-        maybe_set("fill", fill_value)
+        style_parts.append(f"fill:{fill_value}")
 
     stroke_value = paint_style.get("stroke")
     if isinstance(stroke_value, str) and stroke_value:
-        maybe_set("stroke", stroke_value)
+        style_parts.append(f"stroke:{stroke_value}")
 
     fill_opacity = paint_style.get("fill_opacity")
-    if fill_opacity is not None:
-        maybe_set("fill-opacity", fill_opacity)
+    if fill_opacity is not None and fill_opacity != 1.0:
+        style_parts.append(f"fill-opacity:{fill_opacity}")
 
     stroke_opacity = paint_style.get("stroke_opacity")
-    if stroke_opacity is not None:
-        maybe_set("stroke-opacity", stroke_opacity)
+    if stroke_opacity is not None and stroke_opacity != 1.0:
+        style_parts.append(f"stroke-opacity:{stroke_opacity}")
 
     stroke_width = paint_style.get("stroke_width_px")
     if stroke_width is not None:
-        maybe_set("stroke-width", stroke_width)
+        style_parts.append(f"stroke-width:{stroke_width}px")
 
     opacity = paint_style.get("opacity")
-    if opacity is not None:
-        maybe_set("opacity", opacity)
+    if opacity is not None and opacity != 1.0:
+        style_parts.append(f"opacity:{opacity}")
+
+    # Append to existing inline style if present, otherwise set new one
+    if style_parts:
+        existing_style = clone.get("style", "")
+        if existing_style and not existing_style.endswith(";"):
+            existing_style += ";"
+        new_style = existing_style + ";".join(style_parts)
+        clone.set("style", new_style)
 
 
 def propagate_symbol_use_attributes(converter, group: etree._Element, use_element: etree._Element) -> None:
