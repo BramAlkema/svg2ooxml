@@ -349,6 +349,44 @@ Total SVG Elements Analyzed: 46
    - **Current**: Automatic fallback to raster
    - **Recommendation**: Consider EMF promotion for alpha masks
 
+### 4.3 Font Feature Gaps
+
+**SVG Font Elements - NOT Supported**:
+- ❌ `<font>`, `<font-face>`, `<glyph>`, `<missing-glyph>` - No SVG font definitions parsed
+- ❌ `<hkern>`, `<vkern>` - No kerning pairs from SVG
+
+**Web Fonts - Partially Supported**:
+- ❌ `@font-face` CSS rules - Not parsed
+- ❌ WOFF/WOFF2 formats - Only TTF/OTF supported
+- ⚠️ Remote font fetching - Limited (Google Fonts special case)
+- ❌ Base64 data URLs - Not decoded for fonts
+
+**Advanced Typography - Limited**:
+- ⚠️ Kerning/letter-spacing - Parsed and stored but not rendered in DrawingML
+- ⚠️ Font-variant - Stored but not applied (no small-caps, etc.)
+- ❌ OpenType features - No font-feature-settings support
+- ❌ Variable fonts - No font-variation-settings
+
+**What DOES Work**:
+- ✅ System font resolution with fallbacks (sans-serif → Arial, etc.)
+- ✅ Font embedding with subsetting (fontTools-based)
+- ✅ Font weight/style (bold, italic, 100-900 scale)
+- ✅ Font size (px, pt, em, %)
+- ✅ Platform font directories (macOS, Windows, Linux)
+- ✅ Missing font fallback strategies (policy-driven)
+- ⚠️ textPath → PowerPoint WordArt (partial, limited presets)
+
+**Impact**:
+- High for web fonts (@font-face, WOFF) - common in modern SVGs
+- Medium for advanced typography (kerning, OpenType features)
+- Low for SVG fonts (deprecated, rarely used)
+
+**Recommendations**:
+1. Add @font-face CSS parsing for web font workflows
+2. Implement WOFF/WOFF2 decompression
+3. Render kerning/letter-spacing in DrawingML output
+4. Consider HarfBuzz for complex script shaping
+
 ---
 
 ## 5. ARCHITECTURAL STRENGTHS
@@ -514,17 +552,28 @@ SVG DOM → IR Scene Graph → DrawingML XML
 
 ### 7.2 Medium Term (Next Quarter)
 
-1. **Improve Pattern Support**
+1. **Add Web Font Support** (HIGH PRIORITY)
+   - Implement @font-face CSS parsing
+   - Add WOFF/WOFF2 decompression
+   - Support base64 data URLs for fonts
+   - Enable automatic web font loading
+
+2. **Improve Pattern Support**
    - Implement pattern complexity analysis
    - Add rasterization fallback for complex patterns
    - Add pattern caching/deduplication
 
-2. **Enhance Alpha Mask Rendering**
+3. **Enhance Typography Rendering**
+   - Apply kerning/letter-spacing in DrawingML
+   - Implement font-variant (small-caps, etc.)
+   - Add basic OpenType feature support
+
+4. **Enhance Alpha Mask Rendering**
    - Implement EMF promotion for alpha masks
    - Detect uniform alpha → native opacity
    - Add mask asset caching
 
-3. **Expand ForeignObject Support**
+5. **Expand ForeignObject Support**
    - Improve XHTML text extraction
    - Support common HTML elements (div, span, p)
    - Add CSS property mapping (HTML → PPTX)
