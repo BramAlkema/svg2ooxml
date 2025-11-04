@@ -18,7 +18,7 @@ from svg2ooxml.policy.constants import FALLBACK_BITMAP, FALLBACK_RASTERIZE
 
 from . import paint_runtime, shapes_runtime
 from .assets import AssetRegistry
-from .animation_writer import DrawingMLAnimationWriter
+from .animation import DrawingMLAnimationWriter
 from .clipmask import clip_xml_for
 from .image import render_picture
 from .generator import DrawingMLPathGenerator, EMU_PER_PX, px_to_emu

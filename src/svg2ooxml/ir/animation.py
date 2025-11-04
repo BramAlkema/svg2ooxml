@@ -196,6 +196,37 @@ class AnimationDefinition:
             return True
         return False
 
+    @property
+    def duration_ms(self) -> int:
+        """Return duration in milliseconds (for compatibility with handlers)."""
+        return int(self.timing.duration * 1000)
+
+    @property
+    def begin_ms(self) -> int:
+        """Return begin time in milliseconds (for compatibility with handlers)."""
+        return int(self.timing.begin * 1000)
+
+    @property
+    def fill_mode(self) -> str:
+        """Return fill_mode as string (for compatibility with handlers)."""
+        return self.timing.fill_mode.value
+
+    @property
+    def repeat_count(self) -> int | str:
+        """Return repeat_count (for compatibility with handlers)."""
+        return self.timing.repeat_count
+
+    @property
+    def repeat_duration_ms(self) -> int | None:
+        """Return repeat_duration in milliseconds (for compatibility with handlers)."""
+        # This is optional - return None by default
+        return None
+
+    @property
+    def is_motion(self) -> bool:
+        """Return True if this is a motion animation (for compatibility with handlers)."""
+        return self.is_motion_animation()
+
     def get_value_at_time(self, time: float) -> Any:
         """Return an interpolated value for the supplied timestamp."""
         if time < self.timing.begin:
