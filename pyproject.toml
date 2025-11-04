@@ -61,6 +61,10 @@ cloud = [
   "google-auth>=2.26",
   "google-auth-oauthlib>=1.2.0"
 ]
+visual-testing = [
+  "scikit-image>=0.21.0",
+  "Pillow>=10.0.0"
+]
 # worker dependencies removed - now using Cloud Tasks instead
 
 [tool.setuptools.packages.find]
