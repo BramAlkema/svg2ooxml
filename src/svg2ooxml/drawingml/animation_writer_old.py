@@ -1,6 +1,32 @@
-"""Generate PowerPoint animation timing XML from animation definitions."""
+"""Generate PowerPoint animation timing XML from animation definitions.
+
+DEPRECATED: This module is deprecated and will be removed in a future release.
+Use `svg2ooxml.drawingml.animation.DrawingMLAnimationWriter` instead.
+
+The new implementation provides:
+- Modular handler-based architecture
+- lxml-based XML generation (no string concatenation)
+- Better testability and maintainability
+- Improved performance
+
+Migration:
+    Old: from svg2ooxml.drawingml.animation_writer import DrawingMLAnimationWriter
+    New: from svg2ooxml.drawingml.animation import DrawingMLAnimationWriter
+
+API remains compatible.
+"""
 
 from __future__ import annotations
+
+import warnings
+
+# Emit deprecation warning when this module is imported
+warnings.warn(
+    "svg2ooxml.drawingml.animation_writer is deprecated. "
+    "Use svg2ooxml.drawingml.animation instead.",
+    DeprecationWarning,
+    stacklevel=2,
+)
 
 import re
 from typing import Any, Mapping, Sequence, TYPE_CHECKING
