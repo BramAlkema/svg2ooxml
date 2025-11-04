@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600" viewBox="0 0 800 600">
+  <defs>
+    <!-- Horizontal gradient -->
+    <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#FF0000"/>
+      <stop offset="100%" stop-color="#0000FF"/>
+    </linearGradient>
+    
+    <!-- Vertical gradient -->
+    <linearGradient id="grad2" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#00FF00"/>
+      <stop offset="100%" stop-color="#FFFF00"/>
+    </linearGradient>
+    
+    <!-- Diagonal gradient -->
+    <linearGradient id="grad3" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FF00FF"/>
+      <stop offset="50%" stop-color="#00FFFF"/>
+      <stop offset="100%" stop-color="#FFFF00"/>
+    </linearGradient>
+    
+    <!-- Gradient with opacity -->
+    <linearGradient id="grad4" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#000000" stop-opacity="1"/>
+      <stop offset="100%" stop-color="#000000" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  
+  <rect width="800" height="600" fill="#FFFFFF"/>
+  
+  <!-- Horizontal gradient -->
+  <rect x="50" y="50" width="300" height="100" fill="url(#grad1)"/>
+  <text x="200" y="170" text-anchor="middle" font-size="14">Horizontal</text>
+  
+  <!-- Vertical gradient -->
+  <rect x="450" y="50" width="300" height="100" fill="url(#grad2)"/>
+  <text x="600" y="170" text-anchor="middle" font-size="14">Vertical</text>
+  
+  <!-- Diagonal gradient -->
+  <rect x="50" y="250" width="300" height="100" fill="url(#grad3)"/>
+  <text x="200" y="370" text-anchor="middle" font-size="14">Diagonal (3 stops)</text>
+  
+  <!-- Opacity gradient -->
+  <rect x="450" y="250" width="300" height="100" fill="#FFAAAA"/>
+  <rect x="450" y="250" width="300" height="100" fill="url(#grad4)"/>
+  <text x="600" y="370" text-anchor="middle" font-size="14">With Opacity</text>
+</svg>

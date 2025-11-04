@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600" viewBox="0 0 800 600">
+  <defs>
+    <!-- Simple composite filter (in operator - masking) -->
+    <filter id="composite-in">
+      <feFlood flood-color="#FF0000" result="red"/>
+      <feComposite in="red" in2="SourceGraphic" operator="in"/>
+    </filter>
+    
+    <!-- Composite with out operator -->
+    <filter id="composite-out">
+      <feFlood flood-color="#00FF00" result="green"/>
+      <feComposite in="green" in2="SourceGraphic" operator="out"/>
+    </filter>
+    
+    <!-- Composite with atop operator -->
+    <filter id="composite-atop">
+      <feFlood flood-color="#0000FF" result="blue"/>
+      <feComposite in="blue" in2="SourceGraphic" operator="atop"/>
+    </filter>
+    
+    <!-- Composite with over operator (default) -->
+    <filter id="composite-over">
+      <feFlood flood-color="#FFFF00" result="yellow"/>
+      <feComposite in="yellow" in2="SourceGraphic" operator="over"/>
+    </filter>
+  </defs>
+  
+  <rect width="800" height="600" fill="#F0F0F0"/>
+  
+  <!-- Test composite operators -->
+  <g transform="translate(100, 100)">
+    <circle cx="60" cy="60" r="50" fill="#888888" filter="url(#composite-in)"/>
+    <text x="60" y="140" text-anchor="middle" font-size="14">in</text>
+  </g>
+  
+  <g transform="translate(300, 100)">
+    <circle cx="60" cy="60" r="50" fill="#888888" filter="url(#composite-out)"/>
+    <text x="60" y="140" text-anchor="middle" font-size="14">out</text>
+  </g>
+  
+  <g transform="translate(500, 100)">
+    <circle cx="60" cy="60" r="50" fill="#888888" filter="url(#composite-atop)"/>
+    <text x="60" y="140" text-anchor="middle" font-size="14">atop</text>
+  </g>
+  
+  <g transform="translate(200, 350)">
+    <circle cx="60" cy="60" r="50" fill="#888888" filter="url(#composite-over)"/>
+    <text x="60" y="140" text-anchor="middle" font-size="14">over</text>
+  </g>
+</svg>

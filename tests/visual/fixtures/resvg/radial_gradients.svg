@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600" viewBox="0 0 800 600">
+  <defs>
+    <!-- Simple radial gradient -->
+    <radialGradient id="radial1">
+      <stop offset="0%" stop-color="#FFFFFF"/>
+      <stop offset="100%" stop-color="#0000FF"/>
+    </radialGradient>
+    
+    <!-- Radial with focal point offset -->
+    <radialGradient id="radial2" cx="50%" cy="50%" r="50%" fx="30%" fy="30%">
+      <stop offset="0%" stop-color="#FFFF00"/>
+      <stop offset="100%" stop-color="#FF0000"/>
+    </radialGradient>
+    
+    <!-- Multi-stop radial gradient -->
+    <radialGradient id="radial3">
+      <stop offset="0%" stop-color="#FF0000"/>
+      <stop offset="33%" stop-color="#00FF00"/>
+      <stop offset="66%" stop-color="#0000FF"/>
+      <stop offset="100%" stop-color="#FFFF00"/>
+    </radialGradient>
+    
+    <!-- Radial with userSpaceOnUse (test transform handling) -->
+    <radialGradient id="radial4" gradientUnits="userSpaceOnUse" cx="600" cy="350" r="80">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="1"/>
+      <stop offset="100%" stop-color="#000000" stop-opacity="0.5"/>
+    </radialGradient>
+  </defs>
+  
+  <rect width="800" height="600" fill="#F5F5F5"/>
+  
+  <!-- Simple radial -->
+  <circle cx="150" cy="150" r="80" fill="url(#radial1)"/>
+  <text x="150" y="250" text-anchor="middle" font-size="14">Simple Radial</text>
+  
+  <!-- Focal point offset -->
+  <circle cx="450" cy="150" r="80" fill="url(#radial2)"/>
+  <text x="450" y="250" text-anchor="middle" font-size="14">Focal Offset</text>
+  
+  <!-- Multi-stop -->
+  <circle cx="150" cy="400" r="80" fill="url(#radial3)"/>
+  <text x="150" y="500" text-anchor="middle" font-size="14">Multi-stop (4)</text>
+  
+  <!-- userSpaceOnUse -->
+  <circle cx="600" cy="350" r="80" fill="url(#radial4)"/>
+  <text x="600" y="450" text-anchor="middle" font-size="14">userSpaceOnUse</text>
+</svg>

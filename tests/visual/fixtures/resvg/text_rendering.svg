@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600" viewBox="0 0 800 600">
+  <defs>
+    <linearGradient id="textGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#FF0000"/>
+      <stop offset="100%" stop-color="#0000FF"/>
+    </linearGradient>
+  </defs>
+  
+  <rect width="800" height="600" fill="#FFFFFF"/>
+  
+  <!-- Simple horizontal text -->
+  <text x="50" y="80" font-family="Arial, sans-serif" font-size="32" fill="#000000">
+    Simple Horizontal Text
+  </text>
+  
+  <!-- Bold text -->
+  <text x="50" y="150" font-family="Arial, sans-serif" font-size="32" font-weight="bold" fill="#333333">
+    Bold Text
+  </text>
+  
+  <!-- Italic text -->
+  <text x="50" y="220" font-family="Arial, sans-serif" font-size="32" font-style="italic" fill="#666666">
+    Italic Text
+  </text>
+  
+  <!-- Text with fill gradient -->
+  <text x="50" y="290" font-family="Arial, sans-serif" font-size="32" fill="url(#textGrad)">
+    Gradient Fill Text
+  </text>
+  
+  <!-- Text with transform (translation only - plain layout) -->
+  <text x="0" y="0" transform="translate(50, 360)" font-family="Arial, sans-serif" font-size="28" fill="#009900">
+    Translated Text
+  </text>
+  
+  <!-- Different font sizes -->
+  <text x="50" y="440" font-family="Arial, sans-serif" font-size="20" fill="#000000">Small (20px)</text>
+  <text x="250" y="445" font-family="Arial, sans-serif" font-size="28" fill="#000000">Medium (28px)</text>
+  <text x="500" y="450" font-family="Arial, sans-serif" font-size="36" fill="#000000">Large (36px)</text>
+</svg>
