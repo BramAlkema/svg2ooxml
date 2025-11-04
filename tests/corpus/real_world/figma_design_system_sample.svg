@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Sample Figma-style export: Design system components -->
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800" viewBox="0 0 1200 800">
+  <defs>
+    <!-- Brand gradient -->
+    <linearGradient id="brand-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#667EEA"/>
+      <stop offset="100%" stop-color="#764BA2"/>
+    </linearGradient>
+    
+    <!-- Button shadow (simple blur) -->
+    <filter id="button-shadow">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="3"/>
+      <feOffset dx="0" dy="2" result="offsetblur"/>
+      <feFlood flood-color="#000000" flood-opacity="0.15"/>
+      <feComposite in2="offsetblur" operator="in"/>
+      <feMerge>
+        <feMergeNode/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  
+  <rect width="1200" height="800" fill="#F7FAFC"/>
+  
+  <!-- Header with brand gradient -->
+  <rect x="0" y="0" width="1200" height="100" fill="url(#brand-gradient)"/>
+  <text x="40" y="60" font-family="Inter, sans-serif" font-size="32" font-weight="700" fill="#FFFFFF">
+    Design System
+  </text>
+  
+  <!-- Primary Button -->
+  <g transform="translate(50, 150)">
+    <rect width="200" height="50" rx="8" fill="#667EEA" filter="url(#button-shadow)"/>
+    <text x="100" y="32" text-anchor="middle" font-family="Inter, sans-serif" font-size="16" font-weight="600" fill="#FFFFFF">
+      Primary Button
+    </text>
+  </g>
+  
+  <!-- Secondary Button -->
+  <g transform="translate(280, 150)">
+    <rect width="200" height="50" rx="8" fill="#FFFFFF" stroke="#667EEA" stroke-width="2"/>
+    <text x="100" y="32" text-anchor="middle" font-family="Inter, sans-serif" font-size="16" font-weight="600" fill="#667EEA">
+      Secondary
+    </text>
+  </g>
+  
+  <!-- Card Component -->
+  <g transform="translate(50, 250)">
+    <rect width="350" height="200" rx="12" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1" filter="url(#button-shadow)"/>
+    <text x="20" y="40" font-family="Inter, sans-serif" font-size="20" font-weight="700" fill="#2D3748">
+      Card Title
+    </text>
+    <text x="20" y="70" font-family="Inter, sans-serif" font-size="14" fill="#718096">
+      This is a sample card component with text content.
+    </text>
+    <text x="20" y="95" font-family="Inter, sans-serif" font-size="14" fill="#718096">
+      It demonstrates typical design system patterns.
+    </text>
+  </g>
+  
+  <!-- Icon with gradient fill -->
+  <g transform="translate(500, 150)">
+    <circle cx="25" cy="25" r="25" fill="url(#brand-gradient)"/>
+    <path d="M 15 25 L 22 32 L 35 15" stroke="#FFFFFF" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+  
+  <!-- Color Swatches -->
+  <g transform="translate(50, 500)">
+    <text x="0" y="0" font-family="Inter, sans-serif" font-size="18" font-weight="600" fill="#2D3748">
+      Color Palette
+    </text>
+    <circle cx="20" cy="40" r="20" fill="#667EEA"/>
+    <circle cx="70" cy="40" r="20" fill="#764BA2"/>
+    <circle cx="120" cy="40" r="20" fill="#48BB78"/>
+    <circle cx="170" cy="40" r="20" fill="#F56565"/>
+    <circle cx="220" cy="40" r="20" fill="#ED8936"/>
+  </g>
+</svg>

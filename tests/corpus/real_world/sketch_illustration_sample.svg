@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Sample Sketch-style export: Illustration with complex gradients -->
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600" viewBox="0 0 800 600">
+  <defs>
+    <!-- Sky gradient -->
+    <linearGradient id="sky" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#87CEEB"/>
+      <stop offset="100%" stop-color="#E0F6FF"/>
+    </linearGradient>
+    
+    <!-- Sun radial gradient -->
+    <radialGradient id="sun">
+      <stop offset="0%" stop-color="#FFF4E6"/>
+      <stop offset="50%" stop-color="#FFD700"/>
+      <stop offset="100%" stop-color="#FFA500" stop-opacity="0"/>
+    </radialGradient>
+    
+    <!-- Mountain gradient -->
+    <linearGradient id="mountain" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#8B7355"/>
+      <stop offset="100%" stop-color="#5D4E37"/>
+    </linearGradient>
+    
+    <!-- Tree mask -->
+    <mask id="tree-mask">
+      <circle cx="400" cy="350" r="50" fill="white"/>
+    </mask>
+  </defs>
+  
+  <!-- Sky background -->
+  <rect width="800" height="600" fill="url(#sky)"/>
+  
+  <!-- Sun -->
+  <circle cx="650" cy="100" r="60" fill="url(#sun)"/>
+  
+  <!-- Mountains -->
+  <path d="M 0 400 L 200 250 L 350 350 L 500 200 L 650 300 L 800 350 L 800 600 L 0 600 Z" fill="url(#mountain)" opacity="0.8"/>
+  
+  <!-- Ground -->
+  <rect x="0" y="450" width="800" height="150" fill="#7CB342"/>
+  
+  <!-- Trees (with complex shapes) -->
+  <g transform="translate(150, 380)">
+    <!-- Trunk -->
+    <rect x="20" y="40" width="10" height="30" fill="#8B4513"/>
+    <!-- Foliage -->
+    <circle cx="25" cy="35" r="25" fill="#228B22"/>
+    <circle cx="15" cy="25" r="20" fill="#32CD32"/>
+    <circle cx="35" cy="25" r="20" fill="#32CD32"/>
+  </g>
+  
+  <g transform="translate(300, 390)">
+    <rect x="20" y="30" width="10" height="30" fill="#8B4513"/>
+    <circle cx="25" cy="25" r="25" fill="#228B22"/>
+    <circle cx="15" cy="15" r="20" fill="#32CD32"/>
+    <circle cx="35" cy="15" r="20" fill="#32CD32"/>
+  </g>
+  
+  <!-- House -->
+  <g transform="translate(500, 360)">
+    <!-- Walls -->
+    <rect x="0" y="40" width="80" height="60" fill="#D2691E"/>
+    <!-- Roof -->
+    <path d="M -10 40 L 40 10 L 90 40 Z" fill="#8B0000"/>
+    <!-- Door -->
+    <rect x="30" y="60" width="20" height="40" fill="#654321"/>
+    <!-- Window -->
+    <rect x="10" y="55" width="15" height="15" fill="#87CEEB" stroke="#000000"/>
+    <rect x="55" y="55" width="15" height="15" fill="#87CEEB" stroke="#000000"/>
+  </g>
+  
+  <!-- Clouds with opacity -->
+  <ellipse cx="150" cy="100" rx="40" ry="25" fill="#FFFFFF" opacity="0.7"/>
+  <ellipse cx="180" cy="110" rx="50" ry="30" fill="#FFFFFF" opacity="0.7"/>
+  <ellipse cx="120" cy="110" rx="45" ry="28" fill="#FFFFFF" opacity="0.7"/>
+</svg>

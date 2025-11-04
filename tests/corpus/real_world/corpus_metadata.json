@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "title": "SVG2OOXML Corpus Metadata",
+  "description": "Metadata for real-world SVG test corpus files",
+  "version": "1.0.0",
+  "decks": [
+    {
+      "deck_name": "figma_design_system_sample",
+      "source": "Figma",
+      "svg_file": "figma_design_system_sample.svg",
+      "description": "Sample design system components with gradients and filters",
+      "expected_native_rate": 0.85,
+      "expected_emf_rate": 0.10,
+      "expected_raster_rate": 0.05,
+      "notes": "Gradients and simple filters should render natively. Complex shadows may fall back to EMF.",
+      "features": ["linear_gradients", "radial_gradients", "blend_modes", "text", "basic_shapes"],
+      "complexity": "medium",
+      "created_date": "2025-01-04",
+      "license": "Sample/Example - Not from actual Figma export"
+    },
+    {
+      "deck_name": "sketch_illustration_sample",
+      "source": "Sketch",
+      "svg_file": "sketch_illustration_sample.svg",
+      "description": "Sample illustration with complex gradients and masks",
+      "expected_native_rate": 0.75,
+      "expected_emf_rate": 0.20,
+      "expected_raster_rate": 0.05,
+      "notes": "Complex gradient transforms and masks may require EMF fallback.",
+      "features": ["radial_gradients", "masks", "complex_paths", "opacity"],
+      "complexity": "high",
+      "created_date": "2025-01-04",
+      "license": "Sample/Example - Not from actual Sketch export"
+    },
+    {
+      "deck_name": "illustrator_vector_art_sample",
+      "source": "Adobe Illustrator",
+      "svg_file": "illustrator_vector_art_sample.svg",
+      "description": "Sample vector artwork with paths and clip paths",
+      "expected_native_rate": 0.90,
+      "expected_emf_rate": 0.08,
+      "expected_raster_rate": 0.02,
+      "notes": "Simple vector art should render mostly natively. Clip paths supported.",
+      "features": ["complex_paths", "clip_paths", "stroke_styles", "fill_patterns"],
+      "complexity": "low",
+      "created_date": "2025-01-04",
+      "license": "Sample/Example - Not from actual Illustrator export"
+    }
+  ],
+  "targets": {
+    "native_rate": 0.80,
+    "emf_rate_max": 0.15,
+    "raster_rate_max": 0.05,
+    "visual_fidelity_min": 0.90
+  },
+  "notes": [
+    "This is a sample corpus metadata file demonstrating the expected format.",
+    "Real-world corpus files should be added by collecting actual SVG exports from Figma, Sketch, and Adobe Illustrator.",
+    "Each deck should include licensing information and source attribution.",
+    "Expected rates are estimates based on feature complexity analysis.",
+    "Baselines should be generated using the corpus runner with legacy mode first."
+  ]
+}
