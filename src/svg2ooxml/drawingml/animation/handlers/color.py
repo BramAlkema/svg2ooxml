@@ -7,10 +7,12 @@ Generates PowerPoint <a:animClr> with from/to color values and optional keyframe
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
+from textwrap import indent
 
 from .base import AnimationHandler, AnimationDefinition
 from ..constants import COLOR_ATTRIBUTES, COLOR_ATTRIBUTE_NAME_MAP
 from ..value_formatters import format_color_value
+from svg2ooxml.drawingml.xml_builder import to_string
 
 if TYPE_CHECKING:
     from svg2ooxml.common.units import UnitConverter
@@ -148,11 +150,8 @@ class ColorAnimationHandler(AnimationHandler):
         tav_block = ""
         if tav_elements:
             tav_container = self._xml.build_tav_list_container(tav_elements)
-            tav_block = (
-                f'                                        <a:tavLst>\n'
-                f'{tav_container}\n'
-                f'                                        </a:tavLst>\n'
-            )
+            tav_string = to_string(tav_container)
+            tav_block = "\n" + indent(tav_string, " " * 40) + "\n"
 
         # Build animClr element
         anim_tag = "<a:animClr"

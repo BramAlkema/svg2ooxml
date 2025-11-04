@@ -14,6 +14,9 @@ from svg2ooxml.common.units import px_to_emu
 from svg2ooxml.drawingml.emf_adapter import EMFAdapter, PaletteResolver
 from svg2ooxml.drawingml.raster_adapter import RasterAdapter
 
+# Import centralized XML builders for safe DrawingML generation
+from svg2ooxml.drawingml.xml_builder import a_elem, a_sub, to_string
+
 
 HOOK_PATTERN = re.compile(r"<!--\s*svg2ooxml:(?P<name>\w+)(?P<attrs>[^>]*)-->", re.IGNORECASE)
 ATTR_PATTERN = re.compile(r"(\w+)=\"([^\"]*)\"")
@@ -119,13 +122,12 @@ class FilterRenderer:
             opacity = 1.0
         opacity = max(0.0, min(opacity, 1.0))
         alpha = int(opacity * 100000)
-        return (
-            "<a:effectLst>"
-            "<a:solidFill>"
-            f"<a:srgbClr val=\"{color}\"><a:alpha val=\"{alpha}\"/></a:srgbClr>"
-            "</a:solidFill>"
-            "</a:effectLst>"
-        )
+
+        effectLst = a_elem("effectLst")
+        solidFill = a_sub(effectLst, "solidFill")
+        srgbClr = a_sub(solidFill, "srgbClr", val=color)
+        a_sub(srgbClr, "alpha", val=alpha)
+        return to_string(effectLst)
 
     def _build_offset(self, name, attrs, remainder, result, context) -> str:
         try:
@@ -138,8 +140,13 @@ class FilterRenderer:
         dy_emu = int(px_to_emu(dy))
         distance = int(math.hypot(dx_emu, dy_emu))
 
+        effectLst = a_elem("effectLst")
+
         if distance == 0:
-            return "<a:effectLst><!-- offset: no displacement --></a:effectLst>"
+            # Add XML comment using lxml.etree.Comment
+            from lxml import etree
+            effectLst.append(etree.Comment(" offset: no displacement "))
+            return to_string(effectLst)
 
         # PowerPoint angle (0 = right, counter-clockwise positive, units 60000 per degree)
         angle_rad = math.atan2(dy_emu, dx_emu)
@@ -147,13 +154,11 @@ class FilterRenderer:
 
         distance = min(distance, 914400)
 
-        return (
-            "<a:effectLst>"
-            f"<a:outerShdw blurRad=\"0\" dist=\"{distance}\" dir=\"{ppt_angle}\" algn=\"ctr\">"
-            "<a:srgbClr val=\"000000\"><a:alpha val=\"0\"/></a:srgbClr>"
-            "</a:outerShdw>"
-            "</a:effectLst>"
-        )
+        outerShdw = a_sub(effectLst, "outerShdw", blurRad="0", dist=distance, dir=ppt_angle, algn="ctr")
+        srgbClr = a_sub(outerShdw, "srgbClr", val="000000")
+        a_sub(srgbClr, "alpha", val="0")
+
+        return to_string(effectLst)
 
     def _build_pass_through(self, name, attrs, remainder, result, context) -> str:
         if remainder:
@@ -199,7 +204,11 @@ class FilterRenderer:
             asset = None
 
         if not asset:
-            return "<a:effectLst><!-- svg2ooxml:emf placeholder="" --></a:effectLst>"
+            from lxml import etree
+            effectLst = a_elem("effectLst")
+            effectLst.append(etree.Comment(' svg2ooxml:emf placeholder="" '))
+            return to_string(effectLst)
+
 
         rel_id = asset.get("relationship_id")
         if not isinstance(rel_id, str) or not rel_id:
@@ -215,20 +224,33 @@ class FilterRenderer:
                 data_hex = bytes(raw).hex()
                 asset["data_hex"] = data_hex
 
+        from lxml import etree
+
         comment_parts = [f'relationship="{rel_id}"']
         if width_emu is not None:
             comment_parts.append(f'width="{int(width_emu)}"')
         if height_emu is not None:
             comment_parts.append(f'height="{int(height_emu)}"')
         comment = " ".join(comment_parts)
-        blip_fill = f'<a:blipFill rotWithShape="0"><a:blip r:embed="{rel_id}"'
+
+        effectLst = a_elem("effectLst")
+        effectLst.append(etree.Comment(f' svg2ooxml:emf {comment} '))
+
+        # Build blipFill with r:embed attribute
+        blipFill = a_sub(effectLst, "blipFill", rotWithShape="0")
+        blip = a_sub(blipFill, "blip")
+        blip.set("{http://schemas.openxmlformats.org/officeDocument/2006/relationships}embed", rel_id)
+
         if data_hex:
-            blip_fill += f'><a:extLst><a:ext uri="{{28A0092B-C50C-407E-A947-70E740481C1C}}">{data_hex}</a:ext></a:extLst></a:blip></a:blipFill>'
-        else:
-            blip_fill += "/></a:blipFill>"
-        return f'<a:effectLst><!-- svg2ooxml:emf {comment} -->{blip_fill}</a:effectLst>'
+            extLst = a_sub(blip, "extLst")
+            ext = a_sub(extLst, "ext", uri="{28A0092B-C50C-407E-A947-70E740481C1C}")
+            ext.text = data_hex
+
+        return to_string(effectLst)
 
     def _placeholder_raster(self, metadata: dict[str, object], result: FilterResult) -> str:
+        from lxml import etree
+
         assets_list = metadata.get("fallback_assets")
         existing_asset: dict[str, object] | None = None
         if isinstance(assets_list, list):
@@ -250,18 +272,30 @@ class FilterRenderer:
                 if isinstance(raw, (bytes, bytearray)):
                     data_hex = bytes(raw).hex()
                     existing_asset["data_hex"] = data_hex
+
+            # Build a:effectLst with lxml
+            effectLst = a_elem("effectLst")
+
+            # Build comment
             comment_parts = [f'relationship="{rel_id}"']
             if width_px is not None:
                 comment_parts.append(f'width="{int(width_px)}"')
             if height_px is not None:
                 comment_parts.append(f'height="{int(height_px)}"')
             comment = " ".join(comment_parts)
-            blip_fill = f'<a:blipFill rotWithShape="0"><a:blip r:embed="{rel_id}"'
+            effectLst.append(etree.Comment(f' svg2ooxml:raster {comment} '))
+
+            # Build a:blipFill
+            blipFill = a_sub(effectLst, "blipFill", rotWithShape="0")
+            blip = a_sub(blipFill, "blip")
+            blip.set("{http://schemas.openxmlformats.org/officeDocument/2006/relationships}embed", rel_id)
+
             if data_hex:
-                blip_fill += f'><a:extLst><a:ext uri="{{svg2ooxml:raster}}">{data_hex}</a:ext></a:extLst></a:blip></a:blipFill>'
-            else:
-                blip_fill += "/></a:blipFill>"
-            return f'<a:effectLst><!-- svg2ooxml:raster {comment} -->{blip_fill}</a:effectLst>'
+                extLst = a_sub(blip, "extLst")
+                ext = a_sub(extLst, "ext", uri="{svg2ooxml:raster}")
+                ext.text = data_hex
+
+            return to_string(effectLst)
 
         placeholder_meta: dict[str, object] = {}
         for key in ("policy", "radius_effective", "alpha", "color", "radius_max"):
@@ -282,12 +316,24 @@ class FilterRenderer:
                 }
             )
         data_hex = raster.image_bytes.hex()
-        return (
-            "<a:effectLst>"
-            f"<!-- svg2ooxml:raster relationship=\"{raster.relationship_id}\" size=\"{len(raster.image_bytes)}\" -->"
-            f"<a:blipFill rotWithShape=\"0\"><a:blip r:embed=\"{raster.relationship_id}\"><a:extLst><a:ext uri=\"{{svg2ooxml:raster}}\">{data_hex}</a:ext></a:extLst></a:blip></a:blipFill>"
-            "</a:effectLst>"
-        )
+
+        # Build a:effectLst with lxml
+        effectLst = a_elem("effectLst")
+
+        # Build comment
+        comment_text = f' svg2ooxml:raster relationship="{raster.relationship_id}" size="{len(raster.image_bytes)}" '
+        effectLst.append(etree.Comment(comment_text))
+
+        # Build a:blipFill
+        blipFill = a_sub(effectLst, "blipFill", rotWithShape="0")
+        blip = a_sub(blipFill, "blip")
+        blip.set("{http://schemas.openxmlformats.org/officeDocument/2006/relationships}embed", raster.relationship_id)
+
+        extLst = a_sub(blip, "extLst")
+        ext = a_sub(extLst, "ext", uri="{svg2ooxml:raster}")
+        ext.text = data_hex
+
+        return to_string(effectLst)
 
     def _ensure_emf_asset(self, metadata: dict[str, object], result: FilterResult) -> dict[str, object] | None:
         asset = self._active_emf_asset(metadata)

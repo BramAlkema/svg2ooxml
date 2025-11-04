@@ -4,9 +4,12 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any, Dict, Iterable, Optional
+from typing import TYPE_CHECKING, Any, Dict, Iterable, Optional
 
 from lxml import etree
+
+if TYPE_CHECKING:
+    from svg2ooxml.telemetry import RenderTracer
 
 
 @dataclass
@@ -20,6 +23,7 @@ class FilterContext:
     options: Dict[str, Any] = field(default_factory=dict)
     primitive: etree._Element | None = None
     pipeline_state: Dict[str, "FilterResult"] | None = None
+    tracer: "RenderTracer | None" = None
 
     def with_primitive(self, primitive: etree._Element) -> "FilterContext":
         """Return a child context referencing the current primitive."""
@@ -32,6 +36,7 @@ class FilterContext:
             options=dict(self.options),
             primitive=primitive,
             pipeline_state=self.pipeline_state,
+            tracer=self.tracer,
         )
 
 

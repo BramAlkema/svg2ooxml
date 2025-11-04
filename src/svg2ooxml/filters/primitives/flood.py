@@ -9,6 +9,9 @@ from lxml import etree
 from svg2ooxml.filters.base import Filter, FilterContext, FilterResult
 from svg2ooxml.filters.utils import parse_number
 
+# Import centralized XML builders for safe DrawingML generation
+from svg2ooxml.drawingml.xml_builder import a_elem, a_sub, to_string
+
 
 def _normalise_color(value: str | None) -> str:
     token = (value or "#000000").strip()
@@ -39,15 +42,14 @@ class FloodFilter(Filter):
             "flood_opacity": params.opacity,
         }
         alpha = _alpha_value(params.opacity)
-        drawingml = (
-            "<a:effectLst>"
-            "<a:solidFill>"
-            f"<a:srgbClr val=\"{params.color}\">"
-            f"<a:alpha val=\"{alpha}\"/>"
-            "</a:srgbClr>"
-            "</a:solidFill>"
-            "</a:effectLst>"
-        )
+
+        # Build effectLst with solidFill
+        effectLst = a_elem("effectLst")
+        solidFill = a_sub(effectLst, "solidFill")
+        srgbClr = a_sub(solidFill, "srgbClr", val=params.color)
+        a_sub(srgbClr, "alpha", val=alpha)
+
+        drawingml = to_string(effectLst)
         return FilterResult(success=True, drawingml=drawingml, metadata=metadata)
 
     def _parse_params(self, primitive: etree._Element) -> FloodParams:

@@ -55,13 +55,25 @@ def _clamp(value: float, minimum: float = 0.0, maximum: float = 1.0) -> float:
 
 
 def _parse_component(value: str) -> Optional[int]:
+    """Parse an RGB color component from a string value.
+
+    Supports both absolute values (0-255) and percentages (0%-100%).
+    Uses round() for percentage conversion to preserve fidelity.
+
+    Args:
+        value: String like "255", "128", "50%", "99.9%"
+
+    Returns:
+        Integer 0-255, or None if parsing fails
+    """
     value = value.strip()
     if value.endswith("%"):
         try:
             pct = float(value[:-1])
         except ValueError:
             return None
-        return int(_clamp(pct / 100.0) * 255)
+        # Use round() instead of int() for fidelity: 99.9% → 255, not 254
+        return round(_clamp(pct / 100.0) * 255)
     try:
         return int(value)
     except ValueError:

@@ -54,11 +54,20 @@ class FontService:
     # ------------------------------------------------------------------
 
     def register_provider(self, provider: FontProvider) -> None:
-        """Add a provider to the resolution chain."""
+        """Add a provider to the resolution chain (at the end)."""
 
         if provider in self._providers:
             return
         self._providers.append(provider)
+
+    def prepend_provider(self, provider: FontProvider) -> None:
+        """Add a provider to the front of the resolution chain (highest priority).
+
+        Use this for document-specific fonts that should override system fonts.
+        """
+        if provider in self._providers:
+            return
+        self._providers.insert(0, provider)
 
     def iter_providers(self) -> Iterator[FontProvider]:
         return iter(self._providers)
@@ -102,6 +111,15 @@ class FontService:
 
     def clear_cache(self) -> None:
         self._cache.clear()
+
+    def clone(self) -> "FontService":
+        """Create a shallow clone with the same providers but empty cache.
+
+        Used for per-parse isolation to prevent cache pollution across documents.
+        """
+        cloned = FontService()
+        cloned._providers = list(self._providers)  # Shallow copy of provider list
+        return cloned
 
     def _resolve_once(self, query: FontQuery) -> FontMatch | None:
         for provider in self._providers:

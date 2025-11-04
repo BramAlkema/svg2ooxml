@@ -12,6 +12,9 @@ from svg2ooxml.common.geometry.paths.drawingml import (
 )
 from svg2ooxml.ir.geometry import Point, Rect, SegmentType
 
+# Import centralized XML builders for safe DrawingML generation
+from svg2ooxml.drawingml.xml_builder import a_elem, a_sub, to_string
+
 EMU_PER_PX = 9525
 
 
@@ -52,20 +55,24 @@ class DrawingMLPathGenerator:
         if not commands:
             raise ValueError("Path command list cannot be empty")
 
-        commands_xml = "\n        ".join(self._command_to_xml(cmd, bounds_px) for cmd in commands)
-        geometry_xml = (
-            "<a:custGeom>\n"
-            "      <a:avLst/>\n"
-            "      <a:gdLst/>\n"
-            "      <a:ahLst/>\n"
-            "      <a:cxnLst/>\n"
-            "      <a:pathLst>\n"
-            f'        <a:path w="{width_emu}" h="{height_emu}" fill="{fill_mode}" stroke="{stroke_mode}">\n'
-            f"        {commands_xml}\n"
-            "        </a:path>\n"
-            "      </a:pathLst>\n"
-            "    </a:custGeom>"
-        )
+        # Build custom geometry using lxml
+        custGeom = a_elem("custGeom")
+        a_sub(custGeom, "avLst")
+        a_sub(custGeom, "gdLst")
+        a_sub(custGeom, "ahLst")
+        a_sub(custGeom, "cxnLst")
+
+        # Add path list with path
+        pathLst = a_sub(custGeom, "pathLst")
+        path = a_sub(pathLst, "path", w=width_emu, h=height_emu, fill=fill_mode, stroke=stroke_mode)
+
+        # Add all path commands
+        for cmd in commands:
+            cmd_elem = self._command_to_xml(cmd, bounds_px)
+            path.append(cmd_elem)
+
+        geometry_xml = to_string(custGeom)
+
         return CustomGeometry(
             xml=geometry_xml,
             width_emu=width_emu,
@@ -73,28 +80,31 @@ class DrawingMLPathGenerator:
             bounds=bounds_px,
         )
 
-    def _command_to_xml(self, command: PathCommand, bounds: Rect) -> str:
+    def _command_to_xml(self, command: PathCommand, bounds: Rect):
+        """Convert path command to lxml element."""
         if command.name == "moveTo":
             point = command.points[0]
             x, y = self._point_to_emu(point, bounds)
-            return f'<a:moveTo><a:pt x="{x}" y="{y}"/></a:moveTo>'
+            moveTo = a_elem("moveTo")
+            a_sub(moveTo, "pt", x=x, y=y)
+            return moveTo
         if command.name == "lnTo":
             point = command.points[0]
             x, y = self._point_to_emu(point, bounds)
-            return f'<a:lnTo><a:pt x="{x}" y="{y}"/></a:lnTo>'
+            lnTo = a_elem("lnTo")
+            a_sub(lnTo, "pt", x=x, y=y)
+            return lnTo
         if command.name == "cubicBezTo":
             c1x, c1y = self._point_to_emu(command.points[0], bounds)
             c2x, c2y = self._point_to_emu(command.points[1], bounds)
             ex, ey = self._point_to_emu(command.points[2], bounds)
-            return (
-                "<a:cubicBezTo>"
-                f'<a:pt x="{c1x}" y="{c1y}"/>'
-                f'<a:pt x="{c2x}" y="{c2y}"/>'
-                f'<a:pt x="{ex}" y="{ey}"/>'
-                "</a:cubicBezTo>"
-            )
+            cubicBezTo = a_elem("cubicBezTo")
+            a_sub(cubicBezTo, "pt", x=c1x, y=c1y)
+            a_sub(cubicBezTo, "pt", x=c2x, y=c2y)
+            a_sub(cubicBezTo, "pt", x=ex, y=ey)
+            return cubicBezTo
         if command.name == "close":
-            return "<a:close/>"
+            return a_elem("close")
         raise ValueError(f"Unsupported path command: {command.name}")
 
     def _point_to_emu(self, point: Point, bounds: Rect) -> Tuple[int, int]:

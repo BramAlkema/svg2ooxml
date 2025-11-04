@@ -10,6 +10,9 @@ from svg2ooxml.filters.base import Filter, FilterContext, FilterResult
 from svg2ooxml.filters.utils import parse_number
 from svg2ooxml.units.conversion import px_to_emu
 
+# Import centralized XML builders for safe DrawingML generation
+from svg2ooxml.drawingml.xml_builder import a_elem, a_sub, to_string
+
 
 @dataclass
 class DropShadowParams:
@@ -56,13 +59,15 @@ class DropShadowFilter(Filter):
         offset_x = int(px_to_emu(params.dx))
         offset_y = int(px_to_emu(params.dy))
         alpha = int(params.flood_opacity * 100000)
-        return (
-            "<a:effectLst>"
-            f"<a:outerShdw blurRad=\"{blur_radius}\" dist=\"{int((offset_x ** 2 + offset_y ** 2) ** 0.5)}\" dir=\"{self._compute_direction(params.dx, params.dy)}\" algn=\"ctr\" rotWithShape=\"0\">"
-            f"<a:srgbClr val=\"{params.flood_color}\"><a:alpha val=\"{alpha}\"/></a:srgbClr>"
-            "</a:outerShdw>"
-            "</a:effectLst>"
-        )
+        dist = int((offset_x ** 2 + offset_y ** 2) ** 0.5)
+        direction = self._compute_direction(params.dx, params.dy)
+
+        effectLst = a_elem("effectLst")
+        outerShdw = a_sub(effectLst, "outerShdw", blurRad=blur_radius, dist=dist, dir=direction, algn="ctr", rotWithShape="0")
+        srgbClr = a_sub(outerShdw, "srgbClr", val=params.flood_color)
+        a_sub(srgbClr, "alpha", val=alpha)
+
+        return to_string(effectLst)
 
     def _compute_direction(self, dx: float, dy: float) -> int:
         import math
@@ -85,11 +90,13 @@ class GlowFilter(Filter):
         opacity = parse_number(primitive.get("flood-opacity"), default=1.0)
         blur_radius = int(px_to_emu(max(0.0, radius)))
         alpha = int(max(0.0, min(opacity, 1.0)) * 100000)
-        drawingml = (
-            "<a:effectLst>"
-            f"<a:glow rad=\"{blur_radius}\"><a:srgbClr val=\"{color}\"><a:alpha val=\"{alpha}\"/></a:srgbClr></a:glow>"
-            "</a:effectLst>"
-        )
+
+        effectLst = a_elem("effectLst")
+        glow_elem = a_sub(effectLst, "glow", rad=blur_radius)
+        srgbClr = a_sub(glow_elem, "srgbClr", val=color)
+        a_sub(srgbClr, "alpha", val=alpha)
+
+        drawingml = to_string(effectLst)
         metadata = {
             "filter_type": self.filter_type,
             "radius": radius,

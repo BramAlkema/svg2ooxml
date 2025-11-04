@@ -169,6 +169,5 @@ class OpacityAnimationHandler(AnimationHandler):
 
         # No values: default based on fill mode
         # freeze → end at visible (1), remove → end at invisible (0)
-        if animation.fill_mode == "freeze":
-            return "1"
-        return "0"
+        default_value = "1" if animation.fill_mode == "freeze" else "0"
+        return self._processor.parse_opacity(default_value)

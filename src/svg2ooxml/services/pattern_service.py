@@ -15,6 +15,9 @@ from svg2ooxml.drawingml.bridges import (
     describe_pattern_element,
 )
 
+# Import centralized XML builders for safe DrawingML generation
+from svg2ooxml.drawingml.xml_builder import a_elem, a_sub, to_string
+
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:  # pragma: no cover - type checking only
@@ -172,14 +175,18 @@ class PatternService:
             preset = None
 
         if preset:
-            return (
-                f'<a:pattFill prst="{preset}">'
-                f"<a:fgClr><a:srgbClr val=\"{fg_color}\"/></a:fgClr>"
-                f"<a:bgClr><a:srgbClr val=\"{bg_color}\"/></a:bgClr>"
-                "</a:pattFill>"
-            )
+            # Build a:pattFill with lxml
+            pattFill = a_elem("pattFill", prst=preset)
+            fgClr = a_sub(pattFill, "fgClr")
+            a_sub(fgClr, "srgbClr", val=fg_color)
+            bgClr = a_sub(pattFill, "bgClr")
+            a_sub(bgClr, "srgbClr", val=bg_color)
+            return to_string(pattFill)
 
-        return f'<a:solidFill><a:srgbClr val="{fg_color}"/></a:solidFill>'
+        # Build a:solidFill with lxml
+        solidFill = a_elem("solidFill")
+        a_sub(solidFill, "srgbClr", val=fg_color)
+        return to_string(solidFill)
 
     def _coerce_descriptor(
         self,

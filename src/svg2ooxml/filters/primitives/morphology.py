@@ -10,6 +10,9 @@ from svg2ooxml.filters.base import Filter, FilterContext, FilterResult
 from svg2ooxml.filters.utils import build_exporter_hook, parse_number
 from svg2ooxml.units.conversion import px_to_emu
 
+# Import centralized XML builders for safe DrawingML generation
+from svg2ooxml.drawingml.xml_builder import a_elem, a_sub, to_string
+
 
 @dataclass
 class MorphologyParams:
@@ -43,7 +46,11 @@ class MorphologyFilter(Filter):
             radius_emu = int(px_to_emu(radius_max))
             metadata["radius_emu"] = radius_emu
             metadata["native_support"] = True
-            drawingml = f'<a:effectLst><a:softEdge rad="{radius_emu}"/></a:effectLst>'
+
+            effectLst = a_elem("effectLst")
+            a_sub(effectLst, "softEdge", rad=radius_emu)
+            drawingml = to_string(effectLst)
+
             return FilterResult(success=True, drawingml=drawingml, metadata=metadata)
 
         if params.operator == "dilate":
@@ -88,13 +95,13 @@ class MorphologyFilter(Filter):
                     "native_support": True,
                 }
             )
-            drawingml = (
-                "<a:effectLst>"
-                f'<a:glow rad="{radius_emu}">'
-                f'<a:srgbClr val="{color_hex}"><a:alpha val="{alpha_val}"/></a:srgbClr>'
-                "</a:glow>"
-                "</a:effectLst>"
-            )
+
+            effectLst = a_elem("effectLst")
+            glow = a_sub(effectLst, "glow", rad=radius_emu)
+            srgbClr = a_sub(glow, "srgbClr", val=color_hex)
+            a_sub(srgbClr, "alpha", val=alpha_val)
+            drawingml = to_string(effectLst)
+
             return FilterResult(success=True, drawingml=drawingml, metadata=metadata)
 
         metadata["effect"] = "unknown"

@@ -15,6 +15,9 @@ from svg2ooxml.core.pipeline.navigation import (
     SlideTarget,
 )
 
+# Import centralized XML builders for safe DrawingML generation
+from svg2ooxml.drawingml.xml_builder import a_elem, to_string
+
 __all__ = [
     "normalize_navigation",
     "register_navigation",
@@ -188,16 +191,28 @@ def _action_uri_for_spec(spec: NavigationSpec) -> str | None:
 
 
 def _build_navigation_xml(asset: NavigationAsset) -> str:
-    attributes: list[str] = []
+    # Build a:hlinkClick element with lxml
+    hlinkClick = a_elem("hlinkClick")
+
+    has_attributes = False
+
     if asset.relationship_id:
-        attributes.append(f'r:id="{asset.relationship_id}"')
+        hlinkClick.set("{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id", asset.relationship_id)
+        has_attributes = True
+
     if asset.tooltip:
-        attributes.append(f'tooltip="{html.escape(asset.tooltip, quote=True)}"')
+        hlinkClick.set("tooltip", html.escape(asset.tooltip, quote=False))
+        has_attributes = True
+
     history_attr = "1" if asset.history else "0"
-    attributes.append(f'history="{history_attr}"')
+    hlinkClick.set("history", history_attr)
+    has_attributes = True
+
     if asset.action:
-        attributes.append(f'action="{html.escape(asset.action, quote=True)}"')
-    if not attributes:
+        hlinkClick.set("action", html.escape(asset.action, quote=False))
+        has_attributes = True
+
+    if not has_attributes:
         return ""
-    joined = " ".join(attributes)
-    return f"<a:hlinkClick {joined}/>"
+
+    return to_string(hlinkClick)

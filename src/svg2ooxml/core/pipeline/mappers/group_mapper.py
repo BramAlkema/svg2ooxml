@@ -9,6 +9,9 @@ from svg2ooxml.ir.scene import Group
 
 from .base import Mapper, MapperResult, OutputFormat
 
+# Import centralized XML builders for safe DrawingML generation
+from svg2ooxml.drawingml.xml_builder import p_elem, p_sub, to_string
+
 
 class GroupMapper(Mapper):
     """Translate IR ``Group`` nodes into grouped DrawingML shapes."""
@@ -22,15 +25,30 @@ class GroupMapper(Mapper):
         return isinstance(element, Group)
 
     def map(self, group: Group) -> MapperResult:
+        from lxml import etree
+
         child_xml = "".join(
             getattr(child, "metadata", {}).get("generated_xml", "") for child in group.children
         )
-        xml = (
-            "<p:grpSp>"
-            "<p:nvGrpSpPr><p:cNvPr id=\"1\" name=\"Group\"/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>"
-            f"<p:grpSpPr>{child_xml}</p:grpSpPr>"
-            "</p:grpSp>"
-        )
+
+        # Build p:grpSp with lxml
+        grpSp = p_elem("grpSp")
+
+        # Build p:nvGrpSpPr
+        nvGrpSpPr = p_sub(grpSp, "nvGrpSpPr")
+        p_sub(nvGrpSpPr, "cNvPr", id="1", name="Group")
+        p_sub(nvGrpSpPr, "cNvGrpSpPr")
+        p_sub(nvGrpSpPr, "nvPr")
+
+        # Build p:grpSpPr and append child_xml
+        grpSpPr = p_sub(grpSp, "grpSpPr")
+        if child_xml:
+            wrapped = f'<root xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">{child_xml}</root>'
+            temp = etree.fromstring(wrapped.encode('utf-8'))
+            for child in temp:
+                grpSpPr.append(child)
+
+        xml = to_string(grpSp)
 
         metadata = {
             "child_count": len(group.children),

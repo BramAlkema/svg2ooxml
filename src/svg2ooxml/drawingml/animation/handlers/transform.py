@@ -7,9 +7,11 @@ Generates PowerPoint <a:animScale>, <a:animRot>, or <a:animMotion> elements.
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
+from textwrap import indent
 
 from .base import AnimationHandler, AnimationDefinition
 from ..value_formatters import format_point_value, format_angle_value
+from svg2ooxml.drawingml.xml_builder import to_string
 
 if TYPE_CHECKING:
     from svg2ooxml.common.units import UnitConverter
@@ -29,7 +31,7 @@ class TransformAnimationHandler(AnimationHandler):
     Transform Types:
     - Scale: <a:animScale> with from/to <a:pt x="..." y="..."/>
     - Rotate: <a:animRot> with <a:by val="..."/> (rotation delta)
-    - Translate: <a:animMotion> with origin/path (not yet implemented)
+    - Translate: <a:animMotion> with origin/path (not currently supported)
 
     Example:
         >>> handler = TransformAnimationHandler(xml_builder, value_processor, tav_builder, unit_converter)
@@ -84,12 +86,11 @@ class TransformAnimationHandler(AnimationHandler):
             return animation.transform_type in {
                 TransformType.SCALE,
                 TransformType.ROTATE,
-                TransformType.TRANSLATE,
             }
 
         # Also support string values for backward compatibility
         transform_str = str(animation.transform_type).lower()
-        return transform_str in {"scale", "rotate", "translate"}
+        return transform_str in {"scale", "rotate"}
 
     def build(
         self,
@@ -181,11 +182,8 @@ class TransformAnimationHandler(AnimationHandler):
         tav_block = ""
         if tav_elements:
             tav_container = self._xml.build_tav_list_container(tav_elements)
-            tav_block = (
-                f'                                        <a:tavLst>\n'
-                f'{tav_container}\n'
-                f'                                        </a:tavLst>\n'
-            )
+            tav_string = to_string(tav_container)
+            tav_block = "\n" + indent(tav_string, " " * 40) + "\n"
 
         # Build animScale element
         anim_tag = "<a:animScale"
@@ -266,11 +264,8 @@ class TransformAnimationHandler(AnimationHandler):
         tav_block = ""
         if tav_elements:
             tav_container = self._xml.build_tav_list_container(tav_elements)
-            tav_block = (
-                f'                                        <a:tavLst>\n'
-                f'{tav_container}\n'
-                f'                                        </a:tavLst>\n'
-            )
+            tav_string = to_string(tav_container)
+            tav_block = "\n" + indent(tav_string, " " * 40) + "\n"
 
         # Build animRot element
         anim_tag = "<a:animRot"

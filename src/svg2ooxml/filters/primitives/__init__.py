@@ -41,7 +41,7 @@ __all__ = [
 ]
 
 # map symbol -> relative module
-_symbol_map = {'BlendFilter': 'blend', 'ColorMatrixFilter': 'color_matrix', 'ComponentTransferFilter': 'component_transfer', 'CompositeFilter': 'composite', 'ConvolveMatrixFilter': 'convolve_matrix', 'DisplacementMapFilter': 'displacement_map', 'DropShadowFilter': 'drop_shadow', 'GlowFilter': 'drop_shadow', 'FloodFilter': 'flood', 'GaussianBlurFilter': 'gaussian_blur', 'ImageFilter': 'image', 'DiffuseLightingFilter': 'lighting', 'SpecularLightingFilter': 'lighting', 'MergeFilter': 'merge', 'MorphologyFilter': 'morphology', 'OffsetFilter': 'offset', 'TileFilter': 'tile', 'TurbulenceFilter': 'turbulence'}
+_symbol_map = {'BlendFilter': 'blend', 'ColorMatrixFilter': 'color_matrix', 'ComponentTransferFilter': 'component_transfer', 'CompositeFilter': 'composite', 'ConvolveMatrixFilter': 'convolve_matrix', 'DisplacementMapFilter': 'displacement_map', 'GlowFilter': 'drop_shadow', 'DropShadowFilter': 'drop_shadow', 'FloodFilter': 'flood', 'GaussianBlurFilter': 'gaussian_blur', 'ImageFilter': 'image', 'SpecularLightingFilter': 'lighting', 'DiffuseLightingFilter': 'lighting', 'MergeFilter': 'merge', 'MorphologyFilter': 'morphology', 'OffsetFilter': 'offset', 'TileFilter': 'tile', 'TurbulenceFilter': 'turbulence'}
 _module_map = {'blend': 'blend', 'color_matrix': 'color_matrix', 'component_transfer': 'component_transfer', 'composite': 'composite', 'convolve_matrix': 'convolve_matrix', 'displacement_map': 'displacement_map', 'drop_shadow': 'drop_shadow', 'flood': 'flood', 'gaussian_blur': 'gaussian_blur', 'image': 'image', 'lighting': 'lighting', 'merge': 'merge', 'morphology': 'morphology', 'offset': 'offset', 'tile': 'tile', 'turbulence': 'turbulence'}
 
 

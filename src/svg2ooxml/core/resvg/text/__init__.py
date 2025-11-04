@@ -12,7 +12,7 @@ __all__ = [
 ]
 
 # map symbol -> relative module
-_symbol_map = {'FontResolver': 'fonts', 'default_font_resolver': 'fonts', 'build_text_layout': 'layout'}
+_symbol_map = {'default_font_resolver': 'fonts', 'FontResolver': 'fonts', 'build_text_layout': 'layout'}
 _module_map = {'fonts': 'fonts', 'layout': 'layout'}
 
 

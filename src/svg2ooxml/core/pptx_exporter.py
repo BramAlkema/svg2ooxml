@@ -85,7 +85,24 @@ class SvgToPptxExporter:
         timeline_sampler: TimelineSampler | None = None,
         timeline_config: TimelineSamplingConfig | None = None,
         filter_strategy: str | None = None,
+        geometry_mode: str | None = None,
     ) -> None:
+        """Initialize the SVG to PPTX exporter.
+
+        Args:
+            parser: Optional custom SVG parser
+            writer: Optional custom DrawingML writer
+            builder: Optional custom PPTX builder
+            animation_parser_factory: Optional animation parser factory
+            timeline_sampler: Optional timeline sampler
+            timeline_config: Optional timeline config
+            filter_strategy: Optional filter strategy
+            geometry_mode: Geometry extraction mode: "legacy" or "resvg".
+                          Defaults to "legacy". Can also be set via
+                          SVG2OOXML_GEOMETRY_MODE environment variable.
+        """
+        import os
+
         self._parser = parser or SVGParser(ParserConfig())
         self._writer = writer or DrawingMLWriter()
         self._builder = builder or PPTXPackageBuilder()
@@ -95,6 +112,19 @@ class SvgToPptxExporter:
         else:
             self._timeline_sampler = TimelineSampler(timeline_config)
         self._filter_strategy = filter_strategy
+
+        # Geometry mode: check parameter, then env var, then default to "legacy"
+        if geometry_mode is not None:
+            self._geometry_mode = geometry_mode
+        else:
+            self._geometry_mode = os.environ.get("SVG2OOXML_GEOMETRY_MODE", "legacy")
+
+        # Validate geometry_mode
+        if self._geometry_mode not in ("legacy", "resvg"):
+            raise ValueError(
+                f"Invalid geometry_mode: {self._geometry_mode!r}. "
+                f"Must be 'legacy' or 'resvg'."
+            )
 
     # ------------------------------------------------------------------
     # Single document conversion
@@ -290,7 +320,14 @@ class SvgToPptxExporter:
                 timeline_scenes = self._timeline_sampler.generate_scenes(animations)
             animation_parser.reset_summary()
 
-        policy_context = self._apply_policy_overrides(parse_result.policy_context, policy_overrides)
+        # Inject geometry_mode into policy_overrides
+        effective_overrides = policy_overrides or {}
+        if self._geometry_mode != "legacy":  # Only override if not default
+            geometry_overrides = effective_overrides.get("geometry", {})
+            geometry_overrides["geometry_mode"] = self._geometry_mode
+            effective_overrides["geometry"] = geometry_overrides
+
+        policy_context = self._apply_policy_overrides(parse_result.policy_context, effective_overrides or None)
         if policy_context is not None:
             animation_policy_options = policy_context.get("animation")
         scene = convert_parser_output(

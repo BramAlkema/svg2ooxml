@@ -13,7 +13,7 @@ def xml_builder():
     builder = Mock()
     builder.build_attribute_list.return_value = (
         '                                            <a:attrNameLst>\n'
-        '                                                <a:attrName>ppt_x</a:attrName>\n'
+        '                                                <a:attrName val="ppt_x"/>\n'
         '                                            </a:attrNameLst>\n'
     )
     builder.build_behavior_core.return_value = (
@@ -23,7 +23,7 @@ def xml_builder():
         '                                                <a:spTgt spid="shape1"/>\n'
         '                                            </a:tgtEl>\n'
         '                                            <a:attrNameLst>\n'
-        '                                                <a:attrName>ppt_x</a:attrName>\n'
+        '                                                <a:attrName val="ppt_x"/>\n'
         '                                            </a:attrNameLst>\n'
         '                                        </a:cBhvr>\n'
     )

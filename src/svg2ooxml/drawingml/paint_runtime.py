@@ -17,6 +17,15 @@ from svg2ooxml.ir.paint import (
 )
 from .markers import marker_end_elements
 
+# Import centralized XML builders for safe DrawingML generation
+from svg2ooxml.drawingml.xml_builder import (
+    a_elem,
+    a_sub,
+    to_string,
+    solid_fill,
+    no_fill,
+)
+
 
 def paint_to_fill(paint, *, opacity: float | None = None) -> str:
     if isinstance(paint, SolidPaint):
@@ -24,22 +33,19 @@ def paint_to_fill(paint, *, opacity: float | None = None) -> str:
         if opacity is not None:
             effective = max(0.0, min(1.0, effective * opacity))
         alpha = int(round(max(0.0, min(1.0, effective)) * 100000))
-        return (
-            "<a:solidFill>"
-            f'<a:srgbClr val="{paint.rgb.upper()}">'
-            f'<a:alpha val="{alpha}"/>'
-            "</a:srgbClr>"
-            "</a:solidFill>"
-        )
+        return to_string(solid_fill(paint.rgb, alpha=alpha))
     if isinstance(paint, LinearGradientPaint):
         return linear_gradient_to_fill(paint)
     if isinstance(paint, RadialGradientPaint):
         return radial_gradient_to_fill(paint)
     if isinstance(paint, GradientPaintRef):
-        return "<a:solidFill><a:schemeClr val=\"phClr\"/></a:solidFill>"
+        # Create solidFill with schemeClr element
+        fill = a_elem("solidFill")
+        a_sub(fill, "schemeClr", val="phClr")
+        return to_string(fill)
     if isinstance(paint, PatternPaint):
         return pattern_to_fill(paint, opacity=opacity)
-    return "<a:noFill/>"
+    return to_string(no_fill())
 
 
 def stroke_to_xml(stroke, metadata: Mapping[str, Any] | None = None) -> str:
@@ -47,74 +53,101 @@ def stroke_to_xml(stroke, metadata: Mapping[str, Any] | None = None) -> str:
     if isinstance(metadata, Mapping):
         markers = metadata.get("markers") or {}
 
+    head_xml, tail_xml = marker_end_elements(markers)
+
     if stroke is None or stroke.paint is None:
-        if not markers:
-            return "<a:ln><a:noFill/></a:ln>"
-        parts = ["<a:ln>", "<a:noFill/>"]
-        head_xml, tail_xml = marker_end_elements(markers)
+        # Create ln element with noFill
+        ln = a_elem("ln")
+        a_sub(ln, "noFill")
+        # Add markers if present (parse XML strings to elements)
+        from lxml import etree
         if tail_xml:
-            parts.append(tail_xml)
+            # Add namespace declaration for parsing
+            wrapped = f'<root xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">{tail_xml}</root>'
+            temp = etree.fromstring(wrapped.encode('utf-8'))
+            tail_elem = temp[0]
+            ln.append(tail_elem)
         if head_xml:
-            parts.append(head_xml)
-        parts.append("</a:ln>")
-        return "".join(parts)
+            # Add namespace declaration for parsing
+            wrapped = f'<root xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">{head_xml}</root>'
+            temp = etree.fromstring(wrapped.encode('utf-8'))
+            head_elem = temp[0]
+            ln.append(head_elem)
+        return to_string(ln)
 
     width_emu = max(1, px_to_emu(stroke.width))
-    parts = [f'<a:ln w="{width_emu}">']
+    ln = a_elem("ln", w=width_emu)
 
+    # Add fill based on paint type
     paint = stroke.paint
     if isinstance(paint, SolidPaint):
         color = paint.rgb.upper()
         alpha = int(round(max(0.0, min(1.0, paint.opacity)) * 100000))
-        parts.append(
-            "<a:solidFill>"
-            f'<a:srgbClr val="{color}"><a:alpha val="{alpha}"/></a:srgbClr>'
-            "</a:solidFill>"
-        )
+        fill = solid_fill(color, alpha=alpha)
+        ln.append(fill)
     elif isinstance(paint, PatternPaint):
-        parts.append(paint_to_fill(paint, opacity=stroke.opacity))
-    elif isinstance(paint, (LinearGradientPaint, RadialGradientPaint, GradientPaintRef)):
-        parts.append(paint_to_fill(paint, opacity=stroke.opacity))
+        ln.append(_pattern_to_fill_elem(paint, opacity=stroke.opacity if hasattr(stroke, 'opacity') else None))
+    elif isinstance(paint, LinearGradientPaint):
+        ln.append(_linear_gradient_to_fill_elem(paint))
+    elif isinstance(paint, RadialGradientPaint):
+        ln.append(_radial_gradient_to_fill_elem(paint))
+    elif isinstance(paint, GradientPaintRef):
+        # Create solidFill with schemeClr element
+        fill = a_elem("solidFill")
+        a_sub(fill, "schemeClr", val="phClr")
+        ln.append(fill)
     else:
-        parts.append("<a:noFill/>")
+        a_sub(ln, "noFill")
 
-    dash_xml = _dash_xml(stroke.dash_array)
-    if dash_xml:
-        parts.append(dash_xml)
+    # Add dash pattern
+    dash_elem = _dash_elem(stroke.dash_array)
+    if dash_elem is not None:
+        ln.append(dash_elem)
 
+    # Add cap style
     cap_map = {
         StrokeCap.ROUND: "rnd",
         StrokeCap.SQUARE: "sq",
         StrokeCap.BUTT: "flat",
     }
-    parts.append(f'<a:cap val="{cap_map.get(stroke.cap, "flat")}"/>')
+    a_sub(ln, "cap", val=cap_map.get(stroke.cap, "flat"))
 
+    # Add join style
     if stroke.join == StrokeJoin.ROUND:
-        parts.append("<a:round/>")
+        a_sub(ln, "round")
     elif stroke.join == StrokeJoin.BEVEL:
-        parts.append("<a:bevel/>")
+        a_sub(ln, "bevel")
     else:
         if stroke.miter_limit and stroke.miter_limit > 0:
-            parts.append(f'<a:miter lim="{int(round(stroke.miter_limit * 1000))}"/>')
+            a_sub(ln, "miter", lim=int(round(stroke.miter_limit * 1000)))
         else:
-            parts.append("<a:miter/>")
+            a_sub(ln, "miter")
 
-    head_xml, tail_xml = marker_end_elements(markers)
+    # Add markers (parse XML strings to elements)
+    from lxml import etree
     if tail_xml:
-        parts.append(tail_xml)
+        # Add namespace declaration for parsing
+        wrapped = f'<root xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">{tail_xml}</root>'
+        temp = etree.fromstring(wrapped.encode('utf-8'))
+        tail_elem = temp[0]
+        ln.append(tail_elem)
     if head_xml:
-        parts.append(head_xml)
+        # Add namespace declaration for parsing
+        wrapped = f'<root xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">{head_xml}</root>'
+        temp = etree.fromstring(wrapped.encode('utf-8'))
+        head_elem = temp[0]
+        ln.append(head_elem)
 
-    parts.append("</a:ln>")
-    return "".join(parts)
+    return to_string(ln)
 
 
-def _dash_xml(dash_array: list[float] | None) -> str:
+def _dash_elem(dash_array: list[float] | None):
+    """Create dash pattern element, or None if no dash."""
     if not dash_array:
-        return ""
+        return None
     values = [abs(x) for x in dash_array if x > 0]
     if not values:
-        return ""
+        return None
     preset = "sysDash"
     if len(values) == 2:
         on, off = values[0], values[1]
@@ -134,7 +167,7 @@ def _dash_xml(dash_array: list[float] | None) -> str:
             preset = "lgDashDot"
         else:
             preset = "dashDot"
-    return f'<a:prstDash val="{preset}"/>'
+    return a_elem("prstDash", val=preset)
 
 
 def clip_rect_to_xml(clip_meta: Mapping[str, Any]) -> str:
@@ -149,21 +182,33 @@ def clip_rect_to_xml(clip_meta: Mapping[str, Any]) -> str:
         return ""
     x2 = x + width
     y2 = y + height
-    return (
-        "<a:clipPath>"
-        "<a:path clipFill=\"1\">"
-        f"<a:moveTo><a:pt x=\"{x}\" y=\"{y}\"/></a:moveTo>"
-        f"<a:lnTo><a:pt x=\"{x2}\" y=\"{y}\"/></a:lnTo>"
-        f"<a:lnTo><a:pt x=\"{x2}\" y=\"{y2}\"/></a:lnTo>"
-        f"<a:lnTo><a:pt x=\"{x}\" y=\"{y2}\"/></a:lnTo>"
-        "<a:close/>"
-        "</a:path>"
-        "</a:clipPath>"
-    )
+
+    # Build clipPath element
+    clipPath = a_elem("clipPath")
+    path = a_sub(clipPath, "path", clipFill="1")
+
+    # moveTo
+    moveTo = a_sub(path, "moveTo")
+    a_sub(moveTo, "pt", x=x, y=y)
+
+    # lnTo points
+    lnTo1 = a_sub(path, "lnTo")
+    a_sub(lnTo1, "pt", x=x2, y=y)
+
+    lnTo2 = a_sub(path, "lnTo")
+    a_sub(lnTo2, "pt", x=x2, y=y2)
+
+    lnTo3 = a_sub(path, "lnTo")
+    a_sub(lnTo3, "pt", x=x, y=y2)
+
+    # close
+    a_sub(path, "close")
+
+    return to_string(clipPath)
 
 
-def linear_gradient_to_fill(paint: LinearGradientPaint) -> str:
-    stops_xml = "".join(gradient_stop_xml(stop) for stop in paint.stops)
+def _linear_gradient_to_fill_elem(paint: LinearGradientPaint):
+    """Create linear gradient fill element (internal helper)."""
     dx = paint.end[0] - paint.start[0]
     dy = paint.end[1] - paint.start[1]
     if abs(dx) < 1e-6 and abs(dy) < 1e-6:
@@ -172,33 +217,57 @@ def linear_gradient_to_fill(paint: LinearGradientPaint) -> str:
         radians = math.atan2(dy, dx)
         angle = (450 - math.degrees(radians)) % 360
     ang_val = int(round(angle * 60000))
-    return (
-        "<a:gradFill rotWithShape=\"1\">"
-        f"<a:gsLst>{stops_xml}</a:gsLst>"
-        f"<a:lin ang=\"{ang_val}\" scaled=\"0\"/>"
-        "</a:gradFill>"
-    )
+
+    # Build gradient fill element
+    gradFill = a_elem("gradFill", rotWithShape="1")
+
+    # Add gradient stop list
+    gsLst = a_sub(gradFill, "gsLst")
+    for stop in paint.stops:
+        gsLst.append(_gradient_stop_elem(stop))
+
+    # Add linear gradient definition
+    a_sub(gradFill, "lin", ang=ang_val, scaled="0")
+
+    return gradFill
 
 
-def radial_gradient_to_fill(paint: RadialGradientPaint) -> str:
-    stops_xml = "".join(gradient_stop_xml(stop) for stop in paint.stops)
+def linear_gradient_to_fill(paint: LinearGradientPaint) -> str:
+    """Create linear gradient fill XML string."""
+    return to_string(_linear_gradient_to_fill_elem(paint))
+
+
+def _radial_gradient_to_fill_elem(paint: RadialGradientPaint):
+    """Create radial gradient fill element (internal helper)."""
     cx, cy = paint.center
     radius = max(paint.radius, 1e-6)
     left = max(0, min(100000, int(round(max(0.0, (cx - radius)) * 100000))))
     top = max(0, min(100000, int(round(max(0.0, (cy - radius)) * 100000))))
     right = max(0, min(100000, int(round(max(0.0, (1.0 - (cx + radius))) * 100000))))
     bottom = max(0, min(100000, int(round(max(0.0, (1.0 - (cy + radius))) * 100000))))
-    return (
-        "<a:gradFill rotWithShape=\"1\">"
-        f"<a:gsLst>{stops_xml}</a:gsLst>"
-        "<a:path path=\"circle\">"
-        f"<a:fillToRect l=\"{left}\" t=\"{top}\" r=\"{right}\" b=\"{bottom}\"/>"
-        "</a:path>"
-        "</a:gradFill>"
-    )
+
+    # Build gradient fill element
+    gradFill = a_elem("gradFill", rotWithShape="1")
+
+    # Add gradient stop list
+    gsLst = a_sub(gradFill, "gsLst")
+    for stop in paint.stops:
+        gsLst.append(_gradient_stop_elem(stop))
+
+    # Add radial gradient path
+    path = a_sub(gradFill, "path", path="circle")
+    a_sub(path, "fillToRect", l=left, t=top, r=right, b=bottom)
+
+    return gradFill
 
 
-def pattern_to_fill(paint: PatternPaint, *, opacity: float | None = None) -> str:
+def radial_gradient_to_fill(paint: RadialGradientPaint) -> str:
+    """Create radial gradient fill XML string."""
+    return to_string(_radial_gradient_to_fill_elem(paint))
+
+
+def _pattern_to_fill_elem(paint: PatternPaint, *, opacity: float | None = None):
+    """Create pattern fill element (internal helper)."""
     preset = (paint.preset or "pct5").strip()
     foreground = (paint.foreground or "000000").lstrip("#").upper()
     background = (paint.background or "FFFFFF").lstrip("#").upper()
@@ -207,27 +276,50 @@ def pattern_to_fill(paint: PatternPaint, *, opacity: float | None = None) -> str
     if len(background) != 6:
         background = "FFFFFF"
 
-    fg_alpha = ""
+    # Build pattern fill element
+    pattFill = a_elem("pattFill", prst=preset)
+
+    # Foreground color
+    fgClr = a_sub(pattFill, "fgClr")
+    fg_srgbClr = a_sub(fgClr, "srgbClr", val=foreground)
     if opacity is not None and opacity < 0.999:
         alpha_val = int(round(max(0.0, min(1.0, opacity)) * 100000))
-        fg_alpha = f'<a:alpha val="{alpha_val}"/>'
+        a_sub(fg_srgbClr, "alpha", val=alpha_val)
 
-    return (
-        f"<a:pattFill prst=\"{preset}\">"
-        f"<a:fgClr><a:srgbClr val=\"{foreground}\">{fg_alpha}</a:srgbClr></a:fgClr>"
-        f"<a:bgClr><a:srgbClr val=\"{background}\"/></a:bgClr>"
-        "</a:pattFill>"
-    )
+    # Background color
+    bgClr = a_sub(pattFill, "bgClr")
+    a_sub(bgClr, "srgbClr", val=background)
+
+    return pattFill
+
+
+def pattern_to_fill(paint: PatternPaint, *, opacity: float | None = None) -> str:
+    """Create pattern fill XML string."""
+    return to_string(_pattern_to_fill_elem(paint, opacity=opacity))
 
 
 def gradient_stop_xml(stop) -> str:
+    """Create gradient stop XML string.
+
+    Returns XML string for backward compatibility with existing code.
+    """
+    gs_elem = _gradient_stop_elem(stop)
+    return to_string(gs_elem)
+
+
+def _gradient_stop_elem(stop):
+    """Create gradient stop element.
+
+    Internal helper that returns lxml element for efficient composition.
+    """
     position = int(max(0.0, min(1.0, stop.offset)) * 100000)
     alpha = int(max(0.0, min(1.0, stop.opacity)) * 100000)
-    return (
-        f'<a:gs pos="{position}">'
-        f'<a:srgbClr val="{stop.rgb.upper()}"><a:alpha val="{alpha}"/></a:srgbClr>'
-        "</a:gs>"
-    )
+
+    gs = a_elem("gs", pos=position)
+    srgbClr = a_sub(gs, "srgbClr", val=stop.rgb.upper())
+    a_sub(srgbClr, "alpha", val=alpha)
+
+    return gs
 
 
 __all__ = [

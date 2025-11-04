@@ -11,6 +11,9 @@ from svg2ooxml.ir.geometry import BezierSegment, LineSegment, Point, Rect, Segme
 from svg2ooxml.ir.scene import ClipRef, MaskRef
 from svg2ooxml.common.geometry import Matrix2D
 
+# Import centralized XML builders for safe DrawingML generation
+from svg2ooxml.drawingml.xml_builder import a_elem, a_sub, to_string
+
 POINT_EPSILON = 1e-6
 
 __all__ = [
@@ -146,13 +149,17 @@ def _points_close(lhs: Point, rhs: Point, *, epsilon: float = POINT_EPSILON) -> 
 def _move_to_xml(point: Point) -> str:
     x = px_to_emu(point.x)
     y = px_to_emu(point.y)
-    return f'<a:moveTo><a:pt x="{x}" y="{y}"/></a:moveTo>'
+    moveTo = a_elem("moveTo")
+    a_sub(moveTo, "pt", x=x, y=y)
+    return to_string(moveTo)
 
 
 def _line_to_xml(point: Point) -> str:
     x = px_to_emu(point.x)
     y = px_to_emu(point.y)
-    return f'<a:lnTo><a:pt x="{x}" y="{y}"/></a:lnTo>'
+    lnTo = a_elem("lnTo")
+    a_sub(lnTo, "pt", x=x, y=y)
+    return to_string(lnTo)
 
 
 def _cubic_to_xml(control1: Point, control2: Point, end: Point) -> str:
@@ -162,10 +169,8 @@ def _cubic_to_xml(control1: Point, control2: Point, end: Point) -> str:
     c2y = px_to_emu(control2.y)
     ex = px_to_emu(end.x)
     ey = px_to_emu(end.y)
-    return (
-        "<a:cubicBezTo>"
-        f'<a:pt x="{c1x}" y="{c1y}"/>'
-        f'<a:pt x="{c2x}" y="{c2y}"/>'
-        f'<a:pt x="{ex}" y="{ey}"/>'
-        "</a:cubicBezTo>"
-    )
+    cubicBezTo = a_elem("cubicBezTo")
+    a_sub(cubicBezTo, "pt", x=c1x, y=c1y)
+    a_sub(cubicBezTo, "pt", x=c2x, y=c2y)
+    a_sub(cubicBezTo, "pt", x=ex, y=ey)
+    return to_string(cubicBezTo)

@@ -1,0 +1,303 @@
+================================================================================
+                    FONT DATA FLOW THROUGH PIPELINE
+================================================================================
+
+INPUT: SVG with @font-face data URI or remote font
+
+================================================================================
+STAGE 1: SVG PARSING
+================================================================================
+                          SVG Document
+                               |
+                               | SVGParser.parse()
+                               v
+                    @font-face Rules Extracted
+                    FontFaceRule[] objects
+                               |
+                               | Contains src=[FontFaceSrc()]
+                               | with url="data:font/ttf;base64,..."
+
+================================================================================
+STAGE 2: FONT LOADING (FontLoader)
+================================================================================
+                     FontFaceSrc.url (data URI)
+                               |
+                               | FontLoader.load_data_uri()
+                               v
+                    ┌─────────────────────┐
+                    │  Base64 Decode      │
+                    └──────────┬──────────┘
+                               v
+                    ┌─────────────────────┐
+                    │ Gzip/Brotli Decomp. │ (if WOFF/WOFF2)
+                    └──────────┬──────────┘
+                               v
+                        LoadedFont
+                    ┌──────────────────┐
+                    │ data: bytes       │ ← RAW FONT BYTES
+                    │ format: "ttf"     │
+                    │ decompressed: T/F │
+                    └────────┬─────────┘
+                             |
+
+================================================================================
+STAGE 3: FONT RESOLUTION (WebFontProvider.resolve)
+================================================================================
+                        LoadedFont.data
+                               |
+                               | WebFontProvider._rule_to_match()
+                               | Lines 253-259
+                               v
+          ┌───────────────────────────────────────┐
+          │ FontMatch                             │
+          ├───────────────────────────────────────┤
+          │ family: "CustomFont"                  │
+          │ path: "data:font/ttf;base64,..."      │
+          │ weight: 400                           │
+          │ style: "normal"                       │
+          │ found_via: "webfont"                  │
+          │ embedding_allowed: true               │
+          │ metadata: {                           │
+          │   "source": "webfont",                │
+          │   "font_data": bytes,         ← KEY   │
+          │   "loaded": true,                     │
+          │   "loaded_format": "ttf",             │
+          │   "loaded_size_bytes": 12345,         │
+          │   "decompressed": false                │
+          │ }                                     │
+          └───────────────────────────────────────┘
+                             |
+
+================================================================================
+STAGE 4: TEXT PLANNING (TextConversionPipeline._plan_embedding)
+================================================================================
+                        FontMatch
+                             |
+                             | Lines 233-248
+                             v
+          ┌─────────────────────────────────────────┐
+          │ FontEmbeddingRequest                    │
+          ├─────────────────────────────────────────┤
+          │ font_path: "data:font/ttf;base64,..."   │
+          │ glyph_ids: (32, 65, 66, 67, ...)        │
+          │ subset_strategy: "glyph"                │
+          │ metadata: {                             │
+          │   "font_family": "CustomFont",          │
+          │   "font_source": "webfont",             │
+          │   "font_data": bytes,        ← NEEDS!   │
+          │   "loaded": true,            ← NEEDS!   │
+          │   "loaded_format": "ttf",    ← NEEDS!   │
+          │   ...more from match.metadata           │
+          │ }                                       │
+          └──────────────┬──────────────────────────┘
+                         |
+                         | self._embedding.subset_font()
+                         v
+
+================================================================================
+STAGE 5: FONT EMBEDDING (FontEmbeddingEngine.subset_font)
+================================================================================
+                  FontEmbeddingRequest
+                         |
+                    DECISION POINT
+                         |
+         ┌───────────────┴───────────────┐
+         |                               |
+    Path is URL?                    Path is File?
+         |                               |
+         v                               v
+  ┌─────────────┐               ┌──────────────┐
+  │OPTION A:    │               │OPTION B:     │
+  │Check        │               │Load from     │
+  │metadata for │               │filesystem    │
+  │font_data    │               │Path.read...  │
+  └──────┬──────┘               └──────┬───────┘
+         |                             |
+         | request.metadata.get(       |
+         |   "font_data")              |
+         |                             |
+         v                             v
+       bytes ─────────────────────── bytes
+         |                             |
+         └─────────────┬───────────────┘
+                       |
+                       v (Lines 178-188, 227-237)
+          ┌──────────────────────────────────┐
+          │ FontEmbeddingResult              │
+          ├──────────────────────────────────┤
+          │ relationship_id: "rIdFont1"      │
+          │ glyph_count: 42                  │
+          │ bytes_written: 5000              │
+          │ permission: "INSTALLABLE"        │
+          │ packaging_metadata: {            │
+          │   "font_data": bytes,    ← KEPT  │
+          │   "font_path": "...",            │
+          │   "font_family": "...",          │
+          │   "glyph_ids": (...),            │
+          │   "subset_bytes": 5000,          │
+          │   "permission": "INSTALLABLE",   │
+          │   ...all from request.metadata   │
+          │ }                                │
+          └──────────────┬───────────────────┘
+                         |
+
+================================================================================
+STAGE 6: IR PLANNING (TextConversionPipeline._plan_embedding continued)
+================================================================================
+                  FontEmbeddingResult
+                         |
+                         | Lines 263-270
+                         | metadata.update(subset_result.packaging_metadata)
+                         v
+          ┌──────────────────────────────────────┐
+          │ EmbeddedFontPlan                     │
+          ├──────────────────────────────────────┤
+          │ font_family: "CustomFont"            │
+          │ requires_embedding: true             │
+          │ subset_strategy: "glyph"             │
+          │ glyph_count: 42                      │
+          │ relationship_hint: "rIdFont1"        │
+          │ metadata: {                          │
+          │   "font_data": bytes,        ← KEY   │
+          │   "font_path": "...",                │
+          │   "font_family": "...",              │
+          │   "subset_bytes": 5000,              │
+          │   "permission": "INSTALLABLE",       │
+          │   "loaded": true,                    │
+          │   "loaded_format": "ttf",            │
+          │   ...all preserved                   │
+          │ }                                    │
+          └──────────────┬───────────────────────┘
+                         |
+                         | Attached to TextFrame
+                         v
+
+================================================================================
+STAGE 7: ASSET REGISTRATION (DrawingML Writer)
+================================================================================
+                    TextFrame with
+                    embedding_plan
+                         |
+                         | Lines 611-614
+                         | self._assets.add_font_plan()
+                         v
+          ┌──────────────────────────────────────┐
+          │ FontAsset                            │
+          ├──────────────────────────────────────┤
+          │ shape_id: 42                         │
+          │ plan: EmbeddedFontPlan               │
+          │   └─ metadata: {..., "font_data": b}│
+          └──────────────┬───────────────────────┘
+                         |
+                         | AssetRegistry.snapshot()
+                         v
+          ┌──────────────────────────────────────┐
+          │ DrawingMLRenderResult.assets         │
+          ├──────────────────────────────────────┤
+          │ fonts: [FontAsset, FontAsset, ...]   │
+          │         └─ each has plan.metadata    │
+          │            with "font_data"          │
+          └──────────────┬───────────────────────┘
+                         |
+
+================================================================================
+STAGE 8: PPTX PACKAGING (PPTXPackageBuilder._write_font_parts)
+================================================================================
+            DrawingMLRenderResult.assets.fonts[]
+                         |
+                         | Lines 485-489
+                         | EXTRACTION POINT
+                         v
+            font_data = metadata.get("font_data")
+                         |
+                         | Validate isinstance(bytes)
+                         v
+                      font_bytes
+                         |
+                         | Lines 506-507
+                         | Create directory
+                         v
+                 "ppt/fonts/" directory
+                         |
+                         | Lines 539-540
+                         | File writing
+                         v
+        ┌───────────────────────────────────────┐
+        │ ppt/fonts/font1.ttf                   │
+        │ (raw bytes written to disk)           │
+        │                                       │
+        │ Size: 5000 bytes                      │
+        │ Format: TTF                           │
+        │ Subsetted: yes (42 glyphs)            │
+        └──────────────┬────────────────────────┘
+                       |
+                       | Lines 605-625
+                       | Update presentation.xml
+                       v
+    <p:embeddedFontLst>
+      <p:embeddedFont>
+        <p:font typeface="CustomFont"/>
+        <p:regular r:id="rIdFont1" r:subsetted="1"/>
+      </p:embeddedFont>
+    </p:embeddedFontLst>
+                       |
+                       | Lines 653-665
+                       | Add relationships
+                       v
+    <Relationship
+        Id="rIdFont1"
+        Type="...relationships/font"
+        Target="fonts/font1.ttf"/>
+
+================================================================================
+FINAL OUTPUT: PPTX Package
+================================================================================
+    output.pptx
+    ├── ppt/
+    │   ├── presentation.xml (with embeddedFontLst)
+    │   ├── _rels/
+    │   │   └── presentation.xml.rels (with font relationship)
+    │   ├── fonts/
+    │   │   ├── font1.ttf        ← From font_data bytes
+    │   │   ├── font2.otf        ← From font_data bytes
+    │   │   └── font3.ttf        ← From font_data bytes
+    │   └── slides/
+    │       ├── slide1.xml
+    │       └── ...
+    ├── [Content_Types].xml (with font MIME types)
+    └── _rels/
+        └── .rels
+
+================================================================================
+METADATA FLOW SUMMARY
+================================================================================
+
+POINT 1 (WebFontProvider):
+  LoadedFont.data → FontMatch.metadata["font_data"]
+
+POINT 2 (TextPipeline):
+  FontMatch.metadata → FontEmbeddingRequest.metadata (SHOULD BE!)
+
+POINT 3 (EmbeddingEngine):
+  FontEmbeddingRequest.metadata → FontEmbeddingResult.packaging_metadata
+
+POINT 4 (TextPipeline):
+  FontEmbeddingResult.packaging_metadata → EmbeddedFontPlan.metadata
+
+POINT 5 (DrawingML):
+  EmbeddedFontPlan → FontAsset.plan.metadata
+
+POINT 6 (PPTX Writer):
+  FontAsset.plan.metadata["font_data"] → file bytes → ppt/fonts/
+
+================================================================================
+CRITICAL DEPENDENCIES
+================================================================================
+
+✓ FontLoader must load font_data correctly
+✓ WebFontProvider must store font_data in FontMatch.metadata
+✓ TextPipeline must pass FontMatch.metadata to FontEmbeddingRequest.metadata
+✓ EmbeddingEngine must not fail on URL paths (check metadata first)
+✓ PPTX Writer must extract and write font_data bytes
+
+================================================================================

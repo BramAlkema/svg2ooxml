@@ -35,7 +35,7 @@ __all__ = [
 ]
 
 # map symbol -> relative module
-_symbol_map = {'convert_document': 'converter', 'StyleRule': 'css', 'parse_stylesheet': 'css', 'Options': 'options', 'ImageRendering': 'options', 'ImageHrefResolver': 'options', 'build_default_options': 'options', 'Size': 'options', 'ShapeRendering': 'options', 'TextRendering': 'options', 'collect_presentation': 'presentation', 'Presentation': 'presentation', 'TransformCommand': 'presentation', 'parse_transform': 'presentation', 'PRESENTATION_KEYS': 'presentation', 'parse_inline_style': 'style', 'SvgDocument': 'tree', 'SvgNode': 'tree', 'parse_svg_bytes': 'xml_loader', 'parse_svg_file': 'xml_loader', 'parse_svg_string': 'xml_loader'}
+_symbol_map = {'convert_document': 'converter', 'StyleRule': 'css', 'parse_stylesheet': 'css', 'Options': 'options', 'build_default_options': 'options', 'Size': 'options', 'ImageHrefResolver': 'options', 'ImageRendering': 'options', 'TextRendering': 'options', 'ShapeRendering': 'options', 'parse_transform': 'presentation', 'PRESENTATION_KEYS': 'presentation', 'TransformCommand': 'presentation', 'Presentation': 'presentation', 'collect_presentation': 'presentation', 'parse_inline_style': 'style', 'SvgNode': 'tree', 'SvgDocument': 'tree', 'parse_svg_string': 'xml_loader', 'parse_svg_bytes': 'xml_loader', 'parse_svg_file': 'xml_loader'}
 _module_map = {'converter': 'converter', 'css': 'css', 'options': 'options', 'presentation': 'presentation', 'style': 'style', 'tree': 'tree', 'xml_loader': 'xml_loader'}
 
 

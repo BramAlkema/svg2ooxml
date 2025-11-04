@@ -14,6 +14,9 @@ from svg2ooxml.ir.scene import Path
 from .base import Mapper, MapperResult, OutputFormat
 from .clip_render import clip_result_to_xml
 
+# Import centralized XML builders for safe DrawingML generation
+from svg2ooxml.drawingml.xml_builder import a_elem, a_sub, p_elem, p_sub, to_string
+
 
 @dataclass
 class PathDecision:
@@ -81,21 +84,53 @@ class PathMapper(Mapper):
         bounds = _path_bounds(path)
         fill_xml = _fill_xml(path)
         stroke_xml = _stroke_xml(path)
-        xml = (
-            f"<p:sp>"
-            f"<p:nvSpPr><p:cNvPr id=\"1\" name=\"Path\"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>"
-            f"<p:spPr>"
-            f"<a:xfrm>"
-            f"<a:off x=\"{px_to_emu(bounds.x)}\" y=\"{px_to_emu(bounds.y)}\"/>"
-            f"<a:ext cx=\"{px_to_emu(bounds.width or 1.0)}\" cy=\"{px_to_emu(bounds.height or 1.0)}\"/>"
-            f"</a:xfrm>"
-            f"{clip_xml}"
-            f"{geometry_xml}"
-            f"{fill_xml}"
-            f"{stroke_xml}"
-            f"</p:spPr>"
-            f"</p:sp>"
-        )
+
+        # Build p:sp with lxml
+        sp = p_elem("sp")
+
+        # Build p:nvSpPr
+        nvSpPr = p_sub(sp, "nvSpPr")
+        p_sub(nvSpPr, "cNvPr", id="1", name="Path")
+        p_sub(nvSpPr, "cNvSpPr")
+        p_sub(nvSpPr, "nvPr")
+
+        # Build p:spPr
+        spPr = p_sub(sp, "spPr")
+
+        # Build a:xfrm
+        xfrm = a_sub(spPr, "xfrm")
+        a_sub(xfrm, "off", x=px_to_emu(bounds.x), y=px_to_emu(bounds.y))
+        a_sub(xfrm, "ext", cx=px_to_emu(bounds.width or 1.0), cy=px_to_emu(bounds.height or 1.0))
+
+        # Add clip_xml if present
+        from lxml import etree
+        if clip_xml:
+            wrapped = f'<root xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">{clip_xml}</root>'
+            temp = etree.fromstring(wrapped.encode('utf-8'))
+            for child in temp:
+                spPr.append(child)
+
+        # Add geometry_xml
+        if geometry_xml:
+            wrapped = f'<root xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">{geometry_xml}</root>'
+            temp = etree.fromstring(wrapped.encode('utf-8'))
+            for child in temp:
+                spPr.append(child)
+
+        # Add fill_xml and stroke_xml
+        if fill_xml:
+            wrapped = f'<root xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">{fill_xml}</root>'
+            temp = etree.fromstring(wrapped.encode('utf-8'))
+            for child in temp:
+                spPr.append(child)
+
+        if stroke_xml:
+            wrapped = f'<root xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">{stroke_xml}</root>'
+            temp = etree.fromstring(wrapped.encode('utf-8'))
+            for child in temp:
+                spPr.append(child)
+
+        xml = to_string(sp)
 
         metadata.update(
             {
