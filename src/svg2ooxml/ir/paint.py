@@ -49,6 +49,12 @@ class RadialGradientPaint:
     focal_point: tuple[float, float] | None = None
     transform: np.ndarray | None = None
     gradient_id: str | None = None
+    # Phase 1: Transform detection & telemetry fields
+    gradient_transform: "Any | None" = None        # Original gradient transform (before baking)
+    original_transform: "Any | None" = None        # Shape transform (for telemetry)
+    had_transform_flag: bool = False                # Was any transform applied?
+    transform_class: "Any | None" = None            # SVD classification (TransformClass from adapter)
+    policy_decision: str | None = None              # "vector_ok" / "vector_warn_mild_anisotropy" / "rasterize_nonuniform"
 
 
 @dataclass(frozen=True)
