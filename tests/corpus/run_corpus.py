@@ -117,17 +117,20 @@ class CorpusRunner:
         corpus_dir: Path,
         output_dir: Path,
         mode: str = "resvg",
+        metadata_file: Path | None = None,
     ):
         """Initialize corpus runner.
-        
+
         Args:
             corpus_dir: Directory containing corpus SVG files and metadata
             output_dir: Directory for output PPTX files and reports
             mode: Rendering mode ("legacy" or "resvg")
+            metadata_file: Path to metadata file (default: corpus_dir/corpus_metadata.json)
         """
         self.corpus_dir = corpus_dir
         self.output_dir = output_dir
         self.mode = mode
+        self.metadata_file = metadata_file
         
         self.output_dir.mkdir(parents=True, exist_ok=True)
         
@@ -145,10 +148,10 @@ class CorpusRunner:
     
     def load_metadata(self) -> dict[str, Any]:
         """Load corpus metadata from JSON file."""
-        metadata_path = self.corpus_dir / "corpus_metadata.json"
+        metadata_path = self.metadata_file or (self.corpus_dir / "corpus_metadata.json")
         if not metadata_path.exists():
             raise FileNotFoundError(f"Metadata file not found: {metadata_path}")
-        
+
         with open(metadata_path) as f:
             return json.load(f)
     
@@ -361,7 +364,12 @@ def main():
         default=Path(__file__).parent / "corpus_report.json",
         help="Report output path (default: tests/corpus/corpus_report.json)",
     )
-    
+    parser.add_argument(
+        "--metadata",
+        type=Path,
+        help="Path to metadata file (default: corpus-dir/corpus_metadata.json)",
+    )
+
     args = parser.parse_args()
     
     if not VISUAL_AVAILABLE:
@@ -373,6 +381,7 @@ def main():
         corpus_dir=args.corpus_dir,
         output_dir=args.output_dir,
         mode=args.mode,
+        metadata_file=args.metadata,
     )
     
     report = runner.run_all()
