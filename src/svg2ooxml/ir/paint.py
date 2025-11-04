@@ -35,6 +35,9 @@ class LinearGradientPaint:
     end: tuple[float, float]
     transform: np.ndarray | None = None
     gradient_id: str | None = None
+    # Phase 4: Units & Spread tracking
+    gradient_units: str | None = None           # "userSpaceOnUse" or "objectBoundingBox"
+    spread_method: str | None = None            # "pad", "reflect", or "repeat"
 
     def __post_init__(self) -> None:
         if len(self.stops) < 2:
@@ -55,6 +58,9 @@ class RadialGradientPaint:
     had_transform_flag: bool = False                # Was any transform applied?
     transform_class: "Any | None" = None            # SVD classification (TransformClass from adapter)
     policy_decision: str | None = None              # "vector_ok" / "vector_warn_mild_anisotropy" / "rasterize_nonuniform"
+    # Phase 4: Units & Spread tracking
+    gradient_units: str | None = None               # "userSpaceOnUse" or "objectBoundingBox"
+    spread_method: str | None = None                # "pad", "reflect", or "repeat"
 
 
 @dataclass(frozen=True)

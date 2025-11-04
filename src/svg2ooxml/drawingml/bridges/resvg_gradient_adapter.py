@@ -234,11 +234,12 @@ def linear_gradient_to_paint(gradient: "LinearGradient") -> "LinearGradientPaint
           to handle transforms.
           ⚠️  **Telemetry impact**: Setting transform=None loses information about whether
           gradient originally had a transform. See docs/tasks/resvg-transform-limitations.md
-        - **Spread method**: Not preserved in IR (pad/reflect/repeat). IR doesn't have this field,
-          so paint_runtime will always use pad behavior. This is a DrawingML limitation.
-        - **Units**: objectBoundingBox vs userSpaceOnUse NOT recorded. If gradient uses
-          objectBoundingBox units (values in 0-1 range), caller MUST scale coordinates before
-          passing to paint_runtime, which assumes user-space pixels.
+        - **Spread method**: ✅ NOW PRESERVED! Phase 4 adds spread_method field to IR.
+          Values: "pad", "reflect", "repeat". Note: DrawingML may not support reflect/repeat,
+          so paint_runtime may need fallback strategies for non-pad spread methods.
+        - **Units**: ✅ NOW PRESERVED! Phase 4 adds gradient_units field to IR.
+          Values: "userSpaceOnUse" or "objectBoundingBox". Note: Coordinates are already
+          transformed, but this field is preserved for telemetry and future use.
         - **Gradient inheritance (href)**: Not resolved. If gradient references another via href,
           caller must resolve the chain before conversion.
     """
@@ -280,6 +281,9 @@ def linear_gradient_to_paint(gradient: "LinearGradient") -> "LinearGradientPaint
         end=end,
         transform=None,  # Transform already applied to coordinates
         gradient_id=grad_id,
+        # Phase 4: Preserve units and spread method
+        gradient_units=gradient.units,
+        spread_method=gradient.spread_method,
     )
 
 
@@ -346,11 +350,12 @@ def radial_gradient_to_paint(gradient: "RadialGradient") -> "RadialGradientPaint
           📝 See docs/tasks/resvg-transform-limitations.md for details and detection strategy
           ⚠️  **Telemetry impact**: Setting transform=None loses information about whether
           gradient originally had a transform.
-        - **Spread method**: Not preserved in IR (pad/reflect/repeat). IR doesn't have this field,
-          so paint_runtime will always use pad behavior. This is a DrawingML limitation.
-        - **Units**: objectBoundingBox vs userSpaceOnUse NOT recorded. If gradient uses
-          objectBoundingBox units (values in 0-1 range), caller MUST scale coordinates before
-          passing to paint_runtime, which assumes user-space pixels.
+        - **Spread method**: ✅ NOW PRESERVED! Phase 4 adds spread_method field to IR.
+          Values: "pad", "reflect", "repeat". Note: DrawingML may not support reflect/repeat,
+          so paint_runtime may need fallback strategies for non-pad spread methods.
+        - **Units**: ✅ NOW PRESERVED! Phase 4 adds gradient_units field to IR.
+          Values: "userSpaceOnUse" or "objectBoundingBox". Note: Coordinates are already
+          transformed, but this field is preserved for telemetry and future use.
         - **Gradient inheritance (href)**: Not resolved. If gradient references another via href,
           caller must resolve the chain before conversion.
         - **Focal point (fx, fy)**: Transformed along with center. May have limited DrawingML support.
@@ -487,6 +492,9 @@ def radial_gradient_to_paint(gradient: "RadialGradient") -> "RadialGradientPaint
         had_transform_flag=had_transform,
         transform_class=transform_class,
         policy_decision=policy_decision,
+        # Phase 4: Preserve units and spread method
+        gradient_units=gradient.units,
+        spread_method=gradient.spread_method,
     )
 
 
