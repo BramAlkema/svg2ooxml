@@ -283,7 +283,42 @@ def linear_gradient_to_paint(gradient: "LinearGradient") -> "LinearGradientPaint
     )
 
 
-def radial_gradient_to_paint(gradient: "RadialGradient") -> "RadialGradientPaint":
+def _calculate_raster_size(s1: float, s2: float, oversample: float = 2.0, min_size: int = 64, max_size: int = 4096) -> int:
+    """Calculate optimal raster size for gradient texture.
+
+    Args:
+        s1: Larger singular value (max stretch factor)
+        s2: Smaller singular value (min stretch factor)
+        oversample: Oversampling factor for quality (default 2.0)
+        min_size: Minimum texture size in pixels (default 64)
+        max_size: Maximum texture size in pixels (default 4096)
+
+    Returns:
+        Clamped raster size in pixels
+
+    Example:
+        >>> # Uniform 2x scale
+        >>> _calculate_raster_size(2.0, 2.0)
+        64  # clamped to min
+
+        >>> # Large non-uniform scale
+        >>> _calculate_raster_size(1000.0, 500.0)
+        4096  # clamped to max
+
+        >>> # Moderate scale
+        >>> _calculate_raster_size(50.0, 25.0)
+        100  # ceil(50 * 2.0)
+    """
+    import math
+    # Use max singular value (maximum stretch)
+    max_stretch = max(s1, s2)
+    # Calculate size with oversampling
+    size = math.ceil(max_stretch * oversample)
+    # Clamp to valid range
+    return max(min_size, min(size, max_size))
+
+
+def radial_gradient_to_paint(gradient: "RadialGradient") -> "RadialGradientPaint | SolidPaint":
     """Convert resvg RadialGradient to IR RadialGradientPaint.
 
     Args:
@@ -372,20 +407,48 @@ def radial_gradient_to_paint(gradient: "RadialGradient") -> "RadialGradientPaint
                 gradient.href or "(none)",
             )
         elif policy_decision == "rasterize_nonuniform":
-            # Severe non-uniformity or shear: log at info level
+            # Phase 3: Severe non-uniformity or shear → solid color fallback
+            # TODO: Implement full bitmap rasterization when needed
+            # For now, use average color of gradient stops as fallback
+
+            # Calculate raster size (for telemetry/future use)
+            raster_size = _calculate_raster_size(transform_class.s1, transform_class.s2)
+
+            # Compute average color from gradient stops
+            total_r, total_g, total_b, total_a = 0.0, 0.0, 0.0, 0.0
+            for stop in gradient.stops:
+                total_r += stop.color.r
+                total_g += stop.color.g
+                total_b += stop.color.b
+                total_a += stop.color.a
+            count = len(gradient.stops)
+            avg_r = int(total_r / count)
+            avg_g = int(total_g / count)
+            avg_b = int(total_b / count)
+            avg_opacity = total_a / count
+
+            avg_rgb = f"{avg_r:02X}{avg_g:02X}{avg_b:02X}"
+
             reason = "shear" if transform_class.has_shear else f"non-uniform scale (ratio={transform_class.ratio:.3f})"
             logger.info(
                 "Radial gradient has %s: "
-                "Rasterization fallback recommended (not yet implemented). "
+                "Using solid color fallback (avg of %d stops). "
                 "Transform: [[%.3f, %.3f], [%.3f, %.3f]], "
                 "Singular values: s1=%.3f, s2=%.3f, "
+                "Raster size would be: %dpx, "
                 "Gradient ID: %s",
                 reason,
+                count,
                 gradient.transform.a, gradient.transform.c,
                 gradient.transform.b, gradient.transform.d,
                 transform_class.s1, transform_class.s2,
+                raster_size,
                 gradient.href or "(none)",
             )
+
+            # Return solid color fallback
+            from svg2ooxml.ir.paint import SolidPaint
+            return SolidPaint(rgb=avg_rgb, opacity=avg_opacity)
 
     # Apply transform to gradient coordinates (if present)
     # This bakes the transform into the coordinates, so paint_runtime doesn't need to handle it

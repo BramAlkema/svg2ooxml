@@ -131,7 +131,7 @@ class TestGradientTransformTelemetry:
         assert result["transform_class"]["ratio"] == pytest.approx(1.015, abs=0.001)
 
     def test_radial_gradient_severe_anisotropy_telemetry(self):
-        """Test radial gradient with severe anisotropy includes rasterization flag."""
+        """Test radial gradient with severe anisotropy returns solid color (Phase 3)."""
         transform = Matrix(a=2.0, b=0.0, c=0.0, d=1.0, e=0.0, f=0.0)
         stops = [
             GradientStop(offset=0.0, color=Color(r=255, g=0, b=0, a=1.0)),
@@ -152,14 +152,13 @@ class TestGradientTransformTelemetry:
         converter = MockConverter()
         result = converter._serialize_paint(paint)
 
-        assert result["type"] == "radialGradient"
-        assert result["had_transform"] is True
-        assert result["policy_decision"] == "rasterize_nonuniform"
-        assert result["transform_class"]["non_uniform"] is True
-        assert result["transform_class"]["ratio"] == pytest.approx(2.0)
+        # Phase 3: Severe non-uniform transform returns SolidPaint
+        assert result["type"] == "solid"
+        assert "rgb" in result
+        assert result["opacity"] == pytest.approx(1.0)
 
     def test_radial_gradient_skew_telemetry(self):
-        """Test radial gradient with skew includes shear detection."""
+        """Test radial gradient with skew returns solid color (Phase 3)."""
         # SkewX(30°): tan(30°) ≈ 0.577
         transform = Matrix(a=1.0, b=0.0, c=0.577, d=1.0, e=0.0, f=0.0)
         stops = [
@@ -181,10 +180,10 @@ class TestGradientTransformTelemetry:
         converter = MockConverter()
         result = converter._serialize_paint(paint)
 
-        assert result["type"] == "radialGradient"
-        assert result["had_transform"] is True
-        assert result["policy_decision"] == "rasterize_nonuniform"
-        assert result["transform_class"]["has_shear"] is True
+        # Phase 3: Skew/shear transform returns SolidPaint
+        assert result["type"] == "solid"
+        assert "rgb" in result
+        assert result["opacity"] == pytest.approx(1.0)
 
 
 class TestLoggingOutput:
@@ -240,9 +239,9 @@ class TestLoggingOutput:
 
         radial_gradient_to_paint(gradient)
 
-        # Check that info log was emitted
+        # Check that info log was emitted (Phase 3: solid color fallback)
         assert any("non-uniform scale" in record.message for record in caplog.records)
-        assert any("Rasterization fallback recommended" in record.message for record in caplog.records)
+        assert any("solid color fallback" in record.message for record in caplog.records)
 
     def test_skew_info_log(self, caplog):
         """Test that skew transform emits info log mentioning shear."""

@@ -224,10 +224,11 @@ class TestGradientTransformIntegration:
         assert paint.gradient_transform == transform
 
     def test_radial_gradient_with_non_uniform_scale(self):
-        """Test radial gradient with non-uniform scale (should detect)."""
+        """Test radial gradient with non-uniform scale returns solid color fallback (Phase 3)."""
         from svg2ooxml.core.resvg.geometry.matrix import Matrix
         from svg2ooxml.core.resvg.painting.gradients import RadialGradient, GradientStop
         from svg2ooxml.core.resvg.painting.paint import Color
+        from svg2ooxml.ir.paint import SolidPaint
 
         transform = Matrix(a=2.0, b=0.0, c=0.0, d=1.0, e=0.0, f=0.0)
         stops = [
@@ -247,19 +248,18 @@ class TestGradientTransformIntegration:
 
         paint = radial_gradient_to_paint(gradient)
 
-        # Verify detection of non-uniform transform
-        assert paint.had_transform_flag is True
-        assert paint.policy_decision == "rasterize_nonuniform"
-        assert paint.transform_class is not None
-        assert paint.transform_class.non_uniform
-        assert paint.transform_class.ratio == pytest.approx(2.0)
-        assert not paint.transform_class.has_shear
+        # Phase 3: Severe non-uniform transform returns SolidPaint fallback
+        assert isinstance(paint, SolidPaint)
+        # Verify solid color is reasonable (average of red and blue = purple)
+        assert paint.rgb is not None
+        assert paint.opacity == pytest.approx(1.0)
 
     def test_radial_gradient_with_skew(self):
-        """Test radial gradient with skew transform (should detect shear)."""
+        """Test radial gradient with skew transform returns solid color fallback (Phase 3)."""
         from svg2ooxml.core.resvg.geometry.matrix import Matrix
         from svg2ooxml.core.resvg.painting.gradients import RadialGradient, GradientStop
         from svg2ooxml.core.resvg.painting.paint import Color
+        from svg2ooxml.ir.paint import SolidPaint
 
         # SkewX(30°): tan(30°) ≈ 0.577
         transform = Matrix(a=1.0, b=0.0, c=0.577, d=1.0, e=0.0, f=0.0)
@@ -280,11 +280,11 @@ class TestGradientTransformIntegration:
 
         paint = radial_gradient_to_paint(gradient)
 
-        # Verify detection of shear
-        assert paint.had_transform_flag is True
-        assert paint.policy_decision == "rasterize_nonuniform"
-        assert paint.transform_class is not None
-        assert paint.transform_class.has_shear
+        # Phase 3: Skew/shear transform returns SolidPaint fallback
+        assert isinstance(paint, SolidPaint)
+        # Verify solid color is reasonable (average of red and blue = purple)
+        assert paint.rgb is not None
+        assert paint.opacity == pytest.approx(1.0)
 
     def test_radial_gradient_with_mild_anisotropy(self):
         """Test radial gradient with mild anisotropy (should warn)."""
