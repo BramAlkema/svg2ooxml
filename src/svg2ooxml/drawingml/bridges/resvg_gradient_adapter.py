@@ -38,12 +38,15 @@ Usage:
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from svg2ooxml.core.resvg.painting.gradients import LinearGradient, RadialGradient
     from svg2ooxml.ir.paint import LinearGradientPaint, RadialGradientPaint, GradientStop
+
+logger = logging.getLogger(__name__)
 
 
 # ============================================================================
@@ -352,6 +355,37 @@ def radial_gradient_to_paint(gradient: "RadialGradient") -> "RadialGradientPaint
             gradient.transform.c,
             gradient.transform.d,
         )
+
+        # Phase 2: Emit warnings/trace logs based on policy decision
+        if policy_decision == "vector_warn_mild_anisotropy":
+            # Mild anisotropy: log warning with details
+            logger.debug(
+                "Radial gradient has mild anisotropy (ratio=%.3f): "
+                "Rendering as circle (approximate). "
+                "Transform: [[%.3f, %.3f], [%.3f, %.3f]], "
+                "Singular values: s1=%.3f, s2=%.3f, "
+                "Gradient ID: %s",
+                transform_class.ratio,
+                gradient.transform.a, gradient.transform.c,
+                gradient.transform.b, gradient.transform.d,
+                transform_class.s1, transform_class.s2,
+                gradient.href or "(none)",
+            )
+        elif policy_decision == "rasterize_nonuniform":
+            # Severe non-uniformity or shear: log at info level
+            reason = "shear" if transform_class.has_shear else f"non-uniform scale (ratio={transform_class.ratio:.3f})"
+            logger.info(
+                "Radial gradient has %s: "
+                "Rasterization fallback recommended (not yet implemented). "
+                "Transform: [[%.3f, %.3f], [%.3f, %.3f]], "
+                "Singular values: s1=%.3f, s2=%.3f, "
+                "Gradient ID: %s",
+                reason,
+                gradient.transform.a, gradient.transform.c,
+                gradient.transform.b, gradient.transform.d,
+                transform_class.s1, transform_class.s2,
+                gradient.href or "(none)",
+            )
 
     # Apply transform to gradient coordinates (if present)
     # This bakes the transform into the coordinates, so paint_runtime doesn't need to handle it

@@ -529,7 +529,7 @@ class TraversalHooksMixin:
                 "gradient_id": paint.gradient_id,
             }
         if isinstance(paint, RadialGradientPaint):
-            return {
+            result = {
                 "type": "radialGradient",
                 "stops": [
                     {"offset": stop.offset, "rgb": stop.rgb, "opacity": stop.opacity}
@@ -541,6 +541,26 @@ class TraversalHooksMixin:
                 "transform": self._serialize_matrix(paint.transform),
                 "gradient_id": paint.gradient_id,
             }
+
+            # Phase 1: Include transform telemetry fields if present
+            if hasattr(paint, 'had_transform_flag') and paint.had_transform_flag:
+                result["had_transform"] = True
+                result["gradient_transform"] = self._serialize_matrix(paint.gradient_transform)
+
+                if paint.policy_decision:
+                    result["policy_decision"] = paint.policy_decision
+
+                if paint.transform_class:
+                    result["transform_class"] = {
+                        "non_uniform": paint.transform_class.non_uniform,
+                        "has_shear": paint.transform_class.has_shear,
+                        "det_sign": paint.transform_class.det_sign,
+                        "s1": float(paint.transform_class.s1),
+                        "s2": float(paint.transform_class.s2),
+                        "ratio": float(paint.transform_class.ratio),
+                    }
+
+            return result
         if isinstance(paint, PatternPaint):
             return {
                 "type": "pattern",
