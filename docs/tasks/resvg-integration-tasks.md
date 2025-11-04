@@ -567,31 +567,49 @@ resvg.RadialGradient → [adapter] → ir.RadialGradientPaint → [paint_runtime
 ## Phase 4: Integration & Visual Coverage
 
 ### Task 4.1: Build Visual Differ Tool
-**Status**: ⏳ Pending
-**File**: `tests/visual/differ.py` (new module)
+**Status**: ✅ Complete
+**File**: `tests/visual/differ.py`
 **Priority**: High
 
-**Sub-tasks**:
-- [ ] **Add `scikit-image` to `pyproject.toml` optional dependencies**:
-  ```toml
-  [project.optional-dependencies]
-  visual-testing = ["scikit-image>=0.21.0", "Pillow>=10.0.0"]
-  ```
-- [ ] Implement pixel comparison using `skimage.metrics.structural_similarity`:
-  ```python
-  def compare_images(baseline: Image, actual: Image) -> DiffResult:
-      """Compare images, return SSIM score and diff image."""
-  ```
-- [ ] Generate diff images (red overlay for changed pixels)
-- [ ] Add thresholding for acceptable differences (e.g., > 0.95 = pass)
-- [ ] Write unit tests: identical images, minor/major differences
+**Completed Sub-tasks**:
+- [x] **Add `scikit-image` to `pyproject.toml` optional dependencies** ✅
+  - Added `visual-testing = ["scikit-image>=0.21.0", "Pillow>=10.0.0"]`
+- [x] Implement SSIM-based image comparison using `skimage.metrics.structural_similarity` ✅
+  - Created `VisualDiffer` class with configurable thresholds
+  - Implemented `compare()` method returning `DiffResult` dataclass
+  - Handles RGB, grayscale, and RGBA images (auto-converts to RGB)
+  - Adaptive window sizing for small images (<7x7)
+  - Fallback to pixel-wise comparison for very small images (<3x3)
+- [x] Generate diff images with red overlay for changed pixels ✅
+  - `_generate_diff_image()` creates visual diff highlighting low-SSIM regions
+  - Supports optional diff generation via `generate_diff` parameter
+- [x] Add thresholding for acceptable differences ✅
+  - Configurable SSIM threshold (default: 0.95)
+  - Configurable pixel diff threshold (default: 10/255)
+  - Pass/fail determination based on threshold
+- [x] Write comprehensive unit tests ✅
+  - 30 tests covering all functionality (100% pass rate)
+  - Test classes: Init (8 tests), SSIM (4 tests), PixelDiff (4 tests), DiffGen (4 tests), Result (3 tests), EdgeCases (5 tests), Integration (2 tests)
+  - Edge cases: different sizes, grayscale/RGBA conversion, 1x1 images, 1000x1000 images
 
-**Dependencies**: None
-**Success Criteria**:
-- Diff tool installed via `pip install svg2ooxml[visual-testing]`
-- SSIM scores correlate with visual perception
-- Diff images help debug failures
-- Tests verify scoring logic
+**Implementation Highlights**:
+- **VisualDiffer class**: Configurable threshold and pixel_diff_threshold parameters
+- **DiffResult dataclass**: Contains ssim_score, pixel_diff_percentage, passed, threshold, diff_image, shapes
+- **SSIM computation**: Per-channel SSIM aggregated to 2D map using minimum across channels (conservative)
+- **Pixel diff calculation**: Counts pixels where ANY channel exceeds threshold
+- **Diff visualization**: Red overlay on regions with SSIM < 0.95
+- **Edge case handling**:
+  - Images < 3x3: Simple pixel-wise equality check
+  - Images 3x3 to 7x7: Adaptive win_size
+  - Grayscale/RGBA: Auto-convert to RGB
+  - Type safety: Returns Python bool/float (not numpy types)
+
+**Dependencies**: None ✅
+**Success Criteria**: ✅ All met
+- Diff tool installed via `pip install svg2ooxml[visual-testing]` ✅
+- SSIM scores correlate with visual perception ✅ (verified in tests)
+- Diff images help debug failures ✅ (red overlay highlights changes)
+- Tests verify scoring logic ✅ (30/30 tests passing)
 
 ---
 
