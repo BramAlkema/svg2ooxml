@@ -1,0 +1,7 @@
+# Generated output directories and files
+output_*/
+report_*.json
+w3c_*_metadata.json
+
+# Keep only README and directory structure
+!README.md

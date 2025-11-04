@@ -28,6 +28,19 @@ tests/corpus/
 └── corpus_report.json           # Latest test report
 ```
 
+## W3C SVG Test Suite Integration
+
+The repository includes 447 non-animation tests from the W3C SVG 1.1 Test Suite! See [W3C Corpus Documentation](w3c/README.md) for details.
+
+**Quick start**:
+```bash
+# Run W3C gradient tests
+./tests/corpus/run_w3c_corpus.sh gradients
+
+# Run all W3C test categories
+./tests/corpus/run_w3c_corpus.sh all
+```
+
 ## Quick Start
 
 ### 1. Install Dependencies
