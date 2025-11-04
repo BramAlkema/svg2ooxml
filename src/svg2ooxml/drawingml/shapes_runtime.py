@@ -13,6 +13,20 @@ from svg2ooxml.ir.scene import Image, Path as IRPath
 from svg2ooxml.ir.shapes import Circle, Ellipse, Rectangle, Line, Polyline, Polygon
 from svg2ooxml.ir.text import Run, TextAnchor, TextFrame, WordArtCandidate
 from svg2ooxml.policy.constants import FALLBACK_BITMAP
+
+# Import centralized XML builders for safe DrawingML generation
+from svg2ooxml.drawingml.xml_builder import (
+    a_elem,
+    a_sub,
+    to_string,
+    blur,
+    soft_edge,
+    glow,
+    outer_shadow,
+    reflection,
+    effect_list,
+    srgb_color,
+)
 from svg2ooxml.ir.effects import (
     BlurEffect,
     CustomEffect,
@@ -487,17 +501,39 @@ def run_fragment(run: Run, text_segment: str, navigation_factory) -> str:
     east_asian = html.escape(getattr(run, "east_asian_font", "") or run.font_family or "Arial", quote=True)
     complex_script = html.escape(getattr(run, "complex_script_font", "") or run.font_family or "Arial", quote=True)
 
-    rpr_parts = [f'<a:rPr {" ".join(attributes)}>']
-    rpr_parts.append(f'<a:solidFill><a:srgbClr val="{rgb}"/></a:solidFill>')
-    rpr_parts.append(f'<a:latin typeface="{font_family}"/>')
-    rpr_parts.append(f'<a:ea typeface="{east_asian}"/>')
-    rpr_parts.append(f'<a:cs typeface="{complex_script}"/>')
+    # Build a:r element with lxml
+    r = a_elem("r")
+
+    # Build a:rPr with attributes
+    rPr = a_elem("rPr")
+    for attr_str in attributes:
+        # Parse attribute strings like 'sz="1200"'
+        if "=" in attr_str:
+            key, val = attr_str.split("=", 1)
+            rPr.set(key, val.strip('"'))
+
+    # Add solidFill
+    solidFill = a_sub(rPr, "solidFill")
+    a_sub(solidFill, "srgbClr", val=rgb)
+
+    # Add font typefaces
+    a_sub(rPr, "latin", typeface=font_family)
+    a_sub(rPr, "ea", typeface=east_asian)
+    a_sub(rPr, "cs", typeface=complex_script)
+
+    # Add navigation if present
     if navigation_factory is not None:
         nav_xml = navigation_factory(text_segment)
         if nav_xml:
-            rpr_parts.append(nav_xml)
-    rpr_parts.append("</a:rPr>")
+            from lxml import etree
+            wrapped = f'<root xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">{nav_xml}</root>'
+            temp = etree.fromstring(wrapped.encode('utf-8'))
+            for child in temp:
+                rPr.append(child)
 
+    r.append(rPr)
+
+    # Build a:t element
     text_value = text_segment
     preserve = False
     if text_value == "":
@@ -506,28 +542,32 @@ def run_fragment(run: Run, text_segment: str, navigation_factory) -> str:
     elif text_value.startswith(" ") or text_value.endswith(" "):
         preserve = True
 
-    escaped_text = html.escape(text_value)
-    space_attr = ' xml:space="preserve"' if preserve else ""
-    text_xml = f'<a:t{space_attr}>{escaped_text}</a:t>'
+    t = a_elem("t")
+    t.text = text_value  # lxml handles escaping
+    if preserve:
+        t.set("{http://www.w3.org/XML/1998/namespace}space", "preserve")
 
-    return f'<a:r>{"".join(rpr_parts)}{text_xml}</a:r>'
+    r.append(t)
+
+    return to_string(r)
 
 
 def _round_rect_adjustment_block(width: float, height: float, radius: float) -> str:
-    if width <= 0 or height <= 0 or radius <= 0:
-        return "        <a:avLst/>\n"
-    min_dim = min(width, height)
-    max_corner = min_dim / 2.0
-    effective_radius = min(radius, max_corner)
-    ratio_x = (effective_radius / width) * 100 if width > 0 else 0.0
-    ratio_y = (effective_radius / height) * 100 if height > 0 else 0.0
-    ratio = min(50.0, max(ratio_x, ratio_y))
-    adj = int(round(ratio * 1000))
-    return (
-        "        <a:avLst>\n"
-        f'            <a:gd name="adj" fmla="val {adj}"/>\n'
-        "        </a:avLst>\n"
-    )
+    avLst = a_elem("avLst")
+
+    if width > 0 and height > 0 and radius > 0:
+        min_dim = min(width, height)
+        max_corner = min_dim / 2.0
+        effective_radius = min(radius, max_corner)
+        ratio_x = (effective_radius / width) * 100 if width > 0 else 0.0
+        ratio_y = (effective_radius / height) * 100 if height > 0 else 0.0
+        ratio = min(50.0, max(ratio_x, ratio_y))
+        adj = int(round(ratio * 1000))
+        a_sub(avLst, "gd", name="adj", fmla=f"val {adj}")
+
+    xml = to_string(avLst)
+    # Add indentation for formatting
+    return "        " + xml.replace("\n", "\n        ") + "\n"
 
 
 def _render_polygonal_shape(
@@ -625,34 +665,42 @@ def _strip_effect_list(xml: str) -> str:
 
 
 def _effect_to_drawingml(effect: Effect) -> str:
+    """Convert effect to DrawingML XML using safe lxml builders.
+
+    Args:
+        effect: Effect object (Blur, SoftEdge, Glow, Shadow, Reflection, or Custom)
+
+    Returns:
+        DrawingML XML string with <a:effectLst> wrapper
+    """
     if isinstance(effect, CustomEffect):
         return (effect.drawingml or "").strip()
+
     if isinstance(effect, BlurEffect):
-        return f"<a:effectLst><a:blur rad=\"{effect.to_emu()}\"/></a:effectLst>"
+        return to_string(effect_list(blur(effect.to_emu())))
+
     if isinstance(effect, SoftEdgeEffect):
-        return f"<a:effectLst><a:softEdge rad=\"{effect.to_emu()}\"/></a:effectLst>"
+        return to_string(effect_list(soft_edge(effect.to_emu())))
+
     if isinstance(effect, GlowEffect):
         color = (effect.color or "FFFFFF").upper()
-        return (
-            "<a:effectLst><a:glow rad=\"{rad}\"><a:srgbClr val=\"{color}\"/></a:glow></a:effectLst>"
-        ).format(rad=effect.to_emu(), color=color)
+        color_elem = srgb_color(color)
+        return to_string(effect_list(glow(effect.to_emu(), color_elem)))
+
     if isinstance(effect, ShadowEffect):
         blur_rad, dist = effect.to_emu()
         direction = effect.to_direction_emu()
         alpha = effect.to_alpha_val()
         color = (effect.color or "000000").upper()
-        return (
-            "<a:effectLst><a:outerShdw blurRad=\"{blur}\" dist=\"{dist}\" dir=\"{dir}\""
-            " algn=\"ctr\" rotWithShape=\"0\"><a:srgbClr val=\"{color}\">"
-            "<a:alpha val=\"{alpha}\"/></a:srgbClr></a:outerShdw></a:effectLst>"
-        ).format(blur=blur_rad, dist=dist, dir=direction, color=color, alpha=alpha)
+        color_elem = srgb_color(color, alpha=alpha)
+        shadow = outer_shadow(blur_rad, dist, direction, color_elem, algn="ctr", rotWithShape="0")
+        return to_string(effect_list(shadow))
+
     if isinstance(effect, ReflectionEffect):
         blur_rad, dist = effect.to_emu()
         start_alpha, end_alpha = effect.to_alpha_vals()
-        return (
-            "<a:effectLst><a:reflection blurRad=\"{blur}\" dist=\"{dist}\" stA=\"{st}\""
-            " endA=\"{end}\"/></a:effectLst>"
-        ).format(blur=blur_rad, dist=dist, st=start_alpha, end=end_alpha)
+        return to_string(effect_list(reflection(blur_rad, dist, start_alpha, end_alpha)))
+
     return ""
 
 
