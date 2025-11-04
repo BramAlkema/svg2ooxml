@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600" viewBox="0 0 800 600">
+  <defs>
+    <!-- Test all 5 supported blend modes: normal, multiply, screen, darken, lighten -->
+    <filter id="blend-normal">
+      <feFlood flood-color="#FF0000" result="red"/>
+      <feBlend in="red" in2="SourceGraphic" mode="normal"/>
+    </filter>
+    <filter id="blend-multiply">
+      <feFlood flood-color="#FF0000" result="red"/>
+      <feBlend in="red" in2="SourceGraphic" mode="multiply"/>
+    </filter>
+    <filter id="blend-screen">
+      <feFlood flood-color="#FF0000" result="red"/>
+      <feBlend in="red" in2="SourceGraphic" mode="screen"/>
+    </filter>
+    <filter id="blend-darken">
+      <feFlood flood-color="#FF0000" result="red"/>
+      <feBlend in="red" in2="SourceGraphic" mode="darken"/>
+    </filter>
+    <filter id="blend-lighten">
+      <feFlood flood-color="#FF0000" result="red"/>
+      <feBlend in="red" in2="SourceGraphic" mode="lighten"/>
+    </filter>
+  </defs>
+  
+  <!-- Background for testing -->
+  <rect width="800" height="600" fill="#F0F0F0"/>
+  
+  <!-- Test each blend mode -->
+  <g transform="translate(50, 50)">
+    <rect width="120" height="100" fill="#0000FF" filter="url(#blend-normal)"/>
+    <text x="60" y="120" text-anchor="middle" font-size="14">normal</text>
+  </g>
+  
+  <g transform="translate(200, 50)">
+    <rect width="120" height="100" fill="#0000FF" filter="url(#blend-multiply)"/>
+    <text x="60" y="120" text-anchor="middle" font-size="14">multiply</text>
+  </g>
+  
+  <g transform="translate(350, 50)">
+    <rect width="120" height="100" fill="#0000FF" filter="url(#blend-screen)"/>
+    <text x="60" y="120" text-anchor="middle" font-size="14">screen</text>
+  </g>
+  
+  <g transform="translate(500, 50)">
+    <rect width="120" height="100" fill="#0000FF" filter="url(#blend-darken)"/>
+    <text x="60" y="120" text-anchor="middle" font-size="14">darken</text>
+  </g>
+  
+  <g transform="translate(650, 50)">
+    <rect width="120" height="100" fill="#0000FF" filter="url(#blend-lighten)"/>
+    <text x="60" y="120" text-anchor="middle" font-size="14">lighten</text>
+  </g>
+</svg>
