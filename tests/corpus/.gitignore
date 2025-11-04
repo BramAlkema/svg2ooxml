@@ -1,0 +1,6 @@
+# Generated output files
+output/
+corpus_report.json
+
+# Baseline images (to be committed separately when generated)
+real_world/baselines/
