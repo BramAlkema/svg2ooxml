@@ -9,6 +9,9 @@ from svg2ooxml.ir.scene import TextFrame
 
 from .base import Mapper, MapperResult, OutputFormat
 
+# Import centralized XML builders for safe DrawingML generation
+from svg2ooxml.drawingml.xml_builder import a_elem, a_sub, p_elem, p_sub, to_string
+
 
 class TextMapper(Mapper):
     """Translate ``TextFrame`` nodes into simple DrawingML text boxes."""
@@ -23,14 +26,26 @@ class TextMapper(Mapper):
 
     def map(self, frame: TextFrame) -> MapperResult:
         runs = frame.runs or []
-        paragraphs = "".join(f"<a:r><a:t>{run.text}</a:t></a:r>" for run in runs)
-        xml = (
-            "<p:txBody>"
-            "<a:bodyPr/>"
-            "<a:lstStyle/>"
-            f"<a:p>{paragraphs or '<a:endParaRPr/>'}</a:p>"
-            "</p:txBody>"
-        )
+
+        # Build p:txBody with lxml
+        txBody = p_elem("txBody")
+        a_sub(txBody, "bodyPr")
+        a_sub(txBody, "lstStyle")
+
+        # Build a:p paragraph
+        p = a_sub(txBody, "p")
+
+        if runs:
+            # Add runs
+            for run in runs:
+                r = a_sub(p, "r")
+                t = a_sub(r, "t")
+                t.text = run.text  # lxml handles escaping
+        else:
+            # Empty paragraph needs endParaRPr
+            a_sub(p, "endParaRPr")
+
+        xml = to_string(txBody)
 
         metadata = {
             "run_count": len(runs),

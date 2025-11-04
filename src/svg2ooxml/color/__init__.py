@@ -6,8 +6,8 @@ from typing import Any as _Any
 __all__ = [
     'ADVANCED_COLOR_ENGINE_AVAILABLE',
     'AdvancedColor',
-    'BlendMode',
     'BasicColorInput',
+    'BlendMode',
     'CSS3_NAMES_TO_HEX',
     'Color',
     'ColorAccessibility',
@@ -23,9 +23,9 @@ __all__ = [
     'PIL_AVAILABLE',
     'TRANSPARENT',
     'color_to_hex',
+    'require_color_engine',
     'ensure_advanced_color_engine',
     'from_advanced_color',
-    'require_color_engine',
     'oklab_to_oklch',
     'oklab_to_rgb',
     'oklch_to_oklab',
@@ -48,7 +48,39 @@ __all__ = [
 ]
 
 # map symbol -> relative module
-_symbol_map = {'summarize_palette': 'analysis', 'MAX_OKLAB_DISTANCE': 'analysis', 'ADVANCED_COLOR_ENGINE_AVAILABLE': 'bridge', 'ensure_advanced_color_engine': 'bridge', 'from_advanced_color': 'bridge', 'to_advanced_color': 'bridge', 'BasicColorInput': 'bridge', 'AdvancedColor': 'advanced', 'BlendMode': 'advanced', 'ColorAccessibility': 'advanced', 'ColorBatch': 'advanced', 'ColorBlindnessType': 'advanced', 'ColorHarmony': 'advanced', 'ColorManipulation': 'advanced', 'ColorParser': 'advanced', 'ContrastLevel': 'advanced', 'require_color_engine': 'advanced', 'Color': 'models', 'TRANSPARENT': 'models', 'CSS3_NAMES_TO_HEX': 'names', 'oklch_to_oklab': 'oklab', 'rgb_to_oklch': 'oklab', 'oklab_to_oklch': 'oklab', 'oklab_to_rgb': 'oklab', 'oklch_to_rgb': 'oklab', 'rgb_to_oklab': 'oklab', 'parse_color': 'parsers', 'ColorSpaceResult': 'spaces', 'ColorSpaceConverter': 'spaces', 'PIL_AVAILABLE': 'spaces', 'color_to_hex': 'utils'}
+_symbol_map = {
+    'MAX_OKLAB_DISTANCE': 'analysis',
+    'summarize_palette': 'analysis',
+    'from_advanced_color': 'bridge',
+    'to_advanced_color': 'bridge',
+    'ensure_advanced_color_engine': 'bridge',
+    'BasicColorInput': 'bridge',
+    'ADVANCED_COLOR_ENGINE_AVAILABLE': 'bridge',
+    'Color': 'models',
+    'TRANSPARENT': 'models',
+    'CSS3_NAMES_TO_HEX': 'names',
+    'oklch_to_oklab': 'oklab',
+    'oklab_to_oklch': 'oklab',
+    'oklab_to_rgb': 'oklab',
+    'oklch_to_rgb': 'oklab',
+    'rgb_to_oklch': 'oklab',
+    'rgb_to_oklab': 'oklab',
+    'parse_color': 'parsers',
+    'PIL_AVAILABLE': 'spaces',
+    'ColorSpaceConverter': 'spaces',
+    'ColorSpaceResult': 'spaces',
+    'color_to_hex': 'utils',
+    'AdvancedColor': 'advanced',
+    'BlendMode': 'advanced',
+    'require_color_engine': 'advanced',
+    'ColorAccessibility': 'advanced',
+    'ColorBatch': 'advanced',
+    'ColorBlindnessType': 'advanced',
+    'ColorHarmony': 'advanced',
+    'ColorManipulation': 'advanced',
+    'ColorParser': 'advanced',
+    'ContrastLevel': 'advanced'
+}
 _module_map = {'advanced': 'advanced', 'analysis': 'analysis', 'bridge': 'bridge', 'models': 'models', 'names': 'names', 'oklab': 'oklab', 'palettes': 'palettes', 'parsers': 'parsers', 'spaces': 'spaces', 'utils': 'utils'}
 
 

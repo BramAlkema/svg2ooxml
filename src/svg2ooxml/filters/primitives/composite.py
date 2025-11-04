@@ -9,6 +9,9 @@ from lxml import etree
 from svg2ooxml.filters.base import Filter, FilterContext, FilterResult
 from svg2ooxml.filters.utils.dml import extract_effect_children, is_effect_list, merge_effect_fragments
 
+# Import centralized XML builders for safe DrawingML generation
+from svg2ooxml.drawingml.xml_builder import a_elem, a_sub, to_string
+
 
 SUPPORTED_OPERATORS = {
     "over",
@@ -78,6 +81,16 @@ class CompositeFilter(Filter):
             metadata["native_support"] = bool(drawingml) or fallback is None
             if fallback:
                 metadata["fallback_reason"] = f"from_inputs:{fallback}"
+
+            # Record telemetry for "over" operator
+            if context.tracer:
+                context.tracer.record_decision(
+                    element_type="feComposite",
+                    strategy="native" if drawingml else "emf",
+                    reason=f"Over operator: {'native merge' if drawingml else f'fallback={fallback}'}",
+                    metadata={"operator": "over", "has_drawingml": bool(drawingml)},
+                )
+
             return FilterResult(
                 success=True,
                 drawingml=drawingml,
@@ -86,10 +99,50 @@ class CompositeFilter(Filter):
                 warnings=propagated_warnings,
             )
         if params.operator in {"in", "out", "atop", "xor"}:
+            # Check if this is a simple mask case that can be promoted
+            is_simple = self._is_simple_mask(params, input_1, input_2, context)
+            metadata["is_simple_mask"] = is_simple
+
             drawingml, fallback = self._combine_masking(params.operator, input_1, input_2)
             metadata["native_support"] = drawingml != ""
             if fallback:
                 metadata["fallback_reason"] = fallback
+
+            # Record telemetry for masking operators
+            tracer = getattr(context, "tracer", None)
+            if tracer:
+                strategy = "native" if drawingml else "emf"
+
+                # Build reason string that clearly distinguishes success vs fallback
+                if drawingml:
+                    # Native success case
+                    reason_parts = [f"Masking operator '{params.operator}'"]
+                    if is_simple:
+                        reason_parts.append("simple mask → alpha compositing")
+                    else:
+                        reason_parts.append("complex mask → alpha compositing")
+                    reason = ": ".join(reason_parts)
+                else:
+                    # EMF fallback case
+                    reason_parts = [f"Masking operator '{params.operator}'"]
+                    if is_simple:
+                        reason_parts.append(f"simple mask → fallback={fallback}")
+                    else:
+                        reason_parts.append(f"complex mask → fallback={fallback}")
+                    reason = ": ".join(reason_parts)
+
+                tracer.record_decision(
+                    element_type="feComposite",
+                    strategy=strategy,
+                    reason=reason,
+                    metadata={
+                        "operator": params.operator,
+                        "masking_type": strategy,
+                        "is_simple_mask": is_simple,
+                        "fallback_reason": fallback,
+                    },
+                )
+
             return FilterResult(
                 success=True,
                 drawingml=drawingml,
@@ -98,9 +151,24 @@ class CompositeFilter(Filter):
                 warnings=(),
             )
 
+        # Arithmetic or other unsupported operators
         if input_1 is not None or input_2 is not None:
             metadata["native_support"] = False
             metadata["fallback_reason"] = f"operator:{params.operator}"
+
+            # Record telemetry for unsupported operator with inputs
+            if context.tracer:
+                context.tracer.record_decision(
+                    element_type="feComposite",
+                    strategy="emf",
+                    reason=f"Unsupported operator: {params.operator}",
+                    metadata={
+                        "operator": params.operator,
+                        "supported_operators": list(SUPPORTED_OPERATORS),
+                        "has_inputs": True,
+                    },
+                )
+
             return FilterResult(
                 success=True,
                 drawingml="",
@@ -111,6 +179,16 @@ class CompositeFilter(Filter):
 
         metadata["native_support"] = False
         metadata["fallback_reason"] = f"operator:{params.operator}"
+
+        # Record telemetry for unsupported operator without inputs
+        if context.tracer:
+            context.tracer.record_decision(
+                element_type="feComposite",
+                strategy="emf",
+                reason=f"Unsupported operator without inputs: {params.operator}",
+                metadata={"operator": params.operator, "has_inputs": False},
+            )
+
         return FilterResult(
             success=True,
             drawingml="",
@@ -207,6 +285,58 @@ class CompositeFilter(Filter):
         new_rank = precedence.get(new_value, 0)
         return new_value if new_rank > current_rank else current
 
+    def _is_simple_mask(
+        self,
+        params: CompositeParams,
+        input_1: FilterResult | None,
+        input_2: FilterResult | None,
+        context: FilterContext,
+    ) -> bool:
+        """Detect if this is a simple mask case that can be promoted to native DrawingML.
+
+        Simple mask criteria:
+        - Single input + SourceAlpha (most common masking pattern)
+        - No arithmetic operator
+        - Mask input has drawable content AND is natively supported
+        - Mask DrawingML must be valid effect list structure
+        - No complex filter chain (future: check context for chain complexity)
+        """
+        # Must be a masking operator
+        if params.operator not in {"in", "out", "atop", "xor"}:
+            return False
+
+        # No arithmetic operators
+        if params.operator == "arithmetic":
+            return False
+
+        # Check if using SourceAlpha as mask (common simple case)
+        input_2_name = params.input_2 or "SourceAlpha"
+        is_using_source_alpha = input_2_name == "SourceAlpha"
+
+        # If using SourceAlpha, it's always simple
+        if is_using_source_alpha:
+            return True
+
+        # For other masks, check if they have native DrawingML support
+        if input_2 is None:
+            return False
+
+        # Check metadata first - mask must be natively supported
+        if not input_2.metadata.get("native_support", True):
+            return False
+
+        # Check if mask has valid DrawingML content
+        mask_fragment = (input_2.drawingml or "").strip()
+        if not mask_fragment:
+            return False
+
+        # Ensure mask DrawingML is a proper effect list (starts with <a:effectLst>)
+        # This guards against EMF placeholders or invalid fragments
+        if not mask_fragment.startswith("<a:effectLst"):
+            return False
+
+        return True
+
     def _combine_masking(
         self,
         operator: str,
@@ -226,18 +356,38 @@ class CompositeFilter(Filter):
             return "", "mask_missing_effects"
 
         alpha_tag = self._alpha_tag_for_operator(operator)
-        base_fragments = []
+
+        # Build outer effectLst
+        outer_effectLst = a_elem("effectLst")
+
+        # Add base fragments
         if source_fragment:
-            if is_effect_list(source_fragment):
-                base_fragments.append(extract_effect_children(source_fragment))
-            else:
-                base_fragments.append(source_fragment)
-        alpha_fragment = (
-            f"<a:{alpha_tag}><a:cont/><a:effectLst>{mask_children}</a:effectLst></a:{alpha_tag}>"
-        )
-        base_fragments.append(alpha_fragment)
-        combined = "".join(base_fragments)
-        return f"<a:effectLst>{combined}</a:effectLst>", None
+            source_children = extract_effect_children(source_fragment) if is_effect_list(source_fragment) else source_fragment
+            if source_children:
+                # Parse and append source children to outer effectLst
+                try:
+                    wrapped = f'<root xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">{source_children}</root>'
+                    temp_root = etree.fromstring(wrapped.encode('utf-8'))
+                    for child_elem in temp_root:
+                        outer_effectLst.append(child_elem)
+                except Exception:
+                    pass  # Skip if parsing fails
+
+        # Build alpha element with inner effectLst
+        alpha_elem = a_sub(outer_effectLst, alpha_tag)
+        a_sub(alpha_elem, "cont")
+        inner_effectLst = a_sub(alpha_elem, "effectLst")
+
+        # Parse and append mask children to inner effectLst
+        try:
+            wrapped = f'<root xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">{mask_children}</root>'
+            temp_root = etree.fromstring(wrapped.encode('utf-8'))
+            for child_elem in temp_root:
+                inner_effectLst.append(child_elem)
+        except Exception:
+            pass  # Skip if parsing fails
+
+        return to_string(outer_effectLst), None
 
     @staticmethod
     def _alpha_tag_for_operator(operator: str) -> str:

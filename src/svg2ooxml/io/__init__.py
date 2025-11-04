@@ -14,7 +14,7 @@ __all__ = [
 ]
 
 # map symbol -> relative module
-_symbol_map = {'PPTXPackageBuilder': 'pptx_writer', 'write_pptx': 'pptx_writer', 'read_svg_shapes': 'svg_reader'}
+_symbol_map = {'write_pptx': 'pptx_writer', 'PPTXPackageBuilder': 'pptx_writer', 'read_svg_shapes': 'svg_reader'}
 _module_map = {'api': 'api', 'emf': 'emf', 'pptx_writer': 'pptx_writer', 'svg_reader': 'svg_reader'}
 
 

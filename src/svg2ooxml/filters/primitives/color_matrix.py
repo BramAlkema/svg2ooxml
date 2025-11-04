@@ -9,6 +9,9 @@ from lxml import etree
 
 from svg2ooxml.filters.base import Filter, FilterContext, FilterResult
 
+# Import centralized XML builders for safe DrawingML generation
+from svg2ooxml.drawingml.xml_builder import a_elem, a_sub, to_string
+
 
 @dataclass
 class ColorMatrixParams:
@@ -73,17 +76,39 @@ class ColorMatrixFilter(Filter):
         if params.matrix_type == "saturate":
             value = params.values[0] if params.values else 1.0
             sat = max(0, min(int(value * 100000), 200000))
-            return f'<a:effectLst><a:clrChange><a:clrTo><a:srgbClr val="FFFFFF"><a:satMod val="{sat}"/></a:srgbClr></a:clrTo></a:clrChange></a:effectLst>'
+
+            effectLst = a_elem("effectLst")
+            clrChange = a_sub(effectLst, "clrChange")
+            clrTo = a_sub(clrChange, "clrTo")
+            srgbClr = a_sub(clrTo, "srgbClr", val="FFFFFF")
+            a_sub(srgbClr, "satMod", val=sat)
+            return to_string(effectLst)
+
         if params.matrix_type == "hueRotate":
             degrees = params.values[0] if params.values else 0.0
             hue = int((degrees % 360) * 60000)
-            return f'<a:effectLst><a:hsl><a:hue val="{hue}"/></a:hsl></a:effectLst>'
+
+            effectLst = a_elem("effectLst")
+            hsl = a_sub(effectLst, "hsl")
+            a_sub(hsl, "hue", val=hue)
+            return to_string(effectLst)
+
         if params.matrix_type == "luminanceToAlpha":
-            return '<a:effectLst><a:alpha val="50000"/></a:effectLst>'
+            effectLst = a_elem("effectLst")
+            a_sub(effectLst, "alpha", val="50000")
+            return to_string(effectLst)
+
         if params.matrix_type == "matrix":
             flattened = " ".join(f"{value:.6g}" for value in params.values[:20])
-            return f'<!-- feColorMatrix matrix -->\n<a:extLst><a:ext uri="{{FEColorMatrix}}"><a:prop val="{flattened}"/></a:ext></a:extLst>'
-        return "<!-- Unsupported feColorMatrix type -->"
+            # Note: XML comments not directly supported in element building
+            # This uses extLst for custom matrix values
+            extLst = a_elem("extLst")
+            ext = a_sub(extLst, "ext", uri="{FEColorMatrix}")
+            a_sub(ext, "prop", val=flattened)
+            return to_string(extLst)
+
+        # Unsupported type - return empty comment placeholder
+        return ""
 
 
 __all__ = ["ColorMatrixFilter"]

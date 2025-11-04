@@ -28,6 +28,8 @@ class FilterPolicyProvider(PolicyProvider):
         "native_shadow",
         "approximation_allowed",
         "prefer_rasterization",
+        "enable_telemetry",
+        "telemetry_level",
     }
 
     _FALLBACKS: dict[str, Mapping[str, Any]] = {
@@ -47,6 +49,8 @@ class FilterPolicyProvider(PolicyProvider):
             "native_shadow": True,
             "approximation_allowed": True,
             "prefer_rasterization": False,
+            "enable_telemetry": True,
+            "telemetry_level": "detailed",
         },
         "balanced": {
             "strategy": "auto",
@@ -64,6 +68,8 @@ class FilterPolicyProvider(PolicyProvider):
             "native_shadow": True,
             "approximation_allowed": True,
             "prefer_rasterization": False,
+            "enable_telemetry": True,
+            "telemetry_level": "summary",
         },
         "low": {
             "strategy": "raster",
@@ -81,6 +87,8 @@ class FilterPolicyProvider(PolicyProvider):
             "native_shadow": True,
             "approximation_allowed": False,
             "prefer_rasterization": True,
+            "enable_telemetry": False,
+            "telemetry_level": "off",
         },
         "compatibility": {
             "strategy": "emf",
@@ -98,6 +106,8 @@ class FilterPolicyProvider(PolicyProvider):
             "native_shadow": False,
             "approximation_allowed": False,
             "prefer_rasterization": True,
+            "enable_telemetry": False,
+            "telemetry_level": "off",
         },
     }
 
@@ -205,6 +215,8 @@ class FilterPolicyProvider(PolicyProvider):
         result["native_shadow"] = self._coerce_bool(payload.get("native_shadow"))
         result["approximation_allowed"] = self._coerce_bool(payload.get("approximation_allowed"))
         result["prefer_rasterization"] = self._coerce_bool(payload.get("prefer_rasterization"))
+        result["enable_telemetry"] = self._coerce_bool(payload.get("enable_telemetry"))
+        result["telemetry_level"] = self._coerce_telemetry_level(payload.get("telemetry_level"))
         primitives = self._coerce_primitives(payload.get("primitives"))
         if primitives:
             result["primitives"] = primitives
@@ -237,6 +249,14 @@ class FilterPolicyProvider(PolicyProvider):
             if token in {"inherit", "source", "flood", "style"}:
                 return token
         return "inherit"
+
+    @staticmethod
+    def _coerce_telemetry_level(value: Any) -> str:
+        if isinstance(value, str):
+            token = value.strip().lower()
+            if token in {"off", "summary", "detailed"}:
+                return token
+        return "summary"
 
     @staticmethod
     def _normalise_primitive_map(value: Any) -> dict[str, Mapping[str, Any]]:

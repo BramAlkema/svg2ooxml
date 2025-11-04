@@ -358,7 +358,7 @@ class TestBuild:
         xml_builder = Mock()
         xml_builder.build_behavior_core = Mock(return_value="<behavior/>")
         xml_builder.build_attribute_list = Mock(return_value="<attrNameLst/>")
-        xml_builder.build_tav_list_container = Mock(return_value="<TAV_CONTAINER/>")
+        xml_builder.build_tav_list_container = Mock(return_value=etree.fromstring("<a:tavLst xmlns:a='http://schemas.openxmlformats.org/drawingml/2006/main'><a:tav tm='0'/></a:tavLst>"))
         xml_builder.build_par_container = Mock(return_value="<p:par/>")
 
         value_processor = Mock()
@@ -375,8 +375,8 @@ class TestBuild:
         call_args = xml_builder.build_par_container.call_args
         child_xml = call_args.kwargs.get("child_content") or call_args.kwargs["child_xml"]
 
-        assert "<a:tavLst>" in child_xml
-        assert "<TAV_CONTAINER/>" in child_xml
+        assert "<a:tavLst" in child_xml
+        assert '<a:tav tm="0"/>' in child_xml
         assert "</a:tavLst>" in child_xml
 
     def test_adds_custom_namespace_when_needed(self):
@@ -384,7 +384,7 @@ class TestBuild:
         xml_builder = Mock()
         xml_builder.build_behavior_core = Mock(return_value="<behavior/>")
         xml_builder.build_attribute_list = Mock(return_value="<attrNameLst/>")
-        xml_builder.build_tav_list_container = Mock(return_value="<tavs/>")
+        xml_builder.build_tav_list_container = Mock(return_value=etree.fromstring("<a:tavLst xmlns:a='http://schemas.openxmlformats.org/drawingml/2006/main'><a:tav svg2:spline='1' xmlns:svg2='http://svg2ooxml.dev/ns/animation'/></a:tavLst>"))
         xml_builder.build_par_container = Mock(return_value="<p:par/>")
 
         value_processor = Mock()
@@ -484,7 +484,7 @@ class TestIntegration:
         xml_builder = Mock()
         xml_builder.build_behavior_core = Mock(return_value="<behavior/>")
         xml_builder.build_attribute_list = Mock(return_value="<attrs/>")
-        xml_builder.build_tav_list_container = Mock(return_value="<tavs/>")
+        xml_builder.build_tav_list_container = Mock(return_value=etree.fromstring("<a:tavLst xmlns:a='http://schemas.openxmlformats.org/drawingml/2006/main'><a:tav svg2:spline='1' xmlns:svg2='http://svg2ooxml.dev/ns/animation'/></a:tavLst>"))
         xml_builder.build_par_container = Mock(return_value="<p:par/>")
 
         value_processor = Mock()

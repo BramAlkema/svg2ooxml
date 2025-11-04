@@ -11,6 +11,9 @@ from svg2ooxml.filters.base import Filter, FilterContext, FilterResult
 from svg2ooxml.filters.utils import parse_number
 from svg2ooxml.units.conversion import px_to_emu
 
+# Import centralized XML builders for safe DrawingML generation
+from svg2ooxml.drawingml.xml_builder import a_elem, a_sub, to_string
+
 
 @dataclass
 class OffsetParams:
@@ -43,21 +46,23 @@ class OffsetFilter(Filter):
 
     def _build_drawingml(self, dx_emu: int, dy_emu: int) -> str:
         distance = int(math.hypot(dx_emu, dy_emu))
+
+        effectLst = a_elem("effectLst")
+
         if distance == 0:
-            return "<a:effectLst/>"
+            return to_string(effectLst)
 
         # PowerPoint angle (0 = right, counter-clockwise positive, units 60000 per degree)
         angle_rad = math.atan2(dy_emu, dx_emu)
         ppt_angle = int((math.degrees(angle_rad) * 60000) % 21600000)
         distance = min(distance, 914400)
 
-        return (
-            "<a:effectLst>"
-            f"<a:outerShdw blurRad=\"0\" dist=\"{distance}\" dir=\"{ppt_angle}\" algn=\"ctr\">"
-            "<a:srgbClr val=\"000000\"><a:alpha val=\"0\"/></a:srgbClr>"
-            "</a:outerShdw>"
-            "</a:effectLst>"
-        )
+        # Create outer shadow with zero blur to simulate offset
+        outerShdw = a_sub(effectLst, "outerShdw", blurRad="0", dist=distance, dir=ppt_angle, algn="ctr")
+        srgbClr = a_sub(outerShdw, "srgbClr", val="000000")
+        a_sub(srgbClr, "alpha", val="0")
+
+        return to_string(effectLst)
 
 
 __all__ = ["OffsetFilter"]

@@ -229,8 +229,7 @@ class AnimationXMLBuilder:
         attrNameLst = a_elem("attrNameLst")
 
         for name in attribute_names:
-            attrName = a_sub(attrNameLst, "attrName")
-            attrName.text = name
+            a_sub(attrNameLst, "attrName", val=name)
 
         return attrNameLst
 

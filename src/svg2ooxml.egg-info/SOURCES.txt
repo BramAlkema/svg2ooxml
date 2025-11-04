@@ -140,6 +140,13 @@ src/svg2ooxml/common/time.py
 src/svg2ooxml/common/types.py
 src/svg2ooxml/common/compat/__init__.py
 src/svg2ooxml/common/compat/fonttools.py
+src/svg2ooxml/common/conversions/__init__.py
+src/svg2ooxml/common/conversions/angles.py
+src/svg2ooxml/common/conversions/colors.py
+src/svg2ooxml/common/conversions/opacity.py
+src/svg2ooxml/common/conversions/powerpoint.py
+src/svg2ooxml/common/conversions/transforms.py
+src/svg2ooxml/common/conversions/units.py
 src/svg2ooxml/common/geometry/__init__.py
 src/svg2ooxml/common/geometry/matrix.py
 src/svg2ooxml/common/geometry/algorithms/__init__.py
@@ -197,6 +204,7 @@ src/svg2ooxml/core/masks/__init__.py
 src/svg2ooxml/core/masks/processor.py
 src/svg2ooxml/core/parser/__init__.py
 src/svg2ooxml/core/parser/content_cleaner.py
+src/svg2ooxml/core/parser/css_font_parser.py
 src/svg2ooxml/core/parser/dom_loader.py
 src/svg2ooxml/core/parser/normalization.py
 src/svg2ooxml/core/parser/reference_collector.py
@@ -214,6 +222,7 @@ src/svg2ooxml/core/parser/batch/__init__.py
 src/svg2ooxml/core/parser/batch/tasks.py
 src/svg2ooxml/core/parser/colors/__init__.py
 src/svg2ooxml/core/parser/colors/parsing.py
+src/svg2ooxml/core/parser/preprocess/__init__.py
 src/svg2ooxml/core/parser/preprocess/services.py
 src/svg2ooxml/core/parser/split/__init__.py
 src/svg2ooxml/core/pipeline/__init__.py
@@ -251,8 +260,11 @@ src/svg2ooxml/core/resvg/parser/style.py
 src/svg2ooxml/core/resvg/parser/tree.py
 src/svg2ooxml/core/resvg/parser/xml_loader.py
 src/svg2ooxml/core/resvg/text/__init__.py
+src/svg2ooxml/core/resvg/text/drawingml_generator.py
 src/svg2ooxml/core/resvg/text/fonts.py
 src/svg2ooxml/core/resvg/text/layout.py
+src/svg2ooxml/core/resvg/text/layout_analyzer.py
+src/svg2ooxml/core/resvg/text/text_coordinator.py
 src/svg2ooxml/core/resvg/utils/__init__.py
 src/svg2ooxml/core/resvg/utils/mimesniff.py
 src/svg2ooxml/core/styling/__init__.py
@@ -297,9 +309,12 @@ src/svg2ooxml/drawingml/rasterizer.py
 src/svg2ooxml/drawingml/result.py
 src/svg2ooxml/drawingml/shapes_runtime.py
 src/svg2ooxml/drawingml/writer.py
+src/svg2ooxml/drawingml/xml_builder.py
 src/svg2ooxml/drawingml/bridges/__init__.py
 src/svg2ooxml/drawingml/bridges/emf_path_adapter.py
+src/svg2ooxml/drawingml/bridges/resvg_gradient_adapter.py
 src/svg2ooxml/drawingml/bridges/resvg_paint_bridge.py
+src/svg2ooxml/drawingml/bridges/resvg_shape_adapter.py
 src/svg2ooxml/elements/__init__.py
 src/svg2ooxml/elements/gradient_processor.py
 src/svg2ooxml/elements/image_processor.py
@@ -348,6 +363,7 @@ src/svg2ooxml/ir/animation.py
 src/svg2ooxml/ir/effects.py
 src/svg2ooxml/ir/entrypoints.py
 src/svg2ooxml/ir/font_metadata.py
+src/svg2ooxml/ir/fonts.py
 src/svg2ooxml/ir/geometry.py
 src/svg2ooxml/ir/numpy_compat.py
 src/svg2ooxml/ir/paint.py
@@ -416,10 +432,12 @@ src/svg2ooxml/services/symbol_service.py
 src/svg2ooxml/services/fonts/__init__.py
 src/svg2ooxml/services/fonts/embedding.py
 src/svg2ooxml/services/fonts/fetcher.py
+src/svg2ooxml/services/fonts/loader.py
 src/svg2ooxml/services/fonts/service.py
 src/svg2ooxml/services/fonts/system.py
 src/svg2ooxml/services/fonts/providers/__init__.py
 src/svg2ooxml/services/fonts/providers/directory.py
+src/svg2ooxml/services/fonts/providers/webfont.py
 src/svg2ooxml/services/providers/__init__.py
 src/svg2ooxml/services/providers/color_provider.py
 src/svg2ooxml/services/providers/drawingml_provider.py
@@ -434,6 +452,8 @@ src/svg2ooxml/services/providers/pattern_provider.py
 src/svg2ooxml/services/providers/registry.py
 src/svg2ooxml/services/providers/symbol_provider.py
 src/svg2ooxml/services/registry/__init__.py
+src/svg2ooxml/telemetry/__init__.py
+src/svg2ooxml/telemetry/render_decisions.py
 src/svg2ooxml/transforms/__init__.py
 src/svg2ooxml/units/__init__.py
 src/svg2ooxml/viewbox/__init__.py

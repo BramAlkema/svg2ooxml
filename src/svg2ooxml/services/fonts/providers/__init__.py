@@ -5,12 +5,14 @@ from typing import Any as _Any
 
 __all__ = [
     'DirectoryFontProvider',
-    'directory'
+    'WebFontProvider',
+    'directory',
+    'webfont'
 ]
 
 # map symbol -> relative module
-_symbol_map = {'DirectoryFontProvider': 'directory'}
-_module_map = {'directory': 'directory'}
+_symbol_map = {'DirectoryFontProvider': 'directory', 'WebFontProvider': 'webfont'}
+_module_map = {'directory': 'directory', 'webfont': 'webfont'}
 
 
 def __getattr__(name: str) -> _Any:  # PEP 562

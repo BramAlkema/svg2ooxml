@@ -169,11 +169,19 @@ class FontEmbeddingEngine:
         request: FontEmbeddingRequest,
         permission: EmbeddingPermission,
     ) -> FontEmbeddingResult | None:
-        try:
-            data = Path(request.font_path).read_bytes()
-        except OSError as exc:  # pragma: no cover - depends on local filesystem
-            logger.debug("Failed to read font for direct embedding: %s", exc)
-            return None
+        # Check if font data is already loaded (e.g., from web fonts)
+        if "font_data" in request.metadata:
+            data = request.metadata["font_data"]
+            if not isinstance(data, bytes):
+                logger.debug("Invalid font_data type in metadata: %s", type(data))
+                return None
+        else:
+            # Fall back to reading from filesystem
+            try:
+                data = Path(request.font_path).read_bytes()
+            except OSError as exc:  # pragma: no cover - depends on local filesystem
+                logger.debug("Failed to read font for direct embedding: %s", exc)
+                return None
 
         metadata = {
             "subset_strategy": request.subset_strategy,
@@ -209,7 +217,18 @@ class FontEmbeddingEngine:
 
         font = None
         try:
-            font = TTFont(request.font_path, lazy=False)
+            # Check if font data is already loaded (e.g., from web fonts)
+            if "font_data" in request.metadata:
+                from io import BytesIO
+                font_data = request.metadata["font_data"]
+                if not isinstance(font_data, bytes):
+                    logger.debug("Invalid font_data type in metadata: %s", type(font_data))
+                    return None
+                font = TTFont(BytesIO(font_data), lazy=False)
+            else:
+                # Fall back to reading from filesystem
+                font = TTFont(request.font_path, lazy=False)
+
             subset_bytes = self._perform_subsetting(font, text_payload, request)
         except Exception as exc:  # pragma: no cover - defensive
             logger.debug("fontTools subsetting failed: %s", exc)

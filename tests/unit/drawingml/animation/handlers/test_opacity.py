@@ -124,30 +124,42 @@ class TestComputeTargetOpacity:
 
     def test_defaults_to_one_for_freeze_fill(self):
         """Should default to '1' when fill_mode is 'freeze' and no values."""
-        handler = OpacityAnimationHandler(Mock(), Mock(), Mock(), Mock())
+        value_processor = Mock()
+        value_processor.parse_opacity = Mock(return_value="100000")
+
+        handler = OpacityAnimationHandler(Mock(), value_processor, Mock(), Mock())
         animation = create_test_animation(values=[], fill_mode="freeze")
 
         result = handler._compute_target_opacity(animation)
 
-        assert result == "1"
+        assert result == "100000"
+        value_processor.parse_opacity.assert_called_once_with("1")
 
     def test_defaults_to_zero_for_remove_fill(self):
         """Should default to '0' when fill_mode is 'remove' and no values."""
-        handler = OpacityAnimationHandler(Mock(), Mock(), Mock(), Mock())
+        value_processor = Mock()
+        value_processor.parse_opacity = Mock(return_value="0")
+
+        handler = OpacityAnimationHandler(Mock(), value_processor, Mock(), Mock())
         animation = create_test_animation(values=[], fill_mode="remove")
 
         result = handler._compute_target_opacity(animation)
 
         assert result == "0"
+        value_processor.parse_opacity.assert_called_once_with("0")
 
     def test_defaults_to_zero_for_other_fill_modes(self):
         """Should default to '0' for other fill modes."""
-        handler = OpacityAnimationHandler(Mock(), Mock(), Mock(), Mock())
+        value_processor = Mock()
+        value_processor.parse_opacity = Mock(return_value="0")
+
+        handler = OpacityAnimationHandler(Mock(), value_processor, Mock(), Mock())
         animation = create_test_animation(values=[], fill_mode="auto")
 
         result = handler._compute_target_opacity(animation)
 
         assert result == "0"
+        value_processor.parse_opacity.assert_called_once_with("0")
 
 
 class TestBuild:
@@ -402,12 +414,16 @@ class TestEdgeCases:
         xml_builder.build_behavior_core = Mock(return_value="<behavior/>")
         xml_builder.build_par_container = Mock(return_value="<p:par/>")
 
-        handler = OpacityAnimationHandler(Mock(), Mock(), Mock(), Mock())
+        value_processor = Mock()
+        value_processor.parse_opacity = Mock(side_effect=lambda v: {"1": "100000", "0": "0"}[v])
+
+        handler = OpacityAnimationHandler(Mock(), value_processor, Mock(), Mock())
         animation = create_test_animation(values=[])
 
-        # Should use default opacity
+        # Should use default opacity (freeze -> visible)
         opacity = handler._compute_target_opacity(animation)
-        assert opacity in ["0", "1"]
+        assert opacity == "100000"
+        value_processor.parse_opacity.assert_called_once_with("1")
 
     def test_handles_zero_duration(self):
         """Should handle zero duration animations."""

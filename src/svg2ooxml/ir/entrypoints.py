@@ -104,5 +104,36 @@ def _hydrate_services_from_parser(
             if logger:
                 logger.warning("Failed to register %s definitions: %s", name, exc)
 
+    # Register web fonts with FontService
+    if parser_result.web_fonts:
+        font_service = services.resolve("font")
+        if font_service is not None:
+            try:
+                from svg2ooxml.services.fonts.providers.webfont import WebFontProvider
+                from svg2ooxml.services.fonts.loader import FontLoader
+                from svg2ooxml.services.fonts.fetcher import FontFetcher
+
+                # Create font loader with fetcher for remote fonts
+                fetcher = FontFetcher()
+                loader = FontLoader(fetcher=fetcher, allow_network=True)
+
+                # Create provider with loader enabled
+                provider = WebFontProvider(
+                    rules=tuple(parser_result.web_fonts),
+                    loader=loader,
+                    enable_loading=True,
+                    cache_loaded_fonts=True
+                )
+                # Prepend to give web fonts priority over system fonts
+                font_service.prepend_provider(provider)
+                if logger:
+                    logger.debug(
+                        "Registered WebFontProvider with %d font face(s) and font loading enabled",
+                        len(parser_result.web_fonts)
+                    )
+            except Exception as exc:  # pragma: no cover - defensive logging
+                if logger:
+                    logger.warning("Failed to register web fonts: %s", exc)
+
 
 __all__ = ["IRScene", "convert_parser_output"]

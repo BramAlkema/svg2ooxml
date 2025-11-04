@@ -7,6 +7,9 @@ from lxml import etree
 from svg2ooxml.filters.base import Filter, FilterContext, FilterResult
 from svg2ooxml.filters.utils import DisplacementMapParameters, parse_displacement_map
 
+# Import centralized XML builders for safe DrawingML generation
+from svg2ooxml.drawingml.xml_builder import a_elem, a_sub, to_string
+
 
 class DisplacementMapFilter(Filter):
     primitive_tags = ("feDisplacementMap",)
@@ -43,12 +46,11 @@ class DisplacementMapFilter(Filter):
     # ------------------------------------------------------------------
 
     def _placeholder_drawingml(self, params: DisplacementMapParameters) -> str:
-        return (
-            "<!-- feDisplacementMap requires bitmap fallback -->"
-            f"<a:effectLst>"
-            f"<a:glow rad=\"0\"/>"
-            f"</a:effectLst>"
-        )
+        # Note: XML comments not supported in lxml element building,
+        # but this is just a placeholder anyway
+        effectLst = a_elem("effectLst")
+        a_sub(effectLst, "glow", rad="0")
+        return to_string(effectLst)
 
 
 __all__ = ["DisplacementMapFilter"]

@@ -15,6 +15,9 @@ from svg2ooxml.common.units import UnitConverter
 
 from .mask_store import MaskAssetStore
 
+# Import centralized XML builders for safe DrawingML generation
+from svg2ooxml.drawingml.xml_builder import a_elem, a_sub, to_string
+
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from svg2ooxml.core.tracing import ConversionTracer
 
@@ -138,27 +141,32 @@ class MaskWriter:
         mask_meta: dict,
         mask_instance: MaskInstance | None,
     ) -> str:
-        src_rect = self._src_rect(mask_meta, mask_instance)
-        rect_xml = (
-            f'<a:srcRect l="{src_rect[0]}" t="{src_rect[1]}" r="{src_rect[2]}" b="{src_rect[3]}"/>'
-            if src_rect is not None
-            else ""
-        )
-        unit_attrs: list[str] = []
+        from lxml import etree
+
+        # Build a:mask element with lxml
+        mask = a_elem("mask")
+
+        # Add unit attributes if present
         mask_units = mask_meta.get("mask_units")
         content_units = mask_meta.get("mask_content_units")
         if isinstance(mask_units, str):
-            unit_attrs.append(f'maskUnits="{mask_units}"')
+            mask.set("maskUnits", mask_units)
         if isinstance(content_units, str):
-            unit_attrs.append(f'maskContentUnits="{content_units}"')
-        attrs = (" " + " ".join(unit_attrs)) if unit_attrs else ""
+            mask.set("maskContentUnits", content_units)
 
-        xml_parts = ["<a:mask" + attrs + ">"]
-        if rect_xml:
-            xml_parts.append(rect_xml)
-        xml_parts.append(geometry_xml)
-        xml_parts.append("</a:mask>")
-        return "\n".join(xml_parts)
+        # Add srcRect if present
+        src_rect = self._src_rect(mask_meta, mask_instance)
+        if src_rect is not None:
+            a_sub(mask, "srcRect", l=src_rect[0], t=src_rect[1], r=src_rect[2], b=src_rect[3])
+
+        # Parse and append geometry_xml
+        if geometry_xml:
+            wrapped = f'<root xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">{geometry_xml}</root>'
+            temp = etree.fromstring(wrapped.encode('utf-8'))
+            for child in temp:
+                mask.append(child)
+
+        return to_string(mask)
 
     @staticmethod
     def _src_rect(mask_meta: dict, mask_instance: MaskInstance | None) -> Tuple[int, int, int, int] | None:
@@ -375,33 +383,32 @@ class MaskWriter:
         mask_meta: dict,
         mask_instance: MaskInstance | None,
     ) -> str:
-        attrs: list[str] = []
+        # Build a:mask element with lxml
+        mask = a_elem("mask")
+
+        # Add unit attributes if present
         mask_units = mask_meta.get("mask_units")
         content_units = mask_meta.get("mask_content_units")
         if isinstance(mask_units, str):
-            attrs.append(f'maskUnits="{mask_units}"')
+            mask.set("maskUnits", mask_units)
         if isinstance(content_units, str):
-            attrs.append(f'maskContentUnits="{content_units}"')
-        attr_str = (" " + " ".join(attrs)) if attrs else ""
+            mask.set("maskContentUnits", content_units)
 
+        # Build a:blipFill
+        blipFill = a_sub(mask, "blipFill", dpi="0", rotWithShape="0")
+        blip = a_sub(blipFill, "blip", cstate="print")
+        blip.set("{http://schemas.openxmlformats.org/officeDocument/2006/relationships}embed", relationship_id)
+
+        # Add srcRect if present
         src_rect = self._src_rect(mask_meta, mask_instance)
-        src_rect_xml = (
-            f'<a:srcRect l="{src_rect[0]}" t="{src_rect[1]}" r="{src_rect[2]}" b="{src_rect[3]}"/>'
-            if src_rect
-            else ""
-        )
+        if src_rect:
+            a_sub(blipFill, "srcRect", l=src_rect[0], t=src_rect[1], r=src_rect[2], b=src_rect[3])
 
-        xml_parts = [f"<a:mask{attr_str}>"]
-        xml_parts.append(
-            "<a:blipFill dpi=\"0\" rotWithShape=\"0\">"
-            f'<a:blip r:embed="{relationship_id}" cstate="print"/>'
-        )
-        if src_rect_xml:
-            xml_parts.append(src_rect_xml)
-        xml_parts.append("<a:stretch><a:fillRect/></a:stretch>")
-        xml_parts.append("</a:blipFill>")
-        xml_parts.append("</a:mask>")
-        return "\n".join(xml_parts)
+        # Build a:stretch
+        stretch = a_sub(blipFill, "stretch")
+        a_sub(stretch, "fillRect")
+
+        return to_string(mask)
 
 
 def _extract_rect(value) -> Rect | None:

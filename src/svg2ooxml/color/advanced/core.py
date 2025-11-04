@@ -16,6 +16,9 @@ import numpy as np
 
 from .color_spaces import ColorSpaceConverter
 
+# Import centralized XML builders for safe DrawingML generation
+from svg2ooxml.drawingml.xml_builder import a_elem, a_sub, to_string
+
 # Global cache for color conversions to improve performance
 _conversion_cache = {}
 _cache_lock = threading.Lock()
@@ -640,15 +643,18 @@ class Color:
             DrawingML XML string for PowerPoint integration
         """
         if self._alpha == 0.0:
-            return '<a:noFill/>'
+            noFill = a_elem("noFill")
+            return to_string(noFill)
 
         color_hex = self.hex()
 
-        if self._alpha >= 1.0:
-            return f'<a:srgbClr val="{color_hex}"/>'
-        else:
+        srgbClr = a_elem("srgbClr", val=color_hex)
+
+        if self._alpha < 1.0:
             alpha_val = int(self._alpha * 100000)
-            return f'<a:srgbClr val="{color_hex}"><a:alpha val="{alpha_val}"/></a:srgbClr>'
+            a_sub(srgbClr, "alpha", val=alpha_val)
+
+        return to_string(srgbClr)
 
     # Color Science Methods
     def delta_e(self, other: Color, method: str = 'cie2000') -> float:

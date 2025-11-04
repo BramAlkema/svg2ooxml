@@ -23,6 +23,9 @@ from svg2ooxml.core.traversal.clip_geometry import (
     compute_clip_geometry,
 )
 
+# Import centralized XML builders for safe DrawingML generation
+from svg2ooxml.drawingml.xml_builder import a_elem, a_sub, to_string
+
 EMU_PER_PX = 9525
 
 
@@ -105,19 +108,29 @@ class StructuredClipService:
             ClipPathSegment("close", []),
         ]
 
-        xml = (
-            "<a:custGeom>"
-            "<a:pathLst>"
-            f"<a:path w=\"{_to_emu(w)}\" h=\"{_to_emu(h)}\" fill=\"none\">"
-            f"<a:moveTo><a:pt x=\"{_to_emu(0)}\" y=\"{_to_emu(0)}\"/></a:moveTo>"
-            f"<a:lnTo><a:pt x=\"{_to_emu(w)}\" y=\"{_to_emu(0)}\"/></a:lnTo>"
-            f"<a:lnTo><a:pt x=\"{_to_emu(w)}\" y=\"{_to_emu(h)}\"/></a:lnTo>"
-            f"<a:lnTo><a:pt x=\"{_to_emu(0)}\" y=\"{_to_emu(h)}\"/></a:lnTo>"
-            "<a:close/>"
-            "</a:path>"
-            "</a:pathLst>"
-            "</a:custGeom>"
-        )
+        # Build a:custGeom with lxml
+        custGeom = a_elem("custGeom")
+        pathLst = a_sub(custGeom, "pathLst")
+        path = a_sub(pathLst, "path", w=_to_emu(w), h=_to_emu(h), fill="none")
+
+        # moveTo
+        moveTo = a_sub(path, "moveTo")
+        a_sub(moveTo, "pt", x=_to_emu(0), y=_to_emu(0))
+
+        # lnTo corners
+        lnTo1 = a_sub(path, "lnTo")
+        a_sub(lnTo1, "pt", x=_to_emu(w), y=_to_emu(0))
+
+        lnTo2 = a_sub(path, "lnTo")
+        a_sub(lnTo2, "pt", x=_to_emu(w), y=_to_emu(h))
+
+        lnTo3 = a_sub(path, "lnTo")
+        a_sub(lnTo3, "pt", x=_to_emu(0), y=_to_emu(h))
+
+        # close
+        a_sub(path, "close")
+
+        xml = to_string(custGeom)
 
         return ClipCustGeom(
             path=points,

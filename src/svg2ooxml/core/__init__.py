@@ -4,7 +4,6 @@ from importlib import import_module as _im
 from typing import Any as _Any
 
 __all__ = [
-    'ConversionPipeline',
     'ConvertResult',
     'Converter',
     'DEFAULT_STAGE_NAMES',
@@ -22,8 +21,17 @@ __all__ = [
     'animation',
     'auth',
     'converter',
+    'hyperlinks',
+    'ir',
+    'masks',
     'multipage',
+    'parser',
+    'parser.batch',
+    'parser.colors',
+    'parser.preprocess',
+    'parser.split',
     'pipeline',
+    'pipeline.mappers',
     'pptx_exporter',
     'resvg',
     'resvg.geometry',
@@ -31,12 +39,16 @@ __all__ = [
     'resvg.parser',
     'resvg.text',
     'resvg.utils',
-    'slide_orchestrator'
+    'slide_orchestrator',
+    'styling',
+    'tracing',
+    'traversal',
+    'traversal.bridges'
 ]
 
 # map symbol -> relative module
-_symbol_map = {'ConvertResult': 'converter', 'Converter': 'converter', 'DEFAULT_STAGE_NAMES': 'converter', 'SplitPage': 'multipage', 'split_svg_into_pages': 'multipage', 'ConversionPipeline': 'pipeline', 'SvgToPptxResult': 'pptx_exporter', 'SvgConversionError': 'pptx_exporter', 'SvgPageSource': 'pptx_exporter', 'SvgToPptxExporter': 'pptx_exporter', 'SvgPageResult': 'pptx_exporter', 'SvgToPptxMultiResult': 'pptx_exporter', 'expand_page_with_variants': 'slide_orchestrator', 'FallbackVariant': 'slide_orchestrator', 'derive_variants_from_trace': 'slide_orchestrator'}
-_module_map = {'animation': 'animation', 'auth': 'auth', 'converter': 'converter', 'multipage': 'multipage', 'pipeline': 'pipeline', 'pptx_exporter': 'pptx_exporter', 'resvg': 'resvg', 'resvg.geometry': 'resvg.geometry', 'resvg.painting': 'resvg.painting', 'resvg.parser': 'resvg.parser', 'resvg.text': 'resvg.text', 'resvg.utils': 'resvg.utils', 'slide_orchestrator': 'slide_orchestrator'}
+_symbol_map = {'DEFAULT_STAGE_NAMES': 'converter', 'ConvertResult': 'converter', 'Converter': 'converter', 'split_svg_into_pages': 'multipage', 'SplitPage': 'multipage', 'SvgConversionError': 'pptx_exporter', 'SvgToPptxResult': 'pptx_exporter', 'SvgPageResult': 'pptx_exporter', 'SvgToPptxExporter': 'pptx_exporter', 'SvgPageSource': 'pptx_exporter', 'SvgToPptxMultiResult': 'pptx_exporter', 'expand_page_with_variants': 'slide_orchestrator', 'FallbackVariant': 'slide_orchestrator', 'derive_variants_from_trace': 'slide_orchestrator'}
+_module_map = {'animation': 'animation', 'auth': 'auth', 'converter': 'converter', 'hyperlinks': 'hyperlinks', 'ir': 'ir', 'masks': 'masks', 'multipage': 'multipage', 'parser': 'parser', 'parser.batch': 'parser.batch', 'parser.colors': 'parser.colors', 'parser.preprocess': 'parser.preprocess', 'parser.split': 'parser.split', 'pipeline': 'pipeline', 'pipeline.mappers': 'pipeline.mappers', 'pptx_exporter': 'pptx_exporter', 'resvg': 'resvg', 'resvg.geometry': 'resvg.geometry', 'resvg.painting': 'resvg.painting', 'resvg.parser': 'resvg.parser', 'resvg.text': 'resvg.text', 'resvg.utils': 'resvg.utils', 'slide_orchestrator': 'slide_orchestrator', 'styling': 'styling', 'tracing': 'tracing', 'traversal': 'traversal', 'traversal.bridges': 'traversal.bridges'}
 
 
 def __getattr__(name: str) -> _Any:  # PEP 562

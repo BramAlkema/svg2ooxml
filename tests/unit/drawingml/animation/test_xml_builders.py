@@ -96,7 +96,8 @@ class TestAttributeList:
         # Find attrName children
         attr_names = attr_list.findall(".//{http://schemas.openxmlformats.org/drawingml/2006/main}attrName")
         assert len(attr_names) == 1
-        assert attr_names[0].text == "ppt_x"
+        assert attr_names[0].get("val") == "ppt_x"
+        assert attr_names[0].get("type") is None
 
     def test_multiple_attributes(self):
         builder = AnimationXMLBuilder()
@@ -106,7 +107,7 @@ class TestAttributeList:
         attr_names = attr_list.findall(".//{http://schemas.openxmlformats.org/drawingml/2006/main}attrName")
         assert len(attr_names) == 3
 
-        values = [attr.text for attr in attr_names]
+        values = [attr.get("val") for attr in attr_names]
         assert values == ["ppt_x", "ppt_y", "ppt_w"]
 
     def test_empty_attribute_list(self):

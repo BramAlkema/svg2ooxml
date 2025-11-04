@@ -13,6 +13,9 @@ from .base import Mapper, MapperResult, OutputFormat
 from .clip_render import clip_result_to_xml
 from .image_adapter import ImageProcessingAdapter, create_image_adapter
 
+# Import centralized XML builders for safe DrawingML generation
+from svg2ooxml.drawingml.xml_builder import a_elem, a_sub, p_elem, p_sub, to_string
+
 
 @dataclass
 class ImageDecision:
@@ -118,25 +121,40 @@ class ImageMapper(Mapper):
         width_emu = max(1, px_to_emu(bounds.width))
         height_emu = max(1, px_to_emu(bounds.height))
 
-        clip_section = clip_xml or ""
-        return (
-            f"<p:pic>"
-            f"<p:nvPicPr>"
-            f"<p:cNvPr id=\"1\" name=\"Image\"/>"
-            f"<p:cNvPicPr><a:picLocks noChangeAspect=\"1\"/></p:cNvPicPr>"
-            f"<p:nvPr/>"
-            f"</p:nvPicPr>"
-            f"<p:blipFill>"
-            f"<a:blip r:embed=\"{rel_id}\"/>"
-            f"<a:stretch><a:fillRect/></a:stretch>"
-            f"</p:blipFill>"
-            f"<p:spPr>"
-            f"<a:xfrm><a:off x=\"{x_emu}\" y=\"{y_emu}\"/><a:ext cx=\"{width_emu}\" cy=\"{height_emu}\"/></a:xfrm>"
-            f"<a:prstGeom prst=\"rect\"><a:avLst/></a:prstGeom>"
-            f"{clip_section}"
-            f"</p:spPr>"
-            f"</p:pic>"
-        )
+        # Build p:pic with lxml
+        pic = p_elem("pic")
+
+        # Build p:nvPicPr
+        nvPicPr = p_sub(pic, "nvPicPr")
+        p_sub(nvPicPr, "cNvPr", id="1", name="Image")
+        cNvPicPr = p_sub(nvPicPr, "cNvPicPr")
+        a_sub(cNvPicPr, "picLocks", noChangeAspect="1")
+        p_sub(nvPicPr, "nvPr")
+
+        # Build p:blipFill
+        blipFill = p_sub(pic, "blipFill")
+        blip = a_sub(blipFill, "blip")
+        blip.set("{http://schemas.openxmlformats.org/officeDocument/2006/relationships}embed", rel_id)
+        stretch = a_sub(blipFill, "stretch")
+        a_sub(stretch, "fillRect")
+
+        # Build p:spPr
+        spPr = p_sub(pic, "spPr")
+        xfrm = a_sub(spPr, "xfrm")
+        a_sub(xfrm, "off", x=x_emu, y=y_emu)
+        a_sub(xfrm, "ext", cx=width_emu, cy=height_emu)
+        prstGeom = a_sub(spPr, "prstGeom", prst="rect")
+        a_sub(prstGeom, "avLst")
+
+        # Add clip_xml if present
+        if clip_xml:
+            from lxml import etree
+            wrapped = f'<root xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">{clip_xml}</root>'
+            temp = etree.fromstring(wrapped.encode('utf-8'))
+            for child in temp:
+                spPr.append(child)
+
+        return to_string(pic)
 
 
 class DefaultImagePolicy:

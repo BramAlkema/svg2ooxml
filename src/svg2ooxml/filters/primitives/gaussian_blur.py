@@ -10,6 +10,9 @@ from svg2ooxml.filters.base import Filter, FilterContext, FilterResult
 from svg2ooxml.filters.utils import parse_number
 from svg2ooxml.units.conversion import px_to_emu
 
+# Import centralized XML builders for safe DrawingML generation
+from svg2ooxml.drawingml.xml_builder import a_elem, a_sub, to_string
+
 
 @dataclass
 class GaussianBlurParams:
@@ -59,7 +62,9 @@ class GaussianBlurFilter(Filter):
                 (params.std_dev_x + params.std_dev_y) / 2.0 if allow_anisotropic and not params.is_isotropic else params.std_dev_x
             )
             radius_emu = self._std_dev_to_emu(radius_source)
-            drawingml = f'<a:effectLst><a:blur rad="{radius_emu}"/></a:effectLst>'
+            effectLst = a_elem("effectLst")
+            a_sub(effectLst, "blur", rad=radius_emu)
+            drawingml = to_string(effectLst)
             if allow_anisotropic and not params.is_isotropic:
                 metadata["anisotropic_mode"] = "approx_native"
                 metadata["native_support"] = True

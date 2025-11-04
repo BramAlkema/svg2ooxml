@@ -17,6 +17,7 @@ from svg2ooxml.services import ConversionServices
 from .preprocess.services import ParserServices, build_parser_services
 from .colors.parsing import parse_color
 from .content_cleaner import prepare_svg_content
+from .css_font_parser import CSSFontFaceParser
 from .dom_loader import ParserOptions, XMLParser
 from .normalization import SafeSVGNormalizer
 from .reference_collector import collect_references
@@ -64,6 +65,7 @@ class SVGParser:
         self._xml_parser = XMLParser(self._config.to_parser_options())
         self._normalizer = SafeSVGNormalizer()
         self._style_resolver = StyleResolver(self._unit_converter)
+        self._font_parser = CSSFontFaceParser()
 
         parser_services = self._coerce_services(services)
         self._service_template = parser_services.services
@@ -182,6 +184,9 @@ class SVGParser:
 
         self._style_resolver.collect_css(root)
 
+        # Parse web fonts from @font-face rules
+        web_fonts = self._font_parser.parse_stylesheets(root)
+
         services = self._service_template.clone()
         policy_context = self._build_policy_context()
 
@@ -261,6 +266,7 @@ class SVGParser:
                 policy_engine=self._policy_engine,
                 policy_context=policy_context,
                 style_context=style_context,
+                web_fonts=web_fonts if web_fonts else None,
                 error="SVG element missing width/height or viewBox.",
             )
             self._trace(tracer, "warning", metadata={"reason": "missing_dimensions"})
@@ -287,6 +293,7 @@ class SVGParser:
                 policy_engine=self._policy_engine,
                 policy_context=policy_context,
                 style_context=style_context,
+                web_fonts=web_fonts if web_fonts else None,
             )
 
             try:

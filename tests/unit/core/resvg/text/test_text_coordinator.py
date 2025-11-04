@@ -1,0 +1,332 @@
+"""Unit tests for TextRenderCoordinator."""
+
+import pytest
+from dataclasses import dataclass
+from typing import Optional
+
+from svg2ooxml.core.resvg.text.text_coordinator import (
+    TextRenderCoordinator,
+    TextRenderResult,
+)
+from svg2ooxml.core.resvg.text.layout_analyzer import TextLayoutComplexity
+from svg2ooxml.telemetry.render_decisions import RenderTracer
+
+
+# Mock classes to simulate resvg structures
+@dataclass
+class MockTransform:
+    """Mock transform for testing."""
+
+    a: float = 1.0
+    b: float = 0.0
+    c: float = 0.0
+    d: float = 1.0
+    e: float = 0.0
+    f: float = 0.0
+
+
+@dataclass
+class MockColor:
+    """Mock color for testing."""
+
+    r: float = 0.0
+    g: float = 0.0
+    b: float = 0.0
+    a: float = 1.0
+
+
+@dataclass
+class MockFillStyle:
+    """Mock fill style for testing."""
+
+    color: Optional[MockColor] = None
+    opacity: float = 1.0
+    reference: Optional[object] = None
+
+
+@dataclass
+class MockTextStyle:
+    """Mock text style for testing."""
+
+    font_families: tuple[str, ...] = ("Arial",)
+    font_size: Optional[float] = 12.0
+    font_style: Optional[str] = None
+    font_weight: Optional[str] = None
+
+
+@dataclass
+class MockTextNode:
+    """Mock TextNode for testing."""
+
+    text_content: Optional[str] = "Hello"
+    text_style: Optional[MockTextStyle] = None
+    fill: Optional[MockFillStyle] = None
+    transform: Optional[MockTransform] = None
+    attributes: dict = None
+    children: list = None
+
+    def __post_init__(self):
+        if self.attributes is None:
+            self.attributes = {}
+        if self.children is None:
+            self.children = []
+        if self.text_style is None:
+            self.text_style = MockTextStyle()
+        if self.fill is None:
+            self.fill = MockFillStyle(color=MockColor())
+
+
+class TestTextRenderCoordinator:
+    """Test suite for TextRenderCoordinator."""
+
+    def test_coordinator_initialization(self):
+        """Test coordinator can be initialized with default parameters."""
+        coordinator = TextRenderCoordinator()
+        assert coordinator is not None
+
+    def test_coordinator_initialization_with_custom_thresholds(self):
+        """Test coordinator can be initialized with custom thresholds."""
+        coordinator = TextRenderCoordinator(
+            max_rotation_deg=30.0, max_skew_deg=3.0, max_scale_ratio=1.5
+        )
+        assert coordinator is not None
+
+    def test_simple_text_renders_as_native(self):
+        """Test that simple horizontal text renders as native DrawingML."""
+        coordinator = TextRenderCoordinator()
+        node = MockTextNode(text_content="Simple text")
+
+        result = coordinator.render(node)
+
+        assert result.strategy == "native"
+        assert result.content is not None
+        assert "<p:txBody>" in result.content
+        assert result.complexity == TextLayoutComplexity.SIMPLE
+
+    def test_simple_text_with_telemetry(self):
+        """Test that simple text records telemetry."""
+        coordinator = TextRenderCoordinator()
+        node = MockTextNode(text_content="Simple text")
+        tracer = RenderTracer()
+
+        result = coordinator.render(node, tracer=tracer)
+
+        assert result.strategy == "native"
+        decisions = tracer.get_decisions()
+        assert len(decisions) == 1
+        assert decisions[0].element_type == "text"
+        assert decisions[0].strategy == "native"
+        assert decisions[0].metadata["complexity"] == TextLayoutComplexity.SIMPLE
+
+    def test_text_with_textpath_falls_back_to_emf(self):
+        """Test that text with textPath falls back to EMF."""
+        coordinator = TextRenderCoordinator()
+        node = MockTextNode(
+            text_content="Path text", attributes={"textPath": "#myPath"}
+        )
+
+        result = coordinator.render(node)
+
+        assert result.strategy == "emf"
+        assert result.content is None
+        assert result.complexity == TextLayoutComplexity.HAS_TEXT_PATH
+
+    def test_text_with_vertical_mode_falls_back_to_emf(self):
+        """Test that vertical text falls back to EMF."""
+        coordinator = TextRenderCoordinator()
+        node = MockTextNode(
+            text_content="Vertical text", attributes={"writing-mode": "tb-rl"}
+        )
+
+        result = coordinator.render(node)
+
+        assert result.strategy == "emf"
+        assert result.content is None
+        assert result.complexity == TextLayoutComplexity.HAS_VERTICAL_TEXT
+
+    def test_text_with_complex_transform_falls_back_to_emf(self):
+        """Test that text with complex transform falls back to EMF."""
+        coordinator = TextRenderCoordinator(max_rotation_deg=30.0)
+        # Create a transform with 45° rotation (exceeds 30° threshold)
+        import math
+
+        angle = math.radians(45.0)
+        transform = MockTransform(
+            a=math.cos(angle),
+            b=math.sin(angle),
+            c=-math.sin(angle),
+            d=math.cos(angle),
+        )
+        node = MockTextNode(text_content="Rotated text", transform=transform)
+
+        result = coordinator.render(node)
+
+        assert result.strategy == "emf"
+        assert result.content is None
+        assert result.complexity == TextLayoutComplexity.HAS_COMPLEX_TRANSFORM
+
+    def test_text_with_complex_positioning_falls_back_to_emf(self):
+        """Test that text with per-character positioning falls back to EMF."""
+        coordinator = TextRenderCoordinator()
+        node = MockTextNode(
+            text_content="Positioned text",
+            attributes={"x": "10 20 30 40"},  # Multiple x positions
+        )
+
+        result = coordinator.render(node)
+
+        assert result.strategy == "emf"
+        assert result.content is None
+        assert result.complexity == TextLayoutComplexity.HAS_COMPLEX_POSITIONING
+
+    def test_emf_fallback_records_telemetry(self):
+        """Test that EMF fallback records telemetry with correct metadata."""
+        coordinator = TextRenderCoordinator()
+        node = MockTextNode(
+            text_content="Complex text", attributes={"textPath": "#path"}
+        )
+        tracer = RenderTracer()
+
+        result = coordinator.render(node, tracer=tracer)
+
+        assert result.strategy == "emf"
+        decisions = tracer.get_decisions()
+        assert len(decisions) == 1
+        assert decisions[0].element_type == "text"
+        assert decisions[0].strategy == "emf"
+        assert decisions[0].metadata["complexity"] == TextLayoutComplexity.HAS_TEXT_PATH
+        assert "Complex text"[:10] in decisions[0].metadata.get("text_preview", "")
+
+    def test_is_simple_layout_helper_for_simple_text(self):
+        """Test is_simple_layout() helper method for simple text."""
+        coordinator = TextRenderCoordinator()
+        node = MockTextNode(text_content="Simple")
+
+        assert coordinator.is_simple_layout(node) is True
+
+    def test_is_simple_layout_helper_for_complex_text(self):
+        """Test is_simple_layout() helper method for complex text."""
+        coordinator = TextRenderCoordinator()
+        node = MockTextNode(text_content="Complex", attributes={"textPath": "#p"})
+
+        assert coordinator.is_simple_layout(node) is False
+
+    def test_empty_text_renders_as_native(self):
+        """Test that empty text still renders as native DrawingML."""
+        coordinator = TextRenderCoordinator()
+        node = MockTextNode(text_content="")
+
+        result = coordinator.render(node)
+
+        assert result.strategy == "native"
+        assert result.content is not None
+        assert "<a:endParaRPr/>" in result.content
+
+    def test_text_with_simple_translation_renders_as_native(self):
+        """Test that text with simple translation renders as native."""
+        coordinator = TextRenderCoordinator()
+        transform = MockTransform(e=100.0, f=50.0)  # Simple translation
+        node = MockTextNode(text_content="Translated", transform=transform)
+
+        result = coordinator.render(node)
+
+        assert result.strategy == "native"
+        assert result.content is not None
+
+    def test_text_with_moderate_rotation_renders_as_native(self):
+        """Test that text with moderate rotation (within threshold) renders as native."""
+        coordinator = TextRenderCoordinator(max_rotation_deg=45.0)
+        import math
+
+        angle = math.radians(30.0)  # 30° is within 45° threshold
+        transform = MockTransform(
+            a=math.cos(angle),
+            b=math.sin(angle),
+            c=-math.sin(angle),
+            d=math.cos(angle),
+        )
+        node = MockTextNode(text_content="Rotated 30°", transform=transform)
+
+        result = coordinator.render(node)
+
+        assert result.strategy == "native"
+        assert result.content is not None
+
+    def test_telemetry_includes_text_preview(self):
+        """Test that telemetry includes text preview (first 50 chars)."""
+        coordinator = TextRenderCoordinator()
+        long_text = "A" * 100  # 100 character text
+        node = MockTextNode(text_content=long_text)
+        tracer = RenderTracer()
+
+        coordinator.render(node, tracer=tracer)
+
+        decisions = tracer.get_decisions()
+        assert len(decisions) == 1
+        preview = decisions[0].metadata.get("text_preview", "")
+        assert len(preview) == 50  # Should be truncated to 50 chars
+        assert preview == "A" * 50
+
+    def test_telemetry_optional(self):
+        """Test that coordinator works without tracer."""
+        coordinator = TextRenderCoordinator()
+        node = MockTextNode(text_content="Simple")
+
+        # Should not raise even without tracer
+        result = coordinator.render(node, tracer=None)
+
+        assert result.strategy == "native"
+        assert result.content is not None
+
+    def test_result_contains_complexity_details(self):
+        """Test that result contains human-readable complexity details."""
+        coordinator = TextRenderCoordinator()
+        node = MockTextNode(text_content="Complex", attributes={"textPath": "#p"})
+
+        result = coordinator.render(node)
+
+        assert result.details is not None
+        assert "textPath" in result.details or "path" in result.details.lower()
+
+    def test_child_span_with_vertical_text_falls_back_to_emf(self):
+        """Test that child spans with vertical text trigger EMF fallback."""
+        coordinator = TextRenderCoordinator()
+
+        # Create a child span with vertical text
+        child_span = MockTextNode(
+            text_content="Child", attributes={"writing-mode": "tb"}
+        )
+        child_span.tag = "tspan"
+
+        parent = MockTextNode(text_content="Parent", children=[child_span])
+
+        result = coordinator.render(parent)
+
+        assert result.strategy == "emf"
+        assert (
+            result.complexity
+            == TextLayoutComplexity.HAS_CHILD_SPAN_VERTICAL_TEXT
+        )
+
+    def test_child_span_with_complex_positioning_falls_back_to_emf(self):
+        """Test that child spans with complex positioning trigger EMF fallback."""
+        coordinator = TextRenderCoordinator()
+
+        # Create a child span with per-character positioning
+        child_span = MockTextNode(
+            text_content="Child", attributes={"x": "10 20 30"}
+        )
+        child_span.tag = "tspan"
+
+        parent = MockTextNode(text_content="Parent", children=[child_span])
+
+        result = coordinator.render(parent)
+
+        assert result.strategy == "emf"
+        assert (
+            result.complexity
+            == TextLayoutComplexity.HAS_CHILD_SPAN_COMPLEX_POSITIONING
+        )
+
+
+__all__ = ["TestTextRenderCoordinator"]

@@ -53,10 +53,138 @@ class ShapeConversionMixin:
             element_id=element_id,
         )
 
+    # ------------------------------------------------------------------ #
+    # Resvg routing infrastructure                                       #
+    # ------------------------------------------------------------------ #
+
+    def _can_use_resvg(self, element: etree._Element) -> bool:
+        """Check if resvg mode is available and enabled for this element.
+
+        Returns:
+            True if:
+            - geometry_mode policy is "resvg"
+            - resvg tree exists on converter
+            - element has corresponding resvg node in lookup table
+        """
+        # Check policy
+        geometry_options = self._policy_options("geometry")
+        if not geometry_options or geometry_options.get("geometry_mode") != "resvg":
+            return False
+
+        # Check resvg tree exists
+        if getattr(self, "_resvg_tree", None) is None:
+            return False
+
+        # Check element has resvg node
+        resvg_lookup = getattr(self, "_resvg_element_lookup", {})
+        if element not in resvg_lookup:
+            return False
+
+        return True
+
+    def _convert_via_resvg(self, element: etree._Element, coord_space: CoordinateSpace):
+        """Convert element using resvg adapters.
+
+        This method handles:
+        - Looking up the resvg node
+        - Routing to appropriate adapter based on node type
+        - Extracting style from element
+        - Creating IR objects with style and metadata
+
+        Args:
+            element: SVG element to convert
+            coord_space: Current coordinate space (used for style extraction)
+
+        Returns:
+            IR object (Path, Circle, etc.) or None if conversion fails
+        """
+        from svg2ooxml.drawingml.bridges.resvg_shape_adapter import ResvgShapeAdapter
+
+        # Look up resvg node
+        resvg_lookup = getattr(self, "_resvg_element_lookup", {})
+        resvg_node = resvg_lookup.get(element)
+        if resvg_node is None:
+            return None
+
+        # Extract style (same as legacy path)
+        style = styles_runtime.extract_style(self, element)
+        metadata = dict(style.metadata)
+        self._attach_policy_metadata(metadata, "geometry")
+
+        # Get clip/mask refs
+        clip_ref = self._resolve_clip_ref(element)
+        mask_ref, mask_instance = self._resolve_mask_ref(element)
+
+        # Convert using resvg adapter
+        adapter = ResvgShapeAdapter()
+        segments = None
+
+        # Route to appropriate adapter method based on node type
+        node_type = type(resvg_node).__name__
+        try:
+            if node_type == "PathNode":
+                segments = adapter.from_path_node(resvg_node)
+            elif node_type == "RectNode":
+                segments = adapter.from_rect_node(resvg_node)
+            elif node_type == "CircleNode":
+                segments = adapter.from_circle_node(resvg_node)
+            elif node_type == "EllipseNode":
+                segments = adapter.from_ellipse_node(resvg_node)
+            else:
+                # Unsupported node type, return None to trigger fallback
+                return None
+        except Exception as exc:
+            self._logger.debug(
+                "Resvg adapter failed for %s: %s",
+                element.get("id") or f"<{node_type}>",
+                exc,
+            )
+            return None
+
+        if not segments:
+            return None
+
+        # Resvg segments already have transforms applied, so we don't apply coord_space
+        # Create IR Path with segments
+        path = Path(
+            segments=segments,
+            fill=style.fill,
+            stroke=style.stroke,
+            clip=clip_ref,
+            mask=mask_ref,
+            mask_instance=mask_instance,
+            opacity=style.opacity,
+            effects=style.effects,
+            metadata=metadata,
+        )
+        self._process_mask_metadata(path)
+        self._trace_geometry_decision(element, "resvg", path.metadata)
+        return path
+
     def _convert_rect(self, *, element: etree._Element, coord_space: CoordinateSpace):
+        # Try resvg path first if available
+        if self._can_use_resvg(element):
+            resvg_result = self._convert_via_resvg(element, coord_space)
+            if resvg_result is not None:
+                return resvg_result
+            # If resvg failed, fall through to legacy
+
+        # Legacy conversion path
         return convert_rectangle(self, element, coord_space, tolerance=DEFAULT_TOLERANCE)
 
     def _convert_circle(self, *, element: etree._Element, coord_space: CoordinateSpace):
+        # Try resvg path first if available
+        if self._can_use_resvg(element):
+            resvg_result = self._convert_via_resvg(element, coord_space)
+            if resvg_result is not None:
+                return resvg_result
+            # If resvg failed, fall through to legacy
+
+        # Legacy conversion path
+        return self._convert_circle_legacy(element=element, coord_space=coord_space)
+
+    def _convert_circle_legacy(self, *, element: etree._Element, coord_space: CoordinateSpace):
+        """Legacy circle conversion (manual coordinate extraction)."""
         cx = _parse_float(element.get("cx"), default=0.0) or 0.0
         cy = _parse_float(element.get("cy"), default=0.0) or 0.0
         radius = _parse_float(element.get("r"))
@@ -107,6 +235,18 @@ class ShapeConversionMixin:
         return path
 
     def _convert_ellipse(self, *, element: etree._Element, coord_space: CoordinateSpace):
+        # Try resvg path first if available
+        if self._can_use_resvg(element):
+            resvg_result = self._convert_via_resvg(element, coord_space)
+            if resvg_result is not None:
+                return resvg_result
+            # If resvg failed, fall through to legacy
+
+        # Legacy conversion path
+        return self._convert_ellipse_legacy(element=element, coord_space=coord_space)
+
+    def _convert_ellipse_legacy(self, *, element: etree._Element, coord_space: CoordinateSpace):
+        """Legacy ellipse conversion (manual coordinate extraction)."""
         cx = _parse_float(element.get("cx"), default=0.0) or 0.0
         cy = _parse_float(element.get("cy"), default=0.0) or 0.0
         rx = _parse_float(element.get("rx"))
@@ -215,6 +355,14 @@ class ShapeConversionMixin:
         if not data:
             return None
 
+        # Try resvg path first if available AND geometry_mode is "resvg"
+        if self._can_use_resvg(element):
+            resvg_result = self._convert_via_resvg(element, coord_space)
+            if resvg_result is not None:
+                return resvg_result
+            # If resvg failed, fall through to legacy
+
+        # Legacy path conversion (with optional resvg normalization as best-effort)
         segments: list[SegmentType] | None = None
 
         resvg_node = (
@@ -225,6 +373,7 @@ class ShapeConversionMixin:
 
         style = styles_runtime.extract_style(self, element)
 
+        # Best-effort resvg normalization (even in legacy mode)
         if resvg_node is not None and getattr(resvg_node, "d", None):
             try:
                 normalized = normalize_path_to_segments(

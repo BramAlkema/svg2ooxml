@@ -9,6 +9,9 @@ from lxml import etree
 from svg2ooxml.filters.base import Filter, FilterContext, FilterResult
 from svg2ooxml.filters.utils.dml import merge_effect_fragments
 
+# Import centralized XML builders for safe DrawingML generation
+from svg2ooxml.drawingml.xml_builder import a_elem, a_sub, to_string
+
 
 SUPPORTED_MODES = {
     "normal",
@@ -53,6 +56,16 @@ class BlendFilter(Filter):
             metadata["native_support"] = bool(drawingml)
             if fallback:
                 metadata["fallback_reason"] = fallback
+
+            # Record telemetry
+            if context.tracer:
+                context.tracer.record_decision(
+                    element_type="feBlend",
+                    strategy="native" if drawingml else "emf",
+                    reason=f"Normal blend mode: {'native merge' if drawingml else 'no drawable content'}",
+                    metadata={"mode": "normal", "has_drawingml": bool(drawingml)},
+                )
+
             return FilterResult(
                 success=True,
                 drawingml=drawingml,
@@ -67,6 +80,16 @@ class BlendFilter(Filter):
                 fallback = self._merge_fallback(base_result, top_result)
                 warnings = self._collect_warnings(base_result, top_result)
                 metadata["native_support"] = True
+
+                # Record telemetry for successful native blend
+                if context.tracer:
+                    context.tracer.record_decision(
+                        element_type="feBlend",
+                        strategy="native",
+                        reason=f"Supported blend mode: {params.mode}",
+                        metadata={"mode": params.mode, "blend_type": "fillOverlay"},
+                    )
+
                 return FilterResult(
                     success=True,
                     drawingml=overlay,
@@ -75,8 +98,19 @@ class BlendFilter(Filter):
                     warnings=warnings,
                 )
 
+        # Unsupported mode - fallback to EMF
         metadata["native_support"] = False
         metadata["fallback_reason"] = f"mode:{params.mode}"
+
+        # Record telemetry for unsupported mode
+        if context.tracer:
+            context.tracer.record_decision(
+                element_type="feBlend",
+                strategy="emf",
+                reason=f"Unsupported blend mode: {params.mode}",
+                metadata={"mode": params.mode, "supported_modes": list(SUPPORTED_MODES)},
+            )
+
         return FilterResult(
             success=True,
             drawingml="",
@@ -163,11 +197,13 @@ class BlendFilter(Filter):
             return None
         color, opacity = color_info
         alpha = int(round(max(0.0, min(opacity, 1.0)) * 100000))
-        return (
-            f'<a:fillOverlay blend="{blend}">'
-            f'<a:solidFill><a:srgbClr val="{color}"><a:alpha val="{alpha}"/></a:srgbClr></a:solidFill>'
-            "</a:fillOverlay>"
-        )
+
+        fillOverlay = a_elem("fillOverlay", blend=blend)
+        solidFill = a_sub(fillOverlay, "solidFill")
+        srgbClr = a_sub(solidFill, "srgbClr", val=color)
+        a_sub(srgbClr, "alpha", val=alpha)
+
+        return to_string(fillOverlay)
 
     @staticmethod
     def _collect_warnings(*results: FilterResult | None) -> tuple[str, ...]:

@@ -11,6 +11,9 @@ from lxml import etree
 
 from svg2ooxml.color.models import Color
 from svg2ooxml.color.parsers import parse_color
+
+# Import centralized XML builders for safe DrawingML generation
+from svg2ooxml.drawingml.xml_builder import a_elem, a_sub, to_string
 from svg2ooxml.drawingml.bridges import (
     GradientDescriptor,
     LinearGradientDescriptor,
@@ -218,10 +221,12 @@ class GradientService:
 
     def _serialise_stop(self, position: int, color: Color) -> str:
         srgb = self._color_to_hex(color)
-        alpha_fragment = ""
+        gs = a_elem("gs", pos=position)
+        srgbClr = a_sub(gs, "srgbClr", val=srgb)
         if color.a < 0.999:
-            alpha_fragment = f"<a:alpha val=\"{int(self._clamp(color.a) * 100000)}\"/>"
-        return f'<a:gs pos="{position}"><a:srgbClr val="{srgb}">{alpha_fragment}</a:srgbClr></a:gs>'
+            alpha_val = int(self._clamp(color.a) * 100000)
+            a_sub(srgbClr, "alpha", val=alpha_val)
+        return to_string(gs)
 
     def _color_to_hex(self, color: Color) -> str:
         r = int(self._clamp(color.r) * 255 + 0.5)
@@ -296,13 +301,19 @@ class GradientService:
         gs_list = self._extract_gradient_stops(element, max_stops=max_stops)
         angle = self._resolve_linear_angle(element)
         comment = self._analysis_comment(analysis)
-        return (
-            f"{comment}"
-            "<a:gradFill>"
-            f"<a:gsLst>{gs_list}</a:gsLst>"
-            f"<a:lin ang=\"{angle}\" scaled=\"0\"/>"
-            "</a:gradFill>"
-        )
+
+        gradFill = a_elem("gradFill")
+        gsLst = a_sub(gradFill, "gsLst")
+        # Parse gs_list XML and append children
+        if gs_list:
+            wrapped = f'<root xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">{gs_list}</root>'
+            temp = etree.fromstring(wrapped.encode('utf-8'))
+            for child in temp:
+                gsLst.append(child)
+        a_sub(gradFill, "lin", ang=angle, scaled="0")
+
+        result = to_string(gradFill)
+        return f"{comment}{result}" if comment else result
 
     def _convert_radial_gradient(
         self,
@@ -313,13 +324,19 @@ class GradientService:
         max_stops = plan.simplify_to if plan and plan.simplify_to else None
         gs_list = self._extract_gradient_stops(element, max_stops=max_stops)
         comment = self._analysis_comment(analysis)
-        return (
-            f"{comment}"
-            "<a:gradFill>"
-            f"<a:gsLst>{gs_list}</a:gsLst>"
-            "<a:path path=\"circle\"/>"
-            "</a:gradFill>"
-        )
+
+        gradFill = a_elem("gradFill")
+        gsLst = a_sub(gradFill, "gsLst")
+        # Parse gs_list XML and append children
+        if gs_list:
+            wrapped = f'<root xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">{gs_list}</root>'
+            temp = etree.fromstring(wrapped.encode('utf-8'))
+            for child in temp:
+                gsLst.append(child)
+        a_sub(gradFill, "path", path="circle")
+
+        result = to_string(gradFill)
+        return f"{comment}{result}" if comment else result
 
     def _convert_mesh_gradient(
         self,

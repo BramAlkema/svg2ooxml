@@ -19,7 +19,7 @@ __all__ = [
 ]
 
 # map symbol -> relative module
-_symbol_map = {'DriveError': 'drive_service', 'GoogleDriveService': 'drive_service', 'OAuthError': 'oauth_service', 'GoogleOAuthService': 'oauth_service', 'get_system_username': 'token_store', 'get_cli_token_store': 'token_store', 'get_api_token_store': 'token_store', 'TokenInfo': 'token_store', 'TokenStore': 'token_store'}
+_symbol_map = {'GoogleDriveService': 'drive_service', 'DriveError': 'drive_service', 'OAuthError': 'oauth_service', 'GoogleOAuthService': 'oauth_service', 'get_cli_token_store': 'token_store', 'get_system_username': 'token_store', 'TokenStore': 'token_store', 'TokenInfo': 'token_store', 'get_api_token_store': 'token_store'}
 _module_map = {'drive_service': 'drive_service', 'oauth_service': 'oauth_service', 'token_store': 'token_store'}
 
 

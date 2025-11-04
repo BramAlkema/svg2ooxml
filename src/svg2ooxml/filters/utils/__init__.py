@@ -7,6 +7,9 @@ __all__ = [
     'DisplacementMapParameters',
     'TurbulenceParameters',
     'build_exporter_hook',
+    'extract_effect_children',
+    'is_effect_list',
+    'merge_effect_fragments',
     'parse_channel',
     'parse_displacement_map',
     'parse_number',
@@ -16,7 +19,7 @@ __all__ = [
 ]
 
 # map symbol -> relative module
-_symbol_map = {'build_exporter_hook': 'dml', 'TurbulenceParameters': 'parsing', 'parse_number': 'parsing', 'parse_turbulence': 'parsing', 'parse_channel': 'parsing', 'DisplacementMapParameters': 'parsing', 'parse_displacement_map': 'parsing'}
+_symbol_map = {'merge_effect_fragments': 'dml', 'is_effect_list': 'dml', 'build_exporter_hook': 'dml', 'extract_effect_children': 'dml', 'TurbulenceParameters': 'parsing', 'parse_turbulence': 'parsing', 'parse_number': 'parsing', 'parse_displacement_map': 'parsing', 'parse_channel': 'parsing', 'DisplacementMapParameters': 'parsing'}
 _module_map = {'dml': 'dml', 'parsing': 'parsing'}
 
 

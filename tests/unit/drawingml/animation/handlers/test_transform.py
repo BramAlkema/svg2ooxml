@@ -2,6 +2,7 @@
 
 import pytest
 from unittest.mock import Mock
+from lxml import etree
 
 from svg2ooxml.drawingml.animation.handlers.transform import TransformAnimationHandler
 from svg2ooxml.drawingml.animation.handlers.base import AnimationDefinition
@@ -65,12 +66,12 @@ class TestCanHandle:
 
         assert handler.can_handle(animation) is True
 
-    def test_handles_translate_transform(self):
-        """Should handle translate transform."""
+    def test_rejects_translate_transform(self):
+        """Should not claim support for translate until implemented."""
         handler = TransformAnimationHandler(Mock(), Mock(), Mock(), Mock())
         animation = create_test_animation(transform_type="translate")
 
-        assert handler.can_handle(animation) is True
+        assert handler.can_handle(animation) is False
 
     def test_does_not_handle_missing_transform_type(self):
         """Should not handle animations without transform_type."""
@@ -211,7 +212,7 @@ class TestScaleAnimation:
         """Should include TAV list for multi-keyframe scale."""
         xml_builder = Mock()
         xml_builder.build_behavior_core = Mock(return_value="<behavior/>")
-        xml_builder.build_tav_list_container = Mock(return_value="<tavs/>")
+        xml_builder.build_tav_list_container = Mock(return_value=etree.fromstring("<a:tavLst xmlns:a='http://schemas.openxmlformats.org/drawingml/2006/main'><a:tav tm='25000'/></a:tavLst>"))
         xml_builder.build_par_container = Mock(return_value="<p:par/>")
 
         value_processor = Mock()
@@ -231,8 +232,9 @@ class TestScaleAnimation:
         call_args = xml_builder.build_par_container.call_args
         child_xml = call_args.kwargs.get("child_content") or call_args.kwargs["child_xml"]
 
-        assert "<a:tavLst>" in child_xml
-        assert "<tavs/>" in child_xml
+        assert "<a:tavLst" in child_xml
+        assert '<a:tav tm="25000"/>' in child_xml
+        assert '<a:tav tm="25000"/>' in child_xml
 
     def test_returns_empty_for_no_values(self):
         """Should return empty string if no values."""
@@ -297,7 +299,7 @@ class TestRotateAnimation:
         """Should include TAV list for multi-keyframe rotate."""
         xml_builder = Mock()
         xml_builder.build_behavior_core = Mock(return_value="<behavior/>")
-        xml_builder.build_tav_list_container = Mock(return_value="<tavs/>")
+        xml_builder.build_tav_list_container = Mock(return_value=etree.fromstring("<a:tavLst xmlns:a='http://schemas.openxmlformats.org/drawingml/2006/main'><a:tav tm='25000'/></a:tavLst>"))
         xml_builder.build_par_container = Mock(return_value="<p:par/>")
 
         value_processor = Mock()
@@ -318,7 +320,8 @@ class TestRotateAnimation:
         call_args = xml_builder.build_par_container.call_args
         child_xml = call_args.kwargs.get("child_content") or call_args.kwargs["child_xml"]
 
-        assert "<a:tavLst>" in child_xml
+        assert "<a:tavLst" in child_xml
+        assert '<a:tav tm="25000"/>' in child_xml
 
     def test_returns_empty_for_no_values(self):
         """Should return empty string if no values."""

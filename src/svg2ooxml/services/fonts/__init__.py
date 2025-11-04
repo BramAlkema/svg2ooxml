@@ -4,12 +4,14 @@ from importlib import import_module as _im
 from typing import Any as _Any
 
 __all__ = [
+    'BROTLI_AVAILABLE',
     'ENV_FONT_DIRS',
     'EmbeddingPermission',
     'FontEmbeddingEngine',
     'FontEmbeddingRequest',
     'FontEmbeddingResult',
     'FontFetcher',
+    'FontLoader',
     'FontMatch',
     'FontOptimisationLevel',
     'FontProvider',
@@ -18,19 +20,21 @@ __all__ = [
     'FontSource',
     'FontSystem',
     'FontSystemConfig',
+    'LoadedFont',
     'MAX_FONT_SIZE',
     'collect_font_directories',
     'parse_directory_list',
     'embedding',
     'fetcher',
+    'loader',
     'providers',
     'service',
     'system'
 ]
 
 # map symbol -> relative module
-_symbol_map = {'EmbeddingPermission': 'embedding', 'FontEmbeddingEngine': 'embedding', 'FontOptimisationLevel': 'embedding', 'FontEmbeddingResult': 'embedding', 'FontEmbeddingRequest': 'embedding', 'FontFetcher': 'fetcher', 'FontSource': 'fetcher', 'MAX_FONT_SIZE': 'fetcher', 'FontMatch': 'service', 'FontProvider': 'service', 'FontQuery': 'service', 'FontService': 'service', 'collect_font_directories': 'system', 'FontSystem': 'system', 'FontSystemConfig': 'system', 'parse_directory_list': 'system', 'ENV_FONT_DIRS': 'system'}
-_module_map = {'embedding': 'embedding', 'fetcher': 'fetcher', 'providers': 'providers', 'service': 'service', 'system': 'system'}
+_symbol_map = {'EmbeddingPermission': 'embedding', 'FontEmbeddingResult': 'embedding', 'FontEmbeddingEngine': 'embedding', 'FontOptimisationLevel': 'embedding', 'FontEmbeddingRequest': 'embedding', 'FontFetcher': 'fetcher', 'MAX_FONT_SIZE': 'fetcher', 'FontSource': 'fetcher', 'LoadedFont': 'loader', 'BROTLI_AVAILABLE': 'loader', 'FontLoader': 'loader', 'FontMatch': 'service', 'FontProvider': 'service', 'FontQuery': 'service', 'FontService': 'service', 'FontSystem': 'system', 'collect_font_directories': 'system', 'parse_directory_list': 'system', 'ENV_FONT_DIRS': 'system', 'FontSystemConfig': 'system'}
+_module_map = {'embedding': 'embedding', 'fetcher': 'fetcher', 'loader': 'loader', 'providers': 'providers', 'service': 'service', 'system': 'system'}
 
 
 def __getattr__(name: str) -> _Any:  # PEP 562

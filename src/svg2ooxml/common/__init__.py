@@ -16,15 +16,24 @@ __all__ = [
     'parse_time_value',
     'project_temp_dir',
     'temporary_directory',
+    'compat',
+    'geometry',
+    'geometry.algorithms',
+    'geometry.clip',
+    'geometry.fractional',
+    'geometry.paths',
+    'geometry.transforms',
     'interpolation',
+    'style',
     'tempfiles',
     'time',
-    'types'
+    'types',
+    'units'
 ]
 
 # map symbol -> relative module
-_symbol_map = {'InterpolationEngine': 'interpolation', 'InterpolationResult': 'interpolation', 'ColorInterpolator': 'interpolation', 'BezierEasing': 'interpolation', 'NumericInterpolator': 'interpolation', 'TransformInterpolator': 'interpolation', 'PROJECT_ROOT': 'tempfiles', 'project_temp_dir': 'tempfiles', 'DEFAULT_TMP_DIR': 'tempfiles', 'temporary_directory': 'tempfiles', 'parse_time_value': 'time', 'ShapeData': 'types'}
-_module_map = {'interpolation': 'interpolation', 'tempfiles': 'tempfiles', 'time': 'time', 'types': 'types'}
+_symbol_map = {'TransformInterpolator': 'interpolation', 'ColorInterpolator': 'interpolation', 'InterpolationEngine': 'interpolation', 'NumericInterpolator': 'interpolation', 'BezierEasing': 'interpolation', 'InterpolationResult': 'interpolation', 'temporary_directory': 'tempfiles', 'DEFAULT_TMP_DIR': 'tempfiles', 'project_temp_dir': 'tempfiles', 'PROJECT_ROOT': 'tempfiles', 'parse_time_value': 'time', 'ShapeData': 'types'}
+_module_map = {'compat': 'compat', 'geometry': 'geometry', 'geometry.algorithms': 'geometry.algorithms', 'geometry.clip': 'geometry.clip', 'geometry.fractional': 'geometry.fractional', 'geometry.paths': 'geometry.paths', 'geometry.transforms': 'geometry.transforms', 'interpolation': 'interpolation', 'style': 'style', 'tempfiles': 'tempfiles', 'time': 'time', 'types': 'types', 'units': 'units'}
 
 
 def __getattr__(name: str) -> _Any:  # PEP 562

@@ -7,12 +7,14 @@ Generates PowerPoint <a:anim> with from/to numeric values and optional keyframes
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
+from textwrap import indent
 
 from lxml import etree
 
 from .base import AnimationHandler, AnimationDefinition
 from ..constants import FADE_ATTRIBUTES, COLOR_ATTRIBUTES, ATTRIBUTE_NAME_MAP
 from ..value_formatters import format_numeric_value
+from svg2ooxml.drawingml.xml_builder import to_string
 
 if TYPE_CHECKING:
     from svg2ooxml.common.units import UnitConverter
@@ -168,11 +170,8 @@ class NumericAnimationHandler(AnimationHandler):
         tav_block = ""
         if tav_elements:
             tav_container = self._xml.build_tav_list_container(tav_elements)
-            tav_block = (
-                f'                                        <a:tavLst>\n'
-                f'{tav_container}\n'
-                f'                                        </a:tavLst>\n'
-            )
+            tav_string = to_string(tav_container)
+            tav_block = "\n" + indent(tav_string, " " * 40) + "\n"
 
         # Build anim element
         anim_tag = "<a:anim"

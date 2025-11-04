@@ -225,20 +225,27 @@ class TextConversionPipeline:
         subset_result = None
         if requires_embedding and self._embedding is not None and match.path:
             metadata["engine_available"] = True
-            if not self._embedding.can_embed(match.path):
+            # Skip can_embed check for web fonts (data already loaded)
+            is_web_font = "font_data" in match.metadata
+            if not is_web_font and not self._embedding.can_embed(match.path):
                 requires_embedding = False
                 metadata["resolution"] = "embedding_disallowed"
             else:
                 glyph_tuple = tuple(sorted(glyphs))
+                request_metadata = {
+                    "font_family": match.family,
+                    "font_source": metadata.get("font_source"),
+                }
+                # Pass through web font data if available
+                if "font_data" in match.metadata:
+                    request_metadata["font_data"] = match.metadata["font_data"]
+
                 request = FontEmbeddingRequest(
                     font_path=match.path,
                     glyph_ids=glyph_tuple,
                     preserve_hinting=decision.embedding.preserve_hinting,
                     subset_strategy=decision.embedding.subset_strategy,
-                    metadata={
-                        "font_family": match.family,
-                        "font_source": metadata.get("font_source"),
-                    },
+                    metadata=request_metadata,
                 )
                 subset_result = self._embedding.subset_font(request)
                 if subset_result is None:
