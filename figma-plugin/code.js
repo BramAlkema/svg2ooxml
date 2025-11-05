@@ -93,8 +93,13 @@ async function handleGetSVGContent() {
         svgOutlineText: false
       });
 
-      // Convert Uint8Array to string (TextDecoder not available in Figma plugin environment)
-      const svgString = String.fromCharCode.apply(null, svg);
+      // Convert Uint8Array to string in chunks (avoid stack overflow)
+      let svgString = '';
+      const chunkSize = 8192;
+      for (let i = 0; i < svg.length; i += chunkSize) {
+        const chunk = svg.slice(i, i + chunkSize);
+        svgString += String.fromCharCode.apply(null, chunk);
+      }
 
       svgFrames.push({
         name: frame.name,
