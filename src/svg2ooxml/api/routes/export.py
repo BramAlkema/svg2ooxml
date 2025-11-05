@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.concurrency import run_in_threadpool
@@ -74,40 +75,45 @@ async def create_export_job(
             f"user_id={firebase_uid}"
         )
 
-        # Check subscription and usage limits
-        from datetime import datetime
+        # Check subscription and usage limits (unless disabled for testing)
+        disable_quota = os.getenv("DISABLE_EXPORT_QUOTA", "false").lower() == "true"
 
-        current_month = datetime.now().strftime("%Y-%m")
+        if not disable_quota:
+            from datetime import datetime
 
-        # Get subscription and usage (synchronous Firestore calls)
-        repo = get_subscription_repo()
-        subscription = await run_in_threadpool(
-            repo.get_active_subscription, firebase_uid
-        )
-        usage = await run_in_threadpool(
-            repo.get_usage, firebase_uid, current_month
-        )
-        export_count = usage["exportCount"] if usage else 0
+            current_month = datetime.now().strftime("%Y-%m")
 
-        # Check if user has exceeded free tier limit
-        if not subscription or subscription.get("status") != "active":
-            # Free tier user - check limit
-            if export_count >= FREE_TIER_LIMIT:
-                logger.warning(
-                    f"User {firebase_uid} exceeded free tier limit: {export_count}/{FREE_TIER_LIMIT}"
-                )
-                raise HTTPException(
-                    status_code=status.HTTP_402_PAYMENT_REQUIRED,
-                    detail={
-                        "error": "quota_exceeded",
-                        "message": f"You've reached your monthly limit of {FREE_TIER_LIMIT} exports. "
-                                   "Upgrade to Pro for unlimited exports.",
-                        "usage": {
-                            "current": export_count,
-                            "limit": FREE_TIER_LIMIT,
+            # Get subscription and usage (synchronous Firestore calls)
+            repo = get_subscription_repo()
+            subscription = await run_in_threadpool(
+                repo.get_active_subscription, firebase_uid
+            )
+            usage = await run_in_threadpool(
+                repo.get_usage, firebase_uid, current_month
+            )
+            export_count = usage["exportCount"] if usage else 0
+
+            # Check if user has exceeded free tier limit
+            if not subscription or subscription.get("status") != "active":
+                # Free tier user - check limit
+                if export_count >= FREE_TIER_LIMIT:
+                    logger.warning(
+                        f"User {firebase_uid} exceeded free tier limit: {export_count}/{FREE_TIER_LIMIT}"
+                    )
+                    raise HTTPException(
+                        status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                        detail={
+                            "error": "quota_exceeded",
+                            "message": f"You've reached your monthly limit of {FREE_TIER_LIMIT} exports. "
+                                       "Upgrade to Pro for unlimited exports.",
+                            "usage": {
+                                "current": export_count,
+                                "limit": FREE_TIER_LIMIT,
+                            },
                         },
-                    },
-                )
+                    )
+        else:
+            logger.info(f"Export quota checking disabled for user {firebase_uid} (DISABLE_EXPORT_QUOTA=true)")
 
         # Create job in Firestore with user authentication
         job_id = await run_in_threadpool(
@@ -120,17 +126,21 @@ async def create_export_job(
             user=user,  # Pass user info for authentication
         )
 
-        # Increment usage counter
-        await run_in_threadpool(
-            repo.increment_usage, firebase_uid, current_month
-        )
+        # Increment usage counter (unless quota is disabled)
+        if not disable_quota:
+            await run_in_threadpool(
+                repo.increment_usage, firebase_uid, current_month
+            )
+            tier = subscription.get('tier', 'free') if subscription else 'free'
+            usage_info = f"(usage: {export_count + 1}, tier: {tier})"
+        else:
+            usage_info = "(quota disabled)"
 
         # Queue background processing
         enqueue_export_job(job_id)
 
         logger.info(
-            f"Export job {job_id} created for user {firebase_uid} "
-            f"(usage: {export_count + 1}, tier: {subscription.get('tier', 'free') if subscription else 'free'})"
+            f"Export job {job_id} created for user {firebase_uid} {usage_info}"
         )
 
         return ExportResponse(
