@@ -124,6 +124,7 @@ async def create_export_job(
             output_format=request.output_format,
             fonts=request.fonts,
             user=user,  # Pass user info for authentication
+            parent_folder_id=request.parent_folder_id,
         )
 
         # Increment usage counter (unless quota is disabled)

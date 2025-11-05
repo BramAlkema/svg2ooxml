@@ -84,6 +84,10 @@ class ExportRequest(BaseModel):
         default_factory=list,
         description="Optional set of fonts required for the conversion",
     )
+    parent_folder_id: Optional[str] = Field(
+        None,
+        description="Google Drive folder ID where Slides should be created (slides format only)",
+    )
 
 
 class ExportResponse(BaseModel):

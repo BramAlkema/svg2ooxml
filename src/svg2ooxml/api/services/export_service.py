@@ -118,6 +118,7 @@ class ExportService:
         output_format: str,
         fonts: Optional[Sequence[RequestedFont]],
         user: Optional[dict] = None,
+        parent_folder_id: Optional[str] = None,
     ) -> str:
         """Register a new export job.
 
@@ -128,6 +129,7 @@ class ExportService:
             output_format: Output format (pptx or slides)
             fonts: Optional fonts to download
             user: Optional user authentication info from Firebase (uid, email, token, token_hash)
+            parent_folder_id: Optional Google Drive folder ID where Slides should be created
         """
 
         job_id = str(uuid.uuid4())
@@ -144,6 +146,7 @@ class ExportService:
             "output_format": output_format,
             "figma_file_id": figma_file_id,
             "figma_file_name": figma_file_name,
+            "parent_folder_id": parent_folder_id,
             "fonts_detail": font_payload,
             "fonts_requested": [font["family"] for font in font_payload],
             "created_at": now,
@@ -736,11 +739,13 @@ class ExportService:
         """
 
         presentation_title = job_data.get("figma_file_name") or job_data.get("figma_file_id") or f"Export {job_id}"
+        # Use job-specific parent folder if provided, otherwise use default
+        parent_folder = job_data.get("parent_folder_id") or self.slides_folder_id
         try:
             result = upload_pptx_to_slides(
                 pptx_path,
                 presentation_title=presentation_title,
-                parent_folder_id=self.slides_folder_id,
+                parent_folder_id=parent_folder,
                 user_token=user_token,
             )
         except SlidesPublishingError as exc:
