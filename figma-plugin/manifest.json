@@ -4,6 +4,7 @@
   "api": "1.0.0",
   "main": "code.js",
   "ui": "ui.html",
+  "documentAccess": "dynamic-page",
   "networkAccess": {
     "allowedDomains": [
       "https://svg2ooxml-export-sghya3t5ya-ew.a.run.app",
