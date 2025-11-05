@@ -352,6 +352,7 @@
 
 try {
   window.debugLog('🟢 ui.js TOP - before anything');
+  window.debugLog('🟢 Window origin: ' + window.location.origin);
 } catch(e) {
   console.error('debugLog error:', e);
 }
@@ -942,26 +943,33 @@ async function createExportJob(frames, fileKey, fileName) {
     throw new Error('Session expired. Please sign in again.');
   }
 
+  // Prepare request body
+  const requestBody = {
+    frames: frames.map(frame => ({
+      name: frame.name,
+      svg_content: frame.svg_content,
+      width: frame.width,
+      height: frame.height
+    })),
+    output_format: 'slides',
+    figma_file_id: fileKey,
+    figma_file_name: fileName
+  };
+
+  const requestBodyStr = JSON.stringify(requestBody);
+  const bodySizeKB = (requestBodyStr.length / 1024).toFixed(2);
+  window.debugLog(`🟢 Request body size: ${bodySizeKB} KB`);
+  window.debugLog(`🟢 Calling API: ${API_URL}/api/v1/export`);
+
   let response;
   try {
-    window.debugLog(`🟢 Calling API: ${API_URL}/api/v1/export`);
     response = await fetch(`${API_URL}/api/v1/export`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${currentToken}`
       },
-      body: JSON.stringify({
-        frames: frames.map(frame => ({
-          name: frame.name,
-          svg_content: frame.svg_content,
-          width: frame.width,
-          height: frame.height
-        })),
-        output_format: 'slides',
-        figma_file_id: fileKey,
-        figma_file_name: fileName
-      })
+      body: requestBodyStr
     });
     window.debugLog(`🟢 API response status: ${response.status}`);
   } catch (fetchError) {
