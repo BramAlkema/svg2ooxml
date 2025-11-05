@@ -11,6 +11,7 @@
       "https://*.googleapis.com",
       "https://*.firebaseapp.com",
       "https://*.google.com",
+      "https://*.firebasedatabase.app",
       "https://www.gstatic.com"
     ]
   },

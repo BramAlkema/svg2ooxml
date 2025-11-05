@@ -469,6 +469,7 @@ async function pollForAuthToken(authKey, authWindow) {
   const startTime = Date.now();
   let attempts = 0;
   const maxAttempts = AUTH_TIMEOUT / AUTH_POLL_INTERVAL;
+  const DATABASE_URL = 'https://powerful-layout-467812-p1-default-rtdb.europe-west1.firebasedatabase.app';
 
   while (Date.now() - startTime < AUTH_TIMEOUT) {
     attempts++;
@@ -479,14 +480,27 @@ async function pollForAuthToken(authKey, authWindow) {
     }
 
     try {
-      const response = await fetch(`${AUTH_URL}/auth-status.html?key=${authKey}`);
+      // Fetch token directly from Firebase Realtime Database
+      const response = await fetch(`${DATABASE_URL}/auth-tokens/${authKey}.json`);
       const data = await response.json();
 
-      if (data.status === 'ready') {
+      if (data && data.token && data.refreshToken && data.email) {
+        // Check if token expired
+        const now = Date.now();
+        if (data.expires < now) {
+          // Delete expired token
+          await fetch(`${DATABASE_URL}/auth-tokens/${authKey}.json`, { method: 'DELETE' });
+          throw new Error('Authentication session expired');
+        }
+
+        // Token is ready - delete it (single-use)
+        await fetch(`${DATABASE_URL}/auth-tokens/${authKey}.json`, { method: 'DELETE' });
+
         // Close auth window (only if we have a reference to it)
         if (authWindow && !authWindow.closed) {
           authWindow.close();
         }
+
         return {
           token: data.token,
           refreshToken: data.refreshToken,
@@ -494,16 +508,9 @@ async function pollForAuthToken(authKey, authWindow) {
         };
       }
 
-      if (data.status === 'expired' || data.status === 'not_found') {
-        if (authWindow && !authWindow.closed) {
-          authWindow.close();
-        }
-        throw new Error('Authentication failed or expired');
-      }
-
     } catch (error) {
       // Ignore polling errors, continue trying
-      if (error.message.includes('failed') || error.message.includes('expired')) {
+      if (error.message.includes('expired')) {
         throw error;
       }
     }
