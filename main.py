@@ -68,6 +68,7 @@ ENVIRONMENT = os.getenv("ENVIRONMENT", "production")
 
 if ENVIRONMENT == "development":
     # Development: Allow localhost
+    # Note: Figma plugins run in a sandboxed environment with Origin: null
     allowed_origins = [
         "https://www.figma.com",
         "https://figma.com",
@@ -75,12 +76,15 @@ if ENVIRONMENT == "development":
         "http://localhost:8000",
         "http://127.0.0.1:3000",
         "http://127.0.0.1:8000",
+        "null",  # Required for Figma plugins (sandboxed environment)
     ]
 else:
     # Production: Only allow Figma
+    # Note: Figma plugins run in a sandboxed environment with Origin: null
     allowed_origins = [
         "https://www.figma.com",
         "https://figma.com",
+        "null",  # Required for Figma plugins (sandboxed environment)
     ]
 
 app.add_middleware(
