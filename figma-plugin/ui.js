@@ -1,13 +1,14 @@
 // SVG to Google Slides - Figma Plugin UI Logic
 
-console.log('🟢🟢🟢 ui.js is loading!');
+const log = window.debugLog || console.log.bind(console);
+log('🟢🟢🟢 ui.js is loading!');
 
 // API Configuration
 const API_URL = 'https://svg2ooxml-export-sghya3t5ya-ew.a.run.app';
 const AUTH_URL = 'https://powerful-layout-467812-p1.web.app';
 
-console.log('🟢 API_URL:', API_URL);
-console.log('🟢 AUTH_URL:', AUTH_URL);
+log('🟢 API_URL: ' + API_URL);
+log('🟢 AUTH_URL: ' + AUTH_URL);
 const API_TIMEOUT = 180000; // 3 minutes
 const POLL_INTERVAL = 3000; // 3 seconds
 const AUTH_POLL_INTERVAL = 2000; // 2 seconds for auth polling
@@ -20,7 +21,7 @@ let currentRefreshToken = null;
 let currentSubscription = null;
 
 // UI Elements
-console.log('🟢 Looking for UI elements...');
+log('🟢 Looking for UI elements...');
 const signInBtn = document.getElementById('sign-in-btn');
 const signOutBtn = document.getElementById('sign-out-btn');
 const userInfo = document.getElementById('user-info');
@@ -40,8 +41,8 @@ const usageText = document.getElementById('usage-text');
 const upgradeBtn = document.getElementById('upgrade-btn');
 const manageSubscriptionBtn = document.getElementById('manage-subscription-btn');
 
-console.log('🟢 signInBtn:', signInBtn);
-console.log('🟢 exportBtn:', exportBtn);
+log('🟢 signInBtn: ' + (signInBtn ? 'FOUND ✓' : 'MISSING ✗'));
+log('🟢 exportBtn: ' + (exportBtn ? 'FOUND ✓' : 'MISSING ✗'));
 
 // ============================================================================
 // Authentication

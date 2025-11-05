@@ -260,11 +260,25 @@
     // No Firebase SDK needed in the plugin iframe
     console.log("🟡🟡🟡 svg2ooxml plugin loaded - using external OAuth flow");
     console.log("🟡 Inline script in HEAD is running!");
+
+    // Helper to write to visible debug output
+    window.debugLog = function(msg) {
+      console.log(msg);
+      setTimeout(() => {
+        const output = document.getElementById('debug-output');
+        if (output) {
+          output.innerHTML += msg + '<br>';
+          output.scrollTop = output.scrollHeight;
+        }
+      }, 0);
+    };
   </script>
 </head>
 <body>
   <div class="logo">svg2ooxml</div>
   <h2>Export to Google Slides</h2>
+
+  <div id="debug-output" style="background: #f0f0f0; padding: 10px; margin: 10px 0; font-size: 11px; font-family: monospace; max-height: 200px; overflow-y: auto; border: 1px solid #ccc;"></div>
 
   <!-- Authentication Section -->
   <div id="auth-section" class="section">
@@ -328,15 +342,16 @@
   <div id="status" class="status"></div>
 
   <script>
-    console.log("🟡 Inline script BEFORE ui.js - DOM should be ready");
-    console.log("🟡 sign-in-btn exists?", document.getElementById('sign-in-btn'));
-    console.log("🟡 About to load ui.js...");
+    debugLog("🟡 DOM ready - script before ui.js");
+    const btn = document.getElementById('sign-in-btn');
+    debugLog("🟡 sign-in-btn exists? " + (btn ? "YES ✓" : "NO ✗"));
+    debugLog("🟡 Loading ui.js...");
   </script>
 
   <script src="ui.js"></script>
 
   <script>
-    console.log("🟡 Inline script AFTER ui.js");
+    debugLog("🟡 Script AFTER ui.js loaded");
   </script>
 </body>
 </html>
