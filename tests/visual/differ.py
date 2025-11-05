@@ -29,7 +29,10 @@ from typing import Optional, Tuple
 
 import numpy as np
 from PIL import Image
-from skimage.metrics import structural_similarity as ssim
+try:  # pragma: no cover - optional dependency
+    from skimage.metrics import structural_similarity as _ssim_impl
+except ImportError:  # pragma: no cover - handled at runtime
+    _ssim_impl = None
 
 
 @dataclass
@@ -162,10 +165,16 @@ class VisualDiffer:
             # Create a dummy SSIM map (all 1.0 if equal, all 0.0 if different)
             ssim_map = np.full((h, w, 3), ssim_score, dtype=np.float64)
         else:
+            if _ssim_impl is None:
+                raise RuntimeError(
+                    "scikit-image is required for VisualDiffer.compare(); "
+                    "install via 'pip install scikit-image' to enable visual comparisons."
+                )
+
             # Use proper SSIM for larger images
             win_size = min(7, min_dim if min_dim % 2 == 1 else min_dim - 1)
 
-            ssim_score, ssim_map = ssim(
+            ssim_score, ssim_map = _ssim_impl(
                 baseline_arr,
                 actual_arr,
                 channel_axis=2,

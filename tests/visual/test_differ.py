@@ -10,6 +10,8 @@ import numpy as np
 import pytest
 from PIL import Image
 
+pytest.importorskip("skimage.metrics")
+
 from tests.visual.differ import DiffResult, VisualDiffer
 
 
