@@ -959,6 +959,18 @@ async function createExportJob(frames, fileKey, fileName) {
   const requestBodyStr = JSON.stringify(requestBody);
   const bodySizeKB = (requestBodyStr.length / 1024).toFixed(2);
   window.debugLog(`🟢 Request body size: ${bodySizeKB} KB`);
+  window.debugLog(`🟢 Window origin: ${window.location.origin}`);
+
+  // Test network access first
+  try {
+    window.debugLog('🟢 Testing API connectivity...');
+    const testResponse = await fetch(`${API_URL}/health`);
+    window.debugLog(`✅ API is reachable (status: ${testResponse.status})`);
+  } catch (testError) {
+    window.debugLog(`❌ API connectivity test failed: ${testError.message}`);
+    throw new Error(`Cannot reach API server: ${testError.message}`);
+  }
+
   window.debugLog(`🟢 Calling API: ${API_URL}/api/v1/export`);
 
   let response;
