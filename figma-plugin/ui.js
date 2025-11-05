@@ -49,18 +49,24 @@ function generateAuthKey() {
 
 // Browser-compatible sign-in flow
 async function signInBrowserFlow() {
+  console.log('🔵 signInBrowserFlow started');
   const authKey = generateAuthKey();
+  console.log('🔵 Generated auth key:', authKey);
 
   // Open auth window
+  console.log('🔵 Opening popup window...');
   const authWindow = window.open(
     `${AUTH_URL}/auth.html?key=${authKey}`,
     '_blank',
     'width=500,height=600,menubar=no,toolbar=no,location=no'
   );
+  console.log('🔵 Window.open returned:', authWindow);
 
   if (!authWindow) {
+    console.error('❌ Popup was blocked');
     throw new Error('Popup blocked. Please allow popups and try again.');
   }
+  console.log('✅ Popup opened successfully');
 
   showStatus('Complete sign-in in the popup window...', 'info');
 
@@ -144,7 +150,9 @@ async function pollForAuthToken(authKey, authWindow) {
 
 // Sign in with Google (unified handler)
 signInBtn.addEventListener('click', async () => {
+  console.log('🔵 Sign-in button clicked');
   try {
+    console.log('🔵 Starting sign-in flow...');
     showStatus('Opening sign-in window...', 'info');
     signInBtn.disabled = true;
 
