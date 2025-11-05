@@ -233,10 +233,12 @@ class FilterService:
         skip_legacy = resvg_result is not None and not resvg_preferred and not results
 
         if not skip_legacy:
-            if strategy in {"vector", "emf"} or (not results and strategy in {"auto", "legacy"}):
+            if strategy in {"vector", "emf", "auto", "legacy"}:
                 computed_vector = self._render_vector(filter_element, filter_context)
                 if computed_vector:
-                    emf_sources.extend(result for result in computed_vector if result.fallback == "emf")
+                    emf_sources.extend(
+                        result for result in computed_vector if result.fallback == "emf"
+                    )
                     if results:
                         results.extend(computed_vector)
                     else:
@@ -253,7 +255,7 @@ class FilterService:
             if descriptor_results:
                 results.extend(descriptor_results)
                 if emf_sources:
-                    self._attach_emf_metadata(results, emf_sources)
+                    results = self._attach_emf_metadata(results, emf_sources)
 
             if strategy in {"auto", "raster", "legacy"}:
                 raster_results = self._render_raster(filter_element, filter_context, filter_ref, strategy=strategy)
@@ -267,7 +269,7 @@ class FilterService:
         if resvg_result is not None and resvg_preferred:
             preferred_results = [resvg_result]
             if emf_sources:
-                self._attach_emf_metadata(preferred_results, emf_sources)
+                preferred_results = self._attach_emf_metadata(preferred_results, emf_sources)
             if raster_results_cache:
                 self._attach_raster_metadata(preferred_results, raster_results_cache)
             return preferred_results
@@ -316,6 +318,7 @@ class FilterService:
             return []
 
         coerced: list[FilterResult] = []
+        source_results: list[FilterResult] = []
         for result in filter_results:
             metadata = dict(result.metadata or {})
             fallback = result.fallback or "emf"
@@ -334,12 +337,53 @@ class FilterService:
                     result_name=result.result_name,
                 )
             )
+            source_results.append(result)
 
         rendered = self._renderer.render(coerced, context=context)
-        for effect in rendered:
-            if effect.strategy not in {"vector", "emf"}:
-                effect.strategy = "vector"
-        return rendered
+        adjusted: list[FilterEffectResult] = []
+        for index, effect in enumerate(rendered):
+            source = source_results[index] if index < len(source_results) else None
+            meta = dict(effect.metadata or {})
+            strategy = effect.strategy if effect.strategy in {"vector", "emf"} else "vector"
+            fallback = effect.fallback
+
+            if fallback == "emf":
+                assets = meta.setdefault("fallback_assets", [])
+                if isinstance(assets, list) and not any(
+                    isinstance(asset, dict) and asset.get("type") == "emf" for asset in assets
+                ):
+                    asset = None
+                    if hasattr(self._renderer, "_ensure_emf_asset") and source is not None:
+                        try:
+                            asset = self._renderer._ensure_emf_asset(meta, source)  # type: ignore[attr-defined]
+                        except Exception:  # pragma: no cover - defensive
+                            asset = None
+                    if not any(
+                        isinstance(asset, dict) and asset.get("type") == "emf" for asset in assets
+                    ):
+                        if not asset:
+                            if hasattr(self._renderer, "_allocate_reuse_id"):
+                                placeholder_id = self._renderer._allocate_reuse_id()  # type: ignore[attr-defined]
+                            else:
+                                placeholder_id = f"rIdEmfPlaceholder{len(assets) + 1}"
+                            assets.append(
+                                {
+                                    "type": "emf",
+                                    "relationship_id": placeholder_id,
+                                    "placeholder": True,
+                                }
+                            )
+                fallback = "emf"
+
+            adjusted.append(
+                replace(
+                    effect,
+                    strategy=strategy,
+                    fallback=fallback,
+                    metadata=meta,
+                )
+            )
+        return adjusted
 
     def _render_raster(
         self,
@@ -1346,32 +1390,88 @@ class FilterService:
         if not existing_results or not emf_results:
             return
 
-        target = existing_results[-1]
-        metadata = dict(target.metadata or {})
-        assets = metadata.setdefault("fallback_assets", [])
-        vector_asset_pool: list[dict[str, Any]] = []
+        vector_indexed = [
+            (index, result)
+            for index, result in enumerate(existing_results)
+            if result.fallback and result.fallback.lower() == "emf"
+        ]
+        if not vector_indexed:
+            return existing_results
 
-        # Preserve the first EMF asset for downstream consumers while allowing additional metadata.
+        base = list(existing_results)
+        last_idx, last_result = vector_indexed[-1]
+        metadata = dict(last_result.metadata or {})
+        original_assets = list(metadata.get("fallback_assets") or [])
+        assets = list(original_assets)
+        descriptor_result = isinstance(last_result.metadata, dict) and last_result.metadata.get("strategy_source") == "resvg_descriptor"
+        best_assets: list[dict[str, Any]] | None = None
         for emf_result in emf_results:
             emf_meta = emf_result.metadata if isinstance(emf_result.metadata, dict) else {}
-            emf_assets = list(emf_meta.get("fallback_assets") or [])
-            if emf_assets:
-                vector_asset_pool.extend(emf_assets)
-            emf_summary = emf_meta.get("emf_asset")
-            if emf_summary and "emf_asset" not in metadata:
-                metadata["emf_asset"] = emf_summary
-            elif emf_summary:
-                metadata.setdefault("emf_assets", []).append(emf_summary)
+            emf_assets = emf_meta.get("fallback_assets")
+            if not isinstance(emf_assets, list):
+                continue
+            candidates = [
+                asset
+                for asset in emf_assets
+                if isinstance(asset, dict) and asset.get("type") == "emf"
+            ]
+            if not candidates:
+                continue
+            preferred = [asset for asset in candidates if not asset.get("placeholder")]
+            if preferred:
+                best_assets = preferred
+            else:
+                best_assets = candidates
 
-        if vector_asset_pool:
-            assets[0:0] = vector_asset_pool
+        descriptor_info = metadata.get("descriptor") if isinstance(metadata.get("descriptor"), dict) else {}
+        primitive_count = None
+        primitive_tags: set[str] = set()
+        if isinstance(descriptor_info, dict):
+            primitive_count = descriptor_info.get("primitive_count")
+            tags = descriptor_info.get("primitive_tags")
+            if isinstance(tags, (list, tuple, set)):
+                primitive_tags = {str(tag).strip().lower() for tag in tags if tag}
 
-        existing_results[-1] = FilterEffectResult(
-            effect=target.effect,
-            strategy=target.strategy,
-            metadata=metadata,
-            fallback=target.fallback,
-        )
+        multi_stage_descriptor = descriptor_result and primitive_count and primitive_count > 1
+        has_composite = descriptor_result and any("fecomposite" in tag for tag in primitive_tags)
+
+        if descriptor_result:
+            if multi_stage_descriptor or has_composite:
+                raster_assets = [
+                    asset for asset in original_assets if isinstance(asset, dict) and asset.get("type") == "raster"
+                ]
+                if raster_assets:
+                    assets = raster_assets
+                elif best_assets:
+                    assets = best_assets
+                else:
+                    assets = original_assets
+            else:
+                assets = best_assets or original_assets
+        else:
+            assets = best_assets or original_assets
+        metadata["fallback_assets"] = assets
+        if assets:
+            sample = next((asset for asset in reversed(assets) if isinstance(asset, dict)), None)
+            if sample:
+                sample_meta = sample.get("metadata")
+                if isinstance(sample_meta, dict) and sample_meta.get("filter_type"):
+                    metadata["filter_type"] = sample_meta.get("filter_type")
+
+        if assets:
+            base[last_idx] = replace(
+                last_result,
+                metadata=metadata,
+                fallback="emf",
+            )
+        else:
+            base[last_idx] = replace(
+                last_result,
+                metadata=metadata,
+                fallback=last_result.fallback,
+            )
+
+        return base
 
     @staticmethod
     def _attach_raster_metadata(
@@ -1383,6 +1483,7 @@ class FilterService:
         target = existing_results[-1]
         metadata = dict(target.metadata or {})
         assets = metadata.setdefault("fallback_assets", [])
+        had_emf = any(isinstance(asset, dict) and asset.get("type") == "emf" for asset in assets)
         for raster in raster_results:
             raster_meta = raster.metadata if isinstance(raster.metadata, dict) else {}
             if "renderer" in raster_meta:
@@ -1392,6 +1493,12 @@ class FilterService:
                     metadata[key] = raster_meta[key]
             for asset in raster_meta.get("fallback_assets", []) or []:
                 assets.append(asset)
+        if (
+            metadata.get("strategy_source") == "resvg_descriptor"
+            and isinstance(assets, list)
+            and not had_emf
+        ):
+            assets.sort(key=lambda asset: 0 if isinstance(asset, dict) and asset.get("type") == "raster" else 1)
         existing_results[-1] = FilterEffectResult(
             effect=target.effect,
             strategy=target.strategy,

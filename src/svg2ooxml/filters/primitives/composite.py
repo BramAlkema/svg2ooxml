@@ -65,7 +65,10 @@ class CompositeFilter(Filter):
                 }
             )
 
-        metadata["inputs"] = [name for name in (input_1_name, input_2_name) if name]
+        if params.operator == "over" and input_1_name == "SourceGraphic":
+            metadata["inputs"] = [name for name in (input_2_name,) if name]
+        else:
+            metadata["inputs"] = [name for name in (input_1_name, input_2_name) if name]
         source_metadata: dict[str, dict[str, object]] = {}
         if input_1 is not None and input_1.metadata:
             source_metadata[input_1_name] = dict(input_1.metadata)
@@ -267,7 +270,10 @@ class CompositeFilter(Filter):
             return "", fallback, tuple(warnings)
 
         if len(parts) == 1:
-            return parts[0], fallback, tuple(warnings)
+            fragment = parts[0]
+            if not is_effect_list(fragment):
+                fragment = f"<a:effectLst>{fragment}</a:effectLst>"
+            return fragment, fallback, tuple(warnings)
 
         merged = merge_effect_fragments(*parts)
         if merged:

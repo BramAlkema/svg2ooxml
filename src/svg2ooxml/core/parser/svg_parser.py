@@ -565,6 +565,23 @@ class SVGParser:
         return summary or None
 
 
-__all__ = ["SVGParser", "ParserConfig"]
+def parse_svg(
+    svg_content: str,
+    *,
+    config: ParserConfig | None = None,
+    services: ConversionServices | ParserServices | None = None,
+    tracer: "ConversionTracer | None" = None,
+) -> ParseResult:
+    """Convenience helper that parses ``svg_content`` into a :class:`ParseResult`.
+
+    This keeps import-time dependencies light and avoids circular imports when
+    higher-level modules need a quick parser entry point.
+    """
+
+    parser = SVGParser(config=config, services=services)
+    return parser.parse(svg_content, tracer=tracer)
+
+
+__all__ = ["SVGParser", "ParserConfig", "parse_svg"]
 if TYPE_CHECKING:  # pragma: no cover - type hints only
     from svg2ooxml.core.tracing import ConversionTracer

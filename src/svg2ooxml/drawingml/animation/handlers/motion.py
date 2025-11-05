@@ -82,7 +82,14 @@ class MotionAnimationHandler(AnimationHandler):
             else:
                 # String comparison for backward compatibility
                 animation_type_str = self._animation_type_to_str(animation_type)
-                if "MOTION" in animation_type_str:
+                canonical_token = animation_type_str
+                for delimiter in (".", ":"):
+                    if delimiter in canonical_token:
+                        canonical_token = canonical_token.split(delimiter)[-1]
+                canonical_token = canonical_token.replace("-", "_")
+                if canonical_token == "ANIMATEMOTION":
+                    canonical_token = "ANIMATE_MOTION"
+                if canonical_token == "ANIMATE_MOTION":
                     return True
 
         # Check for is_motion property (from AnimationDefinition)

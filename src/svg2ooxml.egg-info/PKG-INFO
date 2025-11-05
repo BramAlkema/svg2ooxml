@@ -44,6 +44,9 @@ Requires-Dist: google-cloud-tasks>=2.16.0; extra == "cloud"
 Requires-Dist: google-api-python-client>=2.130; extra == "cloud"
 Requires-Dist: google-auth>=2.26; extra == "cloud"
 Requires-Dist: google-auth-oauthlib>=1.2.0; extra == "cloud"
+Provides-Extra: visual-testing
+Requires-Dist: scikit-image>=0.21.0; extra == "visual-testing"
+Requires-Dist: Pillow>=10.0.0; extra == "visual-testing"
 
 # svg2ooxml
 

@@ -111,7 +111,7 @@ def test_scale_animation_emits_segment_tavs() -> None:
     render_result, _, _ = _render(svg)
 
     assert render_result.slide_xml.count("<a:tav tm=") >= 3
-    assert '<a:pt x="1.5" y="2"' in render_result.slide_xml
+    assert '<a:pt x="1.5" y="2.0"' in render_result.slide_xml
     assert '<a:pt x="0.5" y="0.5"' in render_result.slide_xml
     assert '<a:tavPr accel="' in render_result.slide_xml
     assert 'svg2:spline=' in render_result.slide_xml
@@ -195,7 +195,7 @@ def test_numeric_attribute_animation_emits_anim() -> None:
     render_result, _, _ = _render(svg)
 
     assert "<a:anim>" in render_result.slide_xml
-    assert "<a:attrName>ppt_x</a:attrName>" in render_result.slide_xml
+    assert '<a:attrName val="ppt_x"/>' in render_result.slide_xml
     assert '<a:val val="190500"' in render_result.slide_xml
 
 
@@ -211,7 +211,7 @@ def test_rotate_attribute_animation_uses_ppt_angle() -> None:
     render_result, _, _ = _render(svg)
 
     assert "<a:anim>" in render_result.slide_xml
-    assert "<a:attrName>ppt_angle</a:attrName>" in render_result.slide_xml
+    assert '<a:attrName val="ppt_angle"/>' in render_result.slide_xml
     assert '<a:val val="0"' in render_result.slide_xml
     assert '<a:val val="5400000"' in render_result.slide_xml
 
@@ -227,7 +227,7 @@ def test_width_animation_uses_ppt_width_attribute() -> None:
     render_result, _, _ = _render(svg)
 
     assert "<a:anim>" in render_result.slide_xml
-    assert "<a:attrName>ppt_w</a:attrName>" in render_result.slide_xml
+    assert '<a:attrName val="ppt_w"/>' in render_result.slide_xml
     assert '<a:val val="95250"' in render_result.slide_xml
 
 
@@ -243,7 +243,7 @@ def test_stroke_width_animation_maps_to_ln_w() -> None:
     render_result, _, _ = _render(svg)
 
     assert "<a:anim>" in render_result.slide_xml
-    assert "<a:attrName>ln_w</a:attrName>" in render_result.slide_xml
+    assert '<a:attrName val="ln_w"/>' in render_result.slide_xml
     assert '<a:val val="9525"' in render_result.slide_xml
     assert '<a:val val="19050"' in render_result.slide_xml
 
@@ -276,7 +276,7 @@ def test_set_animation_emits_set_element() -> None:
     render_result, _, _ = _render(svg)
 
     assert "<a:set" in render_result.slide_xml
-    assert "<a:attrName>visibility</a:attrName>" in render_result.slide_xml
+    assert '<a:attrName val="visibility"/>' in render_result.slide_xml
     assert 'a:val val="hidden"' in render_result.slide_xml
 
 
@@ -292,7 +292,7 @@ def test_set_animation_normalizes_numeric_value() -> None:
     render_result, _, _ = _render(svg)
 
     assert "<a:set" in render_result.slide_xml
-    assert "<a:attrName>ppt_x</a:attrName>" in render_result.slide_xml
+    assert '<a:attrName val="ppt_x"/>' in render_result.slide_xml
     assert 'a:val val="95250"' in render_result.slide_xml
 
 

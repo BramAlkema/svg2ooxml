@@ -19,7 +19,7 @@ from svg2ooxml.ir.animation import (
 )
 from svg2ooxml.drawingml.result import DrawingMLRenderResult
 from svg2ooxml.drawingml.writer import DrawingMLWriter
-from svg2ooxml.io.pptx_writer import PPTXPackageBuilder
+from svg2ooxml.io.pptx_writer import PPTXPackageBuilder, ALLOWED_SLIDE_SIZE_MODES
 from svg2ooxml.core.ir.converter import IRScene
 from svg2ooxml.ir import convert_parser_output
 from svg2ooxml.core.tracing import ConversionTracer
@@ -86,6 +86,7 @@ class SvgToPptxExporter:
         timeline_config: TimelineSamplingConfig | None = None,
         filter_strategy: str | None = None,
         geometry_mode: str | None = None,
+        slide_size_mode: str | None = None,
     ) -> None:
         """Initialize the SVG to PPTX exporter.
 
@@ -98,14 +99,13 @@ class SvgToPptxExporter:
             timeline_config: Optional timeline config
             filter_strategy: Optional filter strategy
             geometry_mode: Geometry extraction mode: "legacy" or "resvg".
-                          Defaults to "legacy". Can also be set via
+                          Defaults to "resvg". Can also be set via
                           SVG2OOXML_GEOMETRY_MODE environment variable.
         """
         import os
 
         self._parser = parser or SVGParser(ParserConfig())
         self._writer = writer or DrawingMLWriter()
-        self._builder = builder or PPTXPackageBuilder()
         self._animation_parser_factory = animation_parser_factory or SMILParser
         if timeline_sampler is not None:
             self._timeline_sampler = timeline_sampler
@@ -117,7 +117,7 @@ class SvgToPptxExporter:
         if geometry_mode is not None:
             self._geometry_mode = geometry_mode
         else:
-            self._geometry_mode = os.environ.get("SVG2OOXML_GEOMETRY_MODE", "legacy")
+            self._geometry_mode = os.environ.get("SVG2OOXML_GEOMETRY_MODE", "resvg")
 
         # Validate geometry_mode
         if self._geometry_mode not in ("legacy", "resvg"):
@@ -125,6 +125,17 @@ class SvgToPptxExporter:
                 f"Invalid geometry_mode: {self._geometry_mode!r}. "
                 f"Must be 'legacy' or 'resvg'."
             )
+
+        env_slide_mode = os.environ.get("SVG2OOXML_SLIDE_SIZE_MODE")
+        mode = slide_size_mode or env_slide_mode or "multipage"
+        if mode not in ALLOWED_SLIDE_SIZE_MODES:
+            raise ValueError(
+                f"Invalid slide_size_mode: {mode!r}. "
+                f"Must be one of {sorted(ALLOWED_SLIDE_SIZE_MODES)}."
+            )
+        self._slide_size_mode = mode
+
+        self._builder = builder or PPTXPackageBuilder(slide_size_mode=self._slide_size_mode)
 
     # ------------------------------------------------------------------
     # Single document conversion
@@ -157,7 +168,12 @@ class SvgToPptxExporter:
 
         active_tracer = tracer or ConversionTracer()
         render_result, scene = self._render_svg(svg_text, active_tracer)
-        pptx_path = self._builder.build_from_results([render_result], output_path, tracer=active_tracer)
+        pptx_path = self._builder.build_from_results(
+            [render_result],
+            output_path,
+            tracer=active_tracer,
+            slide_size_mode=self._slide_size_mode,
+        )
 
         report_dict = active_tracer.report().to_dict()
         if isinstance(scene.metadata, dict):
@@ -256,7 +272,12 @@ class SvgToPptxExporter:
                     )
 
         packaging_tracer = tracer or ConversionTracer()
-        pptx_path = self._builder.build_from_results(render_results, output_path, tracer=packaging_tracer)
+        pptx_path = self._builder.build_from_results(
+            render_results,
+            output_path,
+            tracer=packaging_tracer,
+            slide_size_mode=self._slide_size_mode,
+        )
         packaging_report = packaging_tracer.report().to_dict()
 
         aggregate_trace = _merge_trace_reports(
@@ -322,7 +343,7 @@ class SvgToPptxExporter:
 
         # Inject geometry_mode into policy_overrides
         effective_overrides = policy_overrides or {}
-        if self._geometry_mode != "legacy":  # Only override if not default
+        if self._geometry_mode != "legacy":  # Only inject when not using legacy fallback
             geometry_overrides = effective_overrides.get("geometry", {})
             geometry_overrides["geometry_mode"] = self._geometry_mode
             effective_overrides["geometry"] = geometry_overrides

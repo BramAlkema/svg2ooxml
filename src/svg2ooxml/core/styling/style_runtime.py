@@ -5,6 +5,7 @@ from __future__ import annotations
 from lxml import etree
 
 from svg2ooxml.paint.resvg_bridge import resolve_paints_for_node
+from svg2ooxml.policy.fidelity import FidelityDecision, resolve_fidelity
 
 from .style_extractor import StyleResult
 
@@ -19,18 +20,47 @@ def extract_style(converter, element: etree._Element) -> StyleResult:
     )
 
     resvg_tree = getattr(converter, "_resvg_tree", None)
+    metadata = dict(base_style.metadata)
+    style_meta = metadata.setdefault("style", {})
+    style_meta["source"] = "legacy"
+    style_meta["decision"] = FidelityDecision.NATIVE.value
     if not resvg_tree:
-        return base_style
+        return StyleResult(
+            fill=base_style.fill,
+            stroke=base_style.stroke,
+            opacity=base_style.opacity,
+            effects=base_style.effects,
+            metadata=metadata,
+        )
 
     node_lookup = getattr(converter, "_resvg_element_lookup", {})
     resvg_node = node_lookup.get(element)
+
     if resvg_node is None:
-        return base_style
+        logger = getattr(converter, "_logger", None)
+        if logger is not None:
+            logger.warning(
+                "style-runtime/missing-resvg-node",
+                extra={"element_id": element.get("id"), "svg_tag": str(element.tag)},
+            )
+        return StyleResult(
+            fill=base_style.fill,
+            stroke=base_style.stroke,
+            opacity=base_style.opacity,
+            effects=base_style.effects,
+            metadata=metadata,
+        )
 
     try:
         paints = resolve_paints_for_node(resvg_node, resvg_tree)
     except Exception:  # pragma: no cover - bridge may fail during porting
-        return base_style
+        return StyleResult(
+            fill=base_style.fill,
+            stroke=base_style.stroke,
+            opacity=base_style.opacity,
+            effects=base_style.effects,
+            metadata=metadata,
+        )
 
     fill = paints.fill if paints.fill is not None else base_style.fill
     stroke = paints.stroke if paints.stroke is not None else base_style.stroke
@@ -40,12 +70,15 @@ def extract_style(converter, element: etree._Element) -> StyleResult:
     if presentation is not None and getattr(presentation, "opacity", None) is not None:
         opacity = presentation.opacity  # type: ignore[assignment]
 
+    style_meta["source"] = "resvg"
+    decision = resolve_fidelity("style", node=resvg_node, context={"element_id": element.get("id")})
+    style_meta["decision"] = decision.value
     return StyleResult(
         fill=fill,
         stroke=stroke,
         opacity=opacity,
         effects=base_style.effects,
-        metadata=dict(base_style.metadata),
+        metadata=metadata,
     )
 
 

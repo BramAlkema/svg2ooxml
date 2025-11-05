@@ -322,7 +322,7 @@ def _calculate_raster_size(s1: float, s2: float, oversample: float = 2.0, min_si
     return max(min_size, min(size, max_size))
 
 
-def radial_gradient_to_paint(gradient: "RadialGradient") -> "RadialGradientPaint | SolidPaint":
+def radial_gradient_to_paint(gradient: "RadialGradient") -> "RadialGradientPaint":
     """Convert resvg RadialGradient to IR RadialGradientPaint.
 
     Args:
@@ -412,14 +412,11 @@ def radial_gradient_to_paint(gradient: "RadialGradient") -> "RadialGradientPaint
                 gradient.href or "(none)",
             )
         elif policy_decision == "rasterize_nonuniform":
-            # Phase 3: Severe non-uniformity or shear → solid color fallback
-            # TODO: Implement full bitmap rasterization when needed
-            # For now, use average color of gradient stops as fallback
-
-            # Calculate raster size (for telemetry/future use)
+            # Phase 3: Severe non-uniformity or shear → approximate with solid fill.
+            # TODO: Implement bitmap rasterization path once fidelity policy allows.
             raster_size = _calculate_raster_size(transform_class.s1, transform_class.s2)
 
-            # Compute average color from gradient stops
+            # Compute average color from gradient stops as a crude approximation.
             total_r, total_g, total_b, total_a = 0.0, 0.0, 0.0, 0.0
             for stop in gradient.stops:
                 total_r += stop.color.r
@@ -433,11 +430,10 @@ def radial_gradient_to_paint(gradient: "RadialGradient") -> "RadialGradientPaint
             avg_opacity = total_a / count
 
             avg_rgb = f"{avg_r:02X}{avg_g:02X}{avg_b:02X}"
-
             reason = "shear" if transform_class.has_shear else f"non-uniform scale (ratio={transform_class.ratio:.3f})"
             logger.info(
                 "Radial gradient has %s: "
-                "Using solid color fallback (avg of %d stops). "
+                "solid color fallback (avg of %d stops). "
                 "Transform: [[%.3f, %.3f], [%.3f, %.3f]], "
                 "Singular values: s1=%.3f, s2=%.3f, "
                 "Raster size would be: %dpx, "
@@ -451,7 +447,6 @@ def radial_gradient_to_paint(gradient: "RadialGradient") -> "RadialGradientPaint
                 gradient.href or "(none)",
             )
 
-            # Return solid color fallback
             from svg2ooxml.ir.paint import SolidPaint
             return SolidPaint(rgb=avg_rgb, opacity=avg_opacity)
 

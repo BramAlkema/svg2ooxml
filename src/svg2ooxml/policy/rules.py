@@ -109,7 +109,7 @@ _BASE_CLIP_POLICY: dict[str, Any] = {
 }
 
 _BASE_GEOMETRY: dict[str, Any] = {
-    "geometry_mode": "legacy",  # "legacy" | "resvg" - controls geometry/paint extraction engine
+    "geometry_mode": "resvg",  # "legacy" | "resvg" - controls geometry/paint extraction engine
     "max_segments": _BASE_THRESHOLDS["max_path_segments"],
     "max_complexity_score": _BASE_THRESHOLDS["max_path_complexity_score"],
     "max_complexity_ratio": 0.8,

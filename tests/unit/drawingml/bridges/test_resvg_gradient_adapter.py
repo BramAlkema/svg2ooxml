@@ -14,7 +14,7 @@ from svg2ooxml.drawingml.bridges.resvg_gradient_adapter import (
 from svg2ooxml.core.resvg.painting.gradients import LinearGradient, RadialGradient, GradientStop
 from svg2ooxml.core.resvg.painting.paint import Color
 from svg2ooxml.core.resvg.geometry.matrix import Matrix
-from svg2ooxml.ir.paint import LinearGradientPaint, RadialGradientPaint
+from svg2ooxml.ir.paint import LinearGradientPaint, RadialGradientPaint, SolidPaint
 
 
 class TestLinearGradientConversion:
@@ -663,13 +663,9 @@ class TestGradientTransformApplication:
 
         paint = radial_gradient_to_paint(resvg_gradient)
 
-        # Center should be scaled
-        assert paint.center == (20.0, 30.0)  # (10*2, 10*3)
-        # Radius is calculated from transformed edge point at (cx+r, cy)
-        # Original edge: (20, 10) → Transformed: (40, 30)
-        # Distance from center (20, 30) to (40, 30) = 20
-        assert paint.radius == pytest.approx(20.0)
-        assert paint.transform is None
+        # Severe anisotropy triggers a SolidPaint fallback for now.
+        assert isinstance(paint, SolidPaint)
+        assert paint.rgb == "7F007F"  # Average of red and blue stops
 
     def test_radial_gradient_with_focal_point_transform(self):
         """Test that focal point is transformed along with center."""

@@ -5,6 +5,7 @@ from typing import Any as _Any
 
 __all__ = [
     'DEFAULT_POLICY',
+    'FidelityDecision',
     'DEFAULT_PROVIDERS',
     'DecisionReason',
     'FALLBACK_BITMAP',
@@ -34,6 +35,7 @@ __all__ = [
     'extract_multipage_policy',
     'geometry_fallback_for',
     'load_policy',
+    'resolve_fidelity',
     'resolve_text_policy',
     'constants',
     'engine',
@@ -47,8 +49,53 @@ __all__ = [
 ]
 
 # map symbol -> relative module
-_symbol_map = {'geometry_fallback_for': 'constants', 'FALLBACK_NATIVE': 'constants', 'FALLBACK_RASTERIZE': 'constants', 'FALLBACK_EMF': 'constants', 'FALLBACK_BITMAP': 'constants', 'PolicyEngine': 'engine', 'PolicyContext': 'engine', 'PolicyProvider': 'engine', 'apply_geometry_policy': 'geometry', 'MultipagePolicy': 'multipage', 'extract_multipage_policy': 'multipage', 'POLICY_PRESETS': 'rules', 'load_policy': 'rules', 'DEFAULT_POLICY': 'rules', 'Policy': 'rules', 'DEFAULT_PROVIDERS': 'setup', 'build_policy_engine': 'setup', 'PolicyTarget': 'targets', 'TargetRegistry': 'targets', 'TextPolicyDecision': 'text_policy', 'FontDecisionContext': 'text_policy', 'TextDecision': 'text_policy', 'FontEmbeddingPolicy': 'text_policy', 'WordArtPolicy': 'text_policy', 'resolve_text_policy': 'text_policy', 'QUALITY_PRESETS': 'text_policy', 'TextFallbackPolicy': 'text_policy', 'TextLayoutPolicy': 'text_policy', 'DecisionReason': 'text_policy', 'explode_fallback_families': 'text_policy', 'TextPolicy': 'text_policy'}
-_module_map = {'constants': 'constants', 'engine': 'engine', 'geometry': 'geometry', 'multipage': 'multipage', 'providers': 'providers', 'rules': 'rules', 'setup': 'setup', 'targets': 'targets', 'text_policy': 'text_policy'}
+_symbol_map = {
+    'geometry_fallback_for': 'constants',
+    'FALLBACK_NATIVE': 'constants',
+    'FALLBACK_RASTERIZE': 'constants',
+    'FALLBACK_EMF': 'constants',
+    'FALLBACK_BITMAP': 'constants',
+    'PolicyEngine': 'engine',
+    'PolicyContext': 'engine',
+    'PolicyProvider': 'engine',
+    'apply_geometry_policy': 'geometry',
+    'MultipagePolicy': 'multipage',
+    'extract_multipage_policy': 'multipage',
+    'POLICY_PRESETS': 'rules',
+    'load_policy': 'rules',
+    'DEFAULT_POLICY': 'rules',
+    'Policy': 'rules',
+    'DEFAULT_PROVIDERS': 'setup',
+    'build_policy_engine': 'setup',
+    'PolicyTarget': 'targets',
+    'TargetRegistry': 'targets',
+    'TextPolicyDecision': 'text_policy',
+    'FontDecisionContext': 'text_policy',
+    'TextDecision': 'text_policy',
+    'FontEmbeddingPolicy': 'text_policy',
+    'WordArtPolicy': 'text_policy',
+    'resolve_fidelity': 'fidelity',
+    'resolve_text_policy': 'text_policy',
+    'FidelityDecision': 'fidelity',
+    'QUALITY_PRESETS': 'text_policy',
+    'TextFallbackPolicy': 'text_policy',
+    'TextLayoutPolicy': 'text_policy',
+    'DecisionReason': 'text_policy',
+    'explode_fallback_families': 'text_policy',
+    'TextPolicy': 'text_policy',
+}
+_module_map = {
+    'constants': 'constants',
+    'engine': 'engine',
+    'geometry': 'geometry',
+    'multipage': 'multipage',
+    'providers': 'providers',
+    'rules': 'rules',
+    'setup': 'setup',
+    'targets': 'targets',
+    'text_policy': 'text_policy',
+    'fidelity': 'fidelity',
+}
 
 
 def __getattr__(name: str) -> _Any:  # PEP 562

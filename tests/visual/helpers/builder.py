@@ -26,11 +26,17 @@ class PptxBuildResult:
 class PptxBuilder:
     """Build PPTX packages from SVG snippets using the svg2ooxml pipeline."""
 
-    def __init__(self, *, filter_strategy: str | None = "resvg") -> None:
+    def __init__(
+        self,
+        *,
+        filter_strategy: str | None = "resvg",
+        slide_size_mode: str | None = "multipage",
+    ) -> None:
         self._parser = SVGParser(ParserConfig())
         self._writer = DrawingMLWriter()
-        self._builder = PPTXPackageBuilder()
+        self._builder = PPTXPackageBuilder(slide_size_mode=slide_size_mode)
         self._filter_strategy = filter_strategy
+        self._slide_size_mode = slide_size_mode or "multipage"
 
     def build_from_svg(self, svg_text: str, output_path: Path) -> PptxBuildResult:
         """Parse *svg_text*, convert to IR, and materialise a PPTX file."""
@@ -54,7 +60,11 @@ class PptxBuilder:
         scene = convert_parser_output(parse_result, services=services)
         render_result = self._writer.render_scene_from_ir(scene)
 
-        pptx_path = self._builder.build_from_results([render_result], output_path)
+        pptx_path = self._builder.build_from_results(
+            [render_result],
+            output_path,
+            slide_size_mode=self._slide_size_mode,
+        )
         return PptxBuildResult(pptx_path=pptx_path, slide_count=1)
 
 

@@ -781,6 +781,48 @@ def _expand_use_nodes(root: BaseNode, ids: Dict[str, BaseNode]) -> None:
                 translation = Matrix(1.0, 0.0, 0.0, 1.0, child.x, child.y)
                 clone.transform = translation.multiply(clone.transform)
                 _propagate_use_source(clone, getattr(child, "source", None))
+
+                # Apply <use> element's presentation attributes to cloned content
+                # Per SVG spec, <use> element attributes override referenced element
+
+                # Update presentation attributes first
+                presentation_updated = False
+                if hasattr(child, 'presentation') and child.presentation and hasattr(clone, 'presentation') and clone.presentation:
+                    from dataclasses import replace
+                    new_presentation = clone.presentation
+                    if child.presentation.stroke is not None:
+                        new_presentation = replace(new_presentation, stroke=child.presentation.stroke)
+                        presentation_updated = True
+                    if child.presentation.stroke_width is not None:
+                        new_presentation = replace(new_presentation, stroke_width=child.presentation.stroke_width)
+                        presentation_updated = True
+                    if child.presentation.stroke_opacity is not None:
+                        new_presentation = replace(new_presentation, stroke_opacity=child.presentation.stroke_opacity)
+                        presentation_updated = True
+                    if presentation_updated:
+                        clone.presentation = new_presentation
+
+                # Re-resolve stroke/fill from updated presentation
+                if presentation_updated and hasattr(clone, 'presentation') and clone.presentation:
+                    stroke_style = resolve_stroke(
+                        clone.presentation.stroke,
+                        clone.presentation.stroke_width,
+                        clone.presentation.stroke_opacity,
+                        clone.presentation.opacity,
+                    )
+                    if not (
+                        stroke_style.color is None
+                        and stroke_style.reference is None
+                        and stroke_style.width is None
+                    ):
+                        clone.stroke = stroke_style
+
+                # Also apply direct attributes
+                if child.fill is not None and clone.fill is None:
+                    clone.fill = child.fill
+                if child.text_style is not None and clone.text_style is None:
+                    clone.text_style = child.text_style
+
                 current.children[index] = clone
                 if child.id:
                     ids[child.id] = clone

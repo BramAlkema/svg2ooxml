@@ -32,7 +32,8 @@ def visual_tools() -> VisualTestTools:
     golden = GoldenRepository()
     diff = ImageDiff()
     filter_strategy = os.getenv("SVG2OOXML_VISUAL_FILTER_STRATEGY", "resvg")
-    builder = PptxBuilder(filter_strategy=filter_strategy)
+    slide_size_mode = os.getenv("SVG2OOXML_SLIDE_SIZE_MODE", "same")
+    builder = PptxBuilder(filter_strategy=filter_strategy, slide_size_mode=slide_size_mode)
     renderer = default_renderer()
     return VisualTestTools(golden=golden, diff=diff, builder=builder, renderer=renderer)
 

@@ -5,7 +5,9 @@ from typing import Any as _Any
 
 __all__ = [
     'BookmarkTarget',
+    'ConversionPipeline',
     'CustomShowTarget',
+    'DEFAULT_STAGE_NAMES',
     'NavigationAction',
     'NavigationKind',
     'NavigationSpec',
@@ -16,8 +18,18 @@ __all__ = [
 ]
 
 # map symbol -> relative module
-_symbol_map = {'NavigationAction': 'navigation', 'NavigationSpec': 'navigation', 'parse_svg_navigation': 'navigation', 'NavigationKind': 'navigation', 'BookmarkTarget': 'navigation', 'SlideTarget': 'navigation', 'CustomShowTarget': 'navigation'}
-_module_map = {'mappers': 'mappers', 'navigation': 'navigation'}
+_symbol_map = {
+    'BookmarkTarget': 'navigation',
+    'ConversionPipeline': 'pipeline',
+    'CustomShowTarget': 'navigation',
+    'DEFAULT_STAGE_NAMES': 'pipeline',
+    'NavigationAction': 'navigation',
+    'NavigationKind': 'navigation',
+    'NavigationSpec': 'navigation',
+    'SlideTarget': 'navigation',
+    'parse_svg_navigation': 'navigation',
+}
+_module_map = {'mappers': 'mappers', 'navigation': 'navigation', 'pipeline': 'pipeline'}
 
 
 def __getattr__(name: str) -> _Any:  # PEP 562

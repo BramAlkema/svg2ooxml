@@ -81,3 +81,27 @@ def test_extract_style_handles_use_expansion() -> None:
     style = styles_runtime.extract_style(converter, use_element)
     assert isinstance(style.fill, SolidPaint)
     assert style.fill.rgb == "ABCDEF"
+
+
+def test_extract_style_propagates_use_stroke_width() -> None:
+    svg_markup = """
+        <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+            <defs>
+                <rect id="shape" width="5" height="5" />
+            </defs>
+            <use xlink:href="#shape" x="2" y="3" stroke="darkgreen" stroke-width="10" />
+        </svg>
+    """
+
+    svg_root = etree.fromstring(svg_markup)
+    converter = _build_converter()
+    converter._build_resvg_lookup(svg_root)
+
+    use_element = svg_root.find("{http://www.w3.org/2000/svg}use")
+    assert use_element is not None
+
+    style = styles_runtime.extract_style(converter, use_element)
+    assert style.stroke is not None
+    assert style.stroke.width == 10.0
+    assert isinstance(style.metadata, dict)
+    assert style.metadata.get("style", {}).get("source") == "resvg"

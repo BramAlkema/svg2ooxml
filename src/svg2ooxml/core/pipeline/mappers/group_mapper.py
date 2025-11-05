@@ -43,7 +43,12 @@ class GroupMapper(Mapper):
         # Build p:grpSpPr and append child_xml
         grpSpPr = p_sub(grpSp, "grpSpPr")
         if child_xml:
-            wrapped = f'<root xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">{child_xml}</root>'
+            wrapped = (
+                '<root xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" '
+                'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">'
+                f"{child_xml}"
+                "</root>"
+            )
             temp = etree.fromstring(wrapped.encode('utf-8'))
             for child in temp:
                 grpSpPr.append(child)

@@ -592,26 +592,23 @@ class StyleResolver:
             return []
 
         def cascade_precedence(origin: CSSOrigin, important: bool) -> int:
-            """Calculate cascade precedence per CSS Cascade 4 spec.
+            """Calculate cascade precedence per CSS Cascade 4 spec."""
 
-            Since we don't have a separate "user" origin, our ordering is:
-            - Normal: UA(1) < Author(2) < Presentation(3) < Inline(4)
-            - Important: UA(1) !important < Inline(4) !important < Presentation(3) !important < Author(2) !important
-
-            For !important, we reverse the author-origin cascade (Inline/Presentation/Author)
-            while keeping UA at the bottom in both tiers.
-            """
             if important:
-                if origin == CSSOrigin.USER_AGENT:
-                    # UA !important stays at bottom (loses to any author !important)
-                    return 1
-                # Author origins reverse for !important: Inline < Presentation < Author
-                # Map: Author(2)->14, Presentation(3)->13, Inline(4)->12
-                # So higher origin values get lower precedence when !important
-                return 16 - int(origin)
+                priority_map = {
+                    CSSOrigin.USER_AGENT: 0,
+                    CSSOrigin.PRESENTATION_ATTR: 1,
+                    CSSOrigin.AUTHOR: 2,
+                    CSSOrigin.INLINE: 3,
+                }
             else:
-                # Normal order: higher origin wins
-                return int(origin)
+                priority_map = {
+                    CSSOrigin.USER_AGENT: 0,
+                    CSSOrigin.PRESENTATION_ATTR: 1,
+                    CSSOrigin.AUTHOR: 2,
+                    CSSOrigin.INLINE: 3,
+                }
+            return priority_map.get(origin, 0)
 
         matches.sort(
             key=lambda item: (
