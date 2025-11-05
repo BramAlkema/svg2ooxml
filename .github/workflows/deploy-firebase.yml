@@ -40,7 +40,7 @@ jobs:
       - name: Deploy to Firebase
         run: |
           firebase deploy \
-            --only hosting,firestore:rules,firestore:indexes,database \
+            --only hosting,firestore:rules,firestore:indexes \
             --project powerful-layout-467812-p1 \
             --non-interactive
 
