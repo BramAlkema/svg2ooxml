@@ -258,7 +258,8 @@
   <script>
     // Firebase Auth is handled externally via auth.html popup window
     // No Firebase SDK needed in the plugin iframe
-    console.log("svg2ooxml plugin loaded - using external OAuth flow");
+    console.log("🟡🟡🟡 svg2ooxml plugin loaded - using external OAuth flow");
+    console.log("🟡 Inline script in HEAD is running!");
   </script>
 </head>
 <body>
@@ -326,6 +327,16 @@
   <!-- Status Section -->
   <div id="status" class="status"></div>
 
+  <script>
+    console.log("🟡 Inline script BEFORE ui.js - DOM should be ready");
+    console.log("🟡 sign-in-btn exists?", document.getElementById('sign-in-btn'));
+    console.log("🟡 About to load ui.js...");
+  </script>
+
   <script src="ui.js"></script>
+
+  <script>
+    console.log("🟡 Inline script AFTER ui.js");
+  </script>
 </body>
 </html>
