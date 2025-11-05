@@ -1,5 +1,11 @@
 // SVG to Google Slides - Figma Plugin UI Logic
 
+try {
+  window.debugLog('🟢 ui.js TOP - before anything');
+} catch(e) {
+  console.error('debugLog error:', e);
+}
+
 const log = window.debugLog || console.log.bind(console);
 log('🟢🟢🟢 ui.js is loading!');
 
@@ -727,3 +733,10 @@ window.addEventListener('unhandledrejection', (event) => {
   showStatus(`Error: ${event.reason?.message || 'Unknown error'}`, 'error');
   hideProgress();
 });
+
+// Final confirmation that entire file loaded
+try {
+  window.debugLog('🟢 ui.js END - entire file loaded successfully');
+} catch(e) {
+  console.error('Error at end of ui.js:', e);
+}
