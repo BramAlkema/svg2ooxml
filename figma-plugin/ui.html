@@ -890,25 +890,36 @@ async function refreshIdToken() {
     throw new Error('No refresh token available');
   }
 
-  const response = await fetch(
-    'https://securetoken.googleapis.com/v1/token?key=AIzaSyBO14gjDcansf4U7Ue9D_A28fEC_ur_5cY',
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        grant_type: 'refresh_token',
-        refresh_token: currentRefreshToken
-      })
-    }
-  );
+  window.debugLog('🟢 Refreshing ID token...');
+
+  let response;
+  try {
+    response = await fetch(
+      'https://securetoken.googleapis.com/v1/token?key=AIzaSyBO14gjDcansf4U7Ue9D_A28fEC_ur_5cY',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          grant_type: 'refresh_token',
+          refresh_token: currentRefreshToken
+        })
+      }
+    );
+  } catch (fetchError) {
+    window.debugLog(`❌ Token refresh fetch error: ${fetchError.message}`);
+    throw new Error(`Failed to refresh token: ${fetchError.message}`);
+  }
 
   if (!response.ok) {
+    window.debugLog(`❌ Token refresh failed with status: ${response.status}`);
     throw new Error('Failed to refresh token');
   }
 
   const data = await response.json();
   currentToken = data.id_token;
   currentRefreshToken = data.refresh_token;
+
+  window.debugLog('✅ Token refreshed successfully');
 
   // Save updated tokens
   await saveSession(currentToken, currentRefreshToken, currentUser.email);
@@ -931,24 +942,33 @@ async function createExportJob(frames, fileKey, fileName) {
     throw new Error('Session expired. Please sign in again.');
   }
 
-  const response = await fetch(`${API_URL}/api/v1/export`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${currentToken}`
-    },
-    body: JSON.stringify({
-      frames: frames.map(frame => ({
-        name: frame.name,
-        svg_content: frame.svg_content,
-        width: frame.width,
-        height: frame.height
-      })),
-      output_format: 'slides',
-      figma_file_id: fileKey,
-      figma_file_name: fileName
-    })
-  });
+  let response;
+  try {
+    window.debugLog(`🟢 Calling API: ${API_URL}/api/v1/export`);
+    response = await fetch(`${API_URL}/api/v1/export`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${currentToken}`
+      },
+      body: JSON.stringify({
+        frames: frames.map(frame => ({
+          name: frame.name,
+          svg_content: frame.svg_content,
+          width: frame.width,
+          height: frame.height
+        })),
+        output_format: 'slides',
+        figma_file_id: fileKey,
+        figma_file_name: fileName
+      })
+    });
+    window.debugLog(`🟢 API response status: ${response.status}`);
+  } catch (fetchError) {
+    window.debugLog(`❌ Fetch error: ${fetchError.message}`);
+    console.error('Fetch error details:', fetchError);
+    throw new Error(`Failed to fetch: ${fetchError.message}`);
+  }
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
