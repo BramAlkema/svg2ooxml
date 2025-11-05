@@ -93,8 +93,8 @@ async function handleGetSVGContent() {
         svgOutlineText: false
       });
 
-      // Convert to string
-      const svgString = new TextDecoder().decode(svg);
+      // Convert Uint8Array to string (TextDecoder not available in Figma plugin environment)
+      const svgString = String.fromCharCode.apply(null, svg);
 
       svgFrames.push({
         name: frame.name,
