@@ -87,9 +87,17 @@ def format_point_value(value: str) -> etree._Element:
     # Parse scale/point pair
     x, y = ValueProcessor.parse_scale_pair(value)
 
-    # Convert to strings (preserve decimals for scale factors)
-    x_str = str(x)
-    y_str = str(y)
+    # Convert to strings while trimming trailing zeros but keep a decimal place
+    def _fmt(value: float) -> str:
+        formatted = f"{value:.6f}"
+        if "." in formatted:
+            formatted = formatted.rstrip("0").rstrip(".")
+        if "." not in formatted:
+            formatted = f"{formatted}.0"
+        return formatted
+
+    x_str = _fmt(x)
+    y_str = _fmt(y)
 
     # Build <a:val><a:pt x="..." y="..."/></a:val>
     val = a_elem("val")

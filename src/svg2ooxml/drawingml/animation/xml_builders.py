@@ -137,11 +137,23 @@ class AnimationXMLBuilder:
                 root = etree.fromstring(wrapped)
                 # Extract and append the child element
                 if len(root) > 0:
-                    childTnLst.append(root[0])
+                    child = root[0]
+                    for prefix in ("a", "p"):
+                        attr_name = f"{{http://www.w3.org/2000/xmlns/}}{prefix}"
+                        if attr_name in child.attrib:
+                            del child.attrib[attr_name]
+                    childTnLst.append(child)
             except etree.XMLSyntaxError:
                 pass  # Skip malformed content
 
-        return to_string(par)
+        result = to_string(par)
+        from svg2ooxml.drawingml.xml_builder import NS_A
+        namespace_decl = f'xmlns:a="{NS_A}"'
+        for tag in ("<a:anim", "<a:animMotion", "<a:animScale"):
+            needle = f"{tag} {namespace_decl}"
+            if needle in result:
+                result = result.replace(needle, tag + "")
+        return result
 
     # ------------------------------------------------------------------ #
     # Common Behavior                                                    #
@@ -229,7 +241,8 @@ class AnimationXMLBuilder:
         attrNameLst = a_elem("attrNameLst")
 
         for name in attribute_names:
-            a_sub(attrNameLst, "attrName", val=name)
+            elem = a_sub(attrNameLst, "attrName")
+            elem.set("val", name)
 
         return attrNameLst
 
@@ -269,12 +282,14 @@ class AnimationXMLBuilder:
         """
         tav = a_elem("tav", tm=str(tm))
 
+        svg2_attrs: dict[str, str] = {}
+
         # Add metadata attributes (e.g., svg2:spline)
         if metadata:
             for key, value in metadata.items():
-                # Handle custom namespace attributes
                 if key.startswith("svg2:"):
                     attr_name = key.split(":", 1)[1]
+                    svg2_attrs[attr_name] = value
                     tav.set(f"{{{SVG2_ANIMATION_NS}}}{attr_name}", value)
                 else:
                     tav.set(key, value)
@@ -282,11 +297,18 @@ class AnimationXMLBuilder:
         # Append value element
         tav.append(value_elem)
 
-        # Add accel/decel if non-zero
-        if accel > 0:
-            a_sub(tav, "accel", val=str(accel))
-        if decel > 0:
-            a_sub(tav, "decel", val=str(decel))
+        needs_tav_pr = accel > 0 or decel > 0
+
+        tav_pr = None
+        if needs_tav_pr:
+            tav_pr = a_sub(tav, "tavPr")
+
+        if tav_pr is not None:
+            if accel > 0:
+                tav_pr.set("accel", str(accel))
+            if decel > 0:
+                tav_pr.set("decel", str(decel))
+            # svg2 metadata already attached to <a:tav>; no need to mirror
 
         return tav
 

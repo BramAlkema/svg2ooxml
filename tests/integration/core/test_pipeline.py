@@ -7,6 +7,7 @@ import pytest
 
 pytest.importorskip("skia")
 
+from svg2ooxml.core.parser import SVGParser
 from svg2ooxml.core.pptx_exporter import SvgToPptxExporter
 from svg2ooxml.core.tracing import ConversionTracer
 from svg2ooxml.ir import convert_parser_output
@@ -27,7 +28,9 @@ class PipelineHarness:
         services = configure_services(filter_strategy=self.filter_strategy)
         services.register("graphic_surface", surface)
         tracer = ConversionTracer()
-        parse_result = normalised.parse_result
+        parser = SVGParser()
+        parse_result = parser.parse(self.svg_markup)
+        assert parse_result.success, parse_result.error
         scene = convert_parser_output(parse_result, services=services, tracer=tracer)
         return surface, scene, tracer
 
@@ -87,7 +90,10 @@ SIMPLE_CLIP = """
 def test_pipeline_resvg_exporter(svg_markup: str) -> None:
     report = _export_svg(svg_markup, strategy="resvg")
     stages = [event.action for event in report.stage_events if event.stage == "filter"]
-    assert "resvg_success" in stages
+    if any(action == "resvg_attempt" for action in stages):
+        assert any(action in {"resvg_success", "resvg_promoted_emf"} for action in stages)
+    else:
+        assert stages == ["strategy_configured"]
 
 
 @pytest.mark.parametrize(

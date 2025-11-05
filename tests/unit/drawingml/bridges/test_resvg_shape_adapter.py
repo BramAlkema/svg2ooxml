@@ -392,7 +392,7 @@ class TestResvgShapeAdapterPrimitives:
         assert bezier.end.y == 50.0
 
     def test_primitives_close_path(self):
-        """Test that ClosePath primitive doesn't generate segment."""
+        """ClosePath now yields an explicit closing segment."""
         from svg2ooxml.core.resvg.geometry.primitives import MoveTo, LineTo, ClosePath
 
         adapter = ResvgShapeAdapter()
@@ -405,9 +405,13 @@ class TestResvgShapeAdapterPrimitives:
 
         segments = adapter._primitives_to_segments(primitives)
 
-        # ClosePath should not produce a segment, MoveTo doesn't either
-        # So we expect only 2 segments (the two LineTo commands)
-        assert len(segments) == 2
+        # ClosePath now produces a closing segment back to the MoveTo origin
+        assert len(segments) == 3
+        assert isinstance(segments[-1], LineSegment)
+        assert segments[-1].start.x == 10.0
+        assert segments[-1].start.y == 10.0
+        assert segments[-1].end.x == 0.0
+        assert segments[-1].end.y == 0.0
 
 
 class TestResvgShapeAdapterTransforms:
@@ -596,11 +600,16 @@ class TestResvgShapeAdapterTransforms:
 
         # All points should be translated by (50, 100)
         # First line: (0, 0) → (10, 0) becomes (50, 100) → (60, 100)
-        assert len(segments) == 2
+        assert len(segments) == 3
         assert segments[0].start.x == pytest.approx(50.0)
         assert segments[0].start.y == pytest.approx(100.0)
         assert segments[0].end.x == pytest.approx(60.0)
         assert segments[0].end.y == pytest.approx(100.0)
+        # Closing segment returns to the origin of the subpath (translated)
+        assert segments[-1].start.x == pytest.approx(60.0)
+        assert segments[-1].start.y == pytest.approx(110.0)
+        assert segments[-1].end.x == pytest.approx(50.0)
+        assert segments[-1].end.y == pytest.approx(100.0)
 
     def test_identity_transform_not_applied(self):
         """Test that identity transform is skipped (optimization)."""

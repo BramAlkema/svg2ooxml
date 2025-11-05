@@ -8,6 +8,7 @@ import re
 from typing import Iterable, List
 
 from svg2ooxml.filters.base import FilterContext, FilterResult
+from svg2ooxml.filters.utils.dml import is_effect_list
 from svg2ooxml.ir.effects import CustomEffect
 from svg2ooxml.services.filter_types import FilterEffectResult
 from svg2ooxml.common.units import px_to_emu
@@ -70,6 +71,10 @@ class FilterRenderer:
             elif drawingml and drawingml.strip().startswith("<!--") and not remainder:
                 # Unhandled comment; drop it.
                 drawingml = ""
+
+            fragment = drawingml.strip()
+            if fragment and not fragment.startswith("<!--") and not is_effect_list(fragment):
+                drawingml = f"<a:effectLst>{fragment}</a:effectLst>"
 
             if not drawingml and result.fallback == "emf":
                 drawingml = self._placeholder_emf(metadata, result)
@@ -204,9 +209,21 @@ class FilterRenderer:
             asset = None
 
         if not asset:
+            assets = metadata.setdefault("fallback_assets", [])
+            placeholder_id = self._allocate_reuse_id()
+            placeholder_asset = {
+                "type": "emf",
+                "relationship_id": placeholder_id,
+                "placeholder": True,
+            }
+            if isinstance(assets, list):
+                assets.append(placeholder_asset)
             from lxml import etree
             effectLst = a_elem("effectLst")
-            effectLst.append(etree.Comment(' svg2ooxml:emf placeholder="" '))
+            effectLst.append(etree.Comment(f' svg2ooxml:emf placeholder="" relationship="{placeholder_id}" '))
+            blipFill = a_sub(effectLst, "blipFill", rotWithShape="0")
+            blip = a_sub(blipFill, "blip")
+            blip.set("{http://schemas.openxmlformats.org/officeDocument/2006/relationships}embed", placeholder_id)
             return to_string(effectLst)
 
 

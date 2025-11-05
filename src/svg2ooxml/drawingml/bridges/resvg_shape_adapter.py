@@ -344,12 +344,14 @@ class ResvgShapeAdapter:
 
         segments: list[SegmentType] = []
         current = Point(0.0, 0.0)  # Track current position
+        subpath_start: Point | None = None
 
         for prim in primitives:
             if isinstance(prim, MoveTo):
                 # MoveTo: just update current position, don't create a segment
                 # The next drawing command will use this as its start point
                 current = Point(prim.x, prim.y)
+                subpath_start = current
             elif isinstance(prim, LineTo):
                 # LineTo: create LineSegment from current to new point
                 next_pt = Point(prim.x, prim.y)
@@ -387,8 +389,12 @@ class ResvgShapeAdapter:
                 ))
                 current = p2
             elif isinstance(prim, ClosePath):
-                # ClosePath doesn't generate a segment (handled by closed flag in generator)
-                pass
+                if subpath_start is not None and (
+                    abs(current.x - subpath_start.x) > 1e-6 or abs(current.y - subpath_start.y) > 1e-6
+                ):
+                    segments.append(LineSegment(current, subpath_start))
+                if subpath_start is not None:
+                    current = subpath_start
 
         return segments
 

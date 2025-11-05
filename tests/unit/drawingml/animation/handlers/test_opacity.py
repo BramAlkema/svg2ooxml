@@ -6,6 +6,7 @@ from lxml import etree
 
 from svg2ooxml.drawingml.animation.handlers.opacity import OpacityAnimationHandler
 from svg2ooxml.drawingml.animation.handlers.base import AnimationDefinition
+from svg2ooxml.drawingml.animation.value_processors import ValueProcessor
 
 
 def create_test_animation(**kwargs):
@@ -311,6 +312,23 @@ class TestBuild:
             or xml_builder.build_par_container.call_args.kwargs["child_xml"]
         )
         assert '<a:fade opacity="0.75"/>' in child_xml
+
+    def test_uses_real_value_processor_scaling(self):
+        """Should emit PPT opacity units when using real ValueProcessor."""
+        xml_builder = Mock()
+        xml_builder.build_behavior_core = Mock(return_value="<behavior/>")
+        xml_builder.build_par_container = Mock(return_value="<p:par/>")
+
+        handler = OpacityAnimationHandler(xml_builder, ValueProcessor(), Mock(), Mock())
+        animation = create_test_animation(values=["0.75"])
+
+        handler.build(animation, par_id=5, behavior_id=6)
+
+        child_xml = (
+            xml_builder.build_par_container.call_args.kwargs.get("child_content")
+            or xml_builder.build_par_container.call_args.kwargs["child_xml"]
+        )
+        assert '<a:fade opacity="75000"/>' in child_xml
 
 
 class TestIntegration:

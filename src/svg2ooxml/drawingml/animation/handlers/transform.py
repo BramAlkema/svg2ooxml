@@ -6,12 +6,20 @@ Generates PowerPoint <a:animScale>, <a:animRot>, or <a:animMotion> elements.
 
 from __future__ import annotations
 
+import math
+import re
 from typing import TYPE_CHECKING
 from textwrap import indent
 
+from lxml import etree
+
 from .base import AnimationHandler, AnimationDefinition
 from ..value_formatters import format_point_value, format_angle_value
+from ..constants import SVG2_ANIMATION_NS
+from svg2ooxml.common.geometry.matrix import Matrix2D
 from svg2ooxml.drawingml.xml_builder import to_string
+
+etree.register_namespace("svg2", SVG2_ANIMATION_NS)
 
 if TYPE_CHECKING:
     from svg2ooxml.common.units import UnitConverter
@@ -25,13 +33,14 @@ __all__ = ["TransformAnimationHandler"]
 class TransformAnimationHandler(AnimationHandler):
     """Handler for transform animations.
 
-    Handles scale, rotate, and translate animations.
+    Handles scale, rotate, translate, and reducible matrix animations.
     Generates PowerPoint transform animation elements based on transform type.
 
     Transform Types:
     - Scale: <a:animScale> with from/to <a:pt x="..." y="..."/>
     - Rotate: <a:animRot> with <a:by val="..."/> (rotation delta)
-    - Translate: <a:animMotion> with origin/path (not currently supported)
+    - Translate: <a:animMotion> with origin/path
+    - Matrix: decomposed into translate/scale/rotate when possible
 
     Example:
         >>> handler = TransformAnimationHandler(xml_builder, value_processor, tav_builder, unit_converter)
@@ -64,6 +73,7 @@ class TransformAnimationHandler(AnimationHandler):
         - TransformType.SCALE
         - TransformType.ROTATE
         - TransformType.TRANSLATE
+        - TransformType.MATRIX
 
         Args:
             animation: Animation definition to check
@@ -86,11 +96,13 @@ class TransformAnimationHandler(AnimationHandler):
             return animation.transform_type in {
                 TransformType.SCALE,
                 TransformType.ROTATE,
+                TransformType.TRANSLATE,
+                TransformType.MATRIX,
             }
 
         # Also support string values for backward compatibility
         transform_str = str(animation.transform_type).lower()
-        return transform_str in {"scale", "rotate"}
+        return transform_str in {"scale", "rotate", "translate", "matrix"}
 
     def build(
         self,
@@ -135,6 +147,8 @@ class TransformAnimationHandler(AnimationHandler):
             return self._build_rotate_animation(animation, par_id, behavior_id)
         elif transform_type == "translate":
             return self._build_translate_animation(animation, par_id, behavior_id)
+        elif transform_type == "matrix":
+            return self._build_matrix_animation(animation, par_id, behavior_id)
 
         return ""
 
@@ -164,56 +178,16 @@ class TransformAnimationHandler(AnimationHandler):
         if not animation.values:
             return ""
 
-        # Parse from/to scale pairs
-        from_scale = self._processor.parse_scale_pair(animation.values[0])
-        to_scale = self._processor.parse_scale_pair(animation.values[-1])
-
-        # Build TAV list if multi-keyframe
-        tav_elements, needs_custom_ns = self._build_scale_tav_list(animation)
-
-        # Build behavior core
-        behavior_core = self._xml.build_behavior_core(
-            behavior_id=behavior_id,
-            duration_ms=animation.duration_ms,
-            target_shape=animation.element_id if hasattr(animation, "element_id") else "",
-        )
-
-        # Build TAV list container if needed
-        tav_block = ""
-        if tav_elements:
-            tav_container = self._xml.build_tav_list_container(tav_elements)
-            tav_string = to_string(tav_container)
-            tav_block = "\n" + indent(tav_string, " " * 40) + "\n"
-
-        # Build animScale element
-        anim_tag = "<a:animScale"
-        if needs_custom_ns:
-            from ..constants import SVG2_ANIMATION_NS
-            anim_tag += f' xmlns:svg2="{SVG2_ANIMATION_NS}"'
-        anim_tag += ">"
-
-        anim_scale = (
-            f'                                    {anim_tag}\n'
-            f'{behavior_core}'
-            f'                                        <a:from>\n'
-            f'                                            <a:pt x="{self._format_float(from_scale[0])}" y="{self._format_float(from_scale[1])}"/>\n'
-            f'                                        </a:from>\n'
-            f'                                        <a:to>\n'
-            f'                                            <a:pt x="{self._format_float(to_scale[0])}" y="{self._format_float(to_scale[1])}"/>\n'
-            f'                                        </a:to>\n'
-            f'{tav_block}'
-            f'                                    </a:animScale>'
-        )
-
-        # Build par container
-        par = self._xml.build_par_container(
+        scale_pairs = [self._processor.parse_scale_pair(value) for value in animation.values]
+        anim_scale = self._build_scale_from_pairs(animation, par_id, behavior_id, scale_pairs)
+        if not anim_scale:
+            return ""
+        return self._xml.build_par_container(
             par_id=par_id,
             duration_ms=animation.duration_ms,
             delay_ms=animation.begin_ms,
             child_content=anim_scale,
         )
-
-        return par
 
     def _build_rotate_animation(
         self,
@@ -241,56 +215,16 @@ class TransformAnimationHandler(AnimationHandler):
         if not animation.values:
             return ""
 
-        # Parse start/end angles
-        start_angle = self._processor.parse_angle(animation.values[0])
-        end_angle = self._processor.parse_angle(animation.values[-1])
-
-        # Calculate rotation delta in PowerPoint units (60000ths of a degree)
-        rotation_delta = self._processor.format_ppt_angle(end_angle - start_angle)
-
-        # Build TAV list if multi-keyframe
-        tav_elements, needs_custom_ns = self._build_rotate_tav_list(
-            animation, start_angle
-        )
-
-        # Build behavior core
-        behavior_core = self._xml.build_behavior_core(
-            behavior_id=behavior_id,
-            duration_ms=animation.duration_ms,
-            target_shape=animation.element_id if hasattr(animation, "element_id") else "",
-        )
-
-        # Build TAV list container if needed
-        tav_block = ""
-        if tav_elements:
-            tav_container = self._xml.build_tav_list_container(tav_elements)
-            tav_string = to_string(tav_container)
-            tav_block = "\n" + indent(tav_string, " " * 40) + "\n"
-
-        # Build animRot element
-        anim_tag = "<a:animRot"
-        if needs_custom_ns:
-            from ..constants import SVG2_ANIMATION_NS
-            anim_tag += f' xmlns:svg2="{SVG2_ANIMATION_NS}"'
-        anim_tag += ">"
-
-        anim_rot = (
-            f'                                    {anim_tag}\n'
-            f'{behavior_core}'
-            f'                                        <a:by val="{rotation_delta}"/>\n'
-            f'{tav_block}'
-            f'                                    </a:animRot>'
-        )
-
-        # Build par container
-        par = self._xml.build_par_container(
+        angles = [self._processor.parse_angle(value) for value in animation.values]
+        anim_rot = self._build_rotate_from_angles(animation, par_id, behavior_id, angles)
+        if not anim_rot:
+            return ""
+        return self._xml.build_par_container(
             par_id=par_id,
             duration_ms=animation.duration_ms,
             delay_ms=animation.begin_ms,
             child_content=anim_rot,
         )
-
-        return par
 
     def _build_translate_animation(
         self,
@@ -298,25 +232,149 @@ class TransformAnimationHandler(AnimationHandler):
         par_id: int,
         behavior_id: int,
     ) -> str:
-        """Build translate animation (<a:animMotion>).
+        """Build translate animation (<a:animMotion>)."""
+        if not animation.values:
+            return ""
 
-        Note: Not yet fully implemented. Returns empty string.
+        translation_pairs = [
+            self._processor.parse_translation_pair(value)
+            for value in animation.values
+        ]
+        anim_motion = self._build_translate_from_pairs(animation, par_id, behavior_id, translation_pairs)
+        if not anim_motion:
+            return ""
+        return self._xml.build_par_container(
+            par_id=par_id,
+            duration_ms=animation.duration_ms,
+            delay_ms=animation.begin_ms,
+            child_content=anim_motion,
+        )
 
-        Args:
-            animation: Animation definition
-            par_id: Par container ID
-            behavior_id: Behavior ID
+    def _build_matrix_animation(
+        self,
+        animation: AnimationDefinition,
+        par_id: int,
+        behavior_id: int,
+    ) -> str:
+        """Build animation for matrix transforms when reducible to primitive components."""
+        if not animation.values:
+            return ""
 
-        Returns:
-            Empty string (not implemented)
-        """
-        # TODO: Implement translate animation
-        # Would use <a:animMotion> with origin and path
-        return ""
+        matrices: list[Matrix2D] = []
+        for raw in animation.values:
+            if isinstance(raw, str):
+                tokens = [token for token in re.split(r"[,\s]+", raw.strip()) if token]
+            else:
+                return ""
+            if len(tokens) < 6:
+                return ""
+            try:
+                values = [float(token) for token in tokens[:6]]
+            except ValueError:
+                return ""
+            matrices.append(Matrix2D.from_values(*values))
+
+        matrix_type: str | None = None
+        staged: list[tuple[str, object | None]] = []
+
+        for matrix in matrices:
+            current_type, payload = self._classify_matrix(matrix)
+            if current_type is None:
+                return ""
+
+            if matrix_type is None:
+                if current_type != "identity":
+                    matrix_type = current_type
+            else:
+                if current_type not in {"identity", matrix_type}:
+                    return ""
+
+            staged.append((current_type, payload))
+
+        if matrix_type is None:
+            # All identities → nothing to animate
+            return ""
+
+        classified: list[object] = []
+        for current_type, payload in staged:
+            if current_type == "identity":
+                classified.append(self._identity_payload(matrix_type))
+            else:
+                classified.append(payload if payload is not None else self._identity_payload(matrix_type))
+
+        content = ""
+        if matrix_type == "translate":
+            pairs = [(float(x), float(y)) for x, y in classified]  # type: ignore[arg-type]
+            content = self._build_translate_from_pairs(animation, par_id, behavior_id, pairs)
+        elif matrix_type == "scale":
+            pairs = [(float(x), float(y)) for x, y in classified]  # type: ignore[arg-type]
+            content = self._build_scale_from_pairs(animation, par_id, behavior_id, pairs)
+        elif matrix_type == "rotate":
+            angles = [float(angle) for angle in classified]  # type: ignore[arg-type]
+            content = self._build_rotate_from_angles(animation, par_id, behavior_id, angles)
+
+        if not content:
+            return ""
+
+        return self._xml.build_par_container(
+            par_id=par_id,
+            duration_ms=animation.duration_ms,
+            delay_ms=animation.begin_ms,
+            child_content=content,
+        )
+
+    def _build_scale_from_pairs(
+        self,
+        animation: AnimationDefinition,
+        par_id: int,
+        behavior_id: int,
+        scale_pairs: list[tuple[float, float]],
+    ) -> str:
+        if not scale_pairs:
+            return ""
+
+        from_scale = scale_pairs[0]
+        to_scale = scale_pairs[-1]
+
+        tav_elements, needs_custom_ns = self._build_scale_tav_list(animation, scale_pairs)
+
+        behavior_core = self._xml.build_behavior_core(
+            behavior_id=behavior_id,
+            duration_ms=animation.duration_ms,
+            target_shape=animation.element_id if hasattr(animation, "element_id") else "",
+        )
+
+        tav_block = ""
+        if tav_elements:
+            tav_container = self._xml.build_tav_list_container(tav_elements)
+            tav_string = to_string(tav_container)
+            tav_block = "\n" + indent(tav_string, " " * 40) + "\n"
+
+        anim_tag = "<a:animScale"
+        if needs_custom_ns:
+            from ..constants import SVG2_ANIMATION_NS
+            anim_tag += f' xmlns:svg2="{SVG2_ANIMATION_NS}"'
+        anim_tag += ">"
+
+        anim_scale = (
+            f'                                    {anim_tag}\n'
+            f'{behavior_core}'
+            f'                                        <a:from>\n'
+            f'                                            <a:pt x="{self._format_float(from_scale[0])}" y="{self._format_float(from_scale[1])}"/>\n'
+            f'                                        </a:from>\n'
+            f'                                        <a:to>\n'
+            f'                                            <a:pt x="{self._format_float(to_scale[0])}" y="{self._format_float(to_scale[1])}"/>\n'
+            f'                                        </a:to>\n'
+            f'{tav_block}'
+            f'                                    </a:animScale>'
+        )
+
+        return anim_scale
 
     def _build_scale_tav_list(
         self,
         animation: AnimationDefinition,
+        scale_pairs: list[tuple[float, float]],
     ) -> tuple[list, bool]:
         """Build TAV list for multi-keyframe scale animations.
 
@@ -324,16 +382,13 @@ class TransformAnimationHandler(AnimationHandler):
 
         Args:
             animation: Animation definition
+            scale_pairs: Sequence of (scale_x, scale_y) values
 
         Returns:
             Tuple of (tav_elements, needs_custom_namespace)
         """
-        values = animation.values
-        if not values or (len(values) <= 2 and not animation.key_times):
+        if not scale_pairs or (len(scale_pairs) <= 2 and not animation.key_times):
             return ([], False)
-
-        # Parse all scale pairs
-        scale_pairs = [self._processor.parse_scale_pair(val) for val in values]
 
         # Format scale pairs as "x y" strings for point formatter
         scale_strings = [f"{x} {y}" for x, y in scale_pairs]
@@ -349,9 +404,54 @@ class TransformAnimationHandler(AnimationHandler):
 
         return (tav_elements, needs_ns)
 
+    def _build_rotate_from_angles(
+        self,
+        animation: AnimationDefinition,
+        par_id: int,
+        behavior_id: int,
+        angles: list[float],
+    ) -> str:
+        if not angles:
+            return ""
+
+        start_angle = angles[0]
+        end_angle = angles[-1]
+        rotation_delta = self._processor.format_ppt_angle(end_angle - start_angle)
+
+        tav_elements, needs_custom_ns = self._build_rotate_tav_list(animation, angles, start_angle)
+
+        behavior_core = self._xml.build_behavior_core(
+            behavior_id=behavior_id,
+            duration_ms=animation.duration_ms,
+            target_shape=animation.element_id if hasattr(animation, "element_id") else "",
+        )
+
+        tav_block = ""
+        if tav_elements:
+            tav_container = self._xml.build_tav_list_container(tav_elements)
+            tav_string = to_string(tav_container)
+            tav_block = "\n" + indent(tav_string, " " * 40) + "\n"
+
+        anim_tag = "<a:animRot"
+        if needs_custom_ns:
+            from ..constants import SVG2_ANIMATION_NS
+            anim_tag += f' xmlns:svg2="{SVG2_ANIMATION_NS}"'
+        anim_tag += ">"
+
+        anim_rot = (
+            f'                                    {anim_tag}\n'
+            f'{behavior_core}'
+            f'                                        <a:by val="{rotation_delta}"/>\n'
+            f'{tav_block}'
+            f'                                    </a:animRot>'
+        )
+
+        return anim_rot
+
     def _build_rotate_tav_list(
         self,
         animation: AnimationDefinition,
+        angles: list[float],
         start_angle: float,
     ) -> tuple[list, bool]:
         """Build TAV list for multi-keyframe rotate animations.
@@ -360,17 +460,14 @@ class TransformAnimationHandler(AnimationHandler):
 
         Args:
             animation: Animation definition
+            angles: Sequence of angle values (degrees)
             start_angle: Starting angle in degrees
 
         Returns:
             Tuple of (tav_elements, needs_custom_namespace)
         """
-        values = animation.values
-        if not values or (len(values) <= 2 and not animation.key_times):
+        if not angles or (len(angles) <= 2 and not animation.key_times):
             return ([], False)
-
-        # Parse all angles
-        angles = [self._processor.parse_angle(val) for val in values]
 
         # Convert to cumulative deltas from start (in degrees)
         angle_deltas = [str(angle - start_angle) for angle in angles]
@@ -385,6 +482,122 @@ class TransformAnimationHandler(AnimationHandler):
         )
 
         return (tav_elements, needs_ns)
+
+    def _build_translate_from_pairs(
+        self,
+        animation: AnimationDefinition,
+        par_id: int,
+        behavior_id: int,
+        translation_pairs: list[tuple[float, float]],
+    ) -> str:
+        if len(translation_pairs) == 1:
+            translation_pairs = [(0.0, 0.0), translation_pairs[0]]
+
+        if len(translation_pairs) < 2:
+            return ""
+
+        behavior_core = self._xml.build_behavior_core(
+            behavior_id=behavior_id,
+            duration_ms=animation.duration_ms,
+            target_shape=animation.element_id if hasattr(animation, "element_id") else "",
+        )
+
+        if len(translation_pairs) == 2:
+            start_dx, start_dy = translation_pairs[0]
+            end_dx, end_dy = translation_pairs[1]
+            delta_x = int(round(self._units.to_emu(end_dx - start_dx, axis="x")))
+            delta_y = int(round(self._units.to_emu(end_dy - start_dy, axis="y")))
+            anim_motion = (
+                f'                                    <a:animMotion>\n'
+                f'{behavior_core}'
+                f'                                        <a:by x="{delta_x}" y="{delta_y}"/>\n'
+                f'                                    </a:animMotion>'
+            )
+        else:
+            point_entries: list[str] = []
+            for dx, dy in translation_pairs:
+                x_emu = int(round(self._units.to_emu(dx, axis="x")))
+                y_emu = int(round(self._units.to_emu(dy, axis="y")))
+                point_entries.append(
+                    f'                                        <a:pt x="{x_emu}" y="{y_emu}"/>'
+                )
+
+            pt_lst = "\n".join(point_entries)
+
+            anim_motion = (
+                f'                                    <a:animMotion>\n'
+                f'{behavior_core}'
+                f'                                        <a:ptLst>\n'
+                f'{pt_lst}\n'
+                f'                                        </a:ptLst>\n'
+                f'                                    </a:animMotion>'
+            )
+
+        return anim_motion
+
+    def _classify_matrix(
+        self,
+        matrix: Matrix2D,
+        *,
+        tolerance: float = 1e-6,
+    ) -> tuple[str | None, object | None]:
+        """Classify matrix as translate/scale/rotate when possible."""
+        if (
+            math.isfinite(matrix.a)
+            and math.isfinite(matrix.b)
+            and math.isfinite(matrix.c)
+            and math.isfinite(matrix.d)
+            and math.isfinite(matrix.e)
+            and math.isfinite(matrix.f)
+        ):
+            if (
+                abs(matrix.a - 1.0) <= tolerance
+                and abs(matrix.d - 1.0) <= tolerance
+                and abs(matrix.b) <= tolerance
+                and abs(matrix.c) <= tolerance
+                and abs(matrix.e) <= tolerance
+                and abs(matrix.f) <= tolerance
+            ):
+                return ("identity", None)
+
+            if (
+                abs(matrix.a - 1.0) <= tolerance
+                and abs(matrix.d - 1.0) <= tolerance
+                and abs(matrix.b) <= tolerance
+                and abs(matrix.c) <= tolerance
+            ):
+                return ("translate", (matrix.e, matrix.f))
+
+            if (
+                abs(matrix.b) <= tolerance
+                and abs(matrix.c) <= tolerance
+                and abs(matrix.e) <= tolerance
+                and abs(matrix.f) <= tolerance
+            ):
+                return ("scale", (matrix.a, matrix.d))
+
+            if (
+                abs(matrix.e) <= tolerance
+                and abs(matrix.f) <= tolerance
+                and abs(matrix.c + matrix.b) <= tolerance
+                and abs(matrix.a - matrix.d) <= tolerance
+                and abs(matrix.a * matrix.a + matrix.b * matrix.b - 1.0) <= tolerance
+                and abs(matrix.c * matrix.c + matrix.d * matrix.d - 1.0) <= tolerance
+            ):
+                angle_deg = math.degrees(math.atan2(matrix.b, matrix.a))
+                return ("rotate", angle_deg)
+
+        return (None, None)
+
+    @staticmethod
+    def _identity_payload(matrix_type: str) -> object:
+        if matrix_type == "translate":
+            return (0.0, 0.0)
+        if matrix_type == "scale":
+            return (1.0, 1.0)
+        if matrix_type == "rotate":
+            return 0.0
+        return (0.0, 0.0)
 
     def _format_float(self, value: float) -> str:
         """Format float value for XML output.
@@ -406,4 +619,8 @@ class TransformAnimationHandler(AnimationHandler):
         formatted = f"{value:.6f}"
         if "." in formatted:
             formatted = formatted.rstrip("0").rstrip(".")
-        return formatted or "0"
+        if not formatted:
+            formatted = "0"
+        if "." not in formatted:
+            formatted = f"{formatted}.0"
+        return formatted

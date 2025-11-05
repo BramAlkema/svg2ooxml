@@ -63,6 +63,33 @@ def process_group(traversal, element: etree._Element, active_navigation, recurse
 
 
 def process_use(traversal, element: etree._Element, active_navigation, recurse) -> list:
+    # In resvg mode, <use> elements are already expanded in the resvg tree
+    # Convert the <use> element directly using its mapped resvg node
+    resvg_tree = getattr(traversal._converter, "_resvg_tree", None)
+    if resvg_tree is not None:
+        # Resvg mode: Convert <use> as a shape using the mapped resvg node
+        converted = traversal._converter.convert_element(
+            tag="use",
+            element=element,
+            coord_space=traversal._coord_space,
+            current_navigation=active_navigation,
+            traverse_callback=recurse,
+        )
+        if not converted:
+            return []
+
+        if not isinstance(converted, (list, tuple)):
+            converted_items = [converted]
+        else:
+            converted_items = [item for item in converted if item is not None]
+
+        ir_elements: list = []
+        for item in converted_items:
+            traversal._converter.attach_metadata(item, element, active_navigation)
+            ir_elements.append(item)
+        return ir_elements
+
+    # Legacy mode: Expand <use> element and convert children
     expanded = traversal._converter.expand_use(
         element=element,
         coord_space=traversal._coord_space,
@@ -71,6 +98,15 @@ def process_use(traversal, element: etree._Element, active_navigation, recurse) 
     )
     ir_elements: list = []
     for item in expanded:
+        if item is None:
+            continue
+        if isinstance(item, (list, tuple)):
+            for child in item:
+                if child is None:
+                    continue
+                traversal._converter.attach_metadata(child, element, active_navigation)
+                ir_elements.append(child)
+            continue
         traversal._converter.attach_metadata(item, element, active_navigation)
         ir_elements.append(item)
     return ir_elements

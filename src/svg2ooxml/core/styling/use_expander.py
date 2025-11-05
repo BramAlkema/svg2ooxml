@@ -57,11 +57,13 @@ def apply_use_attributes(converter, use_element: etree._Element, target: etree._
         if attr == "class" and target.get("class"):
             existing = target.get("class")
             target.set("class", f"{existing} {value}".strip())
-        elif attr == "style" and target.get("style"):
+        elif attr == "style":
             existing = target.get("style") or ""
-            if existing and not existing.endswith(";"):
-                existing += ";"
-            target.set("style", f"{existing}{value}")
+            merged = value or ""
+            if merged and not merged.endswith(";"):
+                merged += ";"
+            merged = f"{merged}{existing}"
+            target.set("style", merged)
         else:
             target.set(attr, value)
 

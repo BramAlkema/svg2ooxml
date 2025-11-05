@@ -5,7 +5,7 @@ SvgToPptxExporter through the policy system to the IRConverter where it can be
 accessed via _policy_options("geometry").
 
 Flow being tested:
-    SvgToPptxExporter(geometry_mode="resvg")
+    SvgToPptxExporter(geometry_mode defaults to "resvg")
         ↓
     policy_overrides = {"geometry": {"geometry_mode": "resvg"}}
         ↓
@@ -37,10 +37,10 @@ TEST_SVG = """<?xml version="1.0" encoding="UTF-8"?>
 class TestGeometryModePropagation:
     """Test suite for geometry_mode policy propagation."""
 
-    def test_default_geometry_mode_is_legacy(self):
-        """Test that the default geometry_mode is 'legacy'."""
+    def test_default_geometry_mode_is_resvg(self):
+        """Test that the default geometry_mode is 'resvg'."""
         exporter = SvgToPptxExporter()
-        assert exporter._geometry_mode == "legacy"
+        assert exporter._geometry_mode == "resvg"
 
     def test_explicit_geometry_mode_parameter(self):
         """Test setting geometry_mode via parameter."""
@@ -49,9 +49,9 @@ class TestGeometryModePropagation:
 
     def test_geometry_mode_from_environment_variable(self):
         """Test setting geometry_mode via environment variable."""
-        with mock.patch.dict(os.environ, {"SVG2OOXML_GEOMETRY_MODE": "resvg"}):
+        with mock.patch.dict(os.environ, {"SVG2OOXML_GEOMETRY_MODE": "legacy"}):
             exporter = SvgToPptxExporter()
-            assert exporter._geometry_mode == "resvg"
+            assert exporter._geometry_mode == "legacy"
 
     def test_parameter_overrides_environment_variable(self):
         """Test that parameter takes precedence over environment variable."""
@@ -87,19 +87,19 @@ class TestGeometryModePropagation:
         base_context = PolicyContext(selections={
             "geometry": {
                 "max_segments": 1000,
-                "geometry_mode": "legacy",  # Base value
+                "geometry_mode": "resvg",  # Base value
             }
         })
 
-        # Apply overrides with geometry_mode="resvg"
-        overrides = {"geometry": {"geometry_mode": "resvg"}}
+        # Apply overrides with geometry_mode="legacy"
+        overrides = {"geometry": {"geometry_mode": "legacy"}}
         result_context = exporter._apply_policy_overrides(base_context, overrides)
 
         # Verify geometry_mode was updated
         assert result_context is not None
         geometry_options = result_context.get("geometry")
         assert geometry_options is not None
-        assert geometry_options["geometry_mode"] == "resvg"
+        assert geometry_options["geometry_mode"] == "legacy"
         # Verify other fields are preserved
         assert geometry_options["max_segments"] == 1000
 
@@ -111,7 +111,7 @@ class TestGeometryModePropagation:
         base_context = PolicyContext(selections={
             "geometry": {
                 "max_segments": 1000,
-                "geometry_mode": "legacy",
+                "geometry_mode": "resvg",
             }
         })
 
@@ -128,7 +128,7 @@ class TestGeometryModePropagation:
         assert result_context is not None
         geometry_options = result_context.get("geometry")
         assert geometry_options is not None
-        assert geometry_options["geometry_mode"] == "legacy"
+        assert geometry_options["geometry_mode"] == "resvg"
 
     def test_policy_context_structure(self):
         """Test that PolicyContext has the expected structure."""
@@ -185,7 +185,7 @@ class TestGeometryModePropagation:
         """Test complete policy flow from exporter to IRConverter-like access.
 
         This verifies the complete flow:
-        1. SvgToPptxExporter(geometry_mode="resvg")
+        1. SvgToPptxExporter geometry mode defaults to "resvg"
         2. Creates policy_overrides with geometry_mode
         3. Policy context is built with merged overrides
         4. IRConverter can access geometry_mode via _policy_options("geometry")
@@ -194,8 +194,8 @@ class TestGeometryModePropagation:
         from svg2ooxml.policy import PolicyEngine
         from svg2ooxml.policy.setup import build_policy_engine
 
-        # Step 1: Create exporter with geometry_mode="resvg"
-        exporter = SvgToPptxExporter(geometry_mode="resvg")
+        # Step 1: Create exporter with default geometry_mode (should be "resvg")
+        exporter = SvgToPptxExporter()
         assert exporter._geometry_mode == "resvg"
 
         # Step 2: Simulate the flow in _render_svg
@@ -203,14 +203,16 @@ class TestGeometryModePropagation:
         policy_engine = build_policy_engine()
         base_context = policy_engine.evaluate()
 
-        # Verify base context has geometry with default geometry_mode="legacy"
+        # Verify base context has geometry with default geometry_mode="resvg"
         base_geometry = base_context.get("geometry")
         assert base_geometry is not None
-        assert base_geometry.get("geometry_mode") == "legacy"
+        assert base_geometry.get("geometry_mode") == "resvg"
 
         # Step 3: Apply overrides (as _render_svg does)
-        overrides = {"geometry": {"geometry_mode": "resvg"}}
-        final_context = exporter._apply_policy_overrides(base_context, overrides)
+        overrides: dict[str, dict[str, str]] = {}
+        if exporter._geometry_mode != "legacy":
+            overrides["geometry"] = {"geometry_mode": exporter._geometry_mode}
+        final_context = exporter._apply_policy_overrides(base_context, overrides or None)
 
         # Step 4: Verify final context has geometry_mode="resvg"
         final_geometry = final_context.get("geometry")

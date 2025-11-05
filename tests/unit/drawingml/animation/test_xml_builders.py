@@ -153,14 +153,11 @@ class TestTAVElement:
 
         assert tav.get("tm") == "50000"
 
-        # Check accel/decel children
-        accel_elem = tav.find(".//{http://schemas.openxmlformats.org/drawingml/2006/main}accel")
-        decel_elem = tav.find(".//{http://schemas.openxmlformats.org/drawingml/2006/main}decel")
-
-        assert accel_elem is not None
-        assert accel_elem.get("val") == "25000"
-        assert decel_elem is not None
-        assert decel_elem.get("val") == "25000"
+        # Check accel/decel attributes on tavPr
+        tav_pr = tav.find(".//{http://schemas.openxmlformats.org/drawingml/2006/main}tavPr")
+        assert tav_pr is not None
+        assert tav_pr.get("accel") == "25000"
+        assert tav_pr.get("decel") == "25000"
 
     def test_tav_with_metadata(self):
         builder = AnimationXMLBuilder()
@@ -189,12 +186,9 @@ class TestTAVElement:
             decel=0
         )
 
-        # Zero accel/decel should not create child elements
-        accel_elem = tav.find(".//{http://schemas.openxmlformats.org/drawingml/2006/main}accel")
-        decel_elem = tav.find(".//{http://schemas.openxmlformats.org/drawingml/2006/main}decel")
-
-        assert accel_elem is None
-        assert decel_elem is None
+        # Zero accel/decel should not create tavPr
+        tav_pr = tav.find(".//{http://schemas.openxmlformats.org/drawingml/2006/main}tavPr")
+        assert tav_pr is None
 
 
 class TestStartCondition:

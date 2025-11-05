@@ -104,12 +104,20 @@ class TraversalHooksMixin:
             "polyline": self._convert_polyline,
             "image": self._convert_image,
             "text": self._text_converter.convert,
+            "use": self._convert_use,
         }
 
         handler = dispatch.get(tag)
         if handler is None:
             return None
         try:
+            if tag == "use":
+                return handler(
+                    element=element,
+                    coord_space=coord_space,
+                    current_navigation=current_navigation,
+                    traverse_callback=traverse_callback,
+                )
             return handler(element=element, coord_space=coord_space)
         except Exception as exc:  # pragma: no cover - defensive logging
             self._logger.error("Failed to convert <%s>: %s", tag, exc)

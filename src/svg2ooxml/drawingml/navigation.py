@@ -181,12 +181,20 @@ def _spec_from_dict(data: dict[str, object]) -> NavigationSpec | None:
 
 
 def _action_uri_for_spec(spec: NavigationSpec) -> str | None:
+    """Generate PowerPoint action URI for navigation specs.
+
+    Only ACTION navigation (next/previous slide) generates ppaction:// URLs.
+    BOOKMARK and CUSTOM_SHOW navigation don't have direct PowerPoint equivalents
+    and would generate invalid ppaction:// URLs that PowerPoint strips during repair.
+
+    Per ECMA-376, ppaction://hlinkshowjump only supports the 'jump' parameter with
+    values: nextslide, previousslide, firstslide, lastslide, endshow.
+    The 'bookmark' and 'show' parameters are not part of the specification.
+    """
     if spec.kind == NavigationKind.ACTION and spec.action is not None:
         return f"ppaction://hlinkshowjump?jump={spec.action.value}"
-    if spec.kind == NavigationKind.BOOKMARK and spec.bookmark is not None:
-        return f"ppaction://hlinkshowjump?bookmark={spec.bookmark.name}"
-    if spec.kind == NavigationKind.CUSTOM_SHOW and spec.custom_show is not None:
-        return f"ppaction://hlinkshowjump?show={spec.custom_show.name}"
+    # BOOKMARK and CUSTOM_SHOW don't generate action URIs
+    # These would require PowerPoint-specific bookmark/show setup which differs from SVG
     return None
 
 

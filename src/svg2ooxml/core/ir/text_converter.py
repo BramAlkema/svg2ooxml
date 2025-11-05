@@ -262,16 +262,44 @@ class TextConverter:
         origin_x: float,
         origin_y: float,
     ) -> Rect:
+        """Estimate text bounding box from runs.
+
+        Note: font_size_pt is in points. Need to convert to pixels (96 DPI standard).
+        Proper text box height requires:
+        - Font size in pixels
+        - Line height (typically 1.2-1.5x font size)
+        - Font ascent/descent
+
+        Current approach uses conservative estimates to ensure text fits.
+        """
         if not runs:
             return Rect(origin_x, origin_y, 0.0, 0.0)
 
-        max_font = max(run.font_size_pt for run in runs)
+        max_font_pt = max(run.font_size_pt for run in runs)
+
+        # Convert points to pixels (96 DPI standard: 1pt = 96/72 pixels = 1.333px)
+        max_font_px = max_font_pt * (96.0 / 72.0)
+
         text_content = "".join(run.text for run in runs)
         lines = text_content.split("\n") if text_content else [""]
         max_line_length = max(len(line) for line in lines) if lines else 0
-        width = max_line_length * max_font * 0.6
-        height = max_font * 1.2 * max(1, len(lines))
-        return Rect(origin_x, origin_y - max_font, width, height)
+
+        # Width: Estimate average character width as 0.6x font size (monospace assumption)
+        # TODO: Use actual font metrics for more accurate width
+        width = max_line_length * max_font_px * 0.6
+
+        # Height: Use proper line height calculation
+        # Line height = font size + leading (extra space between lines)
+        # Standard line height is 1.2-1.5x font size
+        # We use 1.5x to ensure text doesn't clip
+        line_height = max_font_px * 1.5
+        height = line_height * max(1, len(lines))
+
+        # Origin offset: Position top of bbox above the baseline
+        # Typical font ascent is ~0.75-0.8 of font size
+        y_offset = max_font_px * 0.8
+
+        return Rect(origin_x, origin_y - y_offset, width, height)
 
     @staticmethod
     def _coerce_hex_color(token: str) -> str:

@@ -16,7 +16,7 @@ from lxml import etree as ET
 from svg2ooxml.common.tempfiles import temporary_directory
 from svg2ooxml.drawingml.assets import FontAsset, MediaAsset, NavigationAsset
 from svg2ooxml.drawingml.result import DrawingMLRenderResult
-from svg2ooxml.drawingml.writer import DrawingMLWriter
+from svg2ooxml.drawingml.writer import DrawingMLWriter, DEFAULT_SLIDE_SIZE
 from svg2ooxml.core.ir import IRScene
 from svg2ooxml.ir.text import EmbeddedFontPlan
 
@@ -143,10 +143,13 @@ class _PackagingContext:
         return mapping.get(content_type, ".bin")
 
 
+ALLOWED_SLIDE_SIZE_MODES = {"multipage", "same"}
+
+
 class PPTXPackageBuilder:
     """Create PPTX packages using the clean-slate template library."""
 
-    def __init__(self, *, assets_root: Path | None = None) -> None:
+    def __init__(self, *, assets_root: Path | None = None, slide_size_mode: str | None = None) -> None:
         self._assets_root = assets_root or ASSETS_ROOT
         self._base_template = self._assets_root / "clean_slate"
         self._content_types_template = (self._assets_root / "content_types.xml").read_text(encoding="utf-8")
@@ -155,6 +158,12 @@ class PPTXPackageBuilder:
         ).read_text(encoding="utf-8")
         self._writer = DrawingMLWriter(template_dir=self._assets_root)
         self._tracer: "ConversionTracer | None" = None
+        if slide_size_mode is not None and slide_size_mode not in ALLOWED_SLIDE_SIZE_MODES:
+            raise ValueError(
+                f"Unsupported slide_size_mode {slide_size_mode!r}. "
+                f"Expected one of {sorted(ALLOWED_SLIDE_SIZE_MODES)}."
+            )
+        self._slide_size_mode = slide_size_mode
 
     def build(
         self,
@@ -197,6 +206,7 @@ class PPTXPackageBuilder:
         *,
         tracer: "ConversionTracer | None" = None,
         persist_trace: bool | None = None,
+        slide_size_mode: str | None = None,
     ) -> Path:
         """Package pre-rendered slides returned by DrawingMLWriter."""
 
@@ -307,11 +317,13 @@ class PPTXPackageBuilder:
                     self._write_mask_parts(temp_path, all_masks)
                     packaged_fonts = self._write_font_parts(temp_path, font_assets)
 
-                # Determine presentation slide size from first slide
-                # (all slides should have the same dimensions)
-                presentation_slide_size = render_results[0].slide_size if render_results else None
+                presentation_slide_size = self._select_slide_size(
+                    render_results,
+                    slide_size_mode=slide_size_mode,
+                )
 
                 self._update_presentation_parts(temp_path, slide_entries, packaged_fonts, presentation_slide_size)
+                self._write_required_presentation_parts(temp_path)
                 self._write_content_types(temp_path, slide_entries, all_media, packaged_fonts, all_masks)
                 self._trace_packaging(
                         "content_types_updated",
@@ -666,6 +678,164 @@ class PPTXPackageBuilder:
 
         rels_tree.write(rels_path, encoding="utf-8", xml_declaration=True)
 
+    def _resolve_slide_size_mode(self, override: str | None) -> str:
+        resolved = override or self._slide_size_mode or "multipage"
+        if resolved not in ALLOWED_SLIDE_SIZE_MODES:
+            raise ValueError(
+                f"Unsupported slide_size_mode {resolved!r}. "
+                f"Expected one of {sorted(ALLOWED_SLIDE_SIZE_MODES)}."
+            )
+        return resolved
+
+    def _select_slide_size(
+        self,
+        render_results: Sequence[DrawingMLRenderResult],
+        *,
+        slide_size_mode: str | None,
+    ) -> tuple[int, int] | None:
+        if not render_results:
+            return None
+
+        mode = self._resolve_slide_size_mode(slide_size_mode)
+        if mode == "same":
+            selected = render_results[0].slide_size
+        else:
+            widths = [result.slide_size[0] for result in render_results]
+            heights = [result.slide_size[1] for result in render_results]
+            max_width = max([DEFAULT_SLIDE_SIZE[0], *widths])
+            max_height = max([DEFAULT_SLIDE_SIZE[1], *heights])
+            selected = (max_width, max_height)
+
+        self._trace_packaging(
+            "slide_size_mode_resolved",
+            metadata={
+                "mode": mode,
+                "width_emu": selected[0],
+                "height_emu": selected[1],
+                "slide_count": len(render_results),
+            },
+        )
+        return selected
+
+    def _write_required_presentation_parts(self, package_root: Path) -> None:
+        """Write required PPTX parts that PowerPoint expects.
+
+        Per ECMA-376, PowerPoint requires these files to validate properly:
+        - presProps.xml: Presentation properties
+        - viewProps.xml: View properties
+        - tableStyles.xml: Table styles
+        """
+        ppt_dir = package_root / "ppt"
+        ppt_dir.mkdir(parents=True, exist_ok=True)
+
+        # presProps.xml - Minimal presentation properties
+        pres_props_content = '''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<p:presentationPr xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"/>'''
+
+        pres_props_path = ppt_dir / "presProps.xml"
+        pres_props_path.write_text(pres_props_content, encoding="utf-8")
+        self._trace_packaging(
+            "required_part_written",
+            metadata={"file": "presProps.xml"},
+        )
+
+        # viewProps.xml - View properties with default normal view settings
+        view_props_content = '''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<p:viewPr xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
+    <p:normalViewPr>
+        <p:restoredLeft sz="15620"/>
+        <p:restoredTop sz="94660"/>
+    </p:normalViewPr>
+</p:viewPr>'''
+
+        view_props_path = ppt_dir / "viewProps.xml"
+        view_props_path.write_text(view_props_content, encoding="utf-8")
+        self._trace_packaging(
+            "required_part_written",
+            metadata={"file": "viewProps.xml"},
+        )
+
+        # tableStyles.xml - Table styles with default style reference
+        table_styles_content = '''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<a:tblStyleLst xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" def="{5C22544A-7EE6-4342-B048-85BDC9FD1C3A}"/>'''
+
+        table_styles_path = ppt_dir / "tableStyles.xml"
+        table_styles_path.write_text(table_styles_content, encoding="utf-8")
+        self._trace_packaging(
+            "required_part_written",
+            metadata={"file": "tableStyles.xml"},
+        )
+
+        # Update presentation.xml.rels to include relationships to these files
+        rels_path = ppt_dir / "_rels" / "presentation.xml.rels"
+        if rels_path.exists():
+            rels_tree = ET.parse(rels_path)
+            rels_root = rels_tree.getroot()
+
+            existing_rel_ids = {rel.get("Id") for rel in rels_root.findall(f"{{{REL_NS}}}Relationship")}
+            existing_targets = {rel.get("Target") for rel in rels_root.findall(f"{{{REL_NS}}}Relationship")}
+
+            # Add presProps relationship if not present
+            if "presProps.xml" not in existing_targets:
+                pres_props_rel_id = "rIdPresProps"
+                # Ensure unique ID
+                counter = 1
+                while pres_props_rel_id in existing_rel_ids:
+                    pres_props_rel_id = f"rIdPresProps{counter}"
+                    counter += 1
+
+                ET.SubElement(
+                    rels_root,
+                    f"{{{REL_NS}}}Relationship",
+                    {
+                        "Id": pres_props_rel_id,
+                        "Type": "http://schemas.openxmlformats.org/officeDocument/2006/relationships/presProps",
+                        "Target": "presProps.xml",
+                    },
+                )
+
+            # Add viewProps relationship if not present
+            if "viewProps.xml" not in existing_targets:
+                view_props_rel_id = "rIdViewProps"
+                counter = 1
+                while view_props_rel_id in existing_rel_ids:
+                    view_props_rel_id = f"rIdViewProps{counter}"
+                    counter += 1
+
+                ET.SubElement(
+                    rels_root,
+                    f"{{{REL_NS}}}Relationship",
+                    {
+                        "Id": view_props_rel_id,
+                        "Type": "http://schemas.openxmlformats.org/officeDocument/2006/relationships/viewProps",
+                        "Target": "viewProps.xml",
+                    },
+                )
+
+            # Add tableStyles relationship if not present
+            if "tableStyles.xml" not in existing_targets:
+                table_styles_rel_id = "rIdTableStyles"
+                counter = 1
+                while table_styles_rel_id in existing_rel_ids:
+                    table_styles_rel_id = f"rIdTableStyles{counter}"
+                    counter += 1
+
+                ET.SubElement(
+                    rels_root,
+                    f"{{{REL_NS}}}Relationship",
+                    {
+                        "Id": table_styles_rel_id,
+                        "Type": "http://schemas.openxmlformats.org/officeDocument/2006/relationships/tableStyles",
+                        "Target": "tableStyles.xml",
+                    },
+                )
+
+            rels_tree.write(rels_path, encoding="utf-8", xml_declaration=True)
+            self._trace_packaging(
+                "presentation_rels_updated",
+                metadata={"added_required_relationships": True},
+            )
+
     def _write_content_types(
         self,
         package_root: Path,
@@ -740,6 +910,21 @@ class PPTXPackageBuilder:
                     {"PartName": part_name, "ContentType": mask.content_type},
                 )
 
+        # Add required PPTX parts per ECMA-376
+        required_parts = [
+            ("/ppt/presProps.xml", "application/vnd.openxmlformats-officedocument.presentationml.presProps+xml"),
+            ("/ppt/viewProps.xml", "application/vnd.openxmlformats-officedocument.presentationml.viewProps+xml"),
+            ("/ppt/tableStyles.xml", "application/vnd.openxmlformats-officedocument.presentationml.tableStyles+xml"),
+        ]
+
+        for part_name, content_type in required_parts:
+            if part_name not in existing_overrides:
+                existing_overrides[part_name] = ET.SubElement(
+                    root,
+                    f"{{{CONTENT_NS}}}Override",
+                    {"PartName": part_name, "ContentType": content_type},
+                )
+
         ET.ElementTree(root).write(content_types_path, encoding="utf-8", xml_declaration=True)
 
 
@@ -751,9 +936,16 @@ def write_pptx(scene: IRScene, output_path: str | Path) -> Path:
 
 
 def _content_type_for_extension(extension: str) -> str:
+    """Get OOXML-compliant content type for font file extensions.
+
+    Per ECMA-376 and Office Open XML specification:
+    - TTF/OTF fonts should use 'application/x-fontdata'
+    - Obfuscated fonts use the dedicated OOXML type
+    - Web fonts (WOFF/WOFF2) use standard MIME types
+    """
     mapping = {
-        "ttf": "application/x-font-ttf",
-        "otf": "application/x-font-otf",
+        "ttf": "application/x-fontdata",  # PowerPoint-compliant (was x-font-ttf)
+        "otf": "application/x-fontdata",  # PowerPoint-compliant (was x-font-otf)
         "woff": "application/font-woff",
         "woff2": "application/font-woff2",
         "odttf": "application/vnd.openxmlformats-officedocument.obfuscatedFont",

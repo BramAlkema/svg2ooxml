@@ -4,15 +4,16 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import Any, Callable, Iterable, Sequence
 
 from lxml import etree
 
 from svg2ooxml.common.geometry.paths import PathParseError, normalize_path_to_segments, parse_path_data
 from svg2ooxml.ir.geometry import BezierSegment, LineSegment, Point, Rect, SegmentType
-from svg2ooxml.ir.paint import SolidPaint, Stroke
+from svg2ooxml.ir.paint import SolidPaint, Stroke, StrokeCap, StrokeJoin
 from svg2ooxml.ir.scene import ClipRef, Group, Image, MaskInstance, MaskRef, Path
-from svg2ooxml.ir.shapes import Circle, Ellipse, Line, Polygon, Polyline
+from svg2ooxml.ir.shapes import Circle, Ellipse, Line, Polygon, Polyline, Rectangle
 from svg2ooxml.ir.text import Run, TextAnchor, TextFrame
 from svg2ooxml.common.geometry import Matrix2D
 from svg2ooxml.policy.constants import FALLBACK_BITMAP, FALLBACK_EMF
@@ -23,7 +24,11 @@ from svg2ooxml.core.traversal import marker_runtime
 from svg2ooxml.core.styling import style_runtime as styles_runtime
 from svg2ooxml.core.traversal.constants import DEFAULT_TOLERANCE
 from svg2ooxml.core.traversal.coordinate_space import CoordinateSpace
-from svg2ooxml.core.traversal.geometry_utils import is_axis_aligned
+from svg2ooxml.core.traversal.geometry_utils import (
+    is_axis_aligned,
+    scaled_corner_radius,
+    transform_axis_aligned_rect,
+)
 from svg2ooxml.core.ir.rectangles import convert_rect as convert_rectangle
 from svg2ooxml.core.styling.style_extractor import StyleResult
 
@@ -82,6 +87,296 @@ class ShapeConversionMixin:
 
         return True
 
+    @staticmethod
+    def _coerce_float(value: float | None, default: float) -> float:
+        if value is None:
+            return default
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return default
+
+    @staticmethod
+    def _matrix2d_from_resvg(matrix: Matrix2D | None) -> Matrix2D:
+        if matrix is None:
+            return Matrix2D.identity()
+        if isinstance(matrix, Matrix2D):
+            return matrix
+        # Fallback: assume resvg Matrix signature (a, b, c, d, e, f)
+        return Matrix2D.from_values(
+            ShapeConversionMixin._coerce_float(getattr(matrix, "a", None), 1.0),
+            ShapeConversionMixin._coerce_float(getattr(matrix, "b", None), 0.0),
+            ShapeConversionMixin._coerce_float(getattr(matrix, "c", None), 0.0),
+            ShapeConversionMixin._coerce_float(getattr(matrix, "d", None), 1.0),
+            ShapeConversionMixin._coerce_float(getattr(matrix, "e", None), 0.0),
+            ShapeConversionMixin._coerce_float(getattr(matrix, "f", None), 0.0),
+        )
+
+    def _resvg_rect_to_rectangle(
+        self,
+        *,
+        element: etree._Element,
+        resvg_node: Any,
+        style: StyleResult,
+        metadata: dict[str, Any],
+        clip_ref: ClipRef | None,
+        mask_ref: MaskRef | None,
+        mask_instance: MaskInstance | None,
+    ) -> Rectangle | None:
+        if clip_ref is not None or mask_ref is not None or mask_instance is not None:
+            return None
+        if style.effects:
+            return None
+
+        transform_matrix = self._matrix2d_from_resvg(getattr(resvg_node, "transform", None))
+        if not is_axis_aligned(transform_matrix, DEFAULT_TOLERANCE):
+            return None
+
+        x = ShapeConversionMixin._coerce_float(getattr(resvg_node, "x", None), 0.0)
+        y = ShapeConversionMixin._coerce_float(getattr(resvg_node, "y", None), 0.0)
+        width = ShapeConversionMixin._coerce_float(getattr(resvg_node, "width", None), 0.0)
+        height = ShapeConversionMixin._coerce_float(getattr(resvg_node, "height", None), 0.0)
+
+        bounds = transform_axis_aligned_rect(
+            transform_matrix,
+            x,
+            y,
+            width,
+            height,
+            DEFAULT_TOLERANCE,
+        )
+        if bounds is None:
+            return None
+
+        rx = ShapeConversionMixin._coerce_float(getattr(resvg_node, "rx", None), 0.0)
+        ry = ShapeConversionMixin._coerce_float(getattr(resvg_node, "ry", None), 0.0)
+        if rx <= 0.0 and ry > 0.0:
+            rx = ry
+        if ry <= 0.0 and rx > 0.0:
+            ry = rx
+
+        max_rx = getattr(resvg_node, "width", 0.0) / 2.0
+        max_ry = getattr(resvg_node, "height", 0.0) / 2.0
+        rx = max(0.0, min(rx, max_rx))
+        ry = max(0.0, min(ry, max_ry))
+
+        if rx > DEFAULT_TOLERANCE and ry > DEFAULT_TOLERANCE:
+            if abs(rx - ry) > DEFAULT_TOLERANCE:
+                return None
+            corner_radius = scaled_corner_radius(rx, transform_matrix, DEFAULT_TOLERANCE)
+        else:
+            corner_radius = 0.0
+
+        rectangle = Rectangle(
+            bounds=bounds,
+            corner_radius=corner_radius,
+            fill=style.fill,
+            stroke=style.stroke,
+            opacity=style.opacity,
+            effects=list(style.effects),
+            metadata=metadata,
+            element_id=element.get("id"),
+        )
+        return rectangle
+
+    def _resvg_circle_to_circle(
+        self,
+        *,
+        element: etree._Element,
+        resvg_node: Any,
+        style: StyleResult,
+        metadata: dict[str, Any],
+        clip_ref: ClipRef | None,
+        mask_ref: MaskRef | None,
+        mask_instance: MaskInstance | None,
+    ) -> Circle | None:
+        if clip_ref is not None or mask_ref is not None or mask_instance is not None:
+            return None
+        if style.effects:
+            return None
+
+        transform_matrix = self._matrix2d_from_resvg(getattr(resvg_node, "transform", None))
+        cx = ShapeConversionMixin._coerce_float(getattr(resvg_node, "cx", None), 0.0)
+        cy = ShapeConversionMixin._coerce_float(getattr(resvg_node, "cy", None), 0.0)
+        raw_radius = ShapeConversionMixin._coerce_float(getattr(resvg_node, "r", None), 0.0)
+        if transform_matrix.is_identity(tolerance=DEFAULT_TOLERANCE):
+            center = Point(cx, cy)
+            scale = 1.0
+        else:
+            scale = _uniform_scale(transform_matrix, DEFAULT_TOLERANCE)
+            if scale is None:
+                return None
+            center = transform_matrix.transform_point(Point(cx, cy))
+
+        radius = raw_radius * scale
+        if radius <= DEFAULT_TOLERANCE:
+            return None
+
+        circle = Circle(
+            center=center,
+            radius=radius,
+            fill=style.fill,
+            stroke=style.stroke,
+            opacity=style.opacity,
+            effects=list(style.effects),
+            metadata=metadata,
+            element_id=element.get("id"),
+        )
+        return circle
+
+    def _resvg_ellipse_to_ellipse(
+        self,
+        *,
+        element: etree._Element,
+        resvg_node: Any,
+        style: StyleResult,
+        metadata: dict[str, Any],
+        clip_ref: ClipRef | None,
+        mask_ref: MaskRef | None,
+        mask_instance: MaskInstance | None,
+    ) -> Ellipse | None:
+        if clip_ref is not None or mask_ref is not None or mask_instance is not None:
+            return None
+        if style.effects:
+            return None
+
+        transform_matrix = self._matrix2d_from_resvg(getattr(resvg_node, "transform", None))
+        has_rotation = abs(transform_matrix.b) > DEFAULT_TOLERANCE or abs(transform_matrix.c) > DEFAULT_TOLERANCE
+        if has_rotation:
+            return None
+
+        scale_x = float(transform_matrix.a)
+        scale_y = float(transform_matrix.d)
+        translate_x = float(transform_matrix.e)
+        translate_y = float(transform_matrix.f)
+
+        cx = ShapeConversionMixin._coerce_float(getattr(resvg_node, "cx", None), 0.0)
+        cy = ShapeConversionMixin._coerce_float(getattr(resvg_node, "cy", None), 0.0)
+        raw_rx = ShapeConversionMixin._coerce_float(getattr(resvg_node, "rx", None), 0.0)
+        raw_ry = ShapeConversionMixin._coerce_float(getattr(resvg_node, "ry", None), 0.0)
+
+        if transform_matrix.is_identity(tolerance=DEFAULT_TOLERANCE):
+            center = Point(cx, cy)
+            radius_x = raw_rx
+            radius_y = raw_ry
+        else:
+            if abs(scale_x) <= DEFAULT_TOLERANCE or abs(scale_y) <= DEFAULT_TOLERANCE:
+                return None
+            center = Point(cx * scale_x + translate_x, cy * scale_y + translate_y)
+            radius_x = abs(raw_rx * scale_x)
+            radius_y = abs(raw_ry * scale_y)
+
+        if radius_x <= DEFAULT_TOLERANCE or radius_y <= DEFAULT_TOLERANCE:
+            return None
+
+        ellipse = Ellipse(
+            center=center,
+            radius_x=radius_x,
+            radius_y=radius_y,
+            fill=style.fill,
+            stroke=style.stroke,
+            opacity=style.opacity,
+            effects=list(style.effects),
+            metadata=metadata,
+            element_id=element.get("id"),
+        )
+        return ellipse
+
+    @staticmethod
+    def _combine_strokes(override: Stroke | None, base: Stroke | None) -> Stroke | None:
+        if base is None and override is None:
+            return None
+        if base is None:
+            return override
+        if override is None:
+            return base
+
+        paint = base.paint if base.paint is not None else override.paint
+        width = override.width if override.width is not None else base.width
+        join = override.join if override.join != StrokeJoin.MITER or base.join == StrokeJoin.MITER else base.join
+        cap = override.cap if override.cap != StrokeCap.BUTT or base.cap == StrokeCap.BUTT else base.cap
+        miter_limit = override.miter_limit if override.miter_limit != 4.0 or base.miter_limit == 4.0 else base.miter_limit
+        dash_array = override.dash_array if override.dash_array else base.dash_array
+        dash_offset = override.dash_offset if override.dash_offset else base.dash_offset
+        opacity = override.opacity if override.opacity != 1.0 else base.opacity
+
+        return Stroke(
+            paint=paint,
+            width=width,
+            join=join,
+            cap=cap,
+            miter_limit=miter_limit,
+            dash_array=dash_array,
+            dash_offset=dash_offset,
+            opacity=opacity,
+        )
+
+    def _materialize_style(
+        self,
+        element: etree._Element,
+        paint_style: dict[str, Any],
+    ) -> StyleResult:
+        metadata: dict[str, Any] = {}
+        fill = self._style_extractor._resolve_paint(
+            element,
+            paint_style.get("fill"),
+            opacity=float(paint_style.get("fill_opacity", 1.0)),
+            services=self._services,
+            context=self._css_context,
+            metadata=metadata,
+            role="fill",
+        )
+        stroke = self._style_extractor._resolve_stroke(
+            element,
+            paint_style,
+            services=self._services,
+            context=self._css_context,
+            metadata=metadata,
+        )
+        opacity = float(paint_style.get("opacity", 1.0))
+        effects = self._style_extractor._resolve_effects(
+            element,
+            services=self._services,
+            metadata=metadata,
+            context=self._css_context,
+        )
+        return StyleResult(
+            fill=fill,
+            stroke=stroke,
+            opacity=opacity,
+            effects=effects,
+            metadata=metadata,
+        )
+
+    def _merge_use_styles(self, use_style: StyleResult, source_style: StyleResult | None) -> StyleResult:
+        if source_style is None:
+            return use_style
+
+        fill = source_style.fill if source_style.fill is not None else use_style.fill
+        stroke = self._combine_strokes(use_style.stroke, source_style.stroke)
+
+        opacity = use_style.opacity if use_style.opacity != 1.0 else source_style.opacity
+
+        effects: list[Any] = []
+        effects.extend(source_style.effects)
+        for effect in use_style.effects:
+            if effect not in effects:
+                effects.append(effect)
+
+        metadata: dict[str, Any] = {}
+        if isinstance(source_style.metadata, dict):
+            metadata.update(source_style.metadata)
+        if isinstance(use_style.metadata, dict):
+            metadata.update(use_style.metadata)
+
+        return StyleResult(
+            fill=fill,
+            stroke=stroke,
+            opacity=opacity,
+            effects=effects,
+            metadata=metadata,
+        )
+
     def _convert_via_resvg(self, element: etree._Element, coord_space: CoordinateSpace):
         """Convert element using resvg adapters.
 
@@ -111,16 +406,91 @@ class ShapeConversionMixin:
         metadata = dict(style.metadata)
         self._attach_policy_metadata(metadata, "geometry")
 
-        # Get clip/mask refs
+        use_source = getattr(resvg_node, "use_source", None)
+        source_element = None
+        if isinstance(use_source, etree._Element):
+            href_attr = use_source.get("{http://www.w3.org/1999/xlink}href") or use_source.get("href")
+            reference_id = self._normalize_href_reference(href_attr)
+            if reference_id:
+                source_element = self._element_index.get(reference_id)
+        if source_element is None:
+            source_element = getattr(resvg_node, "source", None)
+        source_style: StyleResult | None = None
+        if isinstance(source_element, etree._Element):
+            paint_dict = self._style_resolver.compute_paint_style(source_element, context=self._css_context)
+            source_style = self._materialize_style(source_element, paint_dict)
+            style = self._merge_use_styles(style, source_style)
+            metadata.update(source_style.metadata or {})
+
+        # Override stroke/fill from resvg_node if available
+        # This preserves attributes from <use> elements that override referenced content
+        if hasattr(resvg_node, 'stroke') and resvg_node.stroke is not None:
+            from svg2ooxml.paint.resvg_bridge import resolve_stroke_style
+            tree = getattr(self, "_resvg_tree", None)
+            if tree is not None:
+                resvg_stroke = resolve_stroke_style(resvg_node.stroke, tree)
+                if resvg_stroke is not None and resvg_stroke.paint is not None:
+                    style = replace(style, stroke=resvg_stroke)
+        if hasattr(resvg_node, 'fill') and resvg_node.fill is not None:
+            from svg2ooxml.paint.resvg_bridge import resolve_fill_paint
+            tree = getattr(self, "_resvg_tree", None)
+            if tree is not None:
+                resvg_fill = resolve_fill_paint(resvg_node.fill, tree)
+                if resvg_fill is not None:
+                    style = replace(style, fill=resvg_fill)
+
+        node_type = type(resvg_node).__name__
+        # Get clip/mask refs (shared across shape types)
         clip_ref = self._resolve_clip_ref(element)
         mask_ref, mask_instance = self._resolve_mask_ref(element)
+
+        if node_type == "RectNode":
+            rectangle = self._resvg_rect_to_rectangle(
+                element=element,
+                resvg_node=resvg_node,
+                style=style,
+                metadata=metadata,
+                clip_ref=clip_ref,
+                mask_ref=mask_ref,
+                mask_instance=mask_instance,
+            )
+            if rectangle is not None:
+                self._trace_geometry_decision(element, "resvg", rectangle.metadata)
+                return rectangle
+
+        if node_type == "CircleNode":
+            circle = self._resvg_circle_to_circle(
+                element=element,
+                resvg_node=resvg_node,
+                style=style,
+                metadata=metadata,
+                clip_ref=clip_ref,
+                mask_ref=mask_ref,
+                mask_instance=mask_instance,
+            )
+            if circle is not None:
+                self._trace_geometry_decision(element, "resvg", circle.metadata)
+                return circle
+
+        if node_type == "EllipseNode":
+            ellipse = self._resvg_ellipse_to_ellipse(
+                element=element,
+                resvg_node=resvg_node,
+                style=style,
+                metadata=metadata,
+                clip_ref=clip_ref,
+                mask_ref=mask_ref,
+                mask_instance=mask_instance,
+            )
+            if ellipse is not None:
+                self._trace_geometry_decision(element, "resvg", ellipse.metadata)
+                return ellipse
 
         # Convert using resvg adapter
         adapter = ResvgShapeAdapter()
         segments = None
 
         # Route to appropriate adapter method based on node type
-        node_type = type(resvg_node).__name__
         try:
             if node_type == "PathNode":
                 segments = adapter.from_path_node(resvg_node)
@@ -158,8 +528,33 @@ class ShapeConversionMixin:
             metadata=metadata,
         )
         self._process_mask_metadata(path)
+        self._apply_marker_metadata(element, path.metadata)
+        marker_shapes = self._build_marker_shapes(element, path)
         self._trace_geometry_decision(element, "resvg", path.metadata)
+        if marker_shapes:
+            return [path, *marker_shapes]
         return path
+
+    def _convert_use(
+        self,
+        *,
+        element: etree._Element,
+        coord_space: CoordinateSpace,
+        current_navigation,
+        traverse_callback,
+    ):
+        """Convert <use> elements via resvg or fall back to legacy expansion."""
+        if self._can_use_resvg(element):
+            resvg_result = self._convert_via_resvg(element, coord_space)
+            if resvg_result is not None:
+                return resvg_result
+
+        return self.expand_use(
+            element=element,
+            coord_space=coord_space,
+            current_navigation=current_navigation,
+            traverse_callback=traverse_callback,
+        )
 
     def _convert_rect(self, *, element: etree._Element, coord_space: CoordinateSpace):
         # Try resvg path first if available

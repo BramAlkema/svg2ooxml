@@ -78,7 +78,12 @@ class SetAnimationHandler(AnimationHandler):
             return False
 
         anim_type_str = self._animation_type_to_str(animation_type)
-        return anim_type_str == "SET" or "SET" in anim_type_str
+        canonical_token = anim_type_str
+        for delimiter in (".", ":"):
+            if delimiter in canonical_token:
+                canonical_token = canonical_token.split(delimiter)[-1]
+        canonical_token = canonical_token.replace("-", "_")
+        return canonical_token == "SET"
 
     def build(
         self,

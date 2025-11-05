@@ -33,6 +33,7 @@ __all__ = [
     'load_dom',
     'parse_color',
     'prepare_svg_content',
+    'register_palette',
     'resolve_viewport',
     'sanitize_svg',
     'viewbox_to_px',
@@ -59,7 +60,7 @@ __all__ = [
 ]
 
 # map symbol -> relative module
-_symbol_map = {'fix_encoding_issues': 'content_cleaner', 'prepare_svg_content': 'content_cleaner', 'XML_DECLARATION': 'content_cleaner', 'parse_color': 'colors.parsing', 'CSSFontFaceParser': 'css_font_parser', 'ParserOptions': 'dom_loader', 'load_dom': 'dom_loader', 'XMLParser': 'dom_loader', 'SafeSVGNormalizer': 'normalization', 'NormalizationSettings': 'normalization', 'ParserReferences': 'reference_collector', 'collect_references': 'reference_collector', 'has_external_references': 'references', 'EXTERNAL_PROTOCOLS': 'references', 'collect_namespaces': 'references', 'ParseResult': 'result', 'sanitize_svg': 'sanitizers', 'compute_statistics': 'statistics', 'StyleContext': 'style_context', 'resolve_viewport': 'style_context', 'build_style_context': 'style_context', 'SVGParser': 'svg_parser', 'ParserConfig': 'svg_parser', 'SwitchEvaluator': 'switch_evaluator', 'ConversionContext': 'units', 'UnitConverter': 'units', 'viewbox_to_px': 'units', 'ensure_namespaces': 'validators', 'has_basic_dimensions': 'validators', 'DEFAULT_NAMESPACES': 'validators', 'ensure_svg_root': 'validators', 'children': 'xml_utils', 'walk': 'xml_utils'}
+_symbol_map = {'fix_encoding_issues': 'content_cleaner', 'prepare_svg_content': 'content_cleaner', 'XML_DECLARATION': 'content_cleaner', 'parse_color': 'colors.parsing', 'register_palette': 'colors.parsing', 'CSSFontFaceParser': 'css_font_parser', 'ParserOptions': 'dom_loader', 'load_dom': 'dom_loader', 'XMLParser': 'dom_loader', 'SafeSVGNormalizer': 'normalization', 'NormalizationSettings': 'normalization', 'ParserReferences': 'reference_collector', 'collect_references': 'reference_collector', 'has_external_references': 'references', 'EXTERNAL_PROTOCOLS': 'references', 'collect_namespaces': 'references', 'ParseResult': 'result', 'sanitize_svg': 'sanitizers', 'compute_statistics': 'statistics', 'StyleContext': 'style_context', 'resolve_viewport': 'style_context', 'build_style_context': 'style_context', 'SVGParser': 'svg_parser', 'ParserConfig': 'svg_parser', 'SwitchEvaluator': 'switch_evaluator', 'ConversionContext': 'units', 'UnitConverter': 'units', 'viewbox_to_px': 'units', 'ensure_namespaces': 'validators', 'has_basic_dimensions': 'validators', 'DEFAULT_NAMESPACES': 'validators', 'ensure_svg_root': 'validators', 'children': 'xml_utils', 'walk': 'xml_utils'}
 _module_map = {'batch': 'batch', 'colors': 'colors', 'content_cleaner': 'content_cleaner', 'css_font_parser': 'css_font_parser', 'dom_loader': 'dom_loader', 'normalization': 'normalization', 'preprocess': 'preprocess', 'reference_collector': 'reference_collector', 'references': 'references', 'result': 'result', 'sanitizers': 'sanitizers', 'split': 'split', 'statistics': 'statistics', 'style_context': 'style_context', 'svg_parser': 'svg_parser', 'switch_evaluator': 'switch_evaluator', 'units': 'units', 'validators': 'validators', 'xml_utils': 'xml_utils'}
 
 
