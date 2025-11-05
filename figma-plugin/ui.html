@@ -429,20 +429,18 @@ async function signInBrowserFlow() {
     '_blank',
     'width=500,height=600,menubar=no,toolbar=no,location=no'
   );
-  window.debugLog('🟢 Window.open returned: ' + (authWindow ? 'SUCCESS' : 'NULL/BLOCKED'));
+
+  // Note: In Figma plugins, window.open() may return null even if popup opens successfully
+  // This is due to Figma's sandboxing, but the popup still works
+  window.debugLog('🟢 Window.open returned: ' + (authWindow ? 'SUCCESS' : 'NULL (but popup may still work)'));
   console.log('🔵 Window.open returned:', authWindow);
 
-  if (!authWindow) {
-    window.debugLog('❌ Popup was blocked!');
-    console.error('❌ Popup was blocked');
-    throw new Error('Popup blocked. Please allow popups and try again.');
-  }
-  window.debugLog('✅ Popup opened successfully');
-  console.log('✅ Popup opened successfully');
+  window.debugLog('✅ Popup should be open - complete sign-in there');
+  console.log('✅ Popup should be open');
 
   showStatus('Complete sign-in in the popup window...', 'info');
 
-  // Poll for token
+  // Poll for token (pass null if we don't have window reference)
   const result = await pollForAuthToken(authKey, authWindow);
 
   currentUser = { email: result.email };
@@ -475,8 +473,8 @@ async function pollForAuthToken(authKey, authWindow) {
   while (Date.now() - startTime < AUTH_TIMEOUT) {
     attempts++;
 
-    // Check if window was closed
-    if (authWindow.closed) {
+    // Check if window was closed (only if we have a reference to it)
+    if (authWindow && authWindow.closed) {
       throw new Error('Sign-in window was closed before completing authentication');
     }
 
@@ -485,8 +483,8 @@ async function pollForAuthToken(authKey, authWindow) {
       const data = await response.json();
 
       if (data.status === 'ready') {
-        // Close auth window
-        if (!authWindow.closed) {
+        // Close auth window (only if we have a reference to it)
+        if (authWindow && !authWindow.closed) {
           authWindow.close();
         }
         return {
@@ -497,7 +495,7 @@ async function pollForAuthToken(authKey, authWindow) {
       }
 
       if (data.status === 'expired' || data.status === 'not_found') {
-        if (!authWindow.closed) {
+        if (authWindow && !authWindow.closed) {
           authWindow.close();
         }
         throw new Error('Authentication failed or expired');
@@ -514,7 +512,7 @@ async function pollForAuthToken(authKey, authWindow) {
     await sleep(AUTH_POLL_INTERVAL);
   }
 
-  if (!authWindow.closed) {
+  if (authWindow && !authWindow.closed) {
     authWindow.close();
   }
   throw new Error('Authentication timeout');
