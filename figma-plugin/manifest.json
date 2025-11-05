@@ -3,7 +3,7 @@
   "id": "1567976537857917445",
   "api": "1.0.0",
   "main": "code.js",
-  "ui": "ui.html",
+  "ui": "test-ui.html",
   "documentAccess": "dynamic-page",
   "networkAccess": {
     "allowedDomains": [
