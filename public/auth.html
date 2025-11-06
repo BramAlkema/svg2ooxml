@@ -213,17 +213,29 @@
                 provider.addScope('https://www.googleapis.com/auth/drive.file');
                 provider.addScope('https://www.googleapis.com/auth/presentations');
 
+                // Request offline access to get refresh token
+                provider.setCustomParameters({
+                    access_type: 'offline',
+                    prompt: 'consent'
+                });
+
                 // Sign in with popup
                 const result = await auth.signInWithPopup(provider);
 
-                // Get ID token and refresh token
+                // Get Firebase ID token
                 const token = await result.user.getIdToken();
-                const refreshToken = result.user.refreshToken;
+
+                // Get Google OAuth refresh token from credential
+                // This is the actual OAuth refresh token, not Firebase's refresh token
+                const googleRefreshToken = result.credential?.refreshToken || result.user.refreshToken;
+
+                console.log('OAuth credential:', result.credential);
+                console.log('Has Google refresh token:', !!googleRefreshToken);
 
                 // Store both tokens in database
                 await database.ref(`auth-tokens/${authKey}`).set({
                     token: token,
-                    refreshToken: refreshToken,
+                    refreshToken: googleRefreshToken,
                     email: result.user.email,
                     timestamp: Date.now(),
                     expires: Date.now() + 300000 // 5 minutes
