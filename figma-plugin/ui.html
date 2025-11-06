@@ -953,7 +953,8 @@ async function createExportJob(frames, fileKey, fileName) {
     })),
     output_format: 'slides',
     figma_file_id: fileKey,
-    figma_file_name: fileName
+    figma_file_name: fileName,
+    user_refresh_token: currentRefreshToken  // Include refresh token for OAuth
   };
 
   const requestBodyStr = JSON.stringify(requestBody);
