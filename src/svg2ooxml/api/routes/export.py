@@ -75,10 +75,25 @@ async def create_export_job(
             f"user_id={firebase_uid}"
         )
 
-        # Check subscription and usage limits (unless disabled for testing)
+        # Check subscription and usage limits (unless disabled for testing or user is admin)
         disable_quota = os.getenv("DISABLE_EXPORT_QUOTA", "false").lower() == "true"
 
+        # Check if user has admin/unlimited flag in Firestore
+        user_has_unlimited = False
         if not disable_quota:
+            try:
+                from ..auth.firebase import get_firestore_client
+                firestore_client = get_firestore_client()
+                user_doc = firestore_client.collection("users").document(firebase_uid).get()
+                if user_doc.exists:
+                    user_data = user_doc.to_dict()
+                    user_has_unlimited = user_data.get("unlimited_exports", False) or user_data.get("admin", False)
+                    if user_has_unlimited:
+                        logger.info(f"User {firebase_uid} has unlimited quota flag (unlimited_exports or admin)")
+            except Exception as e:
+                logger.debug(f"Could not check user unlimited flag: {e}")
+
+        if not disable_quota and not user_has_unlimited:
             from datetime import datetime
 
             current_month = datetime.now().strftime("%Y-%m")
@@ -112,8 +127,10 @@ async def create_export_job(
                             },
                         },
                     )
+        elif user_has_unlimited:
+            logger.info(f"Export quota checking bypassed for user {firebase_uid} (user has unlimited_exports flag)")
         else:
-            logger.info(f"Export quota checking disabled for user {firebase_uid} (DISABLE_EXPORT_QUOTA=true)")
+            logger.info(f"Export quota checking disabled globally (DISABLE_EXPORT_QUOTA=true)")
 
         # Create job in Firestore with user authentication
         job_id = await run_in_threadpool(
@@ -128,8 +145,8 @@ async def create_export_job(
             user_refresh_token=request.user_refresh_token,  # Pass refresh token for OAuth
         )
 
-        # Increment usage counter (unless quota is disabled)
-        if not disable_quota:
+        # Increment usage counter (unless quota is disabled or user has unlimited)
+        if not disable_quota and not user_has_unlimited:
             await run_in_threadpool(
                 repo.increment_usage, firebase_uid, current_month
             )
