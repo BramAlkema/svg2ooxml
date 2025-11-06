@@ -125,6 +125,7 @@ async def create_export_job(
             fonts=request.fonts,
             user=user,  # Pass user info for authentication
             parent_folder_id=request.parent_folder_id,
+            user_refresh_token=request.user_refresh_token,  # Pass refresh token for OAuth
         )
 
         # Increment usage counter (unless quota is disabled)

@@ -1,0 +1,47 @@
+{
+  "started_at": "2025-11-05T17:01:47.939225",
+  "completed_at": "2025-11-05T17:01:58.419642",
+  "total_files": 3,
+  "submitted": 3,
+  "completed": 3,
+  "failed": 0,
+  "skipped": 0,
+  "results": [
+    {
+      "svg_file": "animate-dom-01-f.svg",
+      "job_id": "4b3d8361-998f-473a-9b35-cec3aecd1ebf",
+      "status": "completed",
+      "message": "Export completed (Slides publishing unavailable)",
+      "slides_url": null,
+      "slides_presentation_id": null,
+      "error": null,
+      "created_at": "2025-11-05T17:01:49.434425",
+      "completed_at": "2025-11-05T17:01:52.102602",
+      "duration_seconds": 2.668177
+    },
+    {
+      "svg_file": "animate-dom-02-f.svg",
+      "job_id": "1a898561-a476-4ff4-81cf-37b3dbe2f600",
+      "status": "completed",
+      "message": "Export completed (Slides publishing unavailable)",
+      "slides_url": null,
+      "slides_presentation_id": null,
+      "error": null,
+      "created_at": "2025-11-05T17:01:51.469629",
+      "completed_at": "2025-11-05T17:01:52.299754",
+      "duration_seconds": 0.830125
+    },
+    {
+      "svg_file": "animate-elem-02-t.svg",
+      "job_id": "667f9887-f37f-4d3e-b633-5e5127225941",
+      "status": "completed",
+      "message": "Export completed (Slides publishing unavailable)",
+      "slides_url": null,
+      "slides_presentation_id": null,
+      "error": null,
+      "created_at": "2025-11-05T17:01:57.792439",
+      "completed_at": "2025-11-05T17:01:58.419564",
+      "duration_seconds": 0.627125
+    }
+  ]
+}

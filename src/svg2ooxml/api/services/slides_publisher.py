@@ -58,6 +58,7 @@ def upload_pptx_to_slides(
     presentation_title: str | None = None,
     parent_folder_id: str | None = None,
     user_token: str | None = None,
+    user_refresh_token: str | None = None,
 ) -> SlidesPublishResult:
     """
     Upload ``pptx_path`` to Google Drive and promote it to Google Slides.
@@ -67,6 +68,7 @@ def upload_pptx_to_slides(
         presentation_title: Optional title for the presentation
         parent_folder_id: Optional Google Drive folder ID
         user_token: Optional Firebase ID token for user authentication
+        user_refresh_token: Optional Firebase refresh token for OAuth token refresh
 
     Returns:
         SlidesPublishResult describing the uploaded presentation.
@@ -85,8 +87,8 @@ def upload_pptx_to_slides(
     # Build credentials: user token if provided, otherwise service account
     try:
         if user_token:
-            credentials = _build_user_credentials(user_token)
-            logger.info("Using user credentials for Slides upload")
+            credentials = _build_user_credentials(user_token, user_refresh_token)
+            logger.info("Using user credentials for Slides upload (refresh=%s)", bool(user_refresh_token))
         else:
             credentials, _ = google.auth.default(scopes=SLIDES_SCOPES)  # type: ignore[attr-defined]
             logger.info("Using service account credentials for Slides upload (fallback)")
@@ -175,26 +177,52 @@ def upload_pptx_to_slides(
     )
 
 
-def _build_user_credentials(id_token: str) -> UserCredentials:
+def _build_user_credentials(id_token: str, refresh_token: str | None = None) -> UserCredentials:
     """
-    Build user credentials from Firebase ID token.
+    Build user credentials from Firebase ID token and optional refresh token.
 
     Args:
         id_token: Firebase ID token from authenticated user
+        refresh_token: Optional Firebase refresh token for long-lived access
 
     Returns:
         Google OAuth2 user credentials
 
     Note:
-        Firebase ID tokens can be used directly with Google APIs that support
-        OpenID Connect (like Drive/Slides). These credentials will expire after
-        1 hour. For long-running jobs, consider implementing refresh logic.
+        If refresh_token is provided, creates credentials with auto-refresh capability.
+        This requires FIREBASE_WEB_CLIENT_ID and FIREBASE_WEB_CLIENT_SECRET env vars.
+        Without refresh token, credentials expire after 1 hour.
     """
     if not _GOOGLE_AVAILABLE:
         raise SlidesPublishingError("Google API client libraries not available")
 
-    # Firebase ID tokens are OpenID Connect tokens that work with Google APIs
-    credentials = UserCredentials(token=id_token)
+    # If we have a refresh token, create OAuth credentials with auto-refresh
+    if refresh_token:
+        client_id = os.getenv("FIREBASE_WEB_CLIENT_ID")
+        client_secret = os.getenv("FIREBASE_WEB_CLIENT_SECRET")
+
+        if not client_id or not client_secret:
+            logger.warning(
+                "Refresh token provided but FIREBASE_WEB_CLIENT_ID or "
+                "FIREBASE_WEB_CLIENT_SECRET not set. Using ID token only."
+            )
+            credentials = UserCredentials(token=id_token)
+        else:
+            # Create OAuth credentials with refresh capability
+            credentials = UserCredentials(
+                token=id_token,
+                refresh_token=refresh_token,
+                token_uri="https://oauth2.googleapis.com/token",
+                client_id=client_id,
+                client_secret=client_secret,
+                scopes=SLIDES_SCOPES,
+            )
+            logger.info("Created user credentials with refresh token support")
+    else:
+        # Firebase ID tokens are OpenID Connect tokens that work with Google APIs
+        # but expire after 1 hour without refresh capability
+        credentials = UserCredentials(token=id_token)
+        logger.info("Created user credentials with ID token only (1 hour expiry)")
 
     return credentials
 
