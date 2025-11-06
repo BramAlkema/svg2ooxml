@@ -1070,7 +1070,17 @@ async function pollJobStatus(jobId) {
 function handleExportSuccess(data) {
   hideProgress();
 
-  const slidesUrl = data.slides_url;
+  window.debugLog('🟢 Export completed! Data: ' + JSON.stringify(data).substring(0, 200));
+
+  const slidesUrl = data.slides_url || data.result?.slides_url || data.output_url;
+
+  if (!slidesUrl) {
+    window.debugLog('❌ No slides_url in response data');
+    console.error('Export completed but no slides_url found in response:', data);
+    showStatus('Export completed but no Slides URL was returned. Check the console for details.', 'error');
+    return;
+  }
+
   const editUrl = slidesUrl.replace('/pub', '/edit');
 
   showStatus(
