@@ -88,6 +88,10 @@ class ExportRequest(BaseModel):
         None,
         description="Google Drive folder ID where Slides should be created (slides format only)",
     )
+    user_refresh_token: Optional[str] = Field(
+        None,
+        description="Firebase refresh token for OAuth operations (required for Slides publishing)",
+    )
 
 
 class ExportResponse(BaseModel):
