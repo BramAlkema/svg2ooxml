@@ -119,6 +119,7 @@ class ExportService:
         fonts: Optional[Sequence[RequestedFont]],
         user: Optional[dict] = None,
         parent_folder_id: Optional[str] = None,
+        user_refresh_token: Optional[str] = None,
     ) -> str:
         """Register a new export job.
 
@@ -130,6 +131,7 @@ class ExportService:
             fonts: Optional fonts to download
             user: Optional user authentication info from Firebase (uid, email, token, token_hash)
             parent_folder_id: Optional Google Drive folder ID where Slides should be created
+            user_refresh_token: Optional Firebase refresh token for OAuth operations
         """
 
         job_id = str(uuid.uuid4())
@@ -175,12 +177,22 @@ class ExportService:
             # Encrypt and store token for background processing
             job_data["auth_token_encrypted"] = encrypt_token(user["token"])
 
-            logger.info(
-                "Created job %s with %d frame(s) for user %s",
-                job_id,
-                len(frames),
-                user["uid"],
-            )
+            # Store refresh token if provided (needed for OAuth operations like Slides publishing)
+            if user_refresh_token:
+                job_data["auth_refresh_token_encrypted"] = encrypt_token(user_refresh_token)
+                logger.info(
+                    "Created job %s with %d frame(s) for user %s (with refresh token for OAuth)",
+                    job_id,
+                    len(frames),
+                    user["uid"],
+                )
+            else:
+                logger.info(
+                    "Created job %s with %d frame(s) for user %s",
+                    job_id,
+                    len(frames),
+                    user["uid"],
+                )
         else:
             logger.info("Created job %s with %d frame(s)", job_id, len(frames))
 
@@ -255,6 +267,17 @@ class ExportService:
             )
 
             job_data = self.get_job_status(job_id)
+
+            # Decrypt refresh token if available (needed for OAuth operations like Slides publishing)
+            user_refresh_token = None
+            if job_data.get("auth_refresh_token_encrypted"):
+                from ..auth.encryption import decrypt_token
+                try:
+                    user_refresh_token = decrypt_token(job_data["auth_refresh_token_encrypted"])
+                    logger.info("Job %s: Using refresh token for OAuth operations", job_id)
+                except Exception as e:
+                    logger.warning("Job %s: Failed to decrypt refresh token: %s", job_id, e)
+
             requested_fonts = self._load_requested_fonts(job_data)
             frames = self._load_svg_frames(job_id, job_data)
 
@@ -316,6 +339,7 @@ class ExportService:
                             job_data=job_data,
                             cache_key=cache_key,
                             user_token=user_token,
+                            user_refresh_token=user_refresh_token,
                         )
                     except SlidesPublishingError as exc:
                         logger.warning("Job %s: Slides publishing failed (%s)", job_id, exc)
@@ -727,6 +751,7 @@ class ExportService:
         job_data: dict[str, Any],
         cache_key: str,
         user_token: str | None = None,
+        user_refresh_token: str | None = None,
     ) -> SlidesPublishResult:
         """Upload ``pptx_path`` to Google Slides and return sharing metadata.
 
@@ -736,6 +761,7 @@ class ExportService:
             job_data: Job metadata from Firestore
             cache_key: Cache key for the conversion
             user_token: Optional decrypted Firebase ID token for user authentication
+            user_refresh_token: Optional decrypted Firebase refresh token for OAuth
         """
 
         presentation_title = job_data.get("figma_file_name") or job_data.get("figma_file_id") or f"Export {job_id}"
@@ -747,6 +773,7 @@ class ExportService:
                 presentation_title=presentation_title,
                 parent_folder_id=parent_folder,
                 user_token=user_token,
+                user_refresh_token=user_refresh_token,
             )
         except SlidesPublishingError as exc:
             logger.error("Publishing job %s to Slides failed: %s", job_id, exc)
