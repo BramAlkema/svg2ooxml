@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Connecting - svg2ooxml</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .container {
+            background: white;
+            padding: 40px;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            max-width: 400px;
+            width: 100%;
+            text-align: center;
+        }
+        .logo {
+            font-weight: bold;
+            font-size: 1.2em;
+            color: #667eea;
+            margin-bottom: 10px;
+        }
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        #msg {
+            font-size: 16px;
+            color: #333;
+            margin-top: 20px;
+        }
+        .success {
+            color: #2e7d32;
+        }
+        .error {
+            color: #c62828;
+        }
+        .close-info {
+            margin-top: 20px;
+            font-size: 0.85em;
+            color: #999;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo">svg2ooxml</div>
+        <div class="spinner" id="spinner"></div>
+        <div id="msg">Connecting to Google Drive...</div>
+        <div id="close-info" class="close-info" style="display: none;">
+            You can close this window
+        </div>
+    </div>
+
+    <script>
+        (async () => {
+            const msgEl = document.getElementById('msg');
+            const spinnerEl = document.getElementById('spinner');
+            const closeInfoEl = document.getElementById('close-info');
+
+            const params = new URLSearchParams(location.search);
+            const code = params.get('code');
+            const state = params.get('state'); // our one-time authKey
+            const error = params.get('error');
+
+            if (error) {
+                spinnerEl.style.display = 'none';
+                msgEl.textContent = 'Authorization denied: ' + error;
+                msgEl.className = 'error';
+                return;
+            }
+
+            if (!code || !state) {
+                spinnerEl.style.display = 'none';
+                msgEl.textContent = 'Missing authorization code or state.';
+                msgEl.className = 'error';
+                return;
+            }
+
+            try {
+                const resp = await fetch('https://svg2ooxml-export-sghya3t5ya-ew.a.run.app/api/v1/oauth/exchange', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ code, state })
+                });
+
+                const data = await resp.json();
+
+                spinnerEl.style.display = 'none';
+
+                if (resp.ok && data.ok) {
+                    msgEl.textContent = '✓ Connected to Google Drive!';
+                    msgEl.className = 'success';
+                    closeInfoEl.style.display = 'block';
+
+                    // Auto-close after 2 seconds
+                    setTimeout(() => {
+                        window.close();
+                    }, 2000);
+                } else {
+                    msgEl.textContent = 'Connection failed: ' + (data.error || data.detail || 'Unknown error');
+                    msgEl.className = 'error';
+                }
+            } catch (e) {
+                spinnerEl.style.display = 'none';
+                msgEl.textContent = 'Network error: ' + e.message;
+                msgEl.className = 'error';
+            }
+        })();
+    </script>
+</body>
+</html>

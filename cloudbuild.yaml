@@ -48,7 +48,7 @@ steps:
       - --service-account=svg2ooxml-runner@$PROJECT_ID.iam.gserviceaccount.com
       - --allow-unauthenticated
       - --set-env-vars=PYTHONPATH=/workspace/src,GCP_PROJECT=$PROJECT_ID,CLOUD_TASKS_LOCATION=$_REGION,CLOUD_TASKS_QUEUE=svg2ooxml-jobs,FIREBASE_PROJECT_ID=$PROJECT_ID,FIREBASE_SERVICE_ACCOUNT_PATH=/secrets/firebase-service-account,ENVIRONMENT=production,STRIPE_SECRET_KEY=${_STRIPE_SECRET_KEY},STRIPE_PRICE_ID_PRO=${_STRIPE_PRICE_ID_PRO},STRIPE_PRICE_ID_ENTERPRISE=${_STRIPE_PRICE_ID_ENTERPRISE},DISABLE_EXPORT_QUOTA=false
-      - --update-secrets=/secrets/firebase-service-account=firebase-service-account:latest,TOKEN_ENCRYPTION_KEY=token-encryption-key:latest
+      - --update-secrets=/secrets/firebase-service-account=firebase-service-account:latest,TOKEN_ENCRYPTION_KEY=token-encryption-key:latest,FIREBASE_WEB_CLIENT_ID=firebase-web-client-id:latest,FIREBASE_WEB_CLIENT_SECRET=firebase-web-client-secret:latest
 
   # Update SERVICE_URL after deployment (get actual URL from Cloud Run)
   - name: gcr.io/google.com/cloudsdktool/cloud-sdk

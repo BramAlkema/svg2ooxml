@@ -145,6 +145,42 @@ async def create_export_job(
         else:
             logger.info(f"Export quota checking disabled globally (DISABLE_EXPORT_QUOTA=true)")
 
+        # Check for OAuth token if Slides format is requested
+        if request.output_format.lower() == "slides":
+            from ..auth.firebase import get_firestore_client
+
+            def check_oauth_token():
+                logger.info(f"Checking OAuth token for user {firebase_uid}")
+                firestore_client = get_firestore_client()
+                user_doc = firestore_client.collection("users").document(firebase_uid).get()
+                if user_doc.exists:
+                    user_data = user_doc.to_dict()
+                    google_oauth = user_data.get("google_oauth", {})
+                    has_token = bool(google_oauth.get("refresh_token_encrypted"))
+                    logger.info(f"User {firebase_uid} has OAuth token: {has_token}")
+                    return has_token
+                return False
+
+            has_oauth_token = await run_in_threadpool(check_oauth_token)
+
+            if not has_oauth_token:
+                logger.warning(f"User {firebase_uid} requested Slides export but has no OAuth token")
+                # Import the OAuth router function to create auth key
+                from .oauth import create_auth_key
+
+                # Create auth key and connect URL
+                connect_info = await create_auth_key(user)
+
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail={
+                        "error": "oauth_required",
+                        "message": "Google Drive connection required for Slides publishing",
+                        "connect_url": connect_info["connect_url"],
+                        "auth_key": connect_info["auth_key"],
+                    },
+                )
+
         # Create job in Firestore with user authentication
         job_id = await run_in_threadpool(
             export_service.create_job,
