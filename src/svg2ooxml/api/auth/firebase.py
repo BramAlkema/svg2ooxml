@@ -6,6 +6,7 @@ from typing import Dict
 import firebase_admin
 from firebase_admin import auth as firebase_auth
 from firebase_admin import credentials
+from firebase_admin import firestore
 from google.auth.transport import requests
 from google.oauth2 import id_token
 
@@ -46,6 +47,22 @@ def initialize_firebase() -> None:
     except Exception as e:
         logger.error(f"Failed to initialize Firebase: {e}")
         raise
+
+
+def get_firestore_client():
+    """Get Firestore client from Firebase Admin SDK.
+
+    Returns:
+        Firestore client instance
+
+    Raises:
+        RuntimeError: If Firebase is not initialized
+    """
+    if not firebase_admin._apps:
+        logger.warning("Firebase not initialized, initializing now...")
+        initialize_firebase()
+
+    return firestore.client()
 
 
 def verify_google_identity_token(token: str) -> Dict[str, any]:
