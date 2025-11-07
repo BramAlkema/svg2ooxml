@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Connect Google Drive - svg2ooxml</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .container {
+            background: white;
+            padding: 40px;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            max-width: 400px;
+            width: 100%;
+            text-align: center;
+        }
+        .logo {
+            font-weight: bold;
+            font-size: 1.2em;
+            color: #667eea;
+            margin-bottom: 10px;
+        }
+        h1 {
+            color: #333;
+            font-size: 1.5em;
+            margin-bottom: 20px;
+        }
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 0.9em;
+        }
+        button {
+            width: 100%;
+            padding: 16px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        button:hover {
+            background: #5568d3;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .message {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+        .message.success {
+            background: #e8f5e9;
+            color: #2e7d32;
+            border: 1px solid #4caf50;
+        }
+        .message.error {
+            background: #ffebee;
+            color: #c62828;
+            border: 1px solid #f44336;
+        }
+        .close-info {
+            margin-top: 20px;
+            font-size: 0.85em;
+            color: #999;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo">svg2ooxml</div>
+        <h1>Connect Google Drive</h1>
+        <p class="subtitle">Grant access to publish presentations to your Google Drive</p>
+
+        <button id="connect-btn">Connect Google Drive</button>
+
+        <div id="message"></div>
+        <div id="close-info" class="close-info" style="display: none;">
+            ✓ Connected! You can close this window.
+        </div>
+    </div>
+
+    <script>
+        // OAuth configuration
+        const CLIENT_ID = '237932518206-vulgj43i9g6mcmsqvndnrj4ehqqjhv7i.apps.googleusercontent.com';
+        const REDIRECT_URI = 'https://powerful-layout-467812-p1.web.app/oauth-callback';
+        const SCOPES = [
+            'https://www.googleapis.com/auth/drive.file',
+            'https://www.googleapis.com/auth/presentations'
+        ].join(' ');
+
+        const urlParams = new URLSearchParams(window.location.search);
+        const authKey = urlParams.get('key');
+
+        const connectBtn = document.getElementById('connect-btn');
+        const messageDiv = document.getElementById('message');
+        const closeInfo = document.getElementById('close-info');
+
+        function showMessage(text, type) {
+            messageDiv.textContent = text;
+            messageDiv.className = `message ${type}`;
+        }
+
+        if (!authKey) {
+            showMessage('Invalid link. Missing key parameter.', 'error');
+            connectBtn.disabled = true;
+        }
+
+        connectBtn.addEventListener('click', () => {
+            // Build OAuth URL
+            const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
+            authUrl.searchParams.set('client_id', CLIENT_ID);
+            authUrl.searchParams.set('redirect_uri', REDIRECT_URI);
+            authUrl.searchParams.set('response_type', 'code');
+            authUrl.searchParams.set('scope', SCOPES);
+            authUrl.searchParams.set('access_type', 'offline');
+            authUrl.searchParams.set('prompt', 'consent');
+            authUrl.searchParams.set('state', authKey);
+
+            // Redirect to Google OAuth
+            window.location.href = authUrl.toString();
+        });
+    </script>
+</body>
+</html>

@@ -84,11 +84,15 @@ def upload_pptx_to_slides(
     if not pptx_path.exists():
         raise SlidesPublishingError(f"PPTX path does not exist: {pptx_path}")
 
-    # Build credentials: use service account for now (user OAuth tokens not working yet)
-    # TODO: Fix user OAuth refresh token flow
+    # Build credentials: user token required for publishing to user's Drive
     try:
-        credentials, _ = google.auth.default(scopes=SLIDES_SCOPES)  # type: ignore[attr-defined]
-        logger.info("Using service account credentials for Slides upload")
+        if user_token:
+            credentials = _build_user_credentials(user_token, user_refresh_token)
+            logger.info("Using user credentials for Slides upload (has_refresh_token=%s)", bool(user_refresh_token))
+        else:
+            # Fallback to service account only if no user token
+            credentials, _ = google.auth.default(scopes=SLIDES_SCOPES)  # type: ignore[attr-defined]
+            logger.warning("No user token provided - using service account (may hit quota issues)")
     except Exception as exc:  # pragma: no cover - defensive
         raise SlidesPublishingError(f"Failed to obtain Google credentials: {exc}") from exc
 
