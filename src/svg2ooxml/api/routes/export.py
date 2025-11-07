@@ -85,20 +85,26 @@ async def create_export_job(
                 from ..auth.firebase import get_firestore_client
 
                 def check_unlimited_flag():
+                    logger.info(f"Checking unlimited flag for user {firebase_uid}")
                     firestore_client = get_firestore_client()
+                    logger.info(f"Got Firestore client, checking users/{firebase_uid}")
                     user_doc = firestore_client.collection("users").document(firebase_uid).get()
+                    logger.info(f"User doc exists: {user_doc.exists}")
                     if user_doc.exists:
                         user_data = user_doc.to_dict()
-                        return user_data.get("unlimited_exports", False) or user_data.get("admin", False)
+                        logger.info(f"User data: {user_data}")
+                        has_flag = user_data.get("unlimited_exports", False) or user_data.get("admin", False)
+                        logger.info(f"Has unlimited flag: {has_flag}")
+                        return has_flag
                     return False
 
                 user_has_unlimited = await run_in_threadpool(check_unlimited_flag)
                 if user_has_unlimited:
-                    logger.info(f"User {firebase_uid} has unlimited quota flag - bypassing quota check")
+                    logger.info(f"✅ User {firebase_uid} has unlimited quota flag - bypassing quota check")
                 else:
-                    logger.debug(f"User {firebase_uid} does not have unlimited flag")
+                    logger.info(f"❌ User {firebase_uid} does not have unlimited flag - checking quota limits")
             except Exception as e:
-                logger.warning(f"Could not check user unlimited flag: {e}")
+                logger.error(f"❌ ERROR checking user unlimited flag: {e}", exc_info=True)
 
         if not disable_quota and not user_has_unlimited:
             from datetime import datetime
