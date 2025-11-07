@@ -509,8 +509,8 @@ async function handleExport(frames, fileKey, fileName) {
   } catch (error) {
     console.error('Export error:', error);
 
-    // Don't show duplicate error for quota exceeded (already shown)
-    if (error.message !== 'QUOTA_EXCEEDED') {
+    // Don't show duplicate errors for quota exceeded or OAuth required (already shown)
+    if (error.message !== 'QUOTA_EXCEEDED' && error.message !== 'OAUTH_REQUIRED') {
       showStatus(`Export failed: ${error.message}`, 'error');
     }
 
@@ -590,6 +590,20 @@ async function createExportJob(frames, fileKey, fileName) {
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
 
+    // Handle OAuth required (403 Forbidden)
+    if (response.status === 403 && errorData.detail?.error === 'oauth_required') {
+      const connectUrl = errorData.detail?.connect_url;
+      const message = errorData.detail?.message || 'Google Drive connection required';
+
+      // Store export parameters for retry after OAuth
+      window.pendingExport = { frames, fileKey, fileName };
+
+      // Show connect button
+      await handleOAuthRequired(connectUrl, message);
+
+      throw new Error('OAUTH_REQUIRED'); // Special error to prevent generic error message
+    }
+
     // Handle quota exceeded error (402 Payment Required)
     if (response.status === 402 && errorData.detail?.error === 'quota_exceeded') {
       const usage = errorData.detail?.usage || {};
@@ -615,6 +629,94 @@ async function createExportJob(frames, fileKey, fileName) {
   showProgress(20);
 
   return data.job_id;
+}
+
+// Handle OAuth required - show connect button and wait for completion
+async function handleOAuthRequired(connectUrl, message) {
+  console.log('OAuth required, connect URL:', connectUrl);
+
+  // Show connect button in status
+  showStatus(
+    `<strong>Google Drive Connection Required</strong><br>${message}<br><br>` +
+    `<button id="connect-drive-btn" class="button primary" style="margin-top: 12px;">Connect Google Drive</button><br><br>` +
+    `<span style="font-size: 12px; color: #666;">After connecting, the export will continue automatically.</span>`,
+    'info'
+  );
+
+  hideProgress();
+
+  // Wait for user to click connect button
+  return new Promise((resolve) => {
+    // Add click handler to the dynamically created button
+    setTimeout(() => {
+      const connectBtn = document.getElementById('connect-drive-btn');
+      if (connectBtn) {
+        connectBtn.addEventListener('click', async () => {
+          connectBtn.disabled = true;
+          connectBtn.textContent = 'Opening...';
+
+          try {
+            // Open OAuth window
+            const oauthWindow = window.open(
+              connectUrl,
+              '_blank',
+              'width=500,height=600,menubar=no,toolbar=no,location=no'
+            );
+
+            if (!oauthWindow) {
+              throw new Error('Popup blocked. Please allow popups and try again.');
+            }
+
+            showStatus('Complete the connection in the popup window...', 'info');
+
+            // Wait for OAuth completion (window closes)
+            await waitForOAuthCompletion(oauthWindow);
+
+            showStatus('✅ Google Drive connected! Retrying export...', 'success');
+            await sleep(1000);
+
+            // Retry the pending export
+            if (window.pendingExport) {
+              const { frames, fileKey, fileName } = window.pendingExport;
+              delete window.pendingExport;
+
+              // Restart the export process
+              await handleExport(frames, fileKey, fileName);
+            }
+
+            resolve();
+
+          } catch (error) {
+            console.error('OAuth connection error:', error);
+            showStatus(`Connection failed: ${error.message}<br>Please try exporting again.`, 'error');
+            resolve();
+          }
+        });
+      }
+    }, 100);
+  });
+}
+
+// Wait for OAuth window to close (indicating completion)
+async function waitForOAuthCompletion(oauthWindow) {
+  const startTime = Date.now();
+  const timeout = 180000; // 3 minutes
+
+  while (Date.now() - startTime < timeout) {
+    if (oauthWindow.closed) {
+      // Window closed - OAuth flow completed
+      return;
+    }
+
+    await sleep(500);
+  }
+
+  // Timeout - close window if still open
+  if (!oauthWindow.closed) {
+    oauthWindow.close();
+  }
+
+  throw new Error('OAuth connection timed out');
 }
 
 // Poll job status until complete
