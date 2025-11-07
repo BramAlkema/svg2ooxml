@@ -590,6 +590,19 @@ async function createExportJob(frames, fileKey, fileName) {
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
 
+    // Debug: Log response details
+    console.log('🔍 Export failed:', {
+      status: response.status,
+      errorData: errorData,
+      detail: errorData.detail,
+      error: errorData.detail?.error
+    });
+
+    //DEBUG: Show error structure in UI temporarily
+    if (response.status === 403) {
+      console.log('DEBUG: 403 response detail:', JSON.stringify(errorData.detail));
+    }
+
     // Handle OAuth required (403 Forbidden)
     if (response.status === 403 && errorData.detail?.error === 'oauth_required') {
       const connectUrl = errorData.detail?.connect_url;
