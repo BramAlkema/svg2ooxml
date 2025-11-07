@@ -59,6 +59,7 @@ def upload_pptx_to_slides(
     parent_folder_id: str | None = None,
     user_token: str | None = None,
     user_refresh_token: str | None = None,
+    user_uid: str | None = None,
 ) -> SlidesPublishResult:
     """
     Upload ``pptx_path`` to Google Drive and promote it to Google Slides.
@@ -68,7 +69,8 @@ def upload_pptx_to_slides(
         presentation_title: Optional title for the presentation
         parent_folder_id: Optional Google Drive folder ID
         user_token: Optional Firebase ID token for user authentication
-        user_refresh_token: Optional Firebase refresh token for OAuth token refresh
+        user_refresh_token: Optional Google OAuth refresh token (stored from OAuth flow)
+        user_uid: Optional Firebase user UID (used to fetch stored OAuth token if not provided)
 
     Returns:
         SlidesPublishResult describing the uploaded presentation.
@@ -87,8 +89,18 @@ def upload_pptx_to_slides(
     # Build credentials: user token required for publishing to user's Drive
     try:
         if user_token:
-            credentials = _build_user_credentials(user_token, user_refresh_token)
-            logger.info("Using user credentials for Slides upload (has_refresh_token=%s)", bool(user_refresh_token))
+            # If no refresh token provided but we have user_uid, try to fetch from Firestore
+            oauth_refresh_token = user_refresh_token
+            if not oauth_refresh_token and user_uid:
+                logger.info("No OAuth refresh token provided - attempting to fetch from Firestore for user %s", user_uid)
+                oauth_refresh_token = _get_stored_oauth_token(user_uid)
+                if oauth_refresh_token:
+                    logger.info("Found stored OAuth refresh token for user %s", user_uid)
+                else:
+                    logger.warning("No stored OAuth refresh token found for user %s", user_uid)
+
+            credentials = _build_user_credentials(user_token, oauth_refresh_token)
+            logger.info("Using user credentials for Slides upload (has_refresh_token=%s)", bool(oauth_refresh_token))
         else:
             # Fallback to service account only if no user token
             credentials, _ = google.auth.default(scopes=SLIDES_SCOPES)  # type: ignore[attr-defined]
@@ -176,6 +188,45 @@ def upload_pptx_to_slides(
         embed_url=embed_url,
         thumbnail_urls=tuple(thumbnails),
     )
+
+
+def _get_stored_oauth_token(user_uid: str) -> str | None:
+    """
+    Fetch and decrypt stored Google OAuth refresh token from Firestore.
+
+    Args:
+        user_uid: Firebase user UID
+
+    Returns:
+        Decrypted OAuth refresh token, or None if not found
+    """
+    try:
+        from ..auth.firebase import get_firestore_client
+        from ..auth.encryption import decrypt_token
+
+        db = get_firestore_client()
+        user_doc = db.collection("users").document(user_uid).get()
+
+        if not user_doc.exists:
+            logger.warning("User document not found for uid %s", user_uid)
+            return None
+
+        user_data = user_doc.to_dict()
+        google_oauth = user_data.get("google_oauth", {})
+        encrypted_token = google_oauth.get("refresh_token_encrypted")
+
+        if not encrypted_token:
+            logger.info("No stored OAuth refresh token for user %s", user_uid)
+            return None
+
+        # Decrypt the token
+        decrypted_token = decrypt_token(encrypted_token)
+        logger.info("Successfully retrieved and decrypted OAuth token for user %s", user_uid)
+        return decrypted_token
+
+    except Exception as exc:
+        logger.error("Failed to fetch stored OAuth token for user %s: %s", user_uid, exc)
+        return None
 
 
 def _build_user_credentials(id_token: str, refresh_token: str | None = None) -> UserCredentials:

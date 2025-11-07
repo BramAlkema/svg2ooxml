@@ -761,12 +761,18 @@ class ExportService:
             job_data: Job metadata from Firestore
             cache_key: Cache key for the conversion
             user_token: Optional decrypted Firebase ID token for user authentication
-            user_refresh_token: Optional decrypted Firebase refresh token for OAuth
+            user_refresh_token: Optional decrypted Google OAuth refresh token
         """
 
         presentation_title = job_data.get("figma_file_name") or job_data.get("figma_file_id") or f"Export {job_id}"
         # Use job-specific parent folder if provided, otherwise use default
         parent_folder = job_data.get("parent_folder_id") or self.slides_folder_id
+
+        # Extract user_uid from job_data for OAuth token retrieval
+        user_uid = None
+        if job_data.get("user"):
+            user_uid = job_data["user"].get("uid")
+
         try:
             result = upload_pptx_to_slides(
                 pptx_path,
@@ -774,6 +780,7 @@ class ExportService:
                 parent_folder_id=parent_folder,
                 user_token=user_token,
                 user_refresh_token=user_refresh_token,
+                user_uid=user_uid,
             )
         except SlidesPublishingError as exc:
             logger.error("Publishing job %s to Slides failed: %s", job_id, exc)

@@ -15,6 +15,7 @@ from src.svg2ooxml.api.routes.export import router as export_router
 from src.svg2ooxml.api.routes.tasks import router as tasks_router
 from src.svg2ooxml.api.routes.subscription import router as subscription_router
 from src.svg2ooxml.api.routes.webhooks import router as webhooks_router
+from src.svg2ooxml.api.routes.oauth import router as oauth_router
 from src.svg2ooxml.api.middleware import RateLimiter, RateLimitMiddleware
 from src.svg2ooxml.api.auth.firebase import initialize_firebase
 
@@ -105,6 +106,7 @@ app.include_router(export_router, prefix="/api/v1", tags=["export"])
 app.include_router(tasks_router, prefix="/api/v1/tasks", tags=["tasks"])
 app.include_router(subscription_router, prefix="/api/v1", tags=["subscription"])
 app.include_router(webhooks_router, prefix="/api", tags=["webhooks"])
+app.include_router(oauth_router, tags=["oauth"])
 
 
 @app.get("/")
