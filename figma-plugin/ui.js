@@ -9,6 +9,9 @@ try {
 const log = window.debugLog || console.log.bind(console);
 log('🟢🟢🟢 ui.js is loading!');
 
+const API_OVERRIDE_KEY = 'svg2ooxml_api_url';
+const AUTH_OVERRIDE_KEY = 'svg2ooxml_auth_url';
+
 function readConfigOverride({ storageKey, queryKey, globalVar, label }) {
   try {
     if (queryKey) {
@@ -51,7 +54,7 @@ function normalizeBaseUrl(url) {
 // API Configuration (supports dev overrides)
 const API_URL = (() => {
   const override = readConfigOverride({
-    storageKey: 'svg2ooxml_api_url',
+    storageKey: API_OVERRIDE_KEY,
     queryKey: 'api',
     globalVar: 'SVG2OOXML_API_URL',
     label: 'API_URL'
@@ -62,7 +65,7 @@ const API_URL = (() => {
 
 const AUTH_URL = (() => {
   const override = readConfigOverride({
-    storageKey: 'svg2ooxml_auth_url',
+    storageKey: AUTH_OVERRIDE_KEY,
     queryKey: 'auth',
     globalVar: 'SVG2OOXML_AUTH_URL',
     label: 'AUTH_URL'
@@ -104,9 +107,90 @@ const usageBar = document.getElementById('usage-bar');
 const usageText = document.getElementById('usage-text');
 const upgradeBtn = document.getElementById('upgrade-btn');
 const manageSubscriptionBtn = document.getElementById('manage-subscription-btn');
+const devApplyBtn = document.getElementById('apply-dev-settings');
+const devClearBtn = document.getElementById('clear-dev-settings');
+const devApiInput = document.getElementById('dev-api-url');
+const devAuthInput = document.getElementById('dev-auth-url');
+const devSettingsStatus = document.getElementById('dev-settings-status');
 
 log('🟢 signInBtn: ' + (signInBtn ? 'FOUND ✓' : 'MISSING ✗'));
 log('🟢 exportBtn: ' + (exportBtn ? 'FOUND ✓' : 'MISSING ✗'));
+
+function safeLocalStorage(action, key, value) {
+  try {
+    if (!window.localStorage) return null;
+    if (action === 'get') {
+      return window.localStorage.getItem(key);
+    }
+    if (action === 'set') {
+      window.localStorage.setItem(key, value);
+    }
+    if (action === 'remove') {
+      window.localStorage.removeItem(key);
+    }
+  } catch (error) {
+    console.warn('localStorage error:', error);
+    return null;
+  }
+  return null;
+}
+
+function initDevSettingsPanel() {
+  if (!devApplyBtn || !devClearBtn) {
+    return;
+  }
+
+  const storedApi = safeLocalStorage('get', API_OVERRIDE_KEY);
+  const storedAuth = safeLocalStorage('get', AUTH_OVERRIDE_KEY);
+
+  if (devApiInput) {
+    devApiInput.value = storedApi || '';
+  }
+  if (devAuthInput) {
+    devAuthInput.value = storedAuth || '';
+  }
+  if (devSettingsStatus) {
+    devSettingsStatus.textContent = storedApi || storedAuth
+      ? 'Overrides active'
+      : 'Using default endpoints';
+  }
+
+  devApplyBtn.addEventListener('click', () => {
+    const apiValue = devApiInput?.value.trim();
+    const authValue = devAuthInput?.value.trim();
+
+    if (apiValue) {
+      safeLocalStorage('set', API_OVERRIDE_KEY, apiValue);
+    }
+    if (authValue) {
+      safeLocalStorage('set', AUTH_OVERRIDE_KEY, authValue);
+    }
+    if (!apiValue) {
+      safeLocalStorage('remove', API_OVERRIDE_KEY);
+    }
+    if (!authValue) {
+      safeLocalStorage('remove', AUTH_OVERRIDE_KEY);
+    }
+
+    if (devSettingsStatus) {
+      devSettingsStatus.textContent = 'Overrides saved. Reloading...';
+    }
+    setTimeout(() => location.reload(), 200);
+  });
+
+  devClearBtn.addEventListener('click', () => {
+    safeLocalStorage('remove', API_OVERRIDE_KEY);
+    safeLocalStorage('remove', AUTH_OVERRIDE_KEY);
+    if (devApiInput) devApiInput.value = '';
+    if (devAuthInput) devAuthInput.value = '';
+    if (devSettingsStatus) {
+      devSettingsStatus.textContent = 'Overrides cleared. Reloading...';
+    }
+    setTimeout(() => location.reload(), 200);
+  });
+}
+
+initDevSettingsPanel();
 
 // ============================================================================
 // Authentication
