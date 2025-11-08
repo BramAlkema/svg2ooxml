@@ -32,8 +32,7 @@ except ImportError:  # pragma: no cover - environment without Google client libs
 
 SLIDES_SCOPES: tuple[str, ...] = (
     "https://www.googleapis.com/auth/drive.file",
-    "https://www.googleapis.com/auth/drive",
-    "https://www.googleapis.com/auth/presentations.readonly",
+    "https://www.googleapis.com/auth/presentations",
 )
 
 
