@@ -765,8 +765,12 @@ class ExportService:
         """
 
         presentation_title = job_data.get("figma_file_name") or job_data.get("figma_file_id") or f"Export {job_id}"
-        # Use job-specific parent folder if provided, otherwise use default
-        parent_folder = job_data.get("parent_folder_id") or self.slides_folder_id
+        # When publishing with user credentials, respect per-job folder only.
+        # Using the shared service folder causes Drive 400 errors because the
+        # user account typically lacks access to the service account folder.
+        parent_folder = job_data.get("parent_folder_id")
+        if not parent_folder and not user_token:
+            parent_folder = self.slides_folder_id
 
         # Extract user_uid from job_data for OAuth token retrieval
         user_uid = None
