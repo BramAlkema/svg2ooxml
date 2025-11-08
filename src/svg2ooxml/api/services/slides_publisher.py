@@ -261,8 +261,10 @@ def _build_user_credentials(id_token: str, refresh_token: str | None = None) -> 
             credentials = UserCredentials(token=id_token)
         else:
             # Create OAuth credentials with refresh capability
+            # Note: We pass token=None to force Google to fetch a fresh access token
+            # using the refresh token. Do NOT pass Firebase ID token here.
             credentials = UserCredentials(
-                token=id_token,
+                token=None,  # Let Google fetch access token from refresh token
                 refresh_token=refresh_token,
                 token_uri="https://oauth2.googleapis.com/token",
                 client_id=client_id,
