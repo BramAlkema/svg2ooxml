@@ -80,11 +80,13 @@ if ENVIRONMENT == "development":
         "null",  # Required for Figma plugins (sandboxed environment)
     ]
 else:
-    # Production: Only allow Figma
+    # Production: Only allow Figma and Firebase Hosting (for OAuth callback)
     # Note: Figma plugins run in a sandboxed environment with Origin: null
     allowed_origins = [
         "https://www.figma.com",
         "https://figma.com",
+        "https://powerful-layout-467812-p1.web.app",  # OAuth callback page
+        "https://powerful-layout-467812-p1.firebaseapp.com",  # Firebase Hosting alternative domain
         "null",  # Required for Figma plugins (sandboxed environment)
     ]
 
