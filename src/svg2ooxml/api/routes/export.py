@@ -8,6 +8,7 @@ import os
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.concurrency import run_in_threadpool
 
+from ..auth.encryption import decrypt_token
 from ..auth.middleware import verify_firebase_token
 from ..background import enqueue_export_job
 from ..models import ExportRequest, ExportResponse, JobStatusResponse
@@ -149,21 +150,36 @@ async def create_export_job(
         if request.output_format.lower() == "slides":
             from ..auth.firebase import get_firestore_client
 
-            def check_oauth_token():
+            def fetch_encrypted_oauth_token():
                 logger.info(f"Checking OAuth token for user {firebase_uid}")
                 firestore_client = get_firestore_client()
                 user_doc = firestore_client.collection("users").document(firebase_uid).get()
-                if user_doc.exists:
-                    user_data = user_doc.to_dict()
-                    google_oauth = user_data.get("google_oauth", {})
-                    has_token = bool(google_oauth.get("refresh_token_encrypted"))
-                    logger.info(f"User {firebase_uid} has OAuth token: {has_token}")
-                    return has_token
-                return False
+                if not user_doc.exists:
+                    logger.info(f"User {firebase_uid} document missing or has no OAuth token")
+                    return None
 
-            has_oauth_token = await run_in_threadpool(check_oauth_token)
+                user_data = user_doc.to_dict()
+                logger.info(f"User data: {user_data}")
+                google_oauth = user_data.get("google_oauth", {})
+                encrypted = google_oauth.get("refresh_token_encrypted")
+                logger.info(f"User {firebase_uid} has OAuth token: {bool(encrypted)}")
+                return encrypted
 
-            if not has_oauth_token:
+            encrypted_oauth_token = await run_in_threadpool(fetch_encrypted_oauth_token)
+
+            google_refresh_token: str | None = None
+            if encrypted_oauth_token:
+                try:
+                    google_refresh_token = decrypt_token(encrypted_oauth_token)
+                except Exception as exc:
+                    logger.warning(
+                        "Failed to decrypt OAuth token for user %s: %s",
+                        firebase_uid,
+                        exc,
+                        exc_info=True,
+                    )
+
+            if not google_refresh_token:
                 logger.warning(f"User {firebase_uid} requested Slides export but has no OAuth token")
                 # Import the OAuth router function to create auth key
                 from .oauth import create_auth_key
@@ -181,6 +197,9 @@ async def create_export_job(
                     },
                 )
 
+        else:
+            google_refresh_token = None
+
         # Create job in Firestore with user authentication
         job_id = await run_in_threadpool(
             export_service.create_job,
@@ -191,7 +210,7 @@ async def create_export_job(
             fonts=request.fonts,
             user=user,  # Pass user info for authentication
             parent_folder_id=request.parent_folder_id,
-            user_refresh_token=request.user_refresh_token,  # Pass refresh token for OAuth
+            user_refresh_token=google_refresh_token,  # Use stored Google OAuth refresh token
         )
 
         # Increment usage counter (unless quota is disabled or user has unlimited)
