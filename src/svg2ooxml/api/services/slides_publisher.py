@@ -371,12 +371,24 @@ def _format_http_error(exc: HttpError) -> str:
             content = content.decode("utf-8", errors="replace")
     except Exception:
         content = "<unavailable>"
+    secondary_message = None
+    if content and isinstance(content, str):
+        try:
+            payload = json.loads(content)
+            secondary_message = payload.get("error", {}).get("message")
+        except Exception:
+            secondary_message = None
+
     status = getattr(exc, "status_code", None) or getattr(getattr(exc, "resp", None), "status", "?")
     reason = getattr(exc, "reason", None)
     if not reason:
         reason = getattr(getattr(exc, "resp", None), "reason", None)
     if not reason:
         reason = getattr(exc, "error_details", None)
+
+    if secondary_message and secondary_message != reason:
+        reason = f"{reason or ''} ({secondary_message})".strip()
+
     return f"status={status}, reason={reason or 'unknown'}, body={content}"
 
 
