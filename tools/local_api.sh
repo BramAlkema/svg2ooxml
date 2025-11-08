@@ -69,12 +69,15 @@ run_uvicorn() {
     exit 1
   fi
 
+  log "Loading environment from ${ENV_FILE}"
   # shellcheck disable=SC1090
   source "${ENV_FILE}"
+  log "Activating virtualenv .venv"
   # shellcheck disable=SC1091
   source .venv/bin/activate
 
   require_cmd uvicorn
+  log "uvicorn version: $(uvicorn --version || true)"
   log "Starting uvicorn on http://127.0.0.1:8080"
   exec uvicorn main:app --reload --host 0.0.0.0 --port "${PORT:-8080}"
 }
