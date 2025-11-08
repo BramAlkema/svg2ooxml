@@ -148,7 +148,7 @@ def upload_pptx_to_slides(
         logger.warning(
             "Drive upload failed for user %s (fingerprint=%s): %s",
             user_uid or "unknown",
-            _token_fingerprint(refresh_token) if refresh_token else "n/a",
+            _token_fingerprint(oauth_refresh_token) if oauth_refresh_token else "n/a",
             error_details,
         )
         raise SlidesPublishingError(f"Drive upload failed: {error_details}") from exc
