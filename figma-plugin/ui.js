@@ -9,9 +9,67 @@ try {
 const log = window.debugLog || console.log.bind(console);
 log('🟢🟢🟢 ui.js is loading!');
 
-// API Configuration
-const API_URL = 'https://svg2ooxml-export-sghya3t5ya-ew.a.run.app';
-const AUTH_URL = 'https://powerful-layout-467812-p1.web.app';
+function readConfigOverride({ storageKey, queryKey, globalVar, label }) {
+  try {
+    if (queryKey) {
+      const params = new URLSearchParams(window.location.search || '');
+      const valueFromQuery = params.get(queryKey);
+      if (valueFromQuery) {
+        log(`🟣 ${label} override via query "${queryKey}": ${valueFromQuery}`);
+        return valueFromQuery;
+      }
+    }
+  } catch (error) {
+    console.warn(`Failed to parse query params for ${label}:`, error);
+  }
+
+  try {
+    if (storageKey && window.localStorage) {
+      const valueFromStorage = window.localStorage.getItem(storageKey);
+      if (valueFromStorage) {
+        log(`🟣 ${label} override via localStorage "${storageKey}": ${valueFromStorage}`);
+        return valueFromStorage;
+      }
+    }
+  } catch (error) {
+    console.warn(`Failed to read localStorage for ${label}:`, error);
+  }
+
+  if (globalVar && typeof window[globalVar] === 'string') {
+    log(`🟣 ${label} override via window.${globalVar}: ${window[globalVar]}`);
+    return window[globalVar];
+  }
+
+  return null;
+}
+
+function normalizeBaseUrl(url) {
+  if (!url) return url;
+  return url.endsWith('/') ? url.slice(0, -1) : url;
+}
+
+// API Configuration (supports dev overrides)
+const API_URL = (() => {
+  const override = readConfigOverride({
+    storageKey: 'svg2ooxml_api_url',
+    queryKey: 'api',
+    globalVar: 'SVG2OOXML_API_URL',
+    label: 'API_URL'
+  });
+  if (override) return normalizeBaseUrl(override);
+  return 'https://svg2ooxml-export-sghya3t5ya-ew.a.run.app';
+})();
+
+const AUTH_URL = (() => {
+  const override = readConfigOverride({
+    storageKey: 'svg2ooxml_auth_url',
+    queryKey: 'auth',
+    globalVar: 'SVG2OOXML_AUTH_URL',
+    label: 'AUTH_URL'
+  });
+  if (override) return normalizeBaseUrl(override);
+  return 'https://powerful-layout-467812-p1.web.app';
+})();
 
 log('🟢 API_URL: ' + API_URL);
 log('🟢 AUTH_URL: ' + AUTH_URL);
@@ -588,148 +646,87 @@ async function createExportJob(frames, fileKey, fileName) {
   });
 
   if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-
-    // Debug: Log response details
-    console.log('🔍 Export failed:', {
-      status: response.status,
-      errorData: errorData,
-      detail: errorData.detail,
-      error: errorData.detail?.error
-    });
-
-    //DEBUG: Show error structure in UI temporarily
-    if (response.status === 403) {
-      console.log('DEBUG: 403 response detail:', JSON.stringify(errorData.detail));
+    let errorData = {};
+    try {
+      errorData = await response.json();
+    } catch (e) {
+      console.error('Failed to parse error response:', e);
     }
 
-    // Handle OAuth required (403 Forbidden)
-    if (response.status === 403 && errorData.detail?.error === 'oauth_required') {
-      const connectUrl = errorData.detail?.connect_url;
-      const message = errorData.detail?.message || 'Google Drive connection required';
+    // Debug: Log response details
+    console.log('🔍 Export failed:', { status: response.status, errorData });
 
-      // Store export parameters for retry after OAuth
+    // Handle OAuth required (403 Forbidden)
+    if (response.status === 403 && errorData?.detail?.error === 'oauth_required') {
+      const connectUrl = errorData.detail.connect_url;
+      const authKey = errorData.detail.auth_key;
+
+      // Store export parameters for retry
       window.pendingExport = { frames, fileKey, fileName };
 
-      // Show connect button
-      await handleOAuthRequired(connectUrl, message);
+      // Render Connect UI
+      const statusDiv = document.getElementById('status');
+      const wrapper = document.createElement('div');
+      wrapper.style.marginTop = '12px';
+      wrapper.innerHTML = `
+        <div style="padding:10px;border:1px solid #eee;border-radius:8px;background:#f9f9f9">
+          <div style="font-weight:600;margin-bottom:8px">Google Drive access needed</div>
+          <div style="font-size:12px;margin-bottom:10px">
+            Click "Connect Google Drive", grant access, then click "Retry Export".
+          </div>
+          <div style="display:flex;gap:8px;margin-bottom:8px">
+            <button id="btn-connect" class="button primary" style="padding:8px 12px;border-radius:6px">Connect Google Drive</button>
+            <button id="btn-retry" class="button" style="padding:8px 12px;border-radius:6px" disabled>Retry Export</button>
+          </div>
+          <div style="font-size:11px;opacity:.7">Auth key: ${authKey || '—'}</div>
+        </div>
+      `;
+      statusDiv.appendChild(wrapper);
 
-      throw new Error('OAUTH_REQUIRED'); // Special error to prevent generic error message
+      const btnConnect = wrapper.querySelector('#btn-connect');
+      const btnRetry = wrapper.querySelector('#btn-retry');
+
+      btnConnect.onclick = () => {
+        // Ask main thread to open URL via figma.openExternal()
+        parent.postMessage({ pluginMessage: { type: 'open-url', url: connectUrl } }, '*');
+        btnRetry.disabled = false;
+        btnConnect.textContent = '✓ Opened browser';
+        btnConnect.disabled = true;
+      };
+
+      btnRetry.onclick = () => {
+        wrapper.remove();
+        exportBtn.click(); // Trigger export again
+      };
+
+      hideProgress();
+      throw new Error('OAUTH_REQUIRED'); // Prevent generic error message
     }
 
     // Handle quota exceeded error (402 Payment Required)
-    if (response.status === 402 && errorData.detail?.error === 'quota_exceeded') {
+    if (response.status === 402 && errorData?.detail?.error === 'quota_exceeded') {
       const usage = errorData.detail?.usage || {};
       const message = errorData.detail?.message || 'You have reached your monthly export limit.';
 
-      // Show upgrade prompt
       showStatus(
         `<strong>Quota Exceeded</strong><br>${message}<br><br>` +
         `<span style="font-weight: 600;">Current usage: ${usage.current || 0} / ${usage.limit || 5} exports</span>`,
         'error'
       );
 
-      // Show upgrade button prominently
       upgradeBtn.scrollIntoView({ behavior: 'smooth', block: 'center' });
-
-      throw new Error('QUOTA_EXCEEDED'); // Special error to prevent generic error message
+      throw new Error('QUOTA_EXCEEDED');
     }
 
-    throw new Error(errorData.detail || `API error: ${response.status}`);
+    // Fallback error message
+    const msg = (errorData && (errorData.detail?.message || errorData.detail || errorData.error || JSON.stringify(errorData))) || 'Export failed';
+    throw new Error(`❌ ${msg}`);
   }
 
   const data = await response.json();
   showProgress(20);
 
   return data.job_id;
-}
-
-// Handle OAuth required - show connect button and wait for completion
-async function handleOAuthRequired(connectUrl, message) {
-  console.log('OAuth required, connect URL:', connectUrl);
-
-  // Show connect button in status
-  showStatus(
-    `<strong>Google Drive Connection Required</strong><br>${message}<br><br>` +
-    `<button id="connect-drive-btn" class="button primary" style="margin-top: 12px;">Connect Google Drive</button><br><br>` +
-    `<span style="font-size: 12px; color: #666;">After connecting, the export will continue automatically.</span>`,
-    'info'
-  );
-
-  hideProgress();
-
-  // Wait for user to click connect button
-  return new Promise((resolve) => {
-    // Add click handler to the dynamically created button
-    setTimeout(() => {
-      const connectBtn = document.getElementById('connect-drive-btn');
-      if (connectBtn) {
-        connectBtn.addEventListener('click', async () => {
-          connectBtn.disabled = true;
-          connectBtn.textContent = 'Opening...';
-
-          try {
-            // Open OAuth window
-            const oauthWindow = window.open(
-              connectUrl,
-              '_blank',
-              'width=500,height=600,menubar=no,toolbar=no,location=no'
-            );
-
-            if (!oauthWindow) {
-              throw new Error('Popup blocked. Please allow popups and try again.');
-            }
-
-            showStatus('Complete the connection in the popup window...', 'info');
-
-            // Wait for OAuth completion (window closes)
-            await waitForOAuthCompletion(oauthWindow);
-
-            showStatus('✅ Google Drive connected! Retrying export...', 'success');
-            await sleep(1000);
-
-            // Retry the pending export
-            if (window.pendingExport) {
-              const { frames, fileKey, fileName } = window.pendingExport;
-              delete window.pendingExport;
-
-              // Restart the export process
-              await handleExport(frames, fileKey, fileName);
-            }
-
-            resolve();
-
-          } catch (error) {
-            console.error('OAuth connection error:', error);
-            showStatus(`Connection failed: ${error.message}<br>Please try exporting again.`, 'error');
-            resolve();
-          }
-        });
-      }
-    }, 100);
-  });
-}
-
-// Wait for OAuth window to close (indicating completion)
-async function waitForOAuthCompletion(oauthWindow) {
-  const startTime = Date.now();
-  const timeout = 180000; // 3 minutes
-
-  while (Date.now() - startTime < timeout) {
-    if (oauthWindow.closed) {
-      // Window closed - OAuth flow completed
-      return;
-    }
-
-    await sleep(500);
-  }
-
-  // Timeout - close window if still open
-  if (!oauthWindow.closed) {
-    oauthWindow.close();
-  }
-
-  throw new Error('OAuth connection timed out');
 }
 
 // Poll job status until complete

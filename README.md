@@ -25,7 +25,8 @@ tooling. For a lean runtime-only stack use `pip install -r requirements.txt`.
 Once you have authenticated with `gcloud` (see
 [`ADR-016`](docs/adr/ADR-016-gcloud-client-setup.md)), you can exercise the live
 service directly. The example below posts the W3C `struct-use-10-f` fixture and
-requests a Google Slides deck:
+requests a Google Slides deck. For a full local setup (FastAPI + real Firestore +
+Drive) see [`docs/local-api-testing.md`](docs/local-api-testing.md).
 
 ```bash
 TOKEN=$(gcloud auth print-identity-token)
