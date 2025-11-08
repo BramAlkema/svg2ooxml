@@ -62,12 +62,12 @@ run_uvicorn() {
   if [ ! -f "${ENV_FILE}" ]; then
     log "Missing ${ENV_FILE}. Run '$0 setup' first."
     exit 1
-  }
+  fi
 
   if [ ! -d ".venv" ]; then
     log "Virtualenv .venv not found. Run ./tools/bootstrap_venv.sh first."
     exit 1
-  }
+  fi
 
   # shellcheck disable=SC1090
   source "${ENV_FILE}"
