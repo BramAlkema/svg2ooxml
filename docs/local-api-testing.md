@@ -38,18 +38,16 @@ use the same encryption key, so existing `google_oauth` tokens continue to work.
 
 ### 5. Point the Figma plugin at your local server
 
-The UI now supports dev overrides (see `figma-plugin/ui.js`). Open the plugin’s
-console (Figma → `Menu > Plugins > Development > Open Console`) and run:
+At the bottom of the plugin UI there’s a **Developer Settings** panel. Expand it
+and enter your local URL (for example `http://127.0.0.1:8080` or the ngrok URL)
+in the *API URL override* field. Hit **Apply Overrides** and the plugin will
+reload against the new endpoint.
 
-```js
-localStorage.setItem('svg2ooxml_api_url', 'http://127.0.0.1:8080');
-location.reload();
-```
-
-- Keep `AUTH_URL` untouched so OAuth still goes through Firebase Hosting.
-- If you need HTTPS, expose the local server via `ngrok http 8080` and set the
-  override to the generated `https://*.ngrok-free.app` URL.
-- To reset: `localStorage.removeItem('svg2ooxml_api_url'); location.reload();`
+- Leave the *Auth URL override* blank so OAuth still goes through Firebase
+  Hosting.
+- If you need HTTPS, expose the local server via `ngrok http 18123` (or whichever
+  port you used) and enter the generated `https://*.ngrok-free.app` URL.
+- Use **Clear Overrides** to revert to the production endpoints.
 
 ### 6. Trigger an export locally
 

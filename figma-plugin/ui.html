@@ -134,6 +134,64 @@
       margin-bottom: 8px;
     }
 
+    .dev-card {
+      margin-top: 16px;
+      font-size: 12px;
+      color: var(--figma-color-text-secondary);
+    }
+
+    .dev-card details {
+      padding: 12px;
+      border-radius: 6px;
+      border: 1px dashed var(--figma-color-border);
+      background: var(--figma-color-bg-secondary);
+    }
+
+    .dev-card summary {
+      font-weight: 600;
+      cursor: pointer;
+      outline: none;
+    }
+
+    .dev-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 12px;
+      margin-top: 12px;
+    }
+
+    .dev-grid label {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      font-size: 11px;
+      color: var(--figma-color-text);
+    }
+
+    .dev-grid input {
+      padding: 8px;
+      border-radius: 4px;
+      border: 1px solid var(--figma-color-border);
+      font-size: 12px;
+    }
+
+    .dev-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .dev-actions button {
+      margin: 0;
+      font-size: 12px;
+    }
+
+    .dev-status {
+      margin-top: 8px;
+      font-size: 11px;
+      color: var(--figma-color-text-secondary);
+    }
+
     .progress {
       width: 100%;
       height: 4px;
@@ -341,6 +399,28 @@
   <!-- Status Section -->
   <div id="status" class="status"></div>
 
+  <!-- Developer Tools -->
+  <div id="dev-tools" class="section dev-card">
+    <details>
+      <summary>Developer Settings</summary>
+      <div class="dev-grid">
+        <label>
+          API URL override
+          <input id="dev-api-url" type="text" placeholder="http://127.0.0.1:8080" />
+        </label>
+        <label>
+          Auth URL override
+          <input id="dev-auth-url" type="text" placeholder="https://powerful-layout-467812-p1.web.app" />
+        </label>
+      </div>
+      <div class="dev-actions">
+        <button id="apply-dev-settings" class="secondary" type="button">Apply Overrides</button>
+        <button id="clear-dev-settings" class="secondary" type="button">Clear Overrides</button>
+      </div>
+      <p id="dev-settings-status" class="dev-status"></p>
+    </details>
+  </div>
+
   <script>
     debugLog("🟡 DOM ready - loading inline JavaScript");
     const btn = document.getElementById('sign-in-btn');
@@ -349,8 +429,10 @@
 
   <script>
 // SVG to Google Slides - Figma Plugin UI Logic (INLINED)
+// VERSION: 2025-11-08-01:20 - FIXED_DEBUG_LOGGING
 
 try {
+  window.debugLog('🔵 VERSION 2025-11-08-01:20 - FIXED DEBUG LOGGING');
   window.debugLog('🟢 ui.js TOP - before anything');
   window.debugLog('🟢 Window origin: ' + window.location.origin);
 } catch(e) {
@@ -873,8 +955,8 @@ async function handleExport(frames, fileKey, fileName) {
   } catch (error) {
     console.error('Export error:', error);
 
-    // Don't show duplicate error for quota exceeded (already shown)
-    if (error.message !== 'QUOTA_EXCEEDED') {
+    // Don't show duplicate errors (already shown in their specific handlers)
+    if (error.message !== 'QUOTA_EXCEEDED' && error.message !== 'OAUTH_REQUIRED') {
       showStatus(`Export failed: ${error.message}`, 'error');
     }
 
@@ -992,10 +1074,70 @@ async function createExportJob(frames, fileKey, fileName) {
   }
 
   if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
+    window.debugLog('🔍 Response not OK, status: ' + response.status);
+
+    let errorData = {};
+    try {
+      errorData = await response.json();
+      window.debugLog('🔍 Parsed error data: ' + JSON.stringify(errorData));
+    } catch (e) {
+      window.debugLog('❌ Failed to parse error response: ' + e.message);
+    }
+
+    // Debug: Log response details
+    window.debugLog('🔍 Checking OAuth: status=' + response.status + ', error=' + (errorData?.detail?.error || 'none'));
+
+    // Handle OAuth required (403 Forbidden)
+    if (response.status === 403 && errorData?.detail?.error === 'oauth_required') {
+      window.debugLog('🔵 OAUTH REQUIRED - Showing connect UI');
+
+      const connectUrl = errorData.detail.connect_url;
+      const authKey = errorData.detail.auth_key;
+
+      // Store export parameters for retry
+      window.pendingExport = { frames, fileKey, fileName };
+
+      // Render Connect UI
+      const statusDiv = document.getElementById('status');
+      const wrapper = document.createElement('div');
+      wrapper.style.marginTop = '12px';
+      wrapper.innerHTML = `
+        <div style="padding:10px;border:1px solid #eee;border-radius:8px;background:#f9f9f9">
+          <div style="font-weight:600;margin-bottom:8px">Google Drive access needed</div>
+          <div style="font-size:12px;margin-bottom:10px">
+            Click "Connect Google Drive", grant access, then click "Retry Export".
+          </div>
+          <div style="display:flex;gap:8px;margin-bottom:8px">
+            <button id="btn-connect" class="button primary" style="padding:8px 12px;border-radius:6px">Connect Google Drive</button>
+            <button id="btn-retry" class="button" style="padding:8px 12px;border-radius:6px" disabled>Retry Export</button>
+          </div>
+          <div style="font-size:11px;opacity:.7">Auth key: ${authKey || '—'}</div>
+        </div>
+      `;
+      statusDiv.appendChild(wrapper);
+
+      const btnConnect = wrapper.querySelector('#btn-connect');
+      const btnRetry = wrapper.querySelector('#btn-retry');
+
+      btnConnect.onclick = () => {
+        // Ask main thread to open URL via figma.openExternal()
+        parent.postMessage({ pluginMessage: { type: 'open-url', url: connectUrl } }, '*');
+        btnRetry.disabled = false;
+        btnConnect.textContent = '✓ Opened browser';
+        btnConnect.disabled = true;
+      };
+
+      btnRetry.onclick = () => {
+        wrapper.remove();
+        exportBtn.click(); // Trigger export again
+      };
+
+      hideProgress();
+      throw new Error('OAUTH_REQUIRED'); // Prevent generic error message
+    }
 
     // Handle quota exceeded error (402 Payment Required)
-    if (response.status === 402 && errorData.detail?.error === 'quota_exceeded') {
+    if (response.status === 402 && errorData?.detail?.error === 'quota_exceeded') {
       const usage = errorData.detail?.usage || {};
       const message = errorData.detail?.message || 'You have reached your monthly export limit.';
 
