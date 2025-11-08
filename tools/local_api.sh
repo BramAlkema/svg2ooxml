@@ -9,6 +9,7 @@ SERVICE_ACCOUNT_JSON="$SECRET_DIR/firebase-service-account.json"
 TOKEN_KEY_FILE="$SECRET_DIR/token-encryption-key.txt"
 WEB_CLIENT_ID_FILE="$SECRET_DIR/firebase-web-client-id.txt"
 WEB_CLIENT_SECRET_FILE="$SECRET_DIR/firebase-web-client-secret.txt"
+DEFAULT_PORT="${SVG2OOXML_LOCAL_PORT:-8080}"
 
 log() {
   printf '[local-api] %s\n' "$*" >&2
@@ -78,8 +79,9 @@ run_uvicorn() {
 
   require_cmd uvicorn
   log "uvicorn version: $(uvicorn --version || true)"
-  log "Starting uvicorn on http://127.0.0.1:8080"
-  exec uvicorn main:app --reload --host 0.0.0.0 --port "${PORT:-8080}"
+  local port="${SVG2OOXML_LOCAL_PORT:-${DEFAULT_PORT}}"
+  log "Starting uvicorn on http://127.0.0.1:${port}"
+  exec uvicorn main:app --reload --host 0.0.0.0 --port "${port}"
 }
 
 cmd=${1:-}
