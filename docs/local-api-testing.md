@@ -10,65 +10,27 @@ you can iterate on Slides uploads without redeploying to Cloud Run.
   `firebase-web-client-id`, and `firebase-web-client-secret`
 - Python virtualenv bootstrapped via `./tools/bootstrap_venv.sh`
 
-### 2. Pull required secrets
+### 2. Bootstrap secrets + env vars
+
+Run the helper script once (or whenever you need to refresh secrets):
 
 ```bash
-mkdir -p secrets/local
-
-gcloud secrets versions access latest \
-  --secret firebase-service-account \
-  --project powerful-layout-467812-p1 \
-  > secrets/local/firebase-service-account.json
-
-gcloud secrets versions access latest \
-  --secret token-encryption-key \
-  --project powerful-layout-467812-p1 \
-  > secrets/local/token-encryption-key.txt
-
-gcloud secrets versions access latest \
-  --secret firebase-web-client-id \
-  --project powerful-layout-467812-p1 \
-  > secrets/local/firebase-web-client-id.txt
-
-gcloud secrets versions access latest \
-  --secret firebase-web-client-secret \
-  --project powerful-layout-467812-p1 \
-  > secrets/local/firebase-web-client-secret.txt
+bash tools/local_api.sh setup
 ```
 
-### 3. Create a local env file
-
-```bash
-cat > .env.local <<'EOF'
-export ENVIRONMENT=development
-export GCP_PROJECT=powerful-layout-467812-p1
-export GOOGLE_CLOUD_PROJECT=powerful-layout-467812-p1
-export FIREBASE_PROJECT_ID=powerful-layout-467812-p1
-export FIREBASE_SERVICE_ACCOUNT_PATH=$PWD/secrets/local/firebase-service-account.json
-export GOOGLE_APPLICATION_CREDENTIALS=$FIREBASE_SERVICE_ACCOUNT_PATH
-export TOKEN_ENCRYPTION_KEY=$(cat secrets/local/token-encryption-key.txt)
-export FIREBASE_WEB_CLIENT_ID=$(cat secrets/local/firebase-web-client-id.txt)
-export FIREBASE_WEB_CLIENT_SECRET=$(cat secrets/local/firebase-web-client-secret.txt)
-export SVG2OOXML_RATE_LIMIT=200
-export SVG2OOXML_RATE_WINDOW=60
-export DISABLE_EXPORT_QUOTA=true
-# Leave SERVICE_URL unset so jobs run inline without Cloud Tasks
-unset SERVICE_URL
-EOF
-```
-
-Source it whenever you open a new shell:
+This pulls the four required Secret Manager entries into `secrets/local/` and
+writes `.env.local` with all exports (`ENVIRONMENT`, `TOKEN_ENCRYPTION_KEY`,
+Firebase web client ID/secret, etc.). Source the env file whenever you open a
+new shell:
 
 ```bash
 source .env.local
 ```
 
-### 4. Start the API locally
+### 3. Start the API locally
 
 ```bash
-source .venv/bin/activate
-source .env.local
-uvicorn main:app --reload --port 8080
+bash tools/local_api.sh run
 ```
 
 The server will connect to real Firestore/Storage using the service account and
