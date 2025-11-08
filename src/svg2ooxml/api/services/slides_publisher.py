@@ -144,7 +144,14 @@ def upload_pptx_to_slides(
             .execute()
         )
     except HttpError as exc:
-        raise SlidesPublishingError(f"Drive upload failed: {exc}") from exc
+        error_details = _format_http_error(exc)
+        logger.warning(
+            "Drive upload failed for user %s (fingerprint=%s): %s",
+            user_uid or "unknown",
+            _token_fingerprint(refresh_token) if refresh_token else "n/a",
+            error_details,
+        )
+        raise SlidesPublishingError(f"Drive upload failed: {error_details}") from exc
 
     file_id = file.get("id")
     if not file_id:
@@ -162,7 +169,8 @@ def upload_pptx_to_slides(
     try:
         presentation = slides_service.presentations().get(presentationId=file_id).execute()
     except HttpError as exc:
-        raise SlidesPublishingError(f"Failed to fetch Slides metadata: {exc}") from exc
+        error_details = _format_http_error(exc)
+        raise SlidesPublishingError(f"Failed to fetch Slides metadata: {error_details}") from exc
 
     thumbnails: list[str] = []
     for slide in presentation.get("slides", []):
@@ -353,6 +361,23 @@ def _ensure_access_token(
                 "Google Drive connection expired. Please reconnect from the plugin."
             ) from exc
         raise SlidesPublishingError(f"Failed to refresh Google OAuth token: {exc}") from exc
+
+
+def _format_http_error(exc: HttpError) -> str:
+    """Return a short string describing an HttpError response."""
+    try:
+        content = exc.content
+        if isinstance(content, bytes):
+            content = content.decode("utf-8", errors="replace")
+    except Exception:
+        content = "<unavailable>"
+    status = getattr(exc, "status_code", None) or getattr(getattr(exc, "resp", None), "status", "?")
+    reason = getattr(exc, "reason", None)
+    if not reason:
+        reason = getattr(getattr(exc, "resp", None), "reason", None)
+    if not reason:
+        reason = getattr(exc, "error_details", None)
+    return f"status={status}, reason={reason or 'unknown'}, body={content}"
 
 
 __all__ = [
