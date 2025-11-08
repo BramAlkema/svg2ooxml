@@ -23,7 +23,7 @@ router = APIRouter(prefix="/api/v1/oauth", tags=["oauth"])
 # OAuth configuration
 GOOGLE_CLIENT_ID = os.getenv("FIREBASE_WEB_CLIENT_ID")
 GOOGLE_CLIENT_SECRET = os.getenv("FIREBASE_WEB_CLIENT_SECRET")
-REDIRECT_URI = "https://powerful-layout-467812-p1.web.app/oauth-callback"
+REDIRECT_URI = "https://powerful-layout-467812-p1.web.app/oauth-callback.html"
 
 
 class ExchangePayload(BaseModel):
