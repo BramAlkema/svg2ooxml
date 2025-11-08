@@ -90,7 +90,10 @@ class ExportRequest(BaseModel):
     )
     user_refresh_token: Optional[str] = Field(
         None,
-        description="Firebase refresh token for OAuth operations (required for Slides publishing)",
+        description=(
+            "Deprecated. Slides publishing now uses the stored Google OAuth token from Firestore; "
+            "this field is ignored."
+        ),
     )
 
 

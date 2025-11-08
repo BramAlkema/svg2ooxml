@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -88,18 +89,28 @@ def upload_pptx_to_slides(
     # Build credentials: user token required for publishing to user's Drive
     try:
         if user_token:
-            # If no refresh token provided but we have user_uid, try to fetch from Firestore
             oauth_refresh_token = user_refresh_token
-            if not oauth_refresh_token and user_uid:
-                logger.info("No OAuth refresh token provided - attempting to fetch from Firestore for user %s", user_uid)
-                oauth_refresh_token = _get_stored_oauth_token(user_uid)
-                if oauth_refresh_token:
-                    logger.info("Found stored OAuth refresh token for user %s", user_uid)
-                else:
-                    logger.warning("No stored OAuth refresh token found for user %s", user_uid)
+            if user_uid:
+                latest_token = _get_stored_oauth_token(user_uid)
+                if latest_token:
+                    if oauth_refresh_token and latest_token != oauth_refresh_token:
+                        logger.info(
+                            "Using refreshed OAuth token from Firestore for user %s",
+                            user_uid,
+                        )
+                    oauth_refresh_token = latest_token
+            elif not oauth_refresh_token:
+                logger.warning("No user UID provided; cannot fetch stored OAuth token.")
 
-            credentials = _build_user_credentials(user_token, oauth_refresh_token)
-            logger.info("Using user credentials for Slides upload (has_refresh_token=%s)", bool(oauth_refresh_token))
+            credentials = _build_user_credentials(
+                user_token,
+                oauth_refresh_token,
+                user_uid=user_uid,
+            )
+            logger.info(
+                "Using user credentials for Slides upload (has_refresh_token=%s)",
+                bool(oauth_refresh_token),
+            )
         else:
             # Fallback to service account only if no user token
             credentials, _ = google.auth.default(scopes=SLIDES_SCOPES)  # type: ignore[attr-defined]
@@ -189,6 +200,11 @@ def upload_pptx_to_slides(
     )
 
 
+def _token_fingerprint(token: str) -> str:
+    """Return a short fingerprint for safe logging."""
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()[:10]
+
+
 def _get_stored_oauth_token(user_uid: str) -> str | None:
     """
     Fetch and decrypt stored Google OAuth refresh token from Firestore.
@@ -220,7 +236,11 @@ def _get_stored_oauth_token(user_uid: str) -> str | None:
 
         # Decrypt the token
         decrypted_token = decrypt_token(encrypted_token)
-        logger.info("Successfully retrieved and decrypted OAuth token for user %s", user_uid)
+        logger.info(
+            "Retrieved OAuth refresh token for user %s (fingerprint=%s)",
+            user_uid,
+            _token_fingerprint(decrypted_token),
+        )
         return decrypted_token
 
     except Exception as exc:
@@ -228,7 +248,24 @@ def _get_stored_oauth_token(user_uid: str) -> str | None:
         return None
 
 
-def _build_user_credentials(id_token: str, refresh_token: str | None = None) -> UserCredentials:
+def _clear_stored_oauth_token(user_uid: str) -> None:
+    """Remove stored OAuth credentials so the user is prompted to reconnect."""
+    try:
+        from ..auth.firebase import get_firestore_client
+
+        db = get_firestore_client()
+        db.collection("users").document(user_uid).update({"google_oauth": {}})
+        logger.warning("Cleared stored OAuth token for user %s", user_uid)
+    except Exception as exc:
+        logger.error("Failed to clear stored OAuth token for user %s: %s", user_uid, exc)
+
+
+def _build_user_credentials(
+    id_token: str,
+    refresh_token: str | None = None,
+    *,
+    user_uid: str | None = None,
+) -> UserCredentials:
     """
     Build user credentials from Firebase ID token and optional refresh token.
 
@@ -270,7 +307,11 @@ def _build_user_credentials(id_token: str, refresh_token: str | None = None) -> 
                 client_secret=client_secret,
                 scopes=SLIDES_SCOPES,
             )
-            logger.info("Created user credentials with refresh token support")
+            logger.info(
+                "Created user credentials with refresh token support (fingerprint=%s)",
+                _token_fingerprint(refresh_token),
+            )
+            _ensure_access_token(credentials, refresh_token, user_uid)
     else:
         # Firebase ID tokens are OpenID Connect tokens that work with Google APIs
         # but expire after 1 hour without refresh capability
@@ -280,4 +321,42 @@ def _build_user_credentials(id_token: str, refresh_token: str | None = None) -> 
     return credentials
 
 
-__all__ = ["SlidesPublishResult", "SlidesPublishingError", "upload_pptx_to_slides"]
+def _ensure_access_token(
+    credentials: UserCredentials,
+    refresh_token: str,
+    user_uid: str | None = None,
+) -> None:
+    """Force-refresh credentials so we detect invalid_grant immediately."""
+    try:
+        from google.auth.exceptions import RefreshError
+        from google.auth.transport.requests import Request as GoogleAuthRequest
+
+        request = GoogleAuthRequest()
+        credentials.refresh(request)
+        logger.info(
+            "Successfully refreshed Google OAuth credentials (user=%s, fingerprint=%s)",
+            user_uid or "unknown",
+            _token_fingerprint(refresh_token),
+        )
+    except RefreshError as exc:
+        message = str(exc)
+        if "invalid_grant" in message.lower():
+            logger.warning(
+                "Google refresh token invalid for user %s (fingerprint=%s): %s",
+                user_uid or "unknown",
+                _token_fingerprint(refresh_token),
+                message,
+            )
+            if user_uid:
+                _clear_stored_oauth_token(user_uid)
+            raise SlidesPublishingError(
+                "Google Drive connection expired. Please reconnect from the plugin."
+            ) from exc
+        raise SlidesPublishingError(f"Failed to refresh Google OAuth token: {exc}") from exc
+
+
+__all__ = [
+    "SlidesPublishResult",
+    "SlidesPublishingError",
+    "upload_pptx_to_slides",
+]
