@@ -25,5 +25,6 @@
     <p:sldLayoutIdLst>
         <p:sldLayoutId id="2147483649" r:id="rId1"/>
         <p:sldLayoutId id="2147483650" r:id="rId2"/>
+        <p:sldLayoutId id="2147483651" r:id="rId4"/>
     </p:sldLayoutIdLst>
 </p:sldMaster>
