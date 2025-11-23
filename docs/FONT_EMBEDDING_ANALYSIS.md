@@ -4,6 +4,13 @@
 
 Font embedding in PPTX follows a multi-stage pipeline where fonts are discovered, resolved, embedded with optional subsetting, and finally packaged into the PPTX file structure. Web fonts (from @font-face) are loaded early and passed through FontService → FontEmbeddingEngine → TextConversionPipeline → DrawingML writer → PPTX package builder.
 
+### 2025-11 Update Highlights
+
+- `FontEmbeddingEngine` now emits Embedded OpenType (EOT) payloads via `src/svg2ooxml/services/fonts/eot.py`, capturing GUID/root-string metadata and style flags inside `EmbeddedFontPayload`.
+- `PPTXPackageBuilder` writes `/ppt/fonts/fontN.fntdata` parts (`application/x-fontdata`), adds `<p:fontKey guid="…">`, and wires `<p:regular>/<p:bold>/<p:italic>/<p:boldItalic>` elements to the correct `relationships/font` entries instead of the legacy `.odttf` approach.
+- `tests/integration/test_font_embedding_eot.py` unzips a generated PPTX to verify the `.fntdata` headers, content-types, relationships, and presentation XML.
+- `tools/verify_font_embedding.py` provides a CLI for inspecting embedded fonts in any PPTX (useful for PowerPoint/Google Slides validation workflows).
+
 ---
 
 ## 1. Font Embedding Logic Location

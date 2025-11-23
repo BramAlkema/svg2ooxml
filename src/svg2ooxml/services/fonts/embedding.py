@@ -10,8 +10,10 @@ from enum import Enum
 from hashlib import sha1
 from pathlib import Path
 from typing import Iterable, Mapping, Sequence
+import uuid
 
 from svg2ooxml.common.tempfiles import project_temp_dir
+from svg2ooxml.services.fonts.eot import build_eot, EOTConversionError
 
 try:  # pragma: no cover - optional dependency
     from fontTools import subset as fonttools_subset
@@ -73,6 +75,25 @@ class FontEmbeddingResult:
     permission: EmbeddingPermission = EmbeddingPermission.UNKNOWN
     optimisation: FontOptimisationLevel = FontOptimisationLevel.BALANCED
     packaging_metadata: Mapping[str, object] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class EmbeddedFontPayload:
+    """EOT packaging data derived from the subsetted font."""
+
+    subset_bytes: bytes
+    eot_bytes: bytes
+    guid: uuid.UUID | None
+    root_string: str
+    style_kind: str
+    style_flags: Mapping[str, bool]
+    subset_prefix: str | None = None
+    charset: int = 1
+    panose: bytes = b""
+    unicode_ranges: tuple[int, int, int, int] = (0, 0, 0, 0)
+    codepage_ranges: tuple[int, int] = (0, 0)
+    fs_type: int = 0
+    pitch_family: int = 0x32
 
 
 class FontEmbeddingEngine:
@@ -243,13 +264,31 @@ class FontEmbeddingEngine:
         if subset_bytes is None:
             return None
 
+        try:
+            payload = self._build_eot_payload(subset_bytes, request)
+        except EOTConversionError as exc:
+            logger.debug("EOT conversion failed: %s", exc)
+            return None
+
         metadata = {
             "subset_strategy": request.subset_strategy,
             "preserve_hinting": request.preserve_hinting,
             "font_path": request.font_path,
             "glyph_ids": request.glyph_ids,
             "characters": request.characters,
-            "font_data": subset_bytes,
+            "subset_bytes": subset_bytes,
+            "font_data": payload.eot_bytes,
+            "eot_bytes": payload.eot_bytes,
+            "font_guid": str(payload.guid) if payload.guid else None,
+            "font_root_string": payload.root_string,
+            "font_style_kind": payload.style_kind,
+            "font_style_flags": dict(payload.style_flags),
+            "subset_prefix": payload.subset_prefix,
+            "font_charset": payload.charset,
+            "font_panose": payload.panose,
+            "font_unicode_ranges": payload.unicode_ranges,
+            "font_codepage_ranges": payload.codepage_ranges,
+            "font_pitch_family": payload.pitch_family,
             "optimisation": request.optimisation.value,
             "permission": permission.value,
         }
@@ -263,6 +302,46 @@ class FontEmbeddingEngine:
             permission=permission,
             optimisation=request.optimisation,
             packaging_metadata=metadata,
+        )
+
+    def _build_eot_payload(
+        self,
+        subset_bytes: bytes,
+        request: FontEmbeddingRequest,
+    ) -> EmbeddedFontPayload:
+        metadata = request.metadata or {}
+        style_kind = _style_kind_from_metadata(metadata)
+        style_name = _style_name_from_kind(style_kind)
+        guid = uuid.uuid4()
+        resolved_family = (
+            metadata.get("resolved_family")
+            or metadata.get("font_family")
+            or Path(request.font_path).stem
+            or "EmbeddedFont"
+        )
+        eot_result = build_eot(
+            subset_bytes,
+            resolved_family=resolved_family,
+            resolved_style=style_name,
+            root_string=metadata.get("font_root_string"),
+            guid=guid,
+        )
+        style_flags = _style_flags_from_metadata(metadata, style_kind)
+        pitch_family = _derive_pitch_family(eot_result.panose, style_flags)
+        return EmbeddedFontPayload(
+            subset_bytes=subset_bytes,
+            eot_bytes=eot_result.data,
+            guid=eot_result.guid,
+            root_string=eot_result.root_string,
+            style_kind=style_kind,
+            style_flags=style_flags,
+            subset_prefix=metadata.get("subset_prefix"),
+            charset=eot_result.charset,
+            panose=eot_result.panose,
+            unicode_ranges=eot_result.unicode_ranges,
+            codepage_ranges=eot_result.codepage_ranges,
+            fs_type=eot_result.fs_type,
+            pitch_family=pitch_family,
         )
 
     def _perform_subsetting(
@@ -385,6 +464,76 @@ class FontEmbeddingEngine:
         digest.update(b"1" if request.preserve_hinting else b"0")
         digest.update(request.optimisation.value.encode("utf-8"))
         return digest.hexdigest()
+
+
+def _style_kind_from_metadata(metadata: Mapping[str, object]) -> str:
+    value = str(metadata.get("font_style_kind") or "").lower()
+    if value == "bolditalic":
+        return "boldItalic"
+    if value in {"regular", "bold", "italic", "boldItalic"}:
+        return "regular" if value == "regular" else value
+    bold = bool(metadata.get("bold"))
+    italic = bool(metadata.get("italic"))
+    if bold and italic:
+        return "boldItalic"
+    if bold:
+        return "bold"
+    if italic:
+        return "italic"
+    return "regular"
+
+
+def _style_name_from_kind(style_kind: str) -> str:
+    mapping = {
+        "regular": "Regular",
+        "bold": "Bold",
+        "italic": "Italic",
+        "boldItalic": "Bold Italic",
+    }
+    return mapping.get(style_kind, "Regular")
+
+
+def _style_flags_from_metadata(metadata: Mapping[str, object], style_kind: str) -> dict[str, bool]:
+    bold = bool(metadata.get("bold"))
+    italic = bool(metadata.get("italic"))
+    if style_kind == "boldItalic":
+        bold = True
+        italic = True
+    elif style_kind == "bold":
+        bold = True
+    elif style_kind == "italic":
+        italic = True
+    return {
+        "bold": bold,
+        "italic": italic,
+        "style_kind": style_kind,
+    }
+
+
+def _derive_pitch_family(panose: bytes, style_flags: Mapping[str, object]) -> int:
+    if not panose:
+        return 0x32  # variable pitch, swiss
+    family_type = panose[0]
+    serif_style = panose[1] if len(panose) > 1 else 0
+
+    family_nibble = 0x20  # default to SWISS
+    if family_type == 2:  # Latin text
+        if serif_style in {11, 12, 13, 14, 15, 16, 17, 18}:  # sans serif styles
+            family_nibble = 0x20
+        else:
+            family_nibble = 0x10  # Roman
+    elif family_type == 3:
+        family_nibble = 0x40  # Script
+    elif family_type == 4:
+        family_nibble = 0x50  # Decorative
+    elif family_type == 5:
+        family_nibble = 0x30  # Symbol/modern
+
+    pitch_bits = 0x2  # Variable pitch
+    if style_flags.get("monospace"):
+        pitch_bits = 0x1
+
+    return (family_nibble & 0xF0) | (pitch_bits & 0x0F)
 
 
 __all__ = [

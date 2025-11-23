@@ -205,6 +205,12 @@ class TextConversionPipeline:
             "subset_strategy": decision.embedding.subset_strategy,
             "preserve_hinting": decision.embedding.preserve_hinting,
         }
+        style_kind = self._style_kind_for_run(primary_run)
+        metadata["font_style_kind"] = style_kind
+        metadata["bold"] = primary_run.bold
+        metadata["italic"] = primary_run.italic
+        metadata["font_weight"] = primary_run.weight_class
+        metadata["font_style"] = "italic" if primary_run.italic else "normal"
 
         match: FontMatch | None = None
         if self._font_service is not None:
@@ -235,6 +241,11 @@ class TextConversionPipeline:
                 request_metadata = {
                     "font_family": match.family,
                     "font_source": metadata.get("font_source"),
+                    "font_style_kind": style_kind,
+                    "bold": primary_run.bold,
+                    "italic": primary_run.italic,
+                    "font_weight": primary_run.weight_class,
+                    "font_style": "italic" if primary_run.italic else "normal",
                 }
                 # Pass through web font data if available
                 if "font_data" in match.metadata:
@@ -275,6 +286,16 @@ class TextConversionPipeline:
             relationship_hint=subset_result.relationship_id if subset_result else None,
             metadata=metadata,
         )
+
+    @staticmethod
+    def _style_kind_for_run(run: Run) -> str:
+        if run.bold and run.italic:
+            return "boldItalic"
+        if run.bold:
+            return "bold"
+        if run.italic:
+            return "italic"
+        return "regular"
 
     def _ensure_directory_providers(self, decision: TextPolicyDecision) -> None:
         if self._font_service is None or DirectoryFontProvider is None:

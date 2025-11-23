@@ -1,10 +1,39 @@
 from __future__ import annotations
 
 import os
+from unittest.mock import MagicMock
 
 import pytest
 
-from svg2ooxml.api.background.tasks import CloudTasksQueue
+from svg2ooxml.api.background.tasks import CloudTasksQueue, tasks_v2
+
+
+@pytest.fixture
+def mock_cloud_tasks(monkeypatch: pytest.MonkeyPatch):
+    """Mocks the Cloud Tasks client and returns the mock object."""
+    mock_client = (
+        MagicMock()
+    )  # Directly creating a MagicMock for simplicity
+    monkeypatch.setattr(tasks_v2, "CloudTasksClient", lambda: mock_client)
+    return mock_client
+
+
+def test_enqueue_job_cloud_tasks(
+    mock_cloud_tasks: MagicMock, monkeypatch: pytest.MonkeyPatch
+):
+    monkeypatch.setenv("GCP_PROJECT", "demo-project")
+    monkeypatch.setenv("SERVICE_URL", "https://example.com")
+
+    queue = CloudTasksQueue()
+    task_name = queue.enqueue_job("cloud-job")
+
+    mock_cloud_tasks.create_task.assert_called_once()
+    # To keep the test simple, we won't assert the full task dictionary
+    # We'll just check that the job_id is in the body
+    _, call_kwargs = mock_cloud_tasks.create_task.call_args
+    request_dict = call_kwargs["request"]
+    assert '"job_id": "cloud-job"' in str(request_dict)
+    assert task_name is not None
 
 
 def test_enqueue_job_inline(monkeypatch: pytest.MonkeyPatch):

@@ -185,6 +185,7 @@ FontLoader.data
 ### Test Files
 - `/Users/ynse/projects/svg2ooxml/tests/integration/test_webfont_embedding_e2e.py` - End-to-end web font tests
 - `/Users/ynse/projects/svg2ooxml/tests/unit/services/test_font_embedding_engine.py` - Embedding engine tests
+- `/Users/ynse/projects/svg2ooxml/tests/integration/test_font_embedding_eot.py` - Verifies `.fntdata` payloads, content types, relationships, and `<p:fontKey>` wiring.
 
 ---
 
@@ -195,6 +196,7 @@ FontLoader.data
 - **brotli** (loader.py): WOFF2 decompression
 - **gzip** (loader.py): WOFF decompression (stdlib)
 - **base64** (loader.py): Data URI decoding (stdlib)
+- **tools/verify_font_embedding.py** – CLI helper that uses `lxml` to inspect PPTX font parts and GUID wiring.
 
 ### Internal Dependencies
 - SVGParser → FontFaceRule extraction

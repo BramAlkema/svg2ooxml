@@ -3,6 +3,7 @@
     <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
     <Default Extension="xml" ContentType="application/xml"/>
     <Default Extension="png" ContentType="image/png"/>
+    <Default Extension="odttf" ContentType="application/vnd.openxmlformats-officedocument.obfuscatedFont"/>
     <Default Extension="jpeg" ContentType="image/jpeg"/>
     <Default Extension="jpg" ContentType="image/jpeg"/>
     <Default Extension="emf" ContentType="application/emf"/>
