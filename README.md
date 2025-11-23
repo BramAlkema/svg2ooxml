@@ -20,6 +20,24 @@ The developer requirements install svg2ooxml in editable mode with all runtime
 extras (API, worker, cloud, rendering, colour, slides) plus linting and test
 tooling. For a lean runtime-only stack use `pip install -r requirements.txt`.
 
+## Local Development
+
+For local development, you'll need to run two processes: the FastAPI server and the Huey worker.
+
+**Running the FastAPI server:**
+
+```bash
+uvicorn main:app --reload
+```
+
+**Running the Huey worker:**
+
+```bash
+python cli/run_worker.py
+```
+
+The Huey worker is used for background tasks in the local development environment. For the production environment on Google Cloud, background tasks are handled by Google Cloud Tasks.
+
 ### Call the Cloud Run export API
 
 Once you have authenticated with `gcloud` (see

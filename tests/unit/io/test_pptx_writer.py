@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import struct
+import uuid
 import tempfile
 import zipfile
 from pathlib import Path
 from xml.etree import ElementTree as ET
 
 import hashlib
+import pytest
 
 from lxml import etree as ET
 
@@ -19,6 +22,7 @@ from svg2ooxml.ir.shapes import Rectangle
 from svg2ooxml.ir.text import EmbeddedFontPlan, Run, TextAnchor, TextFrame
 from svg2ooxml.core.ir import IRScene
 from svg2ooxml.core.pipeline.navigation import NavigationKind, NavigationSpec, SlideTarget
+from svg2ooxml.services.fonts.eot import build_eot
 
 
 def _build_scene_with_filter_assets() -> IRScene:
@@ -75,20 +79,41 @@ def test_pptx_builder_embeds_filter_assets() -> None:
 
 
 def test_pptx_builder_embeds_fonts() -> None:
-    font_data = b"subset-data"
+    pytest.importorskip("fontTools.ttLib")
+    font_path = Path("tests/resources/ScheherazadeRegOT.ttf")
+    font_bytes = font_path.read_bytes()
+    test_guid = uuid.UUID("12345678-90ab-cdef-1234-567890abcdef")
+    eot = build_eot(
+        font_bytes,
+        resolved_family="Scheherazade",
+        resolved_style="Regular",
+        guid=test_guid,
+    )
+
     plan = EmbeddedFontPlan(
-        font_family="TestFont",
+        font_family="Scheherazade",
         requires_embedding=True,
         subset_strategy="glyph",
         glyph_count=len("Hello"),
         relationship_hint="rIdFontCustom",
-        metadata={"font_data": font_data, "font_path": "TestFont.ttf"},
+        metadata={
+            "font_data": eot.data,
+            "eot_bytes": eot.data,
+            "font_family": "Scheherazade",
+            "font_path": str(font_path),
+            "font_style_kind": "regular",
+            "font_style_flags": {"bold": False, "italic": False, "style_kind": "regular"},
+            "font_guid": str(test_guid),
+            "font_root_string": eot.root_string,
+            "font_pitch_family": 0x32,
+            "font_charset": 1,
+        },
     )
     frame = TextFrame(
         origin=Point(0, 0),
         anchor=TextAnchor.START,
         bbox=Rect(0, 0, 120, 40),
-        runs=[Run(text="Hello", font_family="TestFont", font_size_pt=24.0)],
+        runs=[Run(text="Hello", font_family="Scheherazade", font_size_pt=24.0)],
         embedding_plan=plan,
     )
     scene = IRScene(elements=[frame], width_px=120, height_px=40)
@@ -104,7 +129,9 @@ def test_pptx_builder_embeds_fonts() -> None:
             font_files = [name for name in names if name.startswith("ppt/fonts/")]
             assert font_files, "Expected embedded font file in PPTX package"
             font_name = font_files[0]
-            assert archive.read(font_name) == font_data
+            embedded = archive.read(font_name)
+            assert font_name.endswith(".fntdata")
+            assert struct.unpack_from("<H", embedded, 34)[0] == 0x504C  # EOT magic
 
             rels_xml = archive.read("ppt/_rels/presentation.xml.rels").decode("utf-8")
             assert "relationships/font" in rels_xml
@@ -113,11 +140,15 @@ def test_pptx_builder_embeds_fonts() -> None:
 
             presentation_xml = archive.read("ppt/presentation.xml").decode("utf-8")
             assert "embeddedFontLst" in presentation_xml
-            assert "TestFont" in presentation_xml
+            assert "Scheherazade" in presentation_xml
             assert "rIdFontCustom" in presentation_xml
+            assert "fontKey" in presentation_xml
+            assert "pitchFamily" in presentation_xml
+            assert "charset" in presentation_xml
 
             content_xml = archive.read("[Content_Types].xml").decode("utf-8")
-            assert f'PartName="/{font_name}"' in content_xml
+            assert 'Extension="fntdata"' in content_xml
+            assert "application/x-fontdata" in content_xml
 
 
 def test_pptx_builder_embeds_navigation_relationships() -> None:

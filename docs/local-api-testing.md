@@ -15,26 +15,34 @@ you can iterate on Slides uploads without redeploying to Cloud Run.
 Run the helper script once (or whenever you need to refresh secrets):
 
 ```bash
+# Python CLI (recommended)
+python tools/local_api.py setup
+
+# Or the legacy bash script
 bash tools/local_api.sh setup
 ```
 
-This pulls the four required Secret Manager entries into `secrets/local/` and
-writes `.env.local` with all exports (`ENVIRONMENT`, `TOKEN_ENCRYPTION_KEY`,
-Firebase web client ID/secret, etc.). Source the env file whenever you open a
-new shell:
-
-```bash
-source .env.local
-```
+This pulls the four required Secret Manager entries into `secrets/local/`. The
+Python version manages these automatically without requiring a `.env.local`
+file.
 
 ### 3. Start the API locally
 
 ```bash
+# Python CLI (recommended)
+python tools/local_api.py run
+
+# Or the legacy bash script
 bash tools/local_api.sh run
 ```
 
 The server will connect to real Firestore/Storage using the service account and
 use the same encryption key, so existing `google_oauth` tokens continue to work.
+
+**Port override**: Set `SVG2OOXML_LOCAL_PORT` to use a different port:
+```bash
+SVG2OOXML_LOCAL_PORT=8081 python tools/local_api.py run
+```
 
 ### 5. Point the Figma plugin at your local server
 
@@ -63,6 +71,58 @@ FIREBASE_TOKEN="$FIREBASE_TOKEN" \
 python tests/batch_export_w3c.py --limit 1
 ```
 
-Note: the batch script uses the identity token’s `sub` as the Firebase UID, so
+Note: the batch script uses the identity token's `sub` as the Firebase UID, so
 ensure you have a matching `users/<uid>` document with `google_oauth` populated
 if you expect Slides publishing to run.
+
+## Using in Pytest Integration Tests
+
+The Python-based local API server can be used directly in pytest integration
+tests via fixtures:
+
+```python
+def test_export_endpoint(api_base_url):
+    """Test the export endpoint against local server."""
+    import requests
+
+    response = requests.get(f"{api_base_url}/")
+    assert response.status_code == 200
+    assert response.json()["service"] == "svg2ooxml-export"
+```
+
+The `local_api_server` fixture (in `tests/integration/conftest.py`) automatically:
+- Fetches secrets from GCP Secret Manager (cached in `secrets/local/`)
+- Sets up environment variables
+- Starts the uvicorn server on a test port (default: 8081)
+- Stops the server after all tests complete
+
+**Custom port**: Override the test port with the `SVG2OOXML_TEST_PORT` environment
+variable:
+
+```bash
+SVG2OOXML_TEST_PORT=9000 pytest tests/integration/api/
+```
+
+## Programmatic Usage
+
+You can also use the local API server programmatically in Python scripts:
+
+```python
+from src.svg2ooxml.api.testing import LocalAPIServer, LocalAPIConfig
+
+# Create and start server
+config = LocalAPIConfig(port=8080)
+server = LocalAPIServer(config)
+server.setup()  # Fetch secrets
+server.start()  # Start uvicorn
+
+# ... use the server ...
+
+server.stop()  # Clean up
+
+# Or use as a context manager
+with LocalAPIServer(config) as server:
+    # Server is running
+    pass
+# Server automatically stopped
+```

@@ -99,6 +99,7 @@ src/svg2ooxml/api/models/export.py
 src/svg2ooxml/api/models/subscription.py
 src/svg2ooxml/api/routes/__init__.py
 src/svg2ooxml/api/routes/export.py
+src/svg2ooxml/api/routes/oauth.py
 src/svg2ooxml/api/routes/subscription.py
 src/svg2ooxml/api/routes/svg.py
 src/svg2ooxml/api/routes/tasks.py
@@ -111,6 +112,8 @@ src/svg2ooxml/api/services/fakes.py
 src/svg2ooxml/api/services/slides_publisher.py
 src/svg2ooxml/api/services/stripe_service.py
 src/svg2ooxml/api/services/subscription_repository.py
+src/svg2ooxml/api/testing/__init__.py
+src/svg2ooxml/api/testing/local_server.py
 src/svg2ooxml/clipmask/__init__.py
 src/svg2ooxml/clipmask/types.py
 src/svg2ooxml/color/__init__.py
@@ -227,6 +230,7 @@ src/svg2ooxml/core/parser/preprocess/services.py
 src/svg2ooxml/core/parser/split/__init__.py
 src/svg2ooxml/core/pipeline/__init__.py
 src/svg2ooxml/core/pipeline/navigation.py
+src/svg2ooxml/core/pipeline/pipeline.py
 src/svg2ooxml/core/pipeline/mappers/__init__.py
 src/svg2ooxml/core/pipeline/mappers/base.py
 src/svg2ooxml/core/pipeline/mappers/clip_render.py
@@ -401,6 +405,7 @@ src/svg2ooxml/pipeline/__init__.py
 src/svg2ooxml/policy/__init__.py
 src/svg2ooxml/policy/constants.py
 src/svg2ooxml/policy/engine.py
+src/svg2ooxml/policy/fidelity.py
 src/svg2ooxml/policy/geometry.py
 src/svg2ooxml/policy/multipage.py
 src/svg2ooxml/policy/rules.py
@@ -446,6 +451,7 @@ src/svg2ooxml/services/setup.py
 src/svg2ooxml/services/symbol_service.py
 src/svg2ooxml/services/fonts/__init__.py
 src/svg2ooxml/services/fonts/embedding.py
+src/svg2ooxml/services/fonts/eot.py
 src/svg2ooxml/services/fonts/fetcher.py
 src/svg2ooxml/services/fonts/loader.py
 src/svg2ooxml/services/fonts/service.py

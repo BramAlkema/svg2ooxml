@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import shutil
+import uuid
 import zipfile
 from collections import OrderedDict
 from dataclasses import dataclass, field
@@ -28,9 +29,19 @@ REL_NS = "http://schemas.openxmlformats.org/package/2006/relationships"
 CONTENT_NS = "http://schemas.openxmlformats.org/package/2006/content-types"
 P_NS = "http://schemas.openxmlformats.org/presentationml/2006/main"
 R_DOC_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+THEME_NS = "http://schemas.openxmlformats.org/drawingml/2006/main"
+THEME_FAMILY_NS = "http://schemas.microsoft.com/office/thememl/2012/main"
+ET.register_namespace("thm15", THEME_FAMILY_NS)
 # PowerPoint masks reference normal ImagePart relationships; no dedicated mask rel type exists.
 # Examples: standard PowerPoint .rels files authored by Microsoft Office only emit the image URI.
 MASK_REL_TYPE = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image"
+FONT_STYLE_TAGS: dict[str, str] = {
+    "regular": "regular",
+    "bold": "bold",
+    "italic": "italic",
+    "boldItalic": "boldItalic",
+}
+FONT_STYLE_ORDER: tuple[str, ...] = ("regular", "bold", "italic", "boldItalic")
 
 
 @dataclass
@@ -67,6 +78,13 @@ class _PackagedFont:
     font_family: str
     subsetted: bool
     content_type: str
+    style_kind: str = "regular"
+    style_flags: dict[str, bool] = field(default_factory=dict)
+    guid: str | None = None
+    root_string: str | None = None
+    subset_prefix: str | None = None
+    pitch_family: int | None = None
+    charset: int | None = None
 
 
 @dataclass
@@ -225,6 +243,7 @@ class PPTXPackageBuilder:
         try:
             with temporary_directory(prefix="svg2ooxml_pptx_") as temp_path:
                 shutil.copytree(self._base_template, temp_path, dirs_exist_ok=True)
+                self._ensure_theme_extension(temp_path)
                 self._trace_packaging(
                     "packaging_start",
                     metadata={"slide_count": len(render_results)},
@@ -495,17 +514,19 @@ class PPTXPackageBuilder:
             if not plan.requires_embedding:
                 continue
             metadata = plan.metadata or {}
-            font_data = metadata.get("font_data")
+            font_data = metadata.get("eot_bytes") or metadata.get("font_data")
             if not isinstance(font_data, (bytes, bytearray)):
                 continue
             font_bytes = bytes(font_data)
             digest = hashlib.md5(font_bytes, usedforsecurity=False).hexdigest()
             key = (
+                metadata.get("resolved_family") or plan.font_family,
                 plan.font_family,
                 plan.subset_strategy,
                 plan.glyph_count,
                 plan.relationship_hint,
                 digest,
+                metadata.get("font_style_kind"),
             )
             if key in seen_keys:
                 continue
@@ -521,17 +542,20 @@ class PPTXPackageBuilder:
         packaged_fonts: list[_PackagedFont] = []
         used_relationships: set[str] = set()
         rel_seed = 1
-        filename_index = 1
+        font_index = 1
 
         for plan, metadata, font_bytes in entries:
-            font_family = plan.font_family or metadata.get("font_family") or "EmbeddedFont"
-            font_path_hint = metadata.get("font_path")
-            extension = None
-            if isinstance(font_path_hint, str):
-                extension = Path(font_path_hint).suffix.lstrip(".")
-            if not extension:
-                extension = "ttf"
-            extension = extension.lower()
+            font_family = (
+                metadata.get("resolved_family")
+                or plan.font_family
+                or metadata.get("font_family")
+                or "EmbeddedFont"
+            )
+            style_kind = _normalize_style_kind(metadata.get("font_style_kind"))
+            style_flags = metadata.get("font_style_flags")
+            if not isinstance(style_flags, dict):
+                style_flags = {"style_kind": style_kind}
+            extension = "fntdata"
 
             rel_id = plan.relationship_hint if isinstance(plan.relationship_hint, str) and plan.relationship_hint else None
             if rel_id and rel_id in used_relationships:
@@ -545,11 +569,21 @@ class PPTXPackageBuilder:
                         break
             used_relationships.add(rel_id)
 
-            filename = f"font{filename_index}.{extension}"
-            filename_index += 1
+            filename = f"font{font_index}.{extension}"
+            font_index += 1
+            while (fonts_dir / filename).exists():
+                filename = f"font{font_index}.{extension}"
+                font_index += 1
             target_path = fonts_dir / filename
             with target_path.open("wb") as handle:
                 handle.write(font_bytes)
+            guid_value = metadata.get("font_guid")
+            if isinstance(guid_value, uuid.UUID):
+                guid_str = str(guid_value)
+            elif isinstance(guid_value, str) and guid_value:
+                guid_str = guid_value
+            else:
+                guid_str = None
             self._trace_packaging(
                 "font_part_written",
                 stage="font",
@@ -557,6 +591,8 @@ class PPTXPackageBuilder:
                     "filename": filename,
                     "relationship_id": rel_id,
                     "font_family": font_family,
+                    "style_kind": style_kind,
+                    "guid": guid_str,
                 },
             )
 
@@ -567,6 +603,13 @@ class PPTXPackageBuilder:
                     font_family=font_family,
                     subsetted=bool(plan.glyph_count),
                     content_type=_content_type_for_extension(extension),
+                    style_kind=style_kind,
+                    style_flags=style_flags,
+                    guid=guid_str,
+                    root_string=metadata.get("font_root_string"),
+                    subset_prefix=metadata.get("subset_prefix"),
+                    pitch_family=_safe_int(metadata.get("font_pitch_family")),
+                    charset=_safe_int(metadata.get("font_charset")),
                 )
             )
 
@@ -618,23 +661,40 @@ class PPTXPackageBuilder:
             font_list = root.find("p:embeddedFontLst", ns)
             if font_list is None:
                 font_list = ET.SubElement(root, f"{{{P_NS}}}embeddedFontLst")
-            existing_families: set[str] = {
-                font_elem.find("p:font", ns).get("typeface")
-                for font_elem in font_list.findall("p:embeddedFont", ns)
-                if font_elem.find("p:font", ns) is not None
-            }
+            else:
+                for child in list(font_list):
+                    font_list.remove(child)
 
+            font_groups: "OrderedDict[str, dict[str, _PackagedFont]]" = OrderedDict()
             for font in fonts:
-                if font.font_family in existing_families:
-                    continue
+                slot = font_groups.setdefault(font.font_family, {})
+                slot[font.style_kind] = font
+
+            for family, style_map in font_groups.items():
                 entry_elem = ET.SubElement(font_list, f"{{{P_NS}}}embeddedFont")
-                ET.SubElement(entry_elem, f"{{{P_NS}}}font", {"typeface": font.font_family})
-                attrs = {
-                    f"{{{R_DOC_NS}}}id": font.relationship_id,
-                    f"{{{R_DOC_NS}}}subsetted": "1" if font.subsetted else "0",
-                }
-                ET.SubElement(entry_elem, f"{{{P_NS}}}regular", attrs)
-                existing_families.add(font.font_family)
+                representative = (
+                    style_map.get("regular")
+                    or style_map.get("bold")
+                    or style_map.get("italic")
+                    or style_map.get("boldItalic")
+                )
+                font_attrs = {"typeface": family}
+                if representative and representative.pitch_family is not None:
+                    font_attrs["pitchFamily"] = str(representative.pitch_family)
+                if representative and representative.charset is not None:
+                    font_attrs["charset"] = str(representative.charset)
+                ET.SubElement(entry_elem, f"{{{P_NS}}}font", font_attrs)
+                if representative and representative.guid:
+                    ET.SubElement(entry_elem, f"{{{P_NS}}}fontKey", {"guid": representative.guid})
+                for style_kind in FONT_STYLE_ORDER:
+                    tagged = style_map.get(style_kind)
+                    if tagged is None:
+                        continue
+                    attrs = {
+                        f"{{{R_DOC_NS}}}id": tagged.relationship_id,
+                        f"{{{R_DOC_NS}}}subsetted": "1" if tagged.subsetted else "0",
+                    }
+                    ET.SubElement(entry_elem, f"{{{P_NS}}}{FONT_STYLE_TAGS[style_kind]}", attrs)
 
         tree.write(presentation_path, encoding="utf-8", xml_declaration=True)
 
@@ -927,6 +987,36 @@ class PPTXPackageBuilder:
 
         ET.ElementTree(root).write(content_types_path, encoding="utf-8", xml_declaration=True)
 
+    def _ensure_theme_extension(self, package_root: Path) -> None:
+        theme_path = package_root / "ppt" / "theme" / "theme1.xml"
+        if not theme_path.exists():
+            return
+        try:
+            tree = ET.parse(theme_path)
+            root = tree.getroot()
+        except ET.XMLSyntaxError:
+            return
+
+        ext_lst = root.find(f"{{{THEME_NS}}}extLst")
+        if ext_lst is None:
+            ext_lst = ET.SubElement(root, f"{{{THEME_NS}}}extLst")
+
+        target_uri = "{05A4C25C-085E-4340-85A3-A5531E510DB2}"
+        existing = [
+            ext
+            for ext in ext_lst.findall(f"{{{THEME_NS}}}ext")
+            if ext.get("uri") == target_uri
+        ]
+        if existing:
+            return
+
+        ext = ET.SubElement(ext_lst, f"{{{THEME_NS}}}ext", uri=target_uri)
+        theme_family = ET.SubElement(ext, f"{{{THEME_FAMILY_NS}}}themeFamily")
+        theme_family.set("name", "svg2ooxml")
+        theme_family.set("id", f"{{{str(uuid.uuid4()).upper()}}}")
+        theme_family.set("vid", f"{{{str(uuid.uuid4()).upper()}}}")
+        tree.write(theme_path, encoding="utf-8", xml_declaration=True)
+
 
 def write_pptx(scene: IRScene, output_path: str | Path) -> Path:
     """Public helper mirroring the historical API."""
@@ -949,8 +1039,30 @@ def _content_type_for_extension(extension: str) -> str:
         "woff": "application/font-woff",
         "woff2": "application/font-woff2",
         "odttf": "application/vnd.openxmlformats-officedocument.obfuscatedFont",
+        "fntdata": "application/x-fontdata",
     }
     return mapping.get(extension.lower(), "application/octet-stream")
+
+
+def _normalize_style_kind(value: object) -> str:
+    if isinstance(value, str):
+        lowered = value.strip().lower()
+        if lowered == "bolditalic":
+            return "boldItalic"
+        if lowered in FONT_STYLE_TAGS:
+            return lowered
+    return "regular"
+
+
+def _safe_int(value: object | None) -> int | None:
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str):
+        try:
+            return int(value, 0)
+        except ValueError:
+            return None
+    return None
 
 
 __all__ = ["PPTXPackageBuilder", "write_pptx"]

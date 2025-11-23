@@ -1,13 +1,14 @@
 {
-  "name": "SVG to Google Slides",
+  "name": "SVG to Google Slides v4",
   "id": "1567976537857917445",
   "api": "1.0.0",
   "main": "code.js",
-  "ui": "ui.html",
+  "ui": "ui-v2.html",
   "documentAccess": "dynamic-page",
   "networkAccess": {
     "allowedDomains": [
       "https://svg2ooxml-export-sghya3t5ya-ew.a.run.app",
+      "https://powerful-layout-467812-p1.web.app",
       "https://*.googleapis.com",
       "https://*.firebaseapp.com",
       "https://*.google.com",

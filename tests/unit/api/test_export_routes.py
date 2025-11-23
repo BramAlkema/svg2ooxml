@@ -19,6 +19,9 @@ def client_with_service(monkeypatch):
     )
     from svg2ooxml.api.services import subscription_repository as repo_module
 
+    # Mock google.auth.default()
+    monkeypatch.setattr("google.auth.default", lambda scopes=None: (None, None))
+
     class _StubSubscriptionRepo:
         def __init__(self) -> None:
             self.usage: dict[tuple[str, str], dict[str, object]] = {}
@@ -68,6 +71,8 @@ def client_with_service(monkeypatch):
             output_format,
             fonts,
             user,
+            parent_folder_id=None,
+            user_refresh_token=None,  # Add user_refresh_token here
         ):  # noqa: ARG002
             job_id = "job123"
             now = datetime.utcnow().isoformat()
