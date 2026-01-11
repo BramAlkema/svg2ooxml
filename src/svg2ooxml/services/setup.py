@@ -10,7 +10,6 @@ from .conversion import ConversionServices
 from .font_converter import build_smart_font_converter
 from .clip_service import StructuredClipService
 from .providers import registry as provider_registry
-from .registry import ensure_default_providers
 from svg2ooxml.elements import (
     create_gradient_processor,
     create_image_processor,
@@ -61,7 +60,7 @@ def configure_services(
         services.register("policy_context", policy_context)
 
     if include_defaults:
-        ensure_default_providers()
+        provider_registry.ensure_default_providers()
         for name, factory in provider_registry.iter_providers():
             if name in override_map:
                 services.register(name, override_map.pop(name))

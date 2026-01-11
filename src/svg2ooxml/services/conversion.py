@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from svg2ooxml.services.registry import get_provider_factories
+from svg2ooxml.services.providers.registry import get_provider_factories
 
 
 @dataclass
