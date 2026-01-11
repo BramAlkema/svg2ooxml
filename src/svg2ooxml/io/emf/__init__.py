@@ -4,6 +4,7 @@ from importlib import import_module as _im
 from typing import Any as _Any
 
 __all__ = [
+    'BrushSpec',
     'DashPattern',
     'EMFBlob',
     'EMFBrushStyle',
@@ -11,8 +12,11 @@ __all__ = [
     'EMFMedia',
     'EMFRecordType',
     'EMFRelationshipManager',
+    'EMU_PER_INCH',
+    'HMM_PER_EMU',
     'NULL_BRUSH_HANDLE',
     'NULL_PEN_HANDLE',
+    'PenSpec',
     'apply_dash_pattern',
     'flatten_segments',
     'blob',
@@ -21,7 +25,7 @@ __all__ = [
 ]
 
 # map symbol -> relative module
-_symbol_map = {'EMFBrushStyle': 'blob', 'EMFRecordType': 'blob', 'NULL_PEN_HANDLE': 'blob', 'NULL_BRUSH_HANDLE': 'blob', 'EMFHatchStyle': 'blob', 'EMFBlob': 'blob', 'EMFMedia': 'packager', 'EMFRelationshipManager': 'packager', 'apply_dash_pattern': 'path', 'flatten_segments': 'path', 'DashPattern': 'path'}
+_symbol_map = {'EMFBlob': 'blob', 'EMU_PER_INCH': 'blob', 'NULL_BRUSH_HANDLE': 'blob', 'EMFHatchStyle': 'blob', 'PenSpec': 'blob', 'BrushSpec': 'blob', 'HMM_PER_EMU': 'blob', 'EMFRecordType': 'blob', 'NULL_PEN_HANDLE': 'blob', 'EMFBrushStyle': 'blob', 'EMFMedia': 'packager', 'EMFRelationshipManager': 'packager', 'apply_dash_pattern': 'path', 'flatten_segments': 'path', 'DashPattern': 'path'}
 _module_map = {'blob': 'blob', 'packager': 'packager', 'path': 'path'}
 
 

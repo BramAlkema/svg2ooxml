@@ -12,7 +12,7 @@ __all__ = [
 ]
 
 # map symbol -> relative module
-_symbol_map = {'resolve_stroke_style': 'resvg_bridge', 'NormalizedPaints': 'resvg_bridge', 'resolve_fill_paint': 'resvg_bridge', 'resolve_paints_for_node': 'resvg_bridge'}
+_symbol_map = {'resolve_stroke_style': 'resvg_bridge', 'NormalizedPaints': 'resvg_bridge', 'resolve_paints_for_node': 'resvg_bridge', 'resolve_fill_paint': 'resvg_bridge'}
 _module_map = {'resvg_bridge': 'resvg_bridge'}
 
 

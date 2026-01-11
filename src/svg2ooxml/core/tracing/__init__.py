@@ -13,7 +13,7 @@ __all__ = [
 ]
 
 # map symbol -> relative module
-_symbol_map = {'GeometryTrace': 'conversion', 'StageTrace': 'conversion', 'TraceReport': 'conversion', 'ConversionTracer': 'conversion', 'PaintTrace': 'conversion'}
+_symbol_map = {'StageTrace': 'conversion', 'TraceReport': 'conversion', 'GeometryTrace': 'conversion', 'ConversionTracer': 'conversion', 'PaintTrace': 'conversion'}
 _module_map = {'conversion': 'conversion'}
 
 

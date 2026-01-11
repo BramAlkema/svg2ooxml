@@ -6,14 +6,10 @@ from typing import Any as _Any
 __all__ = [
     'CoordinateSpace',
     'DecomposedTransform',
-    'IDENTITY',
-    'Matrix',
-    'Matrix2D',
     'compose_matrix',
     'decompose_matrix',
     'matrix',
     'parse_transform',
-    'parse_transform_list',
     'rotate',
     'scale',
     'skew_x',
@@ -26,7 +22,7 @@ __all__ = [
 ]
 
 # map symbol -> relative module
-_symbol_map = {'DecomposedTransform': 'decompose', 'decompose_matrix': 'decompose', 'compose_matrix': 'decompose', 'translate': 'matrix', 'rotate': 'matrix', 'skew_y': 'matrix', 'Matrix2D': 'matrix', 'skew_x': 'matrix', 'Matrix': 'matrix', 'matrix': 'matrix', 'scale': 'matrix', 'IDENTITY': 'matrix', 'parse_transform_list': 'matrix', 'parse_transform': 'parser', 'CoordinateSpace': 'space'}
+_symbol_map = {'decompose_matrix': 'decompose', 'compose_matrix': 'decompose', 'DecomposedTransform': 'decompose', 'skew_y': 'matrix', 'skew_x': 'matrix', 'scale': 'matrix', 'translate': 'matrix', 'rotate': 'matrix', 'matrix': 'matrix', 'parse_transform': 'parser', 'CoordinateSpace': 'space'}
 _module_map = {'decompose': 'decompose', 'matrix': 'matrix', 'parser': 'parser', 'space': 'space'}
 
 

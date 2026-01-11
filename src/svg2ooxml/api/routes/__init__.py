@@ -4,9 +4,20 @@ from importlib import import_module as _im
 from typing import Any as _Any
 
 __all__ = [
+    'AuthKeyResponse',
+    'ExchangePayload',
     'FREE_TIER_LIMIT',
+    'GOOGLE_CLIENT_ID',
+    'GOOGLE_CLIENT_SECRET',
+    'REDIRECT_URI',
+    'TaskRequest',
+    'create_auth_key',
     'create_checkout',
+    'create_export_job',
     'create_portal',
+    'delete_job',
+    'exchange_tokens',
+    'get_job_status',
     'get_stripe_service',
     'get_subscription_repo',
     'get_subscription_status',
@@ -17,10 +28,12 @@ __all__ = [
     'handle_subscription_created',
     'handle_subscription_deleted',
     'handle_subscription_updated',
+    'process_export_task',
     'register_svg_routes',
-    'router',
+    'revoke_oauth',
     'stripe_webhook',
     'export',
+    'oauth',
     'subscription',
     'svg',
     'tasks',
@@ -28,8 +41,8 @@ __all__ = [
 ]
 
 # map symbol -> relative module
-_symbol_map = {'router': 'export', 'get_subscription_repo': 'subscription', 'create_checkout': 'subscription', 'FREE_TIER_LIMIT': 'subscription', 'create_portal': 'subscription', 'get_subscription_status': 'subscription', 'get_tier_from_price_id': 'subscription', 'get_stripe_service': 'subscription', 'register_svg_routes': 'svg', 'get_webhook_db': 'webhooks', 'handle_payment_failed': 'webhooks', 'stripe_webhook': 'webhooks', 'handle_subscription_deleted': 'webhooks', 'handle_payment_succeeded': 'webhooks', 'handle_subscription_updated': 'webhooks', 'handle_subscription_created': 'webhooks'}
-_module_map = {'export': 'export', 'subscription': 'subscription', 'svg': 'svg', 'tasks': 'tasks', 'webhooks': 'webhooks'}
+_symbol_map = {'get_job_status': 'export', 'delete_job': 'export', 'create_export_job': 'export', 'FREE_TIER_LIMIT': 'export', 'get_subscription_repo': 'export', 'REDIRECT_URI': 'oauth', 'create_auth_key': 'oauth', 'AuthKeyResponse': 'oauth', 'exchange_tokens': 'oauth', 'GOOGLE_CLIENT_ID': 'oauth', 'ExchangePayload': 'oauth', 'GOOGLE_CLIENT_SECRET': 'oauth', 'revoke_oauth': 'oauth', 'get_stripe_service': 'subscription', 'create_portal': 'subscription', 'get_tier_from_price_id': 'subscription', 'create_checkout': 'subscription', 'get_subscription_status': 'subscription', 'register_svg_routes': 'svg', 'TaskRequest': 'tasks', 'process_export_task': 'tasks', 'handle_payment_failed': 'webhooks', 'handle_subscription_deleted': 'webhooks', 'get_webhook_db': 'webhooks', 'handle_subscription_updated': 'webhooks', 'handle_subscription_created': 'webhooks', 'stripe_webhook': 'webhooks', 'handle_payment_succeeded': 'webhooks'}
+_module_map = {'export': 'export', 'oauth': 'oauth', 'subscription': 'subscription', 'svg': 'svg', 'tasks': 'tasks', 'webhooks': 'webhooks'}
 
 
 def __getattr__(name: str) -> _Any:  # PEP 562

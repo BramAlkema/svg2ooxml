@@ -4,13 +4,19 @@ from importlib import import_module as _im
 from typing import Any as _Any
 
 __all__ = [
+    'CSSDeclaration',
+    'CSSOrigin',
+    'CSSRule',
+    'CompiledSelector',
+    'PropertyDescriptor',
+    'SelectorPart',
     'StyleContext',
     'StyleResolver',
     'resolver'
 ]
 
 # map symbol -> relative module
-_symbol_map = {'StyleContext': 'resolver', 'StyleResolver': 'resolver'}
+_symbol_map = {'PropertyDescriptor': 'resolver', 'StyleContext': 'resolver', 'SelectorPart': 'resolver', 'CSSRule': 'resolver', 'CompiledSelector': 'resolver', 'CSSDeclaration': 'resolver', 'CSSOrigin': 'resolver', 'StyleResolver': 'resolver'}
 _module_map = {'resolver': 'resolver'}
 
 

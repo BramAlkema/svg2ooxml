@@ -5,23 +5,41 @@ from typing import Any as _Any
 
 __all__ = [
     'BlendFilter',
+    'BlendParams',
+    'CHANNELS',
     'ColorMatrixFilter',
+    'ColorMatrixParams',
+    'ComponentFunction',
     'ComponentTransferFilter',
     'CompositeFilter',
+    'CompositeParams',
     'ConvolveMatrixFilter',
+    'ConvolveMatrixParams',
     'DiffuseLightingFilter',
     'DisplacementMapFilter',
     'DropShadowFilter',
+    'DropShadowParams',
     'FloodFilter',
+    'FloodParams',
     'GaussianBlurFilter',
+    'GaussianBlurParams',
     'GlowFilter',
     'ImageFilter',
+    'ImageParams',
+    'LightSource',
     'MergeFilter',
+    'MergeParams',
     'MorphologyFilter',
+    'MorphologyParams',
     'OffsetFilter',
+    'OffsetParams',
+    'SUPPORTED_MODES',
+    'SUPPORTED_OPERATORS',
     'SpecularLightingFilter',
     'TileFilter',
+    'TileParams',
     'TurbulenceFilter',
+    'XLINK_HREF',
     'blend',
     'color_matrix',
     'component_transfer',
@@ -41,7 +59,7 @@ __all__ = [
 ]
 
 # map symbol -> relative module
-_symbol_map = {'BlendFilter': 'blend', 'ColorMatrixFilter': 'color_matrix', 'ComponentTransferFilter': 'component_transfer', 'CompositeFilter': 'composite', 'ConvolveMatrixFilter': 'convolve_matrix', 'DisplacementMapFilter': 'displacement_map', 'GlowFilter': 'drop_shadow', 'DropShadowFilter': 'drop_shadow', 'FloodFilter': 'flood', 'GaussianBlurFilter': 'gaussian_blur', 'ImageFilter': 'image', 'SpecularLightingFilter': 'lighting', 'DiffuseLightingFilter': 'lighting', 'MergeFilter': 'merge', 'MorphologyFilter': 'morphology', 'OffsetFilter': 'offset', 'TileFilter': 'tile', 'TurbulenceFilter': 'turbulence'}
+_symbol_map = {'BlendParams': 'blend', 'BlendFilter': 'blend', 'SUPPORTED_MODES': 'blend', 'ColorMatrixParams': 'color_matrix', 'ColorMatrixFilter': 'color_matrix', 'ComponentFunction': 'component_transfer', 'ComponentTransferFilter': 'component_transfer', 'CHANNELS': 'component_transfer', 'CompositeFilter': 'composite', 'CompositeParams': 'composite', 'SUPPORTED_OPERATORS': 'composite', 'ConvolveMatrixFilter': 'convolve_matrix', 'ConvolveMatrixParams': 'convolve_matrix', 'DisplacementMapFilter': 'displacement_map', 'DropShadowFilter': 'drop_shadow', 'GlowFilter': 'drop_shadow', 'DropShadowParams': 'drop_shadow', 'FloodFilter': 'flood', 'FloodParams': 'flood', 'GaussianBlurFilter': 'gaussian_blur', 'GaussianBlurParams': 'gaussian_blur', 'XLINK_HREF': 'image', 'ImageParams': 'image', 'ImageFilter': 'image', 'SpecularLightingFilter': 'lighting', 'DiffuseLightingFilter': 'lighting', 'LightSource': 'lighting', 'MergeParams': 'merge', 'MergeFilter': 'merge', 'MorphologyParams': 'morphology', 'MorphologyFilter': 'morphology', 'OffsetFilter': 'offset', 'OffsetParams': 'offset', 'TileParams': 'tile', 'TileFilter': 'tile', 'TurbulenceFilter': 'turbulence'}
 _module_map = {'blend': 'blend', 'color_matrix': 'color_matrix', 'component_transfer': 'component_transfer', 'composite': 'composite', 'convolve_matrix': 'convolve_matrix', 'displacement_map': 'displacement_map', 'drop_shadow': 'drop_shadow', 'flood': 'flood', 'gaussian_blur': 'gaussian_blur', 'image': 'image', 'lighting': 'lighting', 'merge': 'merge', 'morphology': 'morphology', 'offset': 'offset', 'tile': 'tile', 'turbulence': 'turbulence'}
 
 

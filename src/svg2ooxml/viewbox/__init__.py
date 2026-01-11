@@ -4,22 +4,11 @@ from importlib import import_module as _im
 from typing import Any as _Any
 
 __all__ = [
-    'PreserveAspectRatio',
-    'ViewBox',
-    'ViewBoxResult',
-    'Viewport',
-    'ViewportEngine',
-    'compute_viewbox',
-    'parse_preserve_aspect_ratio',
-    'parse_viewbox_attribute',
-    'resolve_viewbox',
-    'resolve_viewbox_dimensions',
-    'viewbox_matrix_from_element',
     'core'
 ]
 
 # map symbol -> relative module
-_symbol_map = {'viewbox_matrix_from_element': 'core', 'ViewBoxResult': 'core', 'compute_viewbox': 'core', 'resolve_viewbox_dimensions': 'core', 'PreserveAspectRatio': 'core', 'parse_viewbox_attribute': 'core', 'parse_preserve_aspect_ratio': 'core', 'ViewBox': 'core', 'ViewportEngine': 'core', 'resolve_viewbox': 'core', 'Viewport': 'core'}
+_symbol_map = {}
 _module_map = {'core': 'core'}
 
 

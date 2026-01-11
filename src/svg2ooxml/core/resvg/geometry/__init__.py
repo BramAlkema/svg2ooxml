@@ -37,7 +37,7 @@ __all__ = [
 ]
 
 # map symbol -> relative module
-_symbol_map = {'matrix_from_commands': 'matrix', 'Matrix': 'matrix', 'V_LINE_TO': 'path_commands', 'MOVE_TO': 'path_commands', 'SMOOTH_QUAD_TO': 'path_commands', 'ARC_TO': 'path_commands', 'CUBIC_TO': 'path_commands', 'LINE_TO': 'path_commands', 'CLOSE': 'path_commands', 'QUAD_TO': 'path_commands', 'H_LINE_TO': 'path_commands', 'SMOOTH_CUBIC_TO': 'path_commands', 'normalize_path': 'path_normalizer', 'NormalizedPath': 'path_normalizer', 'PathCommand': 'path_normalizer', 'ClosePath': 'primitives', 'CubicCurve': 'primitives', 'MoveTo': 'primitives', 'LineTo': 'primitives', 'Arc': 'primitives', 'QuadraticCurve': 'primitives', 'Tessellator': 'tessellation', 'TessellationResult': 'tessellation', 'Vec2': 'vectors'}
+_symbol_map = {'Matrix': 'matrix', 'matrix_from_commands': 'matrix', 'V_LINE_TO': 'path_commands', 'SMOOTH_QUAD_TO': 'path_commands', 'ARC_TO': 'path_commands', 'H_LINE_TO': 'path_commands', 'CLOSE': 'path_commands', 'CUBIC_TO': 'path_commands', 'MOVE_TO': 'path_commands', 'QUAD_TO': 'path_commands', 'LINE_TO': 'path_commands', 'SMOOTH_CUBIC_TO': 'path_commands', 'normalize_path': 'path_normalizer', 'NormalizedPath': 'path_normalizer', 'PathCommand': 'path_normalizer', 'CubicCurve': 'primitives', 'LineTo': 'primitives', 'Arc': 'primitives', 'QuadraticCurve': 'primitives', 'ClosePath': 'primitives', 'MoveTo': 'primitives', 'Tessellator': 'tessellation', 'TessellationResult': 'tessellation', 'Vec2': 'vectors'}
 _module_map = {'matrix': 'matrix', 'path_commands': 'path_commands', 'path_normalizer': 'path_normalizer', 'primitives': 'primitives', 'tessellation': 'tessellation', 'vectors': 'vectors'}
 
 
