@@ -18,7 +18,7 @@ from svg2ooxml.core.ir.smart_font_bridge import SmartFontBridge
 from svg2ooxml.core.ir.text_pipeline import TextConversionPipeline
 
 if TYPE_CHECKING:  # pragma: no cover - type checking only
-    from svg2ooxml.core.ir.converter import IRConverter
+    from svg2ooxml.core.ir.context import IRConverterContext
 
 
 FONT_FALLBACKS: dict[str, str] = {
@@ -141,14 +141,18 @@ def _estimate_run_width(text: str, run: Run, font_service: Any | None) -> float:
 class TextConverter:
     """Handle text element extraction, policy application, and metadata."""
 
-    def __init__(self, parent: IRConverter, pipeline: TextConversionPipeline | None = None) -> None:
-        self._parent = parent
+    def __init__(
+        self,
+        context: "IRConverterContext | Any",
+        pipeline: TextConversionPipeline | None = None,
+    ) -> None:
+        self._context = self._resolve_context(context)
         self._pipeline = pipeline or TextConversionPipeline(
-            font_service=parent._services.resolve("font"),  # pylint: disable=protected-access
-            embedding_engine=parent._services.resolve("font_embedding"),  # pylint: disable=protected-access
-            logger=parent._logger,  # pylint: disable=protected-access
+            font_service=self._context.services.resolve("font"),
+            embedding_engine=self._context.services.resolve("font_embedding"),
+            logger=self._context.logger,
         )
-        self._smart_font_bridge = SmartFontBridge(parent._services, parent._logger)
+        self._smart_font_bridge = SmartFontBridge(self._context.services, self._context.logger)
         self._text_path_positioner = CurveTextPositioner(PathSamplingMethod.DETERMINISTIC)
 
     # ------------------------------------------------------------------
@@ -156,9 +160,9 @@ class TextConverter:
     # ------------------------------------------------------------------
 
     def convert(self, *, element: etree._Element, coord_space: CoordinateSpace) -> TextFrame | None:
-        base_style = self._parent._style_resolver.compute_text_style(  # pylint: disable=protected-access
+        base_style = self._context.style_resolver.compute_text_style(
             element,
-            context=self._parent._css_context,  # pylint: disable=protected-access
+            context=self._context.css_context,
         )
         runs, run_metadata = self._collect_text_runs(element, base_style)
         if not runs:
@@ -184,11 +188,11 @@ class TextConverter:
         }.get(element.get("text-anchor"), TextAnchor.START)
 
         origin_x, origin_y = coord_space.apply_point(x, y)
-        font_service = self._parent._services.resolve("font")  # pylint: disable=protected-access
+        font_service = self._context.services.resolve("font")
         bbox = self._estimate_text_bbox(processed_runs, origin_x, origin_y, font_service=font_service)
 
         metadata: dict[str, Any] = dict(run_metadata)
-        self._parent._attach_policy_metadata(metadata, "text")  # pylint: disable=protected-access
+        self._context.attach_policy_metadata(metadata, "text")
         if policy_meta_accum:
             policy_meta = metadata.setdefault("policy", {}).setdefault("text", {})
             policy_meta.update(policy_meta_accum)
@@ -206,7 +210,7 @@ class TextConverter:
             frame = self._pipeline.plan_frame(frame, processed_runs, decision)
         if self._smart_font_bridge is not None:
             frame = self._smart_font_bridge.enhance_frame(frame, processed_runs, decision)
-        trace_stage = getattr(self._parent, "_trace_stage", None)
+        trace_stage = getattr(self._context, "trace_stage", None)
         if callable(trace_stage):
             trace_stage(
                 "text_frame",
@@ -219,11 +223,11 @@ class TextConverter:
                     "decision": getattr(decision, "value", decision),
                 },
             )
-        self._parent._trace_geometry_decision(element, "native", frame.metadata)  # pylint: disable=protected-access
+        self._context.trace_geometry_decision(element, "native", frame.metadata)
         return frame
 
     def apply_policy(self, run: Run) -> tuple[Run, dict[str, Any]]:
-        policy = self._parent._policy_options("text")  # pylint: disable=protected-access
+        policy = self._context.policy_options("text")
         if not policy:
             return run, {}
 
@@ -239,6 +243,15 @@ class TextConverter:
     def pipeline(self) -> TextConversionPipeline:
         return self._pipeline
 
+    @staticmethod
+    def _resolve_context(context: "IRConverterContext | Any") -> "IRConverterContext":
+        if hasattr(context, "style_resolver") and hasattr(context, "services"):
+            return context
+        parent_context = getattr(context, "_context", None)
+        if parent_context is not None:
+            return parent_context
+        raise TypeError("TextConverter expects an IRConverterContext or compatible object.")
+
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
@@ -249,7 +262,7 @@ class TextConverter:
     ) -> TextPolicyDecision | None:
         options = policy
         if options is None:
-            options = self._parent._policy_options("text")  # pylint: disable=protected-access
+            options = self._context.policy_options("text")
         if not isinstance(options, Mapping):
             return None
         candidate = options.get("decision")
@@ -271,22 +284,22 @@ class TextConverter:
                 segments.append((dict(style), text_segment))
 
             for child in node:
-                local = self._parent._local_name(getattr(child, "tag", "")).lower()  # pylint: disable=protected-access
+                local = self._context.local_name(getattr(child, "tag", "")).lower()
                 if local == "tspan":
-                    child_style = self._parent._style_resolver.compute_text_style(  # pylint: disable=protected-access
+                    child_style = self._context.style_resolver.compute_text_style(
                         child,
-                        context=self._parent._css_context,  # pylint: disable=protected-access
+                        context=self._context.css_context,
                         parent_style=style,
                     )
                     visit(child, child_style)
                 elif local == "textpath":
-                    child_style = self._parent._style_resolver.compute_text_style(  # pylint: disable=protected-access
+                    child_style = self._context.style_resolver.compute_text_style(
                         child,
-                        context=self._parent._css_context,  # pylint: disable=protected-access
+                        context=self._context.css_context,
                         parent_style=style,
                     )
                     href = child.get("{http://www.w3.org/1999/xlink}href") or child.get("href")
-                    path_id = self._parent._normalize_href_reference(href)  # pylint: disable=protected-access
+                    path_id = self._context.normalize_href_reference(href)
                     if path_id:
                         metadata.setdefault("text_path_id", path_id)
                         sampled = self._sample_text_path(path_id)
@@ -529,7 +542,7 @@ class TextConverter:
         return mapped or token
 
     def _sample_text_path(self, path_id: str) -> dict[str, object] | None:
-        element = self._parent._element_index.get(path_id)  # pylint: disable=protected-access
+        element = self._context.element_index.get(path_id)
         if element is None:
             return None
         path_data = element.get("d")

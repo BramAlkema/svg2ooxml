@@ -4,8 +4,11 @@ from importlib import import_module as _im
 from typing import Any as _Any
 
 __all__ = [
-    'BROTLI_AVAILABLE',
+    'DATA_URI_PATTERN',
     'ENV_FONT_DIRS',
+    'EOTConversionError',
+    'EOTResult',
+    'EmbeddedFontPayload',
     'EmbeddingPermission',
     'FontEmbeddingEngine',
     'FontEmbeddingRequest',
@@ -22,9 +25,12 @@ __all__ = [
     'FontSystemConfig',
     'LoadedFont',
     'MAX_FONT_SIZE',
+    'WOFFTableEntry',
+    'build_eot',
     'collect_font_directories',
     'parse_directory_list',
     'embedding',
+    'eot',
     'fetcher',
     'loader',
     'providers',
@@ -33,8 +39,8 @@ __all__ = [
 ]
 
 # map symbol -> relative module
-_symbol_map = {'EmbeddingPermission': 'embedding', 'FontEmbeddingResult': 'embedding', 'FontEmbeddingEngine': 'embedding', 'FontOptimisationLevel': 'embedding', 'FontEmbeddingRequest': 'embedding', 'FontFetcher': 'fetcher', 'MAX_FONT_SIZE': 'fetcher', 'FontSource': 'fetcher', 'LoadedFont': 'loader', 'BROTLI_AVAILABLE': 'loader', 'FontLoader': 'loader', 'FontMatch': 'service', 'FontProvider': 'service', 'FontQuery': 'service', 'FontService': 'service', 'FontSystem': 'system', 'collect_font_directories': 'system', 'parse_directory_list': 'system', 'ENV_FONT_DIRS': 'system', 'FontSystemConfig': 'system'}
-_module_map = {'embedding': 'embedding', 'fetcher': 'fetcher', 'loader': 'loader', 'providers': 'providers', 'service': 'service', 'system': 'system'}
+_symbol_map = {'FontEmbeddingEngine': 'embedding', 'FontEmbeddingResult': 'embedding', 'EmbeddedFontPayload': 'embedding', 'EmbeddingPermission': 'embedding', 'FontEmbeddingRequest': 'embedding', 'FontOptimisationLevel': 'embedding', 'EOTResult': 'eot', 'EOTConversionError': 'eot', 'build_eot': 'eot', 'MAX_FONT_SIZE': 'fetcher', 'FontSource': 'fetcher', 'FontFetcher': 'fetcher', 'WOFFTableEntry': 'loader', 'FontLoader': 'loader', 'LoadedFont': 'loader', 'DATA_URI_PATTERN': 'loader', 'FontService': 'service', 'FontMatch': 'service', 'FontProvider': 'service', 'FontQuery': 'service', 'FontSystem': 'system', 'collect_font_directories': 'system', 'parse_directory_list': 'system', 'FontSystemConfig': 'system', 'ENV_FONT_DIRS': 'system'}
+_module_map = {'embedding': 'embedding', 'eot': 'eot', 'fetcher': 'fetcher', 'loader': 'loader', 'providers': 'providers', 'service': 'service', 'system': 'system'}
 
 
 def __getattr__(name: str) -> _Any:  # PEP 562

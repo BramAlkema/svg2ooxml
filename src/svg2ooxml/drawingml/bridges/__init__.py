@@ -6,29 +6,37 @@ from typing import Any as _Any
 __all__ = [
     'EMFPathAdapter',
     'EMFPathResult',
-    'GradientDescriptor',
     'GradientStopDescriptor',
     'LinearGradientDescriptor',
     'MeshGradientDescriptor',
     'PathStyle',
     'PatternDescriptor',
     'RadialGradientDescriptor',
+    'ResvgShapeAdapter',
+    'ResvgShapeAdapterError',
+    'TransformClass',
     'build_linear_gradient_element',
     'build_mesh_gradient_element',
     'build_pattern_element',
     'build_radial_gradient_element',
+    'classify_linear',
+    'decide_radial_policy',
     'describe_gradient_element',
     'describe_linear_gradient',
     'describe_pattern',
     'describe_pattern_element',
     'describe_radial_gradient',
+    'linear_gradient_to_paint',
+    'radial_gradient_to_paint',
     'emf_path_adapter',
-    'resvg_paint_bridge'
+    'resvg_gradient_adapter',
+    'resvg_paint_bridge',
+    'resvg_shape_adapter'
 ]
 
 # map symbol -> relative module
-_symbol_map = {'EMFPathAdapter': 'emf_path_adapter', 'PathStyle': 'emf_path_adapter', 'EMFPathResult': 'emf_path_adapter', 'describe_linear_gradient': 'resvg_paint_bridge', 'PatternDescriptor': 'resvg_paint_bridge', 'GradientStopDescriptor': 'resvg_paint_bridge', 'describe_pattern': 'resvg_paint_bridge', 'build_linear_gradient_element': 'resvg_paint_bridge', 'LinearGradientDescriptor': 'resvg_paint_bridge', 'describe_gradient_element': 'resvg_paint_bridge', 'build_pattern_element': 'resvg_paint_bridge', 'build_radial_gradient_element': 'resvg_paint_bridge', 'describe_radial_gradient': 'resvg_paint_bridge', 'describe_pattern_element': 'resvg_paint_bridge', 'build_mesh_gradient_element': 'resvg_paint_bridge', 'MeshGradientDescriptor': 'resvg_paint_bridge', 'GradientDescriptor': 'resvg_paint_bridge', 'RadialGradientDescriptor': 'resvg_paint_bridge'}
-_module_map = {'emf_path_adapter': 'emf_path_adapter', 'resvg_paint_bridge': 'resvg_paint_bridge'}
+_symbol_map = {'EMFPathResult': 'emf_path_adapter', 'EMFPathAdapter': 'emf_path_adapter', 'PathStyle': 'emf_path_adapter', 'radial_gradient_to_paint': 'resvg_gradient_adapter', 'classify_linear': 'resvg_gradient_adapter', 'linear_gradient_to_paint': 'resvg_gradient_adapter', 'decide_radial_policy': 'resvg_gradient_adapter', 'TransformClass': 'resvg_gradient_adapter', 'build_pattern_element': 'resvg_paint_bridge', 'LinearGradientDescriptor': 'resvg_paint_bridge', 'describe_linear_gradient': 'resvg_paint_bridge', 'build_linear_gradient_element': 'resvg_paint_bridge', 'describe_radial_gradient': 'resvg_paint_bridge', 'build_mesh_gradient_element': 'resvg_paint_bridge', 'RadialGradientDescriptor': 'resvg_paint_bridge', 'MeshGradientDescriptor': 'resvg_paint_bridge', 'describe_pattern_element': 'resvg_paint_bridge', 'GradientStopDescriptor': 'resvg_paint_bridge', 'build_radial_gradient_element': 'resvg_paint_bridge', 'PatternDescriptor': 'resvg_paint_bridge', 'describe_gradient_element': 'resvg_paint_bridge', 'describe_pattern': 'resvg_paint_bridge', 'ResvgShapeAdapter': 'resvg_shape_adapter', 'ResvgShapeAdapterError': 'resvg_shape_adapter'}
+_module_map = {'emf_path_adapter': 'emf_path_adapter', 'resvg_gradient_adapter': 'resvg_gradient_adapter', 'resvg_paint_bridge': 'resvg_paint_bridge', 'resvg_shape_adapter': 'resvg_shape_adapter'}
 
 
 def __getattr__(name: str) -> _Any:  # PEP 562

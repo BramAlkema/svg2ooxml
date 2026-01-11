@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 from pathlib import Path
-from typing import Sequence, Set, Tuple
+from typing import Sequence, Set, Tuple, TYPE_CHECKING
 
 from svg2ooxml.common.geometry.algorithms import classify_text_path_warp
 from svg2ooxml.ir.text import (
@@ -24,10 +24,39 @@ from svg2ooxml.services.fonts import (
     collect_font_directories,
 )
 
+if TYPE_CHECKING:  # pragma: no cover - type checking only
+    from svg2ooxml.core.ir.context import IRConverterContext
+    from svg2ooxml.core.ir.text_converter import TextConverter
+    from svg2ooxml.core.traversal.coordinate_space import CoordinateSpace
+
 try:  # pragma: no cover - optional dependency
     from svg2ooxml.services.fonts.providers.directory import DirectoryFontProvider
 except Exception:  # pragma: no cover
     DirectoryFontProvider = None  # type: ignore[assignment]
+
+
+class TextPipeline:
+    """Expose text conversion through a focused pipeline interface."""
+
+    def __init__(
+        self,
+        context: "IRConverterContext",
+        *,
+        converter: "TextConverter | None" = None,
+        pipeline: "TextConversionPipeline | None" = None,
+    ) -> None:
+        if converter is None:
+            from svg2ooxml.core.ir.text_converter import TextConverter
+
+            converter = TextConverter(context, pipeline=pipeline)
+        self._converter = converter
+
+    def convert(self, *, element, coord_space: "CoordinateSpace"):
+        return self._converter.convert(element=element, coord_space=coord_space)
+
+    @property
+    def converter(self) -> "TextConverter":
+        return self._converter
 
 
 class TextConversionPipeline:
@@ -346,4 +375,4 @@ class TextConversionPipeline:
         return preset, confidence
 
 
-__all__ = ["TextConversionPipeline"]
+__all__ = ["TextConversionPipeline", "TextPipeline"]

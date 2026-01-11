@@ -7,6 +7,7 @@ __all__ = [
     'decrypt_token',
     'encrypt_token',
     'generate_encryption_key',
+    'get_firestore_client',
     'initialize_firebase',
     'verify_firebase_token',
     'verify_firebase_token_with_scopes',
@@ -18,7 +19,7 @@ __all__ = [
 ]
 
 # map symbol -> relative module
-_symbol_map = {'generate_encryption_key': 'encryption', 'encrypt_token': 'encryption', 'decrypt_token': 'encryption', 'verify_google_identity_token': 'firebase', 'initialize_firebase': 'firebase', 'verify_id_token': 'firebase', 'verify_firebase_token_with_scopes': 'middleware', 'verify_firebase_token': 'middleware'}
+_symbol_map = {'generate_encryption_key': 'encryption', 'encrypt_token': 'encryption', 'decrypt_token': 'encryption', 'verify_id_token': 'firebase', 'initialize_firebase': 'firebase', 'verify_google_identity_token': 'firebase', 'get_firestore_client': 'firebase', 'verify_firebase_token_with_scopes': 'middleware', 'verify_firebase_token': 'middleware'}
 _module_map = {'encryption': 'encryption', 'firebase': 'firebase', 'middleware': 'middleware'}
 
 

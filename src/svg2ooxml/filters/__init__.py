@@ -6,8 +6,10 @@ from typing import Any as _Any
 __all__ = [
     'Filter',
     'FilterContext',
+    'FilterPlanner',
     'FilterPrimitiveDescriptor',
     'FilterRegistry',
+    'FilterRenderer',
     'FilterResult',
     'ResolvedFilter',
     'build_filter_element',
@@ -18,15 +20,17 @@ __all__ = [
     'base',
     'effects',
     'image',
+    'planner',
     'primitives',
     'registry',
+    'renderer',
     'resvg_bridge',
     'utils'
 ]
 
 # map symbol -> relative module
-_symbol_map = {'FilterResult': 'base', 'Filter': 'base', 'FilterContext': 'base', 'FilterRegistry': 'registry', 'build_filter_node': 'resvg_bridge', 'resolve_filter_reference': 'resvg_bridge', 'resolve_filter_node': 'resvg_bridge', 'resolve_filter_element': 'resvg_bridge', 'build_filter_element': 'resvg_bridge', 'ResolvedFilter': 'resvg_bridge', 'FilterPrimitiveDescriptor': 'resvg_bridge'}
-_module_map = {'base': 'base', 'effects': 'effects', 'image': 'image', 'primitives': 'primitives', 'registry': 'registry', 'resvg_bridge': 'resvg_bridge', 'utils': 'utils'}
+_symbol_map = {'Filter': 'base', 'FilterContext': 'base', 'FilterResult': 'base', 'FilterPlanner': 'planner', 'FilterRegistry': 'registry', 'FilterRenderer': 'renderer', 'resolve_filter_node': 'resvg_bridge', 'build_filter_node': 'resvg_bridge', 'ResolvedFilter': 'resvg_bridge', 'build_filter_element': 'resvg_bridge', 'resolve_filter_element': 'resvg_bridge', 'FilterPrimitiveDescriptor': 'resvg_bridge', 'resolve_filter_reference': 'resvg_bridge'}
+_module_map = {'base': 'base', 'effects': 'effects', 'image': 'image', 'planner': 'planner', 'primitives': 'primitives', 'registry': 'registry', 'renderer': 'renderer', 'resvg_bridge': 'resvg_bridge', 'utils': 'utils'}
 
 
 def __getattr__(name: str) -> _Any:  # PEP 562

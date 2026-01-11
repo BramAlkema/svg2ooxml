@@ -5,14 +5,13 @@ from typing import Any as _Any
 
 __all__ = [
     'convert_single_svg',
-    'convert_single_svg_task',
     'enqueue_svg_conversion',
     'process_svg_batch',
     'tasks'
 ]
 
 # map symbol -> relative module
-_symbol_map = {'process_svg_batch': 'tasks', 'convert_single_svg': 'tasks', 'convert_single_svg_task': 'tasks', 'enqueue_svg_conversion': 'tasks'}
+_symbol_map = {'enqueue_svg_conversion': 'tasks', 'convert_single_svg': 'tasks', 'process_svg_batch': 'tasks'}
 _module_map = {'tasks': 'tasks'}
 
 

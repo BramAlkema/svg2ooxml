@@ -4,12 +4,10 @@ from importlib import import_module as _im
 from typing import Any as _Any
 
 __all__ = [
-    'ProviderFactory',
-    '_build_embedding_engine',
-    '_build_font_service',
-    '_factory',
     'clear_providers',
+    'ensure_default_providers',
     'get_provider',
+    'get_provider_factories',
     'iter_providers',
     'register_provider',
     'color_provider',
@@ -27,7 +25,7 @@ __all__ = [
 ]
 
 # map symbol -> relative module
-_symbol_map = {'_factory': 'color_provider', '_build_embedding_engine': 'font_provider', '_build_font_service': 'font_provider', 'iter_providers': 'registry', 'clear_providers': 'registry', 'register_provider': 'registry', 'ProviderFactory': 'registry', 'get_provider': 'registry'}
+_symbol_map = {'get_provider_factories': 'registry', 'ensure_default_providers': 'registry', 'iter_providers': 'registry', 'register_provider': 'registry', 'get_provider': 'registry', 'clear_providers': 'registry'}
 _module_map = {'color_provider': 'color_provider', 'drawingml_provider': 'drawingml_provider', 'filter_provider': 'filter_provider', 'font_provider': 'font_provider', 'gradient_provider': 'gradient_provider', 'hyperlink_provider': 'hyperlink_provider', 'image_provider': 'image_provider', 'marker_provider': 'marker_provider', 'mask_provider': 'mask_provider', 'pattern_provider': 'pattern_provider', 'registry': 'registry', 'symbol_provider': 'symbol_provider'}
 
 

@@ -3,44 +3,8 @@
 from importlib import import_module as _im
 from typing import Any as _Any
 
-
-try:  # pragma: no cover - exercised indirectly via availability flag
-    from .core import Color as _AdvancedColorImpl
-except Exception as _advanced_color_error:  # pragma: no cover - dependency not installed
-    COLOR_ENGINE_AVAILABLE = False
-
-    class _UnavailableAdvancedColor:  # type: ignore[too-many-ancestors]
-        """Placeholder that surfaces a friendly error when the engine is missing."""
-
-        def __init__(self, *args, **kwargs) -> None:
-            raise RuntimeError(
-                "svg2ooxml advanced colour engine is unavailable. Install the 'color' extra "
-                "(pip install svg2ooxml[color]) to enable AdvancedColor support."
-            ) from _advanced_color_error
-
-    AdvancedColor = _UnavailableAdvancedColor  # type: ignore[assignment]
-
-    def require_color_engine() -> None:
-        """Raise a runtime error explaining how to enable the advanced colour engine."""
-
-        raise RuntimeError(
-            "Advanced colour engine unavailable: install the 'color' extra to enable it."
-        ) from _advanced_color_error
-
-else:  # pragma: no cover - thin wrapper, behaviour covered by downstream tests
-    COLOR_ENGINE_AVAILABLE = True
-    AdvancedColor = _AdvancedColorImpl
-
-    def require_color_engine() -> None:
-        """Ensure the advanced colour engine is ready (no-op when available)."""
-
-        return None
-
 __all__ = [
-    'AdvancedColor',
-    'COLOR_ENGINE_AVAILABLE',
     'BlendMode',
-    'CSS_NAMED_COLORS',
     'Color',
     'ColorAccessibility',
     'ColorBatch',
@@ -52,7 +16,6 @@ __all__ = [
     'ContrastLevel',
     'NAMED_COLORS',
     'color_to_hex',
-    'require_color_engine',
     'get_css_color',
     'is_css_color',
     'oklab_to_oklch',
@@ -73,7 +36,7 @@ __all__ = [
 ]
 
 # map symbol -> relative module
-_symbol_map = {'ColorAccessibility': 'accessibility', 'ColorBlindnessType': 'accessibility', 'ContrastLevel': 'accessibility', 'ColorBatch': 'batch', 'ColorSpaceConverter': 'color_spaces', 'oklch_to_oklab': 'color_spaces', 'oklab_to_oklch': 'color_spaces', 'oklab_to_rgb': 'color_spaces', 'oklch_to_rgb': 'color_spaces', 'rgb_to_oklch': 'color_spaces', 'rgb_to_oklab': 'color_spaces', 'Color': 'core', 'CSS_NAMED_COLORS': 'css_colors', 'get_css_color': 'css_colors', 'is_css_color': 'css_colors', 'NAMED_COLORS': 'css_colors', 'ColorHarmony': 'harmony', 'BlendMode': 'manipulation', 'ColorManipulation': 'manipulation', 'ColorParser': 'parser', 'color_to_hex': 'utils'}
+_symbol_map = {'ColorAccessibility': 'accessibility', 'ContrastLevel': 'accessibility', 'ColorBlindnessType': 'accessibility', 'ColorBatch': 'batch', 'ColorSpaceConverter': 'color_spaces', 'oklch_to_oklab': 'color_spaces', 'oklch_to_rgb': 'color_spaces', 'rgb_to_oklch': 'color_spaces', 'rgb_to_oklab': 'color_spaces', 'oklab_to_rgb': 'color_spaces', 'oklab_to_oklch': 'color_spaces', 'Color': 'core', 'is_css_color': 'css_colors', 'NAMED_COLORS': 'css_colors', 'get_css_color': 'css_colors', 'ColorHarmony': 'harmony', 'BlendMode': 'manipulation', 'ColorManipulation': 'manipulation', 'ColorParser': 'parser', 'color_to_hex': 'utils'}
 _module_map = {'accessibility': 'accessibility', 'batch': 'batch', 'color_spaces': 'color_spaces', 'core': 'core', 'css_colors': 'css_colors', 'harmony': 'harmony', 'manipulation': 'manipulation', 'parser': 'parser', 'utils': 'utils'}
 
 
