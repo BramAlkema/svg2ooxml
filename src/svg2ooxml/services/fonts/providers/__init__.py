@@ -5,13 +5,14 @@ from typing import Any as _Any
 
 __all__ = [
     'DirectoryFontProvider',
+    'FONT_EXTENSIONS',
     'WebFontProvider',
     'directory',
     'webfont'
 ]
 
 # map symbol -> relative module
-_symbol_map = {'DirectoryFontProvider': 'directory', 'WebFontProvider': 'webfont'}
+_symbol_map = {'FONT_EXTENSIONS': 'directory', 'DirectoryFontProvider': 'directory', 'WebFontProvider': 'webfont'}
 _module_map = {'directory': 'directory', 'webfont': 'webfont'}
 
 

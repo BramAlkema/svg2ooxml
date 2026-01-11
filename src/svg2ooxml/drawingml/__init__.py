@@ -4,13 +4,13 @@ from importlib import import_module as _im
 from typing import Any as _Any
 
 __all__ = [
+    'ATTR_PATTERN',
     'AssetRegistry',
     'AssetRegistrySnapshot',
     'CustGeomGenerationError',
     'CustGeomGenerator',
     'CustomGeometry',
     'DEFAULT_SLIDE_SIZE',
-    'DrawingMLAnimationWriter',
     'DrawingMLPathGenerator',
     'DrawingMLRenderResult',
     'DrawingMLWriter',
@@ -19,6 +19,7 @@ __all__ = [
     'EMU_PER_PX',
     'FilterRenderer',
     'FontAsset',
+    'HOOK_PATTERN',
     'MaskAsset',
     'MaskAssetHandle',
     'MaskAssetStore',
@@ -26,27 +27,41 @@ __all__ = [
     'MaskRenderResult',
     'MaskWriter',
     'MediaAsset',
+    'NSMAP',
+    'NS_A',
+    'NS_P',
+    'NS_R',
     'NavigationAsset',
-    'PaletteResolver',
+    'POINT_EPSILON',
     'PrimitiveSegmentBuilder',
     'RasterAdapter',
     'RasterResult',
     'Rasterizer',
-    'SKIA_AVAILABLE',
+    'a_elem',
+    'a_sub',
     'apply_matrix_to_segments',
+    'blur',
     'build_runs_xml',
     'clip_rect_to_xml',
     'clip_xml_for',
     'compute_mask_geometry',
+    'effect_list',
+    'glow',
     'gradient_stop_xml',
     'linear_gradient_to_fill',
+    'ln',
     'marker_end_elements',
     'mask_xml_for',
+    'no_fill',
     'normalize_navigation',
+    'outer_shadow',
+    'p_elem',
+    'p_sub',
     'paint_to_fill',
     'pattern_to_fill',
     'px_to_emu',
     'radial_gradient_to_fill',
+    'reflection',
     'register_navigation',
     'render_circle',
     'render_ellipse',
@@ -61,8 +76,13 @@ __all__ = [
     'render_wordart',
     'run_fragment',
     'segments_from_primitives',
+    'soft_edge',
+    'solid_fill',
+    'srgb_color',
     'stroke_to_xml',
+    'to_string',
     'animation',
+    'animation.handlers',
     'assets',
     'bridges',
     'clipmask',
@@ -81,12 +101,13 @@ __all__ = [
     'rasterizer',
     'result',
     'shapes_runtime',
-    'writer'
+    'writer',
+    'xml_builder'
 ]
 
 # map symbol -> relative module
-_symbol_map = {'DrawingMLAnimationWriter': 'animation', 'AssetRegistry': 'assets', 'MediaAsset': 'assets', 'FontAsset': 'assets', 'AssetRegistrySnapshot': 'assets', 'NavigationAsset': 'assets', 'clip_xml_for': 'clipmask', 'mask_xml_for': 'clipmask', 'apply_matrix_to_segments': 'custgeom_generator', 'CustGeomGenerationError': 'custgeom_generator', 'CustGeomGenerator': 'custgeom_generator', 'segments_from_primitives': 'custgeom_generator', 'PrimitiveSegmentBuilder': 'custgeom_generator', 'EMFAdapter': 'emf_adapter', 'EMFResult': 'emf_adapter', 'PaletteResolver': 'emf_adapter', 'FilterRenderer': 'filter_renderer', 'EMU_PER_PX': 'generator', 'DrawingMLPathGenerator': 'generator', 'px_to_emu': 'generator', 'CustomGeometry': 'generator', 'render_picture': 'image', 'marker_end_elements': 'markers', 'compute_mask_geometry': 'mask_generator', 'MaskGeometryResult': 'mask_generator', 'MaskAsset': 'mask_store', 'MaskAssetHandle': 'mask_store', 'MaskAssetStore': 'mask_store', 'MaskRenderResult': 'mask_writer', 'MaskWriter': 'mask_writer', 'normalize_navigation': 'navigation', 'register_navigation': 'navigation', 'paint_to_fill': 'paint_runtime', 'gradient_stop_xml': 'paint_runtime', 'pattern_to_fill': 'paint_runtime', 'clip_rect_to_xml': 'paint_runtime', 'stroke_to_xml': 'paint_runtime', 'linear_gradient_to_fill': 'paint_runtime', 'radial_gradient_to_fill': 'paint_runtime', 'RasterAdapter': 'raster_adapter', 'RasterResult': 'raster_adapter', 'SKIA_AVAILABLE': 'rasterizer', 'Rasterizer': 'rasterizer', 'DrawingMLRenderResult': 'result', 'render_ellipse': 'shapes_runtime', 'render_line': 'shapes_runtime', 'render_rectangle': 'shapes_runtime', 'render_textframe': 'shapes_runtime', 'run_fragment': 'shapes_runtime', 'render_path': 'shapes_runtime', 'render_circle': 'shapes_runtime', 'render_preset_shape': 'shapes_runtime', 'build_runs_xml': 'shapes_runtime', 'render_wordart': 'shapes_runtime', 'render_polygon': 'shapes_runtime', 'render_polyline': 'shapes_runtime', 'DrawingMLWriter': 'writer', 'DEFAULT_SLIDE_SIZE': 'writer'}
-_module_map = {'animation': 'animation', 'assets': 'assets', 'bridges': 'bridges', 'clipmask': 'clipmask', 'custgeom_generator': 'custgeom_generator', 'emf_adapter': 'emf_adapter', 'filter_renderer': 'filter_renderer', 'generator': 'generator', 'image': 'image', 'markers': 'markers', 'mask_generator': 'mask_generator', 'mask_store': 'mask_store', 'mask_writer': 'mask_writer', 'navigation': 'navigation', 'paint_runtime': 'paint_runtime', 'raster_adapter': 'raster_adapter', 'rasterizer': 'rasterizer', 'result': 'result', 'shapes_runtime': 'shapes_runtime', 'writer': 'writer'}
+_symbol_map = {'FontAsset': 'assets', 'AssetRegistry': 'assets', 'NavigationAsset': 'assets', 'AssetRegistrySnapshot': 'assets', 'MediaAsset': 'assets', 'mask_xml_for': 'clipmask', 'clip_xml_for': 'clipmask', 'POINT_EPSILON': 'clipmask', 'segments_from_primitives': 'custgeom_generator', 'CustGeomGenerator': 'custgeom_generator', 'apply_matrix_to_segments': 'custgeom_generator', 'PrimitiveSegmentBuilder': 'custgeom_generator', 'CustGeomGenerationError': 'custgeom_generator', 'EMFAdapter': 'emf_adapter', 'EMFResult': 'emf_adapter', 'FilterRenderer': 'filter_renderer', 'ATTR_PATTERN': 'filter_renderer', 'HOOK_PATTERN': 'filter_renderer', 'px_to_emu': 'generator', 'DrawingMLPathGenerator': 'generator', 'CustomGeometry': 'generator', 'EMU_PER_PX': 'generator', 'render_picture': 'image', 'marker_end_elements': 'markers', 'compute_mask_geometry': 'mask_generator', 'MaskGeometryResult': 'mask_generator', 'MaskAssetStore': 'mask_store', 'MaskAsset': 'mask_store', 'MaskAssetHandle': 'mask_store', 'MaskWriter': 'mask_writer', 'MaskRenderResult': 'mask_writer', 'register_navigation': 'navigation', 'normalize_navigation': 'navigation', 'paint_to_fill': 'paint_runtime', 'clip_rect_to_xml': 'paint_runtime', 'pattern_to_fill': 'paint_runtime', 'gradient_stop_xml': 'paint_runtime', 'linear_gradient_to_fill': 'paint_runtime', 'stroke_to_xml': 'paint_runtime', 'radial_gradient_to_fill': 'paint_runtime', 'RasterAdapter': 'raster_adapter', 'RasterResult': 'raster_adapter', 'Rasterizer': 'rasterizer', 'DrawingMLRenderResult': 'result', 'render_path': 'shapes_runtime', 'render_preset_shape': 'shapes_runtime', 'render_circle': 'shapes_runtime', 'render_polygon': 'shapes_runtime', 'build_runs_xml': 'shapes_runtime', 'render_wordart': 'shapes_runtime', 'render_line': 'shapes_runtime', 'run_fragment': 'shapes_runtime', 'render_rectangle': 'shapes_runtime', 'render_ellipse': 'shapes_runtime', 'render_polyline': 'shapes_runtime', 'render_textframe': 'shapes_runtime', 'DrawingMLWriter': 'writer', 'DEFAULT_SLIDE_SIZE': 'writer', 'p_elem': 'xml_builder', 'solid_fill': 'xml_builder', 'p_sub': 'xml_builder', 'NSMAP': 'xml_builder', 'NS_P': 'xml_builder', 'NS_A': 'xml_builder', 'glow': 'xml_builder', 'NS_R': 'xml_builder', 'to_string': 'xml_builder', 'reflection': 'xml_builder', 'soft_edge': 'xml_builder', 'srgb_color': 'xml_builder', 'ln': 'xml_builder', 'effect_list': 'xml_builder', 'blur': 'xml_builder', 'no_fill': 'xml_builder', 'a_sub': 'xml_builder', 'outer_shadow': 'xml_builder', 'a_elem': 'xml_builder'}
+_module_map = {'animation': 'animation', 'animation.handlers': 'animation.handlers', 'assets': 'assets', 'bridges': 'bridges', 'clipmask': 'clipmask', 'custgeom_generator': 'custgeom_generator', 'emf_adapter': 'emf_adapter', 'filter_renderer': 'filter_renderer', 'generator': 'generator', 'image': 'image', 'markers': 'markers', 'mask_generator': 'mask_generator', 'mask_store': 'mask_store', 'mask_writer': 'mask_writer', 'navigation': 'navigation', 'paint_runtime': 'paint_runtime', 'raster_adapter': 'raster_adapter', 'rasterizer': 'rasterizer', 'result': 'result', 'shapes_runtime': 'shapes_runtime', 'writer': 'writer', 'xml_builder': 'xml_builder'}
 
 
 def __getattr__(name: str) -> _Any:  # PEP 562

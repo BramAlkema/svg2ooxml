@@ -19,6 +19,7 @@ __all__ = [
     'ClipRef',
     'ClipStrategy',
     'CustomEffect',
+    'EMU_PER_POINT',
     'Effect',
     'Ellipse',
     'EmbeddedFontPlan',
@@ -34,8 +35,6 @@ __all__ = [
     'GradientPaintRef',
     'GradientStop',
     'Group',
-    'IRElement',
-    'IRScene',
     'Image',
     'Line',
     'LineSegment',
@@ -44,8 +43,6 @@ __all__ = [
     'MaskInstance',
     'MaskMode',
     'MaskRef',
-    'NUMPY_AVAILABLE',
-    'Paint',
     'Path',
     'PathPoint',
     'PatternPaint',
@@ -58,9 +55,7 @@ __all__ = [
     'ReflectionEffect',
     'Run',
     'Scene',
-    'SceneGraph',
     'Segment',
-    'SegmentType',
     'ShadowEffect',
     'SoftEdgeEffect',
     'SolidPaint',
@@ -77,9 +72,6 @@ __all__ = [
     'WordArtCandidate',
     'convert_parser_output',
     'format_transform_string',
-    'matmul',
-    'np',
-    'sqrt',
     'animation',
     'effects',
     'entrypoints',
@@ -95,7 +87,7 @@ __all__ = [
 ]
 
 # map symbol -> relative module
-_symbol_map = {'AnimationDefinition': 'animation', 'AnimationKeyframe': 'animation', 'AnimationComplexity': 'animation', 'FillMode': 'animation', 'AnimationTiming': 'animation', 'CalcMode': 'animation', 'AnimationType': 'animation', 'AnimationScene': 'animation', 'AnimationSummary': 'animation', 'TransformType': 'animation', 'format_transform_string': 'animation', 'ReflectionEffect': 'effects', 'Effect': 'effects', 'CustomEffect': 'effects', 'GlowEffect': 'effects', 'ShadowEffect': 'effects', 'SoftEdgeEffect': 'effects', 'BlurEffect': 'effects', 'convert_parser_output': 'entrypoints', 'IRScene': 'entrypoints', 'FontMetadata': 'font_metadata', 'FontStrategy': 'font_metadata', 'FontMetrics': 'font_metadata', 'FontAvailability': 'font_metadata', 'FontFaceRule': 'fonts', 'FontFaceSrc': 'fonts', 'SegmentType': 'geometry', 'BezierSegment': 'geometry', 'Rect': 'geometry', 'LineSegment': 'geometry', 'Segment': 'geometry', 'Point': 'geometry', 'matmul': 'numpy_compat', 'sqrt': 'numpy_compat', 'NUMPY_AVAILABLE': 'numpy_compat', 'np': 'numpy_compat', 'Stroke': 'paint', 'LinearGradientPaint': 'paint', 'Paint': 'paint', 'StrokeCap': 'paint', 'StrokeJoin': 'paint', 'SolidPaint': 'paint', 'GradientPaintRef': 'paint', 'GradientStop': 'paint', 'RadialGradientPaint': 'paint', 'PatternPaint': 'paint', 'Group': 'scene', 'Scene': 'scene', 'MaskInstance': 'scene', 'ClipStrategy': 'scene', 'SceneGraph': 'scene', 'Image': 'scene', 'ClipRef': 'scene', 'MaskRef': 'scene', 'Path': 'scene', 'MaskMode': 'scene', 'MaskDefinition': 'scene', 'IRElement': 'scene', 'Polygon': 'shapes', 'Polyline': 'shapes', 'Rectangle': 'shapes', 'Circle': 'shapes', 'Ellipse': 'shapes', 'Line': 'shapes', 'TextFrame': 'text', 'Run': 'text', 'EmbeddedFontPlan': 'text', 'WordArtCandidate': 'text', 'EnhancedRun': 'text', 'TextAnchor': 'text', 'TextPathSpacing': 'text_path', 'CharacterPlacement': 'text_path', 'TextPathSide': 'text_path', 'PathPoint': 'text_path', 'TextPathFrame': 'text_path', 'TextPathMethod': 'text_path'}
+_symbol_map = {'AnimationScene': 'animation', 'TransformType': 'animation', 'format_transform_string': 'animation', 'CalcMode': 'animation', 'AnimationKeyframe': 'animation', 'AnimationSummary': 'animation', 'AnimationTiming': 'animation', 'AnimationComplexity': 'animation', 'AnimationDefinition': 'animation', 'AnimationType': 'animation', 'FillMode': 'animation', 'Effect': 'effects', 'BlurEffect': 'effects', 'GlowEffect': 'effects', 'ReflectionEffect': 'effects', 'SoftEdgeEffect': 'effects', 'ShadowEffect': 'effects', 'CustomEffect': 'effects', 'EMU_PER_POINT': 'effects', 'convert_parser_output': 'entrypoints', 'FontStrategy': 'font_metadata', 'FontMetrics': 'font_metadata', 'FontMetadata': 'font_metadata', 'FontAvailability': 'font_metadata', 'FontFaceSrc': 'fonts', 'FontFaceRule': 'fonts', 'Segment': 'geometry', 'LineSegment': 'geometry', 'BezierSegment': 'geometry', 'Rect': 'geometry', 'Point': 'geometry', 'Stroke': 'paint', 'LinearGradientPaint': 'paint', 'StrokeJoin': 'paint', 'PatternPaint': 'paint', 'GradientStop': 'paint', 'GradientPaintRef': 'paint', 'StrokeCap': 'paint', 'SolidPaint': 'paint', 'RadialGradientPaint': 'paint', 'MaskInstance': 'scene', 'MaskMode': 'scene', 'MaskRef': 'scene', 'Image': 'scene', 'MaskDefinition': 'scene', 'Path': 'scene', 'Group': 'scene', 'ClipRef': 'scene', 'ClipStrategy': 'scene', 'Scene': 'scene', 'Rectangle': 'shapes', 'Polygon': 'shapes', 'Polyline': 'shapes', 'Circle': 'shapes', 'Ellipse': 'shapes', 'Line': 'shapes', 'WordArtCandidate': 'text', 'EnhancedRun': 'text', 'Run': 'text', 'TextAnchor': 'text', 'EmbeddedFontPlan': 'text', 'TextFrame': 'text', 'TextPathFrame': 'text_path', 'TextPathMethod': 'text_path', 'PathPoint': 'text_path', 'TextPathSide': 'text_path', 'CharacterPlacement': 'text_path', 'TextPathSpacing': 'text_path'}
 _module_map = {'animation': 'animation', 'effects': 'effects', 'entrypoints': 'entrypoints', 'font_metadata': 'font_metadata', 'fonts': 'fonts', 'geometry': 'geometry', 'numpy_compat': 'numpy_compat', 'paint': 'paint', 'scene': 'scene', 'shapes': 'shapes', 'text': 'text', 'text_path': 'text_path'}
 
 

@@ -14,7 +14,7 @@ __all__ = [
 ]
 
 # map symbol -> relative module
-_symbol_map = {'EMU_PER_PX': 'tessellation', 'ClipPathData': 'tessellation', 'rect_to_emu': 'tessellation', 'tessellate_segments': 'tessellation', 'ClipPathSegment': 'tessellation', 'commands_to_clip_segments': 'tessellation'}
+_symbol_map = {'ClipPathData': 'tessellation', 'tessellate_segments': 'tessellation', 'commands_to_clip_segments': 'tessellation', 'ClipPathSegment': 'tessellation', 'rect_to_emu': 'tessellation', 'EMU_PER_PX': 'tessellation'}
 _module_map = {'tessellation': 'tessellation'}
 
 

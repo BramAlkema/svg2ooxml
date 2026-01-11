@@ -4,31 +4,39 @@ from importlib import import_module as _im
 from typing import Any as _Any
 
 __all__ = [
-    'FONT_FALLBACKS',
     'IRConverter',
+    'IRConverterContext',
     'IRScene',
     'PolicyHooksMixin',
+    'ResourceTracker',
+    'ResvgBridge',
     'ShapeConversionMixin',
+    'ShapePipeline',
     'SmartFontBridge',
     'TextConversionPipeline',
     'TextConverter',
+    'TextPipeline',
     'convert_rect',
     'hex_to_rgba',
     'render_bitmap_fallback',
     'render_emf_fallback',
+    'context',
     'converter',
     'fallbacks',
     'policy_hooks',
     'rectangles',
+    'resource_tracker',
+    'resvg_bridge',
     'shape_converters',
+    'shape_pipeline',
     'smart_font_bridge',
     'text_converter',
     'text_pipeline'
 ]
 
 # map symbol -> relative module
-_symbol_map = {'IRConverter': 'converter', 'IRScene': 'converter', 'hex_to_rgba': 'fallbacks', 'render_emf_fallback': 'fallbacks', 'render_bitmap_fallback': 'fallbacks', 'PolicyHooksMixin': 'policy_hooks', 'convert_rect': 'rectangles', 'ShapeConversionMixin': 'shape_converters', 'SmartFontBridge': 'smart_font_bridge', 'FONT_FALLBACKS': 'text_converter', 'TextConverter': 'text_converter', 'TextConversionPipeline': 'text_pipeline'}
-_module_map = {'converter': 'converter', 'fallbacks': 'fallbacks', 'policy_hooks': 'policy_hooks', 'rectangles': 'rectangles', 'shape_converters': 'shape_converters', 'smart_font_bridge': 'smart_font_bridge', 'text_converter': 'text_converter', 'text_pipeline': 'text_pipeline'}
+_symbol_map = {'IRConverterContext': 'context', 'IRScene': 'converter', 'IRConverter': 'converter', 'render_emf_fallback': 'fallbacks', 'hex_to_rgba': 'fallbacks', 'render_bitmap_fallback': 'fallbacks', 'PolicyHooksMixin': 'policy_hooks', 'convert_rect': 'rectangles', 'ResourceTracker': 'resource_tracker', 'ResvgBridge': 'resvg_bridge', 'ShapeConversionMixin': 'shape_converters', 'ShapePipeline': 'shape_pipeline', 'SmartFontBridge': 'smart_font_bridge', 'TextConverter': 'text_converter', 'TextConversionPipeline': 'text_pipeline', 'TextPipeline': 'text_pipeline'}
+_module_map = {'context': 'context', 'converter': 'converter', 'fallbacks': 'fallbacks', 'policy_hooks': 'policy_hooks', 'rectangles': 'rectangles', 'resource_tracker': 'resource_tracker', 'resvg_bridge': 'resvg_bridge', 'shape_converters': 'shape_converters', 'shape_pipeline': 'shape_pipeline', 'smart_font_bridge': 'smart_font_bridge', 'text_converter': 'text_converter', 'text_pipeline': 'text_pipeline'}
 
 
 def __getattr__(name: str) -> _Any:  # PEP 562

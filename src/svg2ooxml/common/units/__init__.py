@@ -5,16 +5,7 @@ from typing import Any as _Any
 
 __all__ = [
     'ConversionContext',
-    'DEFAULT_DPI',
-    'EMU_PER_CM',
-    'EMU_PER_INCH',
-    'EMU_PER_MM',
-    'EMU_PER_PICA',
-    'EMU_PER_POINT',
-    'EMU_PER_PX_AT_DEFAULT_DPI',
-    'EMU_PER_Q',
     'LengthConverter',
-    'PX_PER_INCH',
     'UnitConverter',
     'emu_to_px',
     'emu_to_unit',
@@ -25,7 +16,7 @@ __all__ = [
 ]
 
 # map symbol -> relative module
-_symbol_map = {'ConversionContext': 'conversion', 'UnitConverter': 'conversion', 'emu_to_unit': 'conversion', 'px_to_emu': 'conversion', 'EMU_PER_INCH': 'conversion', 'EMU_PER_MM': 'conversion', 'EMU_PER_Q': 'conversion', 'EMU_PER_CM': 'conversion', 'emu_to_px': 'conversion', 'EMU_PER_PX_AT_DEFAULT_DPI': 'conversion', 'EMU_PER_PICA': 'conversion', 'EMU_PER_POINT': 'conversion', 'DEFAULT_DPI': 'conversion', 'LengthConverter': 'converters', 'PX_PER_INCH': 'scalars'}
+_symbol_map = {'UnitConverter': 'conversion', 'emu_to_px': 'conversion', 'px_to_emu': 'conversion', 'emu_to_unit': 'conversion', 'ConversionContext': 'conversion', 'LengthConverter': 'converters'}
 _module_map = {'conversion': 'conversion', 'converters': 'converters', 'scalars': 'scalars'}
 
 

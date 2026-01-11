@@ -4,9 +4,9 @@ from importlib import import_module as _im
 from typing import Any as _Any
 
 __all__ = [
+    'ConversionContextBundle',
     'ConvertResult',
     'Converter',
-    'DEFAULT_STAGE_NAMES',
     'FallbackVariant',
     'SplitPage',
     'SvgConversionError',
@@ -15,11 +15,16 @@ __all__ = [
     'SvgToPptxExporter',
     'SvgToPptxMultiResult',
     'SvgToPptxResult',
+    'build_conversion_context',
+    'clone_policy_context',
     'derive_variants_from_trace',
     'expand_page_with_variants',
+    'resolve_policy_context',
+    'resolve_policy_engine',
     'split_svg_into_pages',
     'animation',
     'auth',
+    'conversion_context',
     'converter',
     'hyperlinks',
     'ir',
@@ -47,8 +52,8 @@ __all__ = [
 ]
 
 # map symbol -> relative module
-_symbol_map = {'DEFAULT_STAGE_NAMES': 'converter', 'ConvertResult': 'converter', 'Converter': 'converter', 'split_svg_into_pages': 'multipage', 'SplitPage': 'multipage', 'SvgConversionError': 'pptx_exporter', 'SvgToPptxResult': 'pptx_exporter', 'SvgPageResult': 'pptx_exporter', 'SvgToPptxExporter': 'pptx_exporter', 'SvgPageSource': 'pptx_exporter', 'SvgToPptxMultiResult': 'pptx_exporter', 'expand_page_with_variants': 'slide_orchestrator', 'FallbackVariant': 'slide_orchestrator', 'derive_variants_from_trace': 'slide_orchestrator'}
-_module_map = {'animation': 'animation', 'auth': 'auth', 'converter': 'converter', 'hyperlinks': 'hyperlinks', 'ir': 'ir', 'masks': 'masks', 'multipage': 'multipage', 'parser': 'parser', 'parser.batch': 'parser.batch', 'parser.colors': 'parser.colors', 'parser.preprocess': 'parser.preprocess', 'parser.split': 'parser.split', 'pipeline': 'pipeline', 'pipeline.mappers': 'pipeline.mappers', 'pptx_exporter': 'pptx_exporter', 'resvg': 'resvg', 'resvg.geometry': 'resvg.geometry', 'resvg.painting': 'resvg.painting', 'resvg.parser': 'resvg.parser', 'resvg.text': 'resvg.text', 'resvg.utils': 'resvg.utils', 'slide_orchestrator': 'slide_orchestrator', 'styling': 'styling', 'tracing': 'tracing', 'traversal': 'traversal', 'traversal.bridges': 'traversal.bridges'}
+_symbol_map = {'resolve_policy_context': 'conversion_context', 'build_conversion_context': 'conversion_context', 'clone_policy_context': 'conversion_context', 'ConversionContextBundle': 'conversion_context', 'resolve_policy_engine': 'conversion_context', 'ConvertResult': 'converter', 'Converter': 'converter', 'SplitPage': 'multipage', 'split_svg_into_pages': 'multipage', 'SvgPageSource': 'pptx_exporter', 'SvgConversionError': 'pptx_exporter', 'SvgToPptxResult': 'pptx_exporter', 'SvgToPptxExporter': 'pptx_exporter', 'SvgPageResult': 'pptx_exporter', 'SvgToPptxMultiResult': 'pptx_exporter', 'derive_variants_from_trace': 'slide_orchestrator', 'expand_page_with_variants': 'slide_orchestrator', 'FallbackVariant': 'slide_orchestrator'}
+_module_map = {'animation': 'animation', 'auth': 'auth', 'conversion_context': 'conversion_context', 'converter': 'converter', 'hyperlinks': 'hyperlinks', 'ir': 'ir', 'masks': 'masks', 'multipage': 'multipage', 'parser': 'parser', 'parser.batch': 'parser.batch', 'parser.colors': 'parser.colors', 'parser.preprocess': 'parser.preprocess', 'parser.split': 'parser.split', 'pipeline': 'pipeline', 'pipeline.mappers': 'pipeline.mappers', 'pptx_exporter': 'pptx_exporter', 'resvg': 'resvg', 'resvg.geometry': 'resvg.geometry', 'resvg.painting': 'resvg.painting', 'resvg.parser': 'resvg.parser', 'resvg.text': 'resvg.text', 'resvg.utils': 'resvg.utils', 'slide_orchestrator': 'slide_orchestrator', 'styling': 'styling', 'tracing': 'tracing', 'traversal': 'traversal', 'traversal.bridges': 'traversal.bridges'}
 
 
 def __getattr__(name: str) -> _Any:  # PEP 562

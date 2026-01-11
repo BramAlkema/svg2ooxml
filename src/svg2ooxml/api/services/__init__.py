@@ -8,12 +8,15 @@ __all__ = [
     'ExportService',
     'ExportServiceDependencies',
     'ExportStatus',
+    'FakeBlob',
+    'FakeBucket',
     'FakeCollectionReference',
     'FakeDocumentReference',
     'FakeDocumentSnapshot',
     'FakeFirestoreClient',
     'FakeStorageClient',
     'FontDiagnostics',
+    'FontPreparationResult',
     'JobNotFoundError',
     'OfflineFontFetcher',
     'SlidesPublishResult',
@@ -34,7 +37,7 @@ __all__ = [
 ]
 
 # map symbol -> relative module
-_symbol_map = {'ConversionArtifacts': 'converter', 'collect_font_diagnostics': 'converter', 'render_pptx_for_frames': 'converter', 'FontDiagnostics': 'converter', 'build_export_service_dependencies': 'dependencies', 'ExportServiceDependencies': 'dependencies', 'ExportStatus': 'export_service', 'ExportService': 'export_service', 'JobNotFoundError': 'export_service', 'FakeDocumentSnapshot': 'fakes', 'FakeStorageClient': 'fakes', 'FakeDocumentReference': 'fakes', 'OfflineFontFetcher': 'fakes', 'FakeCollectionReference': 'fakes', 'FakeFirestoreClient': 'fakes', 'SlidesPublishResult': 'slides_publisher', 'SlidesPublishingError': 'slides_publisher', 'upload_pptx_to_slides': 'slides_publisher', 'StripeService': 'stripe_service', 'SubscriptionRepository': 'subscription_repository'}
+_symbol_map = {'FontDiagnostics': 'converter', 'collect_font_diagnostics': 'converter', 'render_pptx_for_frames': 'converter', 'ConversionArtifacts': 'converter', 'build_export_service_dependencies': 'dependencies', 'ExportServiceDependencies': 'dependencies', 'ExportStatus': 'export_service', 'FontPreparationResult': 'export_service', 'JobNotFoundError': 'export_service', 'ExportService': 'export_service', 'FakeDocumentSnapshot': 'fakes', 'FakeDocumentReference': 'fakes', 'FakeBucket': 'fakes', 'OfflineFontFetcher': 'fakes', 'FakeCollectionReference': 'fakes', 'FakeStorageClient': 'fakes', 'FakeFirestoreClient': 'fakes', 'FakeBlob': 'fakes', 'SlidesPublishingError': 'slides_publisher', 'upload_pptx_to_slides': 'slides_publisher', 'SlidesPublishResult': 'slides_publisher', 'StripeService': 'stripe_service', 'SubscriptionRepository': 'subscription_repository'}
 _module_map = {'converter': 'converter', 'dependencies': 'dependencies', 'export_service': 'export_service', 'fakes': 'fakes', 'slides_publisher': 'slides_publisher', 'stripe_service': 'stripe_service', 'subscription_repository': 'subscription_repository'}
 
 
