@@ -7,28 +7,18 @@ __all__ = [
     'BookmarkTarget',
     'ConversionPipeline',
     'CustomShowTarget',
-    'DEFAULT_STAGE_NAMES',
     'NavigationAction',
     'NavigationKind',
     'NavigationSpec',
     'SlideTarget',
     'parse_svg_navigation',
     'mappers',
-    'navigation'
+    'navigation',
+    'pipeline'
 ]
 
 # map symbol -> relative module
-_symbol_map = {
-    'BookmarkTarget': 'navigation',
-    'ConversionPipeline': 'pipeline',
-    'CustomShowTarget': 'navigation',
-    'DEFAULT_STAGE_NAMES': 'pipeline',
-    'NavigationAction': 'navigation',
-    'NavigationKind': 'navigation',
-    'NavigationSpec': 'navigation',
-    'SlideTarget': 'navigation',
-    'parse_svg_navigation': 'navigation',
-}
+_symbol_map = {'CustomShowTarget': 'navigation', 'parse_svg_navigation': 'navigation', 'NavigationAction': 'navigation', 'SlideTarget': 'navigation', 'NavigationKind': 'navigation', 'BookmarkTarget': 'navigation', 'NavigationSpec': 'navigation', 'ConversionPipeline': 'pipeline'}
 _module_map = {'mappers': 'mappers', 'navigation': 'navigation', 'pipeline': 'pipeline'}
 
 

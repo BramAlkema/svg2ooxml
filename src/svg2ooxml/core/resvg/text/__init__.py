@@ -4,16 +4,26 @@ from importlib import import_module as _im
 from typing import Any as _Any
 
 __all__ = [
+    'DRAWINGML_HUNDREDTHS_PER_POINT',
+    'DrawingMLTextGenerator',
     'FontResolver',
+    'LayoutAnalysisResult',
+    'TextLayoutAnalyzer',
+    'TextLayoutComplexity',
+    'TextRenderCoordinator',
+    'TextRenderResult',
     'build_text_layout',
     'default_font_resolver',
+    'drawingml_generator',
     'fonts',
-    'layout'
+    'layout',
+    'layout_analyzer',
+    'text_coordinator'
 ]
 
 # map symbol -> relative module
-_symbol_map = {'default_font_resolver': 'fonts', 'FontResolver': 'fonts', 'build_text_layout': 'layout'}
-_module_map = {'fonts': 'fonts', 'layout': 'layout'}
+_symbol_map = {'DrawingMLTextGenerator': 'drawingml_generator', 'DRAWINGML_HUNDREDTHS_PER_POINT': 'drawingml_generator', 'FontResolver': 'fonts', 'default_font_resolver': 'fonts', 'build_text_layout': 'layout', 'TextLayoutAnalyzer': 'layout_analyzer', 'LayoutAnalysisResult': 'layout_analyzer', 'TextLayoutComplexity': 'layout_analyzer', 'TextRenderResult': 'text_coordinator', 'TextRenderCoordinator': 'text_coordinator'}
+_module_map = {'drawingml_generator': 'drawingml_generator', 'fonts': 'fonts', 'layout': 'layout', 'layout_analyzer': 'layout_analyzer', 'text_coordinator': 'text_coordinator'}
 
 
 def __getattr__(name: str) -> _Any:  # PEP 562

@@ -4,6 +4,8 @@ from importlib import import_module as _im
 from typing import Any as _Any
 
 __all__ = [
+    'DefaultImagePolicy',
+    'DefaultPathPolicy',
     'GroupMapper',
     'ImageDecision',
     'ImageMapper',
@@ -29,7 +31,7 @@ __all__ = [
 ]
 
 # map symbol -> relative module
-_symbol_map = {'validate_mapper_result': 'base', 'OutputFormat': 'base', 'Mapper': 'base', 'MapperResult': 'base', 'MapperError': 'base', 'clip_result_to_xml': 'clip_render', 'GroupMapper': 'group_mapper', 'ImageProcessingAdapter': 'image_adapter', 'create_image_adapter': 'image_adapter', 'ImageProcessingResult': 'image_adapter', 'ImageDecision': 'image_mapper', 'ImageMapper': 'image_mapper', 'PathMapper': 'path_mapper', 'PathDecision': 'path_mapper', 'TextMapper': 'text_mapper'}
+_symbol_map = {'MapperResult': 'base', 'OutputFormat': 'base', 'Mapper': 'base', 'validate_mapper_result': 'base', 'MapperError': 'base', 'clip_result_to_xml': 'clip_render', 'GroupMapper': 'group_mapper', 'ImageProcessingResult': 'image_adapter', 'ImageProcessingAdapter': 'image_adapter', 'create_image_adapter': 'image_adapter', 'DefaultImagePolicy': 'image_mapper', 'ImageDecision': 'image_mapper', 'ImageMapper': 'image_mapper', 'PathMapper': 'path_mapper', 'PathDecision': 'path_mapper', 'DefaultPathPolicy': 'path_mapper', 'TextMapper': 'text_mapper'}
 _module_map = {'base': 'base', 'clip_render': 'clip_render', 'group_mapper': 'group_mapper', 'image_adapter': 'image_adapter', 'image_mapper': 'image_mapper', 'path_mapper': 'path_mapper', 'text_mapper': 'text_mapper'}
 
 

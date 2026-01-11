@@ -4,14 +4,10 @@ from importlib import import_module as _im
 from typing import Any as _Any
 
 __all__ = [
-    'BezierSegment',
-    'LineSegment',
     'NormalizedSegments',
     'PathCommand',
     'PathParseError',
     'PathTessellation',
-    'Point',
-    'SegmentType',
     'TessellationOutput',
     'approximate_circle',
     'approximate_ellipse',
@@ -30,7 +26,7 @@ __all__ = [
 ]
 
 # map symbol -> relative module
-_symbol_map = {'to_line_segments': 'drawing', 'approximate_circle': 'drawing', 'approximate_ellipse': 'drawing', 'compute_path_bounds': 'drawingml', 'PathCommand': 'drawingml', 'build_path_commands': 'drawingml', 'parse_path_data': 'parser', 'PathParseError': 'parser', 'PathTessellation': 'resvg_bridge', 'TessellationOutput': 'resvg_bridge', 'normalize_path_to_segments': 'resvg_bridge', 'tessellate_path': 'resvg_bridge', 'NormalizedSegments': 'resvg_bridge', 'SegmentType': 'segments', 'BezierSegment': 'segments', 'LineSegment': 'segments', 'compute_segments_bbox': 'segments', 'Point': 'segments'}
+_symbol_map = {'to_line_segments': 'drawing', 'approximate_ellipse': 'drawing', 'approximate_circle': 'drawing', 'build_path_commands': 'drawingml', 'compute_path_bounds': 'drawingml', 'PathCommand': 'drawingml', 'parse_path_data': 'parser', 'PathParseError': 'parser', 'PathTessellation': 'resvg_bridge', 'NormalizedSegments': 'resvg_bridge', 'normalize_path_to_segments': 'resvg_bridge', 'TessellationOutput': 'resvg_bridge', 'tessellate_path': 'resvg_bridge', 'compute_segments_bbox': 'segments'}
 _module_map = {'drawing': 'drawing', 'drawingml': 'drawingml', 'parser': 'parser', 'resvg_bridge': 'resvg_bridge', 'segments': 'segments'}
 
 

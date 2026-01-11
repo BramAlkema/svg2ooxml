@@ -4,12 +4,6 @@ from importlib import import_module as _im
 from typing import Any as _Any
 
 __all__ = [
-    'ConversionTracer',
-    'GeometryTrace',
-    'HyperlinkProcessor',
-    'PaintTrace',
-    'StageTrace',
-    'TraceReport',
     'converter',
     'hyperlinks',
     'mapper',
@@ -17,7 +11,7 @@ __all__ = [
 ]
 
 # map symbol -> relative module
-_symbol_map = {'HyperlinkProcessor': 'hyperlinks', 'GeometryTrace': 'tracer', 'StageTrace': 'tracer', 'TraceReport': 'tracer', 'ConversionTracer': 'tracer', 'PaintTrace': 'tracer'}
+_symbol_map = {}
 _module_map = {'converter': 'converter', 'hyperlinks': 'hyperlinks', 'mapper': 'mapper', 'tracer': 'tracer'}
 
 

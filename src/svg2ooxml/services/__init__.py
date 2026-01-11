@@ -4,14 +4,18 @@ from importlib import import_module as _im
 from typing import Any as _Any
 
 __all__ = [
+    'ALLOWED_STRATEGIES',
     'BasicSmartFontConverter',
     'ClipAnalysis',
     'ColorNormalizedImage',
     'ColorSpaceService',
     'ConversionServices',
     'ConverterCache',
+    'DATA_URI_RE',
+    'EMU_PER_PX',
     'FilterEffectResult',
     'FilterService',
+    'GENERIC_FALLBACKS',
     'GradientAnalysis',
     'GradientComplexity',
     'GradientMetrics',
@@ -22,15 +26,17 @@ __all__ = [
     'ImageResource',
     'ImageService',
     'MarkerService',
+    'MaskClassification',
     'MaskComputeResult',
     'PatternService',
-    'Resolver',
     'SmartFontConverter',
     'StructuredClipService',
     'StructuredMaskService',
     'SymbolService',
+    'XLINK_HREF',
     'build_smart_font_converter',
     'configure_services',
+    'load_svg2pptx_converter',
     'cache',
     'clip_service',
     'color_service',
@@ -53,7 +59,7 @@ __all__ = [
 ]
 
 # map symbol -> relative module
-_symbol_map = {'ConverterCache': 'cache', 'StructuredClipService': 'clip_service', 'ClipAnalysis': 'clip_service', 'ColorNormalizedImage': 'color_service', 'ColorSpaceService': 'color_service', 'ConversionServices': 'conversion', 'FilterService': 'filter_service', 'FilterEffectResult': 'filter_types', 'SmartFontConverter': 'font_converter', 'BasicSmartFontConverter': 'font_converter', 'build_smart_font_converter': 'font_converter', 'GradientComplexity': 'gradient_processor', 'GradientAnalysis': 'gradient_processor', 'GradientProcessor': 'gradient_processor', 'GradientOptimisationPlan': 'gradient_processor', 'GradientOptimisation': 'gradient_processor', 'GradientMetrics': 'gradient_processor', 'GradientService': 'gradient_service', 'ImageService': 'image_service', 'ImageResource': 'image_service', 'Resolver': 'image_service', 'MarkerService': 'marker_service', 'MaskComputeResult': 'mask_service', 'StructuredMaskService': 'mask_service', 'PatternService': 'pattern_service', 'configure_services': 'setup', 'SymbolService': 'symbol_service'}
+_symbol_map = {'ConverterCache': 'cache', 'StructuredClipService': 'clip_service', 'ClipAnalysis': 'clip_service', 'EMU_PER_PX': 'clip_service', 'ColorNormalizedImage': 'color_service', 'ColorSpaceService': 'color_service', 'ConversionServices': 'conversion', 'ALLOWED_STRATEGIES': 'filter_service', 'FilterService': 'filter_service', 'FilterEffectResult': 'filter_types', 'GENERIC_FALLBACKS': 'font_converter', 'BasicSmartFontConverter': 'font_converter', 'SmartFontConverter': 'font_converter', 'load_svg2pptx_converter': 'font_converter', 'build_smart_font_converter': 'font_converter', 'GradientOptimisation': 'gradient_processor', 'GradientAnalysis': 'gradient_processor', 'GradientMetrics': 'gradient_processor', 'GradientProcessor': 'gradient_processor', 'GradientComplexity': 'gradient_processor', 'GradientOptimisationPlan': 'gradient_processor', 'GradientService': 'gradient_service', 'DATA_URI_RE': 'image_service', 'ImageService': 'image_service', 'ImageResource': 'image_service', 'XLINK_HREF': 'marker_service', 'MarkerService': 'marker_service', 'MaskClassification': 'mask_service', 'MaskComputeResult': 'mask_service', 'StructuredMaskService': 'mask_service', 'PatternService': 'pattern_service', 'configure_services': 'setup', 'SymbolService': 'symbol_service'}
 _module_map = {'cache': 'cache', 'clip_service': 'clip_service', 'color_service': 'color_service', 'conversion': 'conversion', 'filter_service': 'filter_service', 'filter_types': 'filter_types', 'font_converter': 'font_converter', 'fonts': 'fonts', 'fonts.providers': 'fonts.providers', 'gradient_processor': 'gradient_processor', 'gradient_service': 'gradient_service', 'image_service': 'image_service', 'marker_service': 'marker_service', 'mask_service': 'mask_service', 'pattern_service': 'pattern_service', 'providers': 'providers', 'registry': 'registry', 'setup': 'setup', 'symbol_service': 'symbol_service'}
 
 

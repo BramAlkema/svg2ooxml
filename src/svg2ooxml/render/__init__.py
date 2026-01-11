@@ -5,6 +5,8 @@ from typing import Any as _Any
 
 __all__ = [
     'ClipPathContext',
+    'ComponentTransferFunction',
+    'ComponentTransferPlan',
     'FilterPlan',
     'FilterPrimitivePlan',
     'GradientStop',
@@ -14,6 +16,10 @@ __all__ = [
     'NormalizedNode',
     'NormalizedSvgTree',
     'PatternPaint',
+    'PrimitiveUnitScale',
+    'REGISTERED_FILTER_PRIMITIVES',
+    'RESVG_SUPPORTED_PRIMITIVES',
+    'RGBA',
     'RadialGradient',
     'Rasterizer',
     'RenderContext',
@@ -34,7 +40,6 @@ __all__ = [
     'node_geometry',
     'normalize_svg',
     'plan_filter',
-    'rasterize_clip',
     'rasterize_clip_path',
     'rasterize_mask',
     'render',
@@ -54,7 +59,7 @@ __all__ = [
 ]
 
 # map symbol -> relative module
-_symbol_map = {'FilterPrimitivePlan': 'filters', 'apply_filter': 'filters', 'UnsupportedPrimitiveError': 'filters', 'plan_filter': 'filters', 'UNSUPPORTED_FILTER_PRIMITIVES': 'filters', 'FilterPlan': 'filters', 'Tessellator': 'geometry', 'TessellationResult': 'geometry', 'resolve_marker': 'markers', 'MarkerPlacement': 'markers', 'compute_marker_positions': 'markers', 'MaskContext': 'mask_clip', 'ClipPathContext': 'mask_clip', 'apply_mask': 'mask_clip', 'rasterize_clip': 'mask_clip', 'resolve_mask': 'mask_clip', 'rasterize_clip_path': 'mask_clip', 'apply_clip': 'mask_clip', 'rasterize_mask': 'mask_clip', 'resolve_clip_path': 'mask_clip', 'NormalizedSvgTree': 'normalize', 'normalize_svg': 'normalize', 'NormalizedNode': 'normalize', 'compute_paints': 'paint', 'GradientStop': 'paint', 'StrokePaint': 'paint', 'RadialGradient': 'paint', 'SolidPaint': 'paint', 'LinearGradient': 'paint', 'PatternPaint': 'paint', 'RenderContext': 'pipeline', 'render': 'pipeline', 'Viewport': 'rasterizer', 'Rasterizer': 'rasterizer', 'node_geometry': 'shapes', 'ensure_surface': 'surface', 'Surface': 'surface'}
+_symbol_map = {'RESVG_SUPPORTED_PRIMITIVES': 'filters', 'UNSUPPORTED_FILTER_PRIMITIVES': 'filters', 'UnsupportedPrimitiveError': 'filters', 'FilterPrimitivePlan': 'filters', 'ComponentTransferPlan': 'filters', 'PrimitiveUnitScale': 'filters', 'apply_filter': 'filters', 'plan_filter': 'filters', 'FilterPlan': 'filters', 'ComponentTransferFunction': 'filters', 'REGISTERED_FILTER_PRIMITIVES': 'filters', 'Tessellator': 'geometry', 'TessellationResult': 'geometry', 'MarkerPlacement': 'markers', 'resolve_marker': 'markers', 'compute_marker_positions': 'markers', 'resolve_mask': 'mask_clip', 'MaskContext': 'mask_clip', 'apply_clip': 'mask_clip', 'apply_mask': 'mask_clip', 'resolve_clip_path': 'mask_clip', 'rasterize_mask': 'mask_clip', 'ClipPathContext': 'mask_clip', 'rasterize_clip_path': 'mask_clip', 'NormalizedSvgTree': 'normalize', 'NormalizedNode': 'normalize', 'normalize_svg': 'normalize', 'StrokePaint': 'paint', 'compute_paints': 'paint', 'PatternPaint': 'paint', 'GradientStop': 'paint', 'SolidPaint': 'paint', 'RadialGradient': 'paint', 'LinearGradient': 'paint', 'RenderContext': 'pipeline', 'render': 'pipeline', 'Viewport': 'rasterizer', 'Rasterizer': 'rasterizer', 'node_geometry': 'shapes', 'Surface': 'surface', 'RGBA': 'surface', 'ensure_surface': 'surface'}
 _module_map = {'filters': 'filters', 'geometry': 'geometry', 'markers': 'markers', 'mask_clip': 'mask_clip', 'normalize': 'normalize', 'paint': 'paint', 'pipeline': 'pipeline', 'rasterizer': 'rasterizer', 'shapes': 'shapes', 'surface': 'surface'}
 
 

@@ -8,18 +8,14 @@ __all__ = [
     'ClipCustGeom',
     'ClipFallback',
     'ClipMediaMeta',
-    'ClipPathSegment',
     'CoordinateSpace',
-    'DEFAULT_TOLERANCE',
     'ElementTraversal',
-    'GeometryPayload',
     'MarkerDefinition',
     'MarkerInstance',
     'MarkerTransform',
     'PreserveAspectRatio',
     'TransformParser',
     'TraversalHooksMixin',
-    'TraverseCallback',
     'ViewBox',
     'ViewBoxResult',
     'Viewport',
@@ -35,6 +31,7 @@ __all__ = [
     'generate_clip_geometry',
     'is_axis_aligned',
     'local_name',
+    'navigation_from_attributes',
     'parse_marker_definition',
     'parse_preserve_aspect_ratio',
     'parse_viewbox_attribute',
@@ -67,7 +64,7 @@ __all__ = [
 ]
 
 # map symbol -> relative module
-_symbol_map = {'ClipCustGeom': 'clip_geometry', 'ClipPathSegment': 'clip_geometry', 'ClipMediaMeta': 'clip_geometry', 'ClipComputeResult': 'clip_geometry', 'compute_clip_geometry': 'clip_geometry', 'ClipFallback': 'clip_geometry', 'extract_url_id': 'clipping', 'resolve_mask_ref': 'clipping', 'generate_clip_geometry': 'clipping', 'GeometryPayload': 'clipping', 'resolve_clip_ref': 'clipping', 'DEFAULT_TOLERANCE': 'constants', 'CoordinateSpace': 'coordinate_space', 'is_axis_aligned': 'geometry_utils', 'scaled_corner_radius': 'geometry_utils', 'transform_axis_aligned_rect': 'geometry_utils', 'TraversalHooksMixin': 'hooks', 'build_marker_shapes': 'marker_runtime', 'apply_marker_metadata': 'marker_runtime', 'MarkerInstance': 'markers', 'build_marker_transform': 'markers', 'MarkerDefinition': 'markers', 'parse_marker_definition': 'markers', 'apply_local_transform': 'markers', 'flatten_points': 'markers', 'MarkerTransform': 'markers', 'process_generic': 'runtime', 'resolve_active_navigation': 'runtime', 'local_name': 'runtime', 'process_use': 'runtime', 'process_anchor': 'runtime', 'push_element_transform': 'runtime', 'process_group': 'runtime', 'TransformParser': 'transform_parser', 'TraverseCallback': 'traversal', 'ElementTraversal': 'traversal', 'viewbox_matrix_from_element': 'viewbox', 'ViewBoxResult': 'viewbox', 'compute_viewbox': 'viewbox', 'resolve_viewbox_dimensions': 'viewbox', 'PreserveAspectRatio': 'viewbox', 'parse_viewbox_attribute': 'viewbox', 'parse_preserve_aspect_ratio': 'viewbox', 'ViewBox': 'viewbox', 'ViewportEngine': 'viewbox', 'resolve_viewbox': 'viewbox', 'Viewport': 'viewbox'}
+_symbol_map = {'compute_clip_geometry': 'clip_geometry', 'ClipMediaMeta': 'clip_geometry', 'ClipFallback': 'clip_geometry', 'ClipComputeResult': 'clip_geometry', 'ClipCustGeom': 'clip_geometry', 'resolve_mask_ref': 'clipping', 'extract_url_id': 'clipping', 'generate_clip_geometry': 'clipping', 'resolve_clip_ref': 'clipping', 'CoordinateSpace': 'coordinate_space', 'is_axis_aligned': 'geometry_utils', 'scaled_corner_radius': 'geometry_utils', 'transform_axis_aligned_rect': 'geometry_utils', 'TraversalHooksMixin': 'hooks', 'apply_marker_metadata': 'marker_runtime', 'build_marker_shapes': 'marker_runtime', 'build_marker_transform': 'markers', 'MarkerTransform': 'markers', 'MarkerInstance': 'markers', 'MarkerDefinition': 'markers', 'parse_marker_definition': 'markers', 'apply_local_transform': 'markers', 'flatten_points': 'markers', 'push_element_transform': 'runtime', 'resolve_active_navigation': 'runtime', 'process_generic': 'runtime', 'process_group': 'runtime', 'process_anchor': 'runtime', 'process_use': 'runtime', 'local_name': 'runtime', 'TransformParser': 'transform_parser', 'navigation_from_attributes': 'traversal', 'ElementTraversal': 'traversal', 'ViewBoxResult': 'viewbox', 'resolve_viewbox_dimensions': 'viewbox', 'Viewport': 'viewbox', 'parse_preserve_aspect_ratio': 'viewbox', 'PreserveAspectRatio': 'viewbox', 'parse_viewbox_attribute': 'viewbox', 'resolve_viewbox': 'viewbox', 'ViewBox': 'viewbox', 'compute_viewbox': 'viewbox', 'viewbox_matrix_from_element': 'viewbox', 'ViewportEngine': 'viewbox'}
 _module_map = {'bridges': 'bridges', 'clip_geometry': 'clip_geometry', 'clipping': 'clipping', 'constants': 'constants', 'coordinate_space': 'coordinate_space', 'geometry_utils': 'geometry_utils', 'hooks': 'hooks', 'marker_runtime': 'marker_runtime', 'markers': 'markers', 'runtime': 'runtime', 'transform_parser': 'transform_parser', 'traversal': 'traversal', 'viewbox': 'viewbox'}
 
 

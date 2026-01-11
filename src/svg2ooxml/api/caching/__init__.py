@@ -4,12 +4,11 @@ from importlib import import_module as _im
 from typing import Any as _Any
 
 __all__ = [
-    'job_status_cache',
     'status'
 ]
 
 # map symbol -> relative module
-_symbol_map = {'job_status_cache': 'status'}
+_symbol_map = {}
 _module_map = {'status': 'status'}
 
 

@@ -12,12 +12,14 @@ __all__ = [
     'api.models',
     'api.routes',
     'api.services',
+    'api.testing',
     'clipmask',
     'color',
     'color.advanced',
     'color.palettes',
     'common',
     'common.compat',
+    'common.conversions',
     'common.geometry',
     'common.geometry.algorithms',
     'common.geometry.clip',
@@ -51,6 +53,8 @@ __all__ = [
     'core.traversal.bridges',
     'css',
     'drawingml',
+    'drawingml.animation',
+    'drawingml.animation.handlers',
     'drawingml.bridges',
     'elements',
     'filters',
@@ -81,6 +85,7 @@ __all__ = [
     'services.fonts.providers',
     'services.providers',
     'services.registry',
+    'telemetry',
     'transforms',
     'units',
     'viewbox'
@@ -88,7 +93,7 @@ __all__ = [
 
 # map symbol -> relative module
 _symbol_map = {}
-_module_map = {'api': 'api', 'api.auth': 'api.auth', 'api.background': 'api.background', 'api.caching': 'api.caching', 'api.middleware': 'api.middleware', 'api.models': 'api.models', 'api.routes': 'api.routes', 'api.services': 'api.services', 'clipmask': 'clipmask', 'color': 'color', 'color.advanced': 'color.advanced', 'color.palettes': 'color.palettes', 'common': 'common', 'common.compat': 'common.compat', 'common.geometry': 'common.geometry', 'common.geometry.algorithms': 'common.geometry.algorithms', 'common.geometry.clip': 'common.geometry.clip', 'common.geometry.fractional': 'common.geometry.fractional', 'common.geometry.paths': 'common.geometry.paths', 'common.geometry.transforms': 'common.geometry.transforms', 'common.style': 'common.style', 'common.units': 'common.units', 'core': 'core', 'core.animation': 'core.animation', 'core.auth': 'core.auth', 'core.hyperlinks': 'core.hyperlinks', 'core.ir': 'core.ir', 'core.masks': 'core.masks', 'core.parser': 'core.parser', 'core.parser.batch': 'core.parser.batch', 'core.parser.colors': 'core.parser.colors', 'core.parser.preprocess': 'core.parser.preprocess', 'core.parser.split': 'core.parser.split', 'core.pipeline': 'core.pipeline', 'core.pipeline.mappers': 'core.pipeline.mappers', 'core.resvg': 'core.resvg', 'core.resvg.geometry': 'core.resvg.geometry', 'core.resvg.painting': 'core.resvg.painting', 'core.resvg.parser': 'core.resvg.parser', 'core.resvg.text': 'core.resvg.text', 'core.resvg.utils': 'core.resvg.utils', 'core.styling': 'core.styling', 'core.tracing': 'core.tracing', 'core.traversal': 'core.traversal', 'core.traversal.bridges': 'core.traversal.bridges', 'css': 'css', 'drawingml': 'drawingml', 'drawingml.bridges': 'drawingml.bridges', 'elements': 'elements', 'filters': 'filters', 'filters.effects': 'filters.effects', 'filters.image': 'filters.image', 'filters.primitives': 'filters.primitives', 'filters.utils': 'filters.utils', 'geometry': 'geometry', 'io': 'io', 'io.api': 'io.api', 'io.emf': 'io.emf', 'ir': 'ir', 'map': 'map', 'map.converter': 'map.converter', 'map.mapper': 'map.mapper', 'paint': 'paint', 'parser': 'parser', 'performance': 'performance', 'performance.metrics': 'performance.metrics', 'pipeline': 'pipeline', 'policy': 'policy', 'policy.providers': 'policy.providers', 'preprocessing': 'preprocessing', 'presentation': 'presentation', 'render': 'render', 'services': 'services', 'services.fonts': 'services.fonts', 'services.fonts.providers': 'services.fonts.providers', 'services.providers': 'services.providers', 'services.registry': 'services.registry', 'transforms': 'transforms', 'units': 'units', 'viewbox': 'viewbox'}
+_module_map = {'api': 'api', 'api.auth': 'api.auth', 'api.background': 'api.background', 'api.caching': 'api.caching', 'api.middleware': 'api.middleware', 'api.models': 'api.models', 'api.routes': 'api.routes', 'api.services': 'api.services', 'api.testing': 'api.testing', 'clipmask': 'clipmask', 'color': 'color', 'color.advanced': 'color.advanced', 'color.palettes': 'color.palettes', 'common': 'common', 'common.compat': 'common.compat', 'common.conversions': 'common.conversions', 'common.geometry': 'common.geometry', 'common.geometry.algorithms': 'common.geometry.algorithms', 'common.geometry.clip': 'common.geometry.clip', 'common.geometry.fractional': 'common.geometry.fractional', 'common.geometry.paths': 'common.geometry.paths', 'common.geometry.transforms': 'common.geometry.transforms', 'common.style': 'common.style', 'common.units': 'common.units', 'core': 'core', 'core.animation': 'core.animation', 'core.auth': 'core.auth', 'core.hyperlinks': 'core.hyperlinks', 'core.ir': 'core.ir', 'core.masks': 'core.masks', 'core.parser': 'core.parser', 'core.parser.batch': 'core.parser.batch', 'core.parser.colors': 'core.parser.colors', 'core.parser.preprocess': 'core.parser.preprocess', 'core.parser.split': 'core.parser.split', 'core.pipeline': 'core.pipeline', 'core.pipeline.mappers': 'core.pipeline.mappers', 'core.resvg': 'core.resvg', 'core.resvg.geometry': 'core.resvg.geometry', 'core.resvg.painting': 'core.resvg.painting', 'core.resvg.parser': 'core.resvg.parser', 'core.resvg.text': 'core.resvg.text', 'core.resvg.utils': 'core.resvg.utils', 'core.styling': 'core.styling', 'core.tracing': 'core.tracing', 'core.traversal': 'core.traversal', 'core.traversal.bridges': 'core.traversal.bridges', 'css': 'css', 'drawingml': 'drawingml', 'drawingml.animation': 'drawingml.animation', 'drawingml.animation.handlers': 'drawingml.animation.handlers', 'drawingml.bridges': 'drawingml.bridges', 'elements': 'elements', 'filters': 'filters', 'filters.effects': 'filters.effects', 'filters.image': 'filters.image', 'filters.primitives': 'filters.primitives', 'filters.utils': 'filters.utils', 'geometry': 'geometry', 'io': 'io', 'io.api': 'io.api', 'io.emf': 'io.emf', 'ir': 'ir', 'map': 'map', 'map.converter': 'map.converter', 'map.mapper': 'map.mapper', 'paint': 'paint', 'parser': 'parser', 'performance': 'performance', 'performance.metrics': 'performance.metrics', 'pipeline': 'pipeline', 'policy': 'policy', 'policy.providers': 'policy.providers', 'preprocessing': 'preprocessing', 'presentation': 'presentation', 'render': 'render', 'services': 'services', 'services.fonts': 'services.fonts', 'services.fonts.providers': 'services.fonts.providers', 'services.providers': 'services.providers', 'services.registry': 'services.registry', 'telemetry': 'telemetry', 'transforms': 'transforms', 'units': 'units', 'viewbox': 'viewbox'}
 
 
 def __getattr__(name: str) -> _Any:  # PEP 562
