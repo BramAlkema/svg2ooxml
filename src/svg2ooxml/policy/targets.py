@@ -1,7 +1,5 @@
 """Policy target definitions and registry utilities."""
 
-# TODO(ADR-policy-map): Extend targets when additional policy domains (filters, effects) are ported.
-
 from __future__ import annotations
 
 from dataclasses import dataclass

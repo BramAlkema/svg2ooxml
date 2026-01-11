@@ -41,15 +41,20 @@ def build_parser_services(
     if service_overrides:
         service_map.update(service_overrides)
 
-    from svg2ooxml.services import configure_services  # local import to avoid circular dependency
-
-    services = configure_services(service_map, include_defaults=include_defaults)
-
     engine = policy_engine or build_policy_engine(policy_name)
     if policy_engine is not None and policy_name:
         engine.set_policy(policy_name)
 
     context = policy_context or engine.evaluate()
+
+    from svg2ooxml.services import configure_services  # local import to avoid circular dependency
+
+    services = configure_services(
+        service_map,
+        include_defaults=include_defaults,
+        policy_engine=engine,
+        policy_context=context,
+    )
     return ParserServices(services=services, policy_engine=engine, policy_context=context)
 
 

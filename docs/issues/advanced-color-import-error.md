@@ -1,13 +1,15 @@
 # AdvancedColor Import Error Blocking API Tests
 
-**Status**: Blocking
-**Priority**: High
+**Status**: Resolved
+**Priority**: High (historical)
 **Created**: 2025-11-03
 **Component**: color.advanced module initialization
 
 ## Problem
 
-The `svg2ooxml.api.services.converter` module cannot be imported due to a missing `AdvancedColor` symbol in the `svg2ooxml.color.advanced` package.
+This issue was reported when `AdvancedColor` was missing from the
+`svg2ooxml.color.advanced` exports. The current package now defines
+`AdvancedColor` and exports it directly, so the import is no longer blocked.
 
 ```python
 ImportError: cannot import name 'AdvancedColor' from 'svg2ooxml.color.advanced'
@@ -15,21 +17,15 @@ ImportError: cannot import name 'AdvancedColor' from 'svg2ooxml.color.advanced'
 
 ## Impact
 
-- **Blocks**: End-to-end API integration tests
-- **Affected**: `tests/integration/test_webfont_embedding_e2e.py`
-- **Workaround**: Use service-layer integration tests instead
+- **Unblocked**: End-to-end API integration tests can import the API layer
+- **Affected**: `tests/integration/test_webfont_embedding_e2e.py` (previously)
 
 ## Root Cause
 
-The `/Users/ynse/projects/svg2ooxml/src/svg2ooxml/color/advanced/__init__.py` file uses lazy imports (PEP 562) and doesn't export `AdvancedColor` in its `__all__` list.
-
-Current `__all__` includes:
-- `Color`
-- `ColorAccessibility`
-- `ColorBatch`
-- etc.
-
-But **NOT** `AdvancedColor`.
+The auto-generated advanced color package previously omitted the
+`AdvancedColor` alias from its public exports. The current
+`src/svg2ooxml/color/advanced/__init__.py` now defines `AdvancedColor`
+explicitly (with an optional-engine fallback) and includes it in `__all__`.
 
 ## Current Test Status
 
@@ -39,45 +35,23 @@ But **NOT** `AdvancedColor`.
   - WebFontProvider: 23 tests
   - Service-layer integration: 8 tests
 
-❌ **Blocked**:
+✅ **Unblocked**:
 - Full E2E PPTX embedding tests (requires API layer)
 
-## Solution Options
+## Resolution
 
-### Option 1: Add AdvancedColor to __all__ (Recommended)
-
-Update `src/svg2ooxml/color/advanced/__init__.py`:
-
-```python
-__all__ = [
-    'AdvancedColor',  # ADD THIS
-    'BlendMode',
-    'Color',
-    # ... rest
-]
-
-_symbol_map = {
-    'AdvancedColor': 'core',  # ADD THIS - map to correct module
-    'ColorAccessibility': 'accessibility',
-    # ... rest
-}
-```
-
-### Option 2: Fix the import in converter
-
-Update the import statement in `src/svg2ooxml/api/services/converter.py` to import from the specific submodule instead of the package.
-
-### Option 3: Skip API tests temporarily
-
-Continue using service-layer integration tests until the color module is fixed.
+- `AdvancedColor` is defined in `src/svg2ooxml/color/advanced/__init__.py` with
+  a fallback class when the optional engine is unavailable.
+- `__all__` now includes `AdvancedColor`, and unit coverage in
+  `tests/unit/color/test_advanced_exports.py` guards the export.
 
 ## Verification
 
-After fix, verify with:
+After verifying the exports, run:
 
 ```bash
-python -c "from svg2ooxml.color.advanced import AdvancedColor; print('OK')"
-python -m pytest tests/integration/test_webfont_embedding_e2e.py -v
+PYTHONPATH=src python3 -c "from svg2ooxml.color.advanced import AdvancedColor; print('OK')"
+PYTHONPATH=src python3 -m pytest tests/integration/test_webfont_embedding_e2e.py -v
 ```
 
 ## Related Files
@@ -88,6 +62,5 @@ python -m pytest tests/integration/test_webfont_embedding_e2e.py -v
 
 ## Notes
 
-- This is a **pre-existing issue** not related to web font implementation
-- Web font functionality is fully tested at the service layer
-- The issue only affects the API wrapper layer
+- Web font functionality is fully tested at the service layer.
+- Keep the export guard tests so future `rebuild_inits.py` runs do not regress.

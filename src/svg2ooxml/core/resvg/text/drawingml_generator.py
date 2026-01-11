@@ -231,15 +231,9 @@ class DrawingMLTextGenerator:
     def _generate_runs_into_parent(self, node: TextNode, parent: etree._Element) -> None:
         """Generate text run elements and append to parent paragraph.
 
-        TODO: This currently generates a single run per paragraph using only
-        the parent text node's style. It does NOT support:
-        - Child <tspan> elements with style overrides
-        - Per-run font/color/weight/style changes
-        - Mixed styling within a single text element
-
-        For complex text with tspans, the TextLayoutAnalyzer should reject
-        the layout and trigger EMF fallback. This method assumes simple,
-        single-run text that has passed complexity checks.
+        Generates one run per text segment, including simple <tspan> style
+        overrides that inherit from the parent. Complex positioning and
+        advanced typography remain gated by TextLayoutAnalyzer.
 
         Uses lxml for safe XML generation with automatic text escaping.
 
@@ -247,23 +241,32 @@ class DrawingMLTextGenerator:
             node: TextNode with text_content and optional text_style
             parent: Parent <a:p> element to append runs to
         """
-        text = node.text_content or ""
+        segments = self._collect_text_segments(node)
 
         # Empty text - use end paragraph marker
-        if not text:
+        if not segments:
             a_sub(parent, "endParaRPr")
             return
 
-        # Create run element
-        r = a_sub(parent, "r")
+        for text, text_style, fill_style in segments:
+            normalized = self._normalize_text_segment(text)
+            if not normalized:
+                continue
+            parts = normalized.split("\n")
+            for index, part in enumerate(parts):
+                if index > 0:
+                    a_sub(parent, "br")
 
-        # Generate run properties
-        rPr = a_sub(r, "rPr")
-        self._populate_run_properties(rPr, node.text_style, node.fill)
+                r = a_sub(parent, "r")
+                rPr = a_sub(r, "rPr")
+                self._populate_run_properties(rPr, text_style, fill_style)
 
-        # Add text element (lxml handles text escaping automatically)
-        t = a_sub(r, "t")
-        t.text = text
+                t = a_sub(r, "t")
+                text_value = part if part else " "
+                preserve = text_value == " " or text_value.startswith(" ") or text_value.endswith(" ")
+                t.text = text_value
+                if preserve:
+                    t.set("{http://www.w3.org/XML/1998/namespace}space", "preserve")
 
     def _populate_run_properties(
         self,
@@ -315,6 +318,47 @@ class DrawingMLTextGenerator:
             hex_color = _color_to_hex(fill_style.color)
             solidFill = a_sub(rPr, "solidFill")
             a_sub(solidFill, "srgbClr", val=hex_color)
+
+    def _collect_text_segments(
+        self,
+        node: TextNode,
+    ) -> list[tuple[str, TextStyle | None, FillStyle | None]]:
+        segments: list[tuple[str, TextStyle | None, FillStyle | None]] = []
+
+        def visit(
+            current,
+            inherited_text_style: TextStyle | None,
+            inherited_fill_style: FillStyle | None,
+        ) -> None:
+            text_style = current.text_style or inherited_text_style
+            fill_style = current.fill or inherited_fill_style
+            source = getattr(current, "source", None)
+            if source is not None:
+                text = getattr(source, "text", None)
+                if text:
+                    segments.append((text, text_style, fill_style))
+            for child in getattr(current, "children", []) or []:
+                visit(child, text_style, fill_style)
+                child_source = getattr(child, "source", None)
+                tail = getattr(child_source, "tail", None) if child_source is not None else None
+                if tail:
+                    segments.append((tail, text_style, fill_style))
+
+        visit(node, node.text_style, node.fill)
+
+        if not segments and node.text_content:
+            segments.append((node.text_content, node.text_style, node.fill))
+
+        return segments
+
+    @staticmethod
+    def _normalize_text_segment(text: str | None) -> str:
+        if not text:
+            return ""
+        token = text.replace("\r\n", "\n").replace("\r", "\n")
+        if token.strip() == "":
+            return "\n" if "\n" in token else " "
+        return token
 
     def resolve_font(
         self,

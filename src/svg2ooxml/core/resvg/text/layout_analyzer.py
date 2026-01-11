@@ -45,10 +45,8 @@ class TextLayoutComplexity:
     """Categorizes reasons why text layout is complex.
 
     Note: Some advanced typography features (kerning, ligatures, glyph reuse)
-    cannot currently be detected because the resvg API doesn't expose this data.
-    These are marked as TODO and will be implemented when pyportresvg bindings
-    are enhanced. Until then, we may green-light some complex text that should
-    fall back to EMF.
+    are detected via SVG attributes and style overrides, and will be treated
+    as complex until DrawingML support is expanded.
     """
 
     # Simple layouts
@@ -62,11 +60,13 @@ class TextLayoutComplexity:
     HAS_CHILD_SPAN_VERTICAL_TEXT = "has_child_span_vertical_text"
     HAS_CHILD_SPAN_COMPLEX_POSITIONING = "has_child_span_complex_positioning"
 
-    # TODO: Cannot detect yet (resvg API limitation)
-    # When these are detectable, add checks to reject complex typography:
-    UNKNOWN_KERNING = "unknown_kerning"  # TODO: Requires resvg glyph positioning API
-    UNKNOWN_LIGATURES = "unknown_ligatures"  # TODO: Requires resvg font feature API
-    UNKNOWN_GLYPH_REUSE = "unknown_glyph_reuse"  # TODO: Requires resvg glyph mapping API
+    # Advanced typography (unsupported in DrawingML path)
+    HAS_KERNING = "has_kerning"
+    HAS_LIGATURES = "has_ligatures"
+    HAS_GLYPH_REUSE = "has_glyph_reuse"
+    UNKNOWN_KERNING = HAS_KERNING
+    UNKNOWN_LIGATURES = HAS_LIGATURES
+    UNKNOWN_GLYPH_REUSE = HAS_GLYPH_REUSE
 
 
 class TextLayoutAnalyzer:
@@ -126,13 +126,13 @@ class TextLayoutAnalyzer:
         if self._has_complex_positioning(node):
             return False
 
+        if self._has_kerning(node) or self._has_ligatures(node) or self._has_glyph_reuse(node):
+            return False
+
         # Check child spans recursively
         has_complex, _ = self._check_child_spans(node)
         if has_complex:
             return False
-
-        # TODO: Check for kerning/ligatures when resvg API exposes this
-        # For now, we assume simple cases don't have complex typography
 
         return True
 
@@ -156,6 +156,15 @@ class TextLayoutAnalyzer:
 
         if self._has_complex_positioning(node):
             return TextLayoutComplexity.HAS_COMPLEX_POSITIONING
+
+        if self._has_kerning(node):
+            return TextLayoutComplexity.HAS_KERNING
+
+        if self._has_ligatures(node):
+            return TextLayoutComplexity.HAS_LIGATURES
+
+        if self._has_glyph_reuse(node):
+            return TextLayoutComplexity.HAS_GLYPH_REUSE
 
         # Check child spans recursively
         has_complex, reason = self._check_child_spans(node)
@@ -212,6 +221,27 @@ class TextLayoutAnalyzer:
                 details="Text has per-character positioning (multiple x/y/dx/dy values or rotate attribute)",
             )
 
+        if self._has_kerning(node):
+            return LayoutAnalysisResult(
+                is_plain=False,
+                complexity=TextLayoutComplexity.HAS_KERNING,
+                details="Text uses kerning or spacing overrides unsupported in DrawingML",
+            )
+
+        if self._has_ligatures(node):
+            return LayoutAnalysisResult(
+                is_plain=False,
+                complexity=TextLayoutComplexity.HAS_LIGATURES,
+                details="Text uses ligatures or font feature settings unsupported in DrawingML",
+            )
+
+        if self._has_glyph_reuse(node):
+            return LayoutAnalysisResult(
+                is_plain=False,
+                complexity=TextLayoutComplexity.HAS_GLYPH_REUSE,
+                details="Text uses advanced font features unsupported in DrawingML",
+            )
+
         # Check child spans recursively
         has_complex, reason = self._check_child_spans(node)
         if has_complex:
@@ -219,6 +249,12 @@ class TextLayoutAnalyzer:
                 details = "Child span uses vertical writing mode"
             elif reason == TextLayoutComplexity.HAS_CHILD_SPAN_COMPLEX_POSITIONING:
                 details = "Child span has per-character positioning"
+            elif reason in {
+                TextLayoutComplexity.HAS_KERNING,
+                TextLayoutComplexity.HAS_LIGATURES,
+                TextLayoutComplexity.HAS_GLYPH_REUSE,
+            }:
+                details = "Child span uses advanced typography features"
             else:
                 details = "Child span has complex layout"
 
@@ -386,8 +422,9 @@ class TextLayoutAnalyzer:
         if dx_count > 1 or dy_count > 1:
             return True
 
-        # TODO: Check for glyph reuse (when resvg API exposes this)
-        # This would indicate advanced typography features
+        # Additional spacing or length adjustments (unsupported in DrawingML)
+        if self._has_spacing_adjustments(node):
+            return True
 
         return False
 
@@ -418,12 +455,24 @@ class TextLayoutAnalyzer:
             if self._has_vertical_text(child):
                 return (True, TextLayoutComplexity.HAS_CHILD_SPAN_VERTICAL_TEXT)
 
+            if self._has_complex_transform(child):
+                return (True, TextLayoutComplexity.HAS_COMPLEX_TRANSFORM)
+
             # Check child's positioning attributes
             if self._has_complex_positioning(child):
                 return (
                     True,
                     TextLayoutComplexity.HAS_CHILD_SPAN_COMPLEX_POSITIONING,
                 )
+
+            if self._has_kerning(child):
+                return (True, TextLayoutComplexity.HAS_KERNING)
+
+            if self._has_ligatures(child):
+                return (True, TextLayoutComplexity.HAS_LIGATURES)
+
+            if self._has_glyph_reuse(child):
+                return (True, TextLayoutComplexity.HAS_GLYPH_REUSE)
 
             # Recursively check child's children
             has_complex, reason = self._check_child_spans(child)
@@ -432,51 +481,82 @@ class TextLayoutAnalyzer:
 
         return (False, "")
 
-    # TODO: Future methods when resvg API improves
+    def _style_value(self, node: "TextNode", name: str) -> str | None:
+        attrs = getattr(node, "attributes", {}) or {}
+        styles = getattr(node, "styles", {}) or {}
+        return styles.get(name) or attrs.get(name)
 
     def _has_kerning(self, node: "TextNode") -> bool:
         """Check if text uses kerning.
-
-        TODO: Implement when resvg API exposes kerning information.
 
         Args:
             node: TextNode to check
 
         Returns:
-            False (not detectable yet)
+            True if kerning or spacing overrides are present
         """
-        # Placeholder for future implementation
-        # When pyportresvg bindings expose kerning data, check here
+        kerning = self._style_value(node, "font-kerning") or self._style_value(node, "kerning")
+        if kerning and kerning.strip().lower() not in {"auto", "normal"}:
+            return True
+        if self._font_feature_enabled(node, {"kern"}):
+            return True
         return False
 
     def _has_ligatures(self, node: "TextNode") -> bool:
         """Check if text uses ligatures.
 
-        TODO: Implement when resvg API exposes ligature information.
-
         Args:
             node: TextNode to check
 
         Returns:
-            False (not detectable yet)
+            True if ligature-related features are present
         """
-        # Placeholder for future implementation
-        # When pyportresvg bindings expose ligature data, check here
+        ligatures = self._style_value(node, "font-variant-ligatures")
+        if ligatures and ligatures.strip().lower() not in {"normal", "none"}:
+            return True
+        if self._font_feature_enabled(node, {"liga", "clig", "dlig", "hlig"}):
+            return True
         return False
 
     def _has_glyph_reuse(self, node: "TextNode") -> bool:
-        """Check if text has complex glyph positioning/reuse.
-
-        TODO: Implement when resvg API exposes glyph positioning data.
+        """Check if text has advanced font feature settings.
 
         Args:
             node: TextNode to check
 
         Returns:
-            False (not detectable yet)
+            True if feature tags are present
         """
-        # Placeholder for future implementation
-        # When pyportresvg bindings expose glyph data, check here
+        features = self._style_value(node, "font-feature-settings")
+        if features and features.strip().lower() != "normal":
+            return True
+        return False
+
+    def _font_feature_enabled(self, node: "TextNode", tokens: set[str]) -> bool:
+        value = self._style_value(node, "font-feature-settings")
+        if not value:
+            return False
+        raw = value.lower()
+        if raw.strip() == "normal":
+            return False
+        for token in tokens:
+            if token in raw:
+                return True
+        return False
+
+    def _has_spacing_adjustments(self, node: "TextNode") -> bool:
+        letter_spacing = self._style_value(node, "letter-spacing")
+        if letter_spacing and letter_spacing.strip().lower() not in {"normal", "0", "0px", "0%"}:
+            return True
+        word_spacing = self._style_value(node, "word-spacing")
+        if word_spacing and word_spacing.strip().lower() not in {"normal", "0", "0px", "0%"}:
+            return True
+        text_length = self._style_value(node, "textLength")
+        if text_length and text_length.strip():
+            return True
+        length_adjust = self._style_value(node, "lengthAdjust")
+        if length_adjust and length_adjust.strip():
+            return True
         return False
 
 

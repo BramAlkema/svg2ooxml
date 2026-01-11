@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any, Iterable, Mapping
 
 from lxml import etree
@@ -28,6 +28,114 @@ FONT_FALLBACKS: dict[str, str] = {
     "cursive": "Comic Sans MS",
     "fantasy": "Impact",
 }
+
+try:  # pragma: no cover - optional dependency
+    from fontTools.ttLib import TTFont  # type: ignore[import-untyped]
+
+    FONTTOOLS_AVAILABLE = True
+except Exception:  # pragma: no cover - optional dependency
+    TTFont = None  # type: ignore[assignment]
+    FONTTOOLS_AVAILABLE = False
+
+
+@dataclass(frozen=True)
+class _FontMetrics:
+    units_per_em: int
+    cmap: dict[int, str]
+    advances: dict[str, int]
+    default_advance: float
+
+
+_FONT_METRICS_CACHE: dict[str, _FontMetrics] = {}
+_FONT_METRICS_MISS: set[str] = set()
+
+
+def _load_font_metrics(path: str) -> _FontMetrics | None:
+    if path in _FONT_METRICS_CACHE:
+        return _FONT_METRICS_CACHE[path]
+    if path in _FONT_METRICS_MISS or not FONTTOOLS_AVAILABLE:
+        return None
+    try:
+        font = TTFont(path)
+    except Exception:
+        _FONT_METRICS_MISS.add(path)
+        return None
+
+    try:
+        units_per_em = 1000
+        if "head" in font:
+            units_per_em = int(getattr(font["head"], "unitsPerEm", units_per_em))
+        cmap = {}
+        if "cmap" in font:
+            cmap = font["cmap"].getBestCmap() or {}
+        advances: dict[str, int] = {}
+        if "hmtx" in font:
+            advances = {name: int(metrics[0]) for name, metrics in font["hmtx"].metrics.items()}
+        if "space" in advances:
+            default_advance = float(advances["space"])
+        elif advances:
+            default_advance = float(sum(advances.values()) / len(advances))
+        else:
+            default_advance = float(units_per_em) * 0.5
+    finally:
+        try:
+            font.close()
+        except Exception:
+            pass
+
+    metrics = _FontMetrics(
+        units_per_em=max(1, units_per_em),
+        cmap=cmap,
+        advances=advances,
+        default_advance=default_advance,
+    )
+    _FONT_METRICS_CACHE[path] = metrics
+    return metrics
+
+
+def _resolve_font_metrics(font_service: Any | None, run: Run) -> _FontMetrics | None:
+    if font_service is None or not hasattr(font_service, "find_font"):
+        return None
+    try:
+        from svg2ooxml.services.fonts import FontQuery
+    except Exception:
+        return None
+
+    family = (run.font_family or "Arial").split(",")[0].strip().strip('"\'')
+    weight = 700 if run.bold else 400
+    style = "italic" if run.italic else "normal"
+
+    try:
+        query = FontQuery(family=family, weight=weight, style=style)
+        match = font_service.find_font(query)
+    except Exception:
+        return None
+
+    if match is None or not getattr(match, "path", None):
+        return None
+    return _load_font_metrics(str(match.path))
+
+
+def _estimate_run_width(text: str, run: Run, font_service: Any | None) -> float:
+    font_px = run.font_size_pt * (96.0 / 72.0)
+    if font_px <= 0:
+        return 0.0
+
+    metrics = _resolve_font_metrics(font_service, run)
+    if metrics is None:
+        return len(text) * font_px * 0.6
+
+    width_units = 0.0
+    for ch in text:
+        if ch == "\n":
+            continue
+        glyph_name = metrics.cmap.get(ord(ch))
+        if glyph_name is None:
+            width_units += metrics.default_advance
+            continue
+        width_units += metrics.advances.get(glyph_name, metrics.default_advance)
+
+    return (width_units / metrics.units_per_em) * font_px
 
 
 class TextConverter:
@@ -76,7 +184,8 @@ class TextConverter:
         }.get(element.get("text-anchor"), TextAnchor.START)
 
         origin_x, origin_y = coord_space.apply_point(x, y)
-        bbox = self._estimate_text_bbox(processed_runs, origin_x, origin_y)
+        font_service = self._parent._services.resolve("font")  # pylint: disable=protected-access
+        bbox = self._estimate_text_bbox(processed_runs, origin_x, origin_y, font_service=font_service)
 
         metadata: dict[str, Any] = dict(run_metadata)
         self._parent._attach_policy_metadata(metadata, "text")  # pylint: disable=protected-access
@@ -261,6 +370,8 @@ class TextConverter:
         runs: list[Run],
         origin_x: float,
         origin_y: float,
+        *,
+        font_service: Any | None = None,
     ) -> Rect:
         """Estimate text bounding box from runs.
 
@@ -271,6 +382,8 @@ class TextConverter:
         - Font ascent/descent
 
         Current approach uses conservative estimates to ensure text fits.
+        When a FontService is available, per-glyph advances are used to
+        improve width estimation.
         """
         if not runs:
             return Rect(origin_x, origin_y, 0.0, 0.0)
@@ -280,26 +393,35 @@ class TextConverter:
         # Convert points to pixels (96 DPI standard: 1pt = 96/72 pixels = 1.333px)
         max_font_px = max_font_pt * (96.0 / 72.0)
 
-        text_content = "".join(run.text for run in runs)
-        lines = text_content.split("\n") if text_content else [""]
-        max_line_length = max(len(line) for line in lines) if lines else 0
-
-        # Width: Estimate average character width as 0.6x font size (monospace assumption)
-        # TODO: Use actual font metrics for more accurate width
-        width = max_line_length * max_font_px * 0.6
+        max_width = 0.0
+        current_width = 0.0
+        line_count = 1
+        for run in runs:
+            text = (run.text or "").replace("\r\n", "\n").replace("\r", "\n")
+            if not text:
+                continue
+            parts = text.split("\n")
+            for index, part in enumerate(parts):
+                if index > 0:
+                    max_width = max(max_width, current_width)
+                    current_width = 0.0
+                    line_count += 1
+                if part:
+                    current_width += _estimate_run_width(part, run, font_service)
+        max_width = max(max_width, current_width)
 
         # Height: Use proper line height calculation
         # Line height = font size + leading (extra space between lines)
         # Standard line height is 1.2-1.5x font size
         # We use 1.5x to ensure text doesn't clip
         line_height = max_font_px * 1.5
-        height = line_height * max(1, len(lines))
+        height = line_height * max(1, line_count)
 
         # Origin offset: Position top of bbox above the baseline
         # Typical font ascent is ~0.75-0.8 of font size
         y_offset = max_font_px * 0.8
 
-        return Rect(origin_x, origin_y - y_offset, width, height)
+        return Rect(origin_x, origin_y - y_offset, max_width, height)
 
     @staticmethod
     def _coerce_hex_color(token: str) -> str:

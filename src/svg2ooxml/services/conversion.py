@@ -16,9 +16,10 @@ class ConversionServices:
 
     def register(self, name: str, service: Any) -> None:
         self.services[name] = service
-        # TODO(ADR-policy-map): Replace ad-hoc binding with policy-aware service descriptors once ported.
         self._bind_if_supported(service)
         self._notify_linked_services(name, service)
+        if name == "policy_engine":
+            self._propagate_policy_engine(service)
 
     def resolve(self, name: str, default: Any = None) -> Any:
         return self.services.get(name, default)
@@ -83,6 +84,10 @@ class ConversionServices:
         return self.resolve("smart_font_converter")
 
     @property
+    def policy_engine(self) -> Any:
+        return self.resolve("policy_engine")
+
+    @property
     def mask_service(self) -> Any:
         return self.resolve("mask_service")
 
@@ -141,6 +146,14 @@ class ConversionServices:
         if isinstance(value, list):
             return list(value)
         return value
+
+    def _propagate_policy_engine(self, engine: Any) -> None:
+        for service in self.services.values():
+            if service is engine:
+                continue
+            setter = getattr(service, "set_policy_engine", None)
+            if callable(setter):
+                setter(engine)
 
 
 __all__ = ["ConversionServices"]
