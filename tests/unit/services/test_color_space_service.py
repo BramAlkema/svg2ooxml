@@ -6,7 +6,7 @@ import io
 
 import pytest
 
-from svg2ooxml.color import (
+from svg2ooxml.color.bridge import (
     ADVANCED_COLOR_ENGINE_AVAILABLE,
     ensure_advanced_color_engine,
 )

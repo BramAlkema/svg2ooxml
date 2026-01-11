@@ -7,17 +7,16 @@ import pytest
 pytest.importorskip("numpy")
 pytest.importorskip("colorspacious")
 
-from svg2ooxml.color import (
+from svg2ooxml.color.advanced.accessibility import ColorAccessibility, ContrastLevel
+from svg2ooxml.color.advanced.engine import AdvancedColor
+from svg2ooxml.color.advanced.harmony import ColorHarmony
+from svg2ooxml.color.bridge import (
     ADVANCED_COLOR_ENGINE_AVAILABLE,
-    AdvancedColor,
-    Color,
-    ColorAccessibility,
-    ColorHarmony,
-    ContrastLevel,
-    from_advanced_color,
     ensure_advanced_color_engine,
+    from_advanced_color,
     to_advanced_color,
 )
+from svg2ooxml.color.models import Color
 
 
 if not ADVANCED_COLOR_ENGINE_AVAILABLE:

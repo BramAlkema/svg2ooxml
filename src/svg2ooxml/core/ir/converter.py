@@ -10,7 +10,8 @@ from lxml import etree
 
 from svg2ooxml.css import StyleResolver
 from svg2ooxml.ir.scene import SceneGraph
-from svg2ooxml.core.parser import ParseResult, UnitConverter
+from svg2ooxml.core.parser import ParseResult
+from svg2ooxml.core.parser.units import UnitConverter
 from svg2ooxml.policy import PolicyContext, PolicyEngine
 from svg2ooxml.services import ConversionServices
 

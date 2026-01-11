@@ -8,7 +8,7 @@ from typing import Final, Tuple
 
 from lxml import etree
 
-from svg2ooxml.common.geometry.transforms import Matrix2D
+from svg2ooxml.common.geometry.transforms.matrix import Matrix2D
 from svg2ooxml.common.units import UnitConverter
 
 ALIGN_MAP: Final[dict[str, tuple[float, float]]] = {

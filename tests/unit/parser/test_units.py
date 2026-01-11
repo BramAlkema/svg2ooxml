@@ -2,7 +2,7 @@
 
 import pytest
 
-from svg2ooxml.core.parser import UnitConverter, viewbox_to_px
+from svg2ooxml.core.parser.units import UnitConverter, viewbox_to_px
 
 
 def test_unit_converter_handles_known_units() -> None:

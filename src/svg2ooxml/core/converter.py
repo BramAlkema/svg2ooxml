@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from dataclasses import dataclass
 
-from .pipeline import DEFAULT_STAGE_NAMES, ConversionPipeline
+from .pipeline.pipeline import DEFAULT_STAGE_NAMES, ConversionPipeline
 from .resvg.normalizer import NormalizationResult, normalize_svg_file
 from .resvg.parser.options import Options
 

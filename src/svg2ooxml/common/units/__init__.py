@@ -16,7 +16,7 @@ __all__ = [
 ]
 
 # map symbol -> relative module
-_symbol_map = {'UnitConverter': 'conversion', 'emu_to_px': 'conversion', 'px_to_emu': 'conversion', 'emu_to_unit': 'conversion', 'ConversionContext': 'conversion', 'LengthConverter': 'converters'}
+_symbol_map = {'emu_to_px': 'conversion', 'emu_to_unit': 'conversion', 'ConversionContext': 'conversion', 'UnitConverter': 'conversion', 'px_to_emu': 'conversion', 'LengthConverter': 'converters'}
 _module_map = {'conversion': 'conversion', 'converters': 'converters', 'scalars': 'scalars'}
 
 

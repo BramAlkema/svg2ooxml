@@ -10,7 +10,7 @@ __all__ = [
 ]
 
 # map symbol -> relative module
-_symbol_map = {'parse_color': 'parsing', 'register_palette': 'parsing'}
+_symbol_map = {'register_palette': 'parsing', 'parse_color': 'parsing'}
 _module_map = {'parsing': 'parsing'}
 
 

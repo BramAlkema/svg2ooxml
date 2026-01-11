@@ -1,6 +1,6 @@
 """Public pipeline API re-export."""
 
-from svg2ooxml.core.pipeline import ConversionPipeline, DEFAULT_STAGE_NAMES
+from svg2ooxml.core.pipeline.pipeline import ConversionPipeline, DEFAULT_STAGE_NAMES
 from svg2ooxml.core.pipeline import navigation as navigation
 from svg2ooxml.core.pipeline.navigation import (
     BookmarkTarget,

@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any, Optional, Sequence
 from urllib.parse import urlparse
 
-from ..caching import job_status_cache
+from ..caching.status import job_status_cache
 from ..models import RequestedFont, SVGFrame
 from .converter import ConversionArtifacts, FontDiagnostics, render_pptx_for_frames
 from .slides_publisher import SlidesPublishResult, SlidesPublishingError, upload_pptx_to_slides

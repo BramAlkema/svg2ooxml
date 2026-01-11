@@ -3,29 +3,23 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import replace
 from pathlib import Path
 from typing import Any, Iterable, Tuple, TYPE_CHECKING
 
 from svg2ooxml.io.emf import EMFRelationshipManager
-from svg2ooxml.ir.animation import AnimationDefinition
-from svg2ooxml.ir.geometry import Point, Rect
-from svg2ooxml.ir.scene import ClipRef, Group, Image, MaskRef, Path as IRPath, SceneGraph
-from svg2ooxml.ir.shapes import Circle, Ellipse, Rectangle, Line, Polygon, Polyline
+from svg2ooxml.ir.scene import Group, Image, SceneGraph
 from svg2ooxml.ir.text import TextFrame
 from svg2ooxml.core.ir import IRScene
-from svg2ooxml.policy.constants import FALLBACK_BITMAP, FALLBACK_RASTERIZE
 
-from . import paint_runtime, shapes_runtime
+from .animation_pipeline import AnimationPipeline
 from .assets import AssetRegistry
-from .animation import DrawingMLAnimationWriter
 from .clipmask import clip_xml_for
-from .image import render_picture
 from .generator import DrawingMLPathGenerator, EMU_PER_PX, px_to_emu
+from .mask_pipeline import MaskPipeline
 from .navigation import register_navigation
 from .result import DrawingMLRenderResult
-from .mask_store import MaskAssetStore
-from .mask_writer import MaskWriter
+from .shape_renderer import DrawingMLShapeRenderer
+from .text_renderer import DrawingMLTextRenderer
 from .rasterizer import Rasterizer, SKIA_AVAILABLE
 
 if TYPE_CHECKING:  # pragma: no cover - type checking only
@@ -63,13 +57,11 @@ class DrawingMLWriter:
         self._next_media_index = 1
         self._next_navigation_index = 1
         self._seen_filter_assets: set[str] = set()
-        self._mask_writer: MaskWriter | None = None
-        self._mask_store_factory = MaskAssetStore
+        self._mask_pipeline = MaskPipeline()
         self._rasterizer: Rasterizer | None = None
-        self._animation_writer = DrawingMLAnimationWriter()
-        self._animation_payload: dict[str, Any] | None = None
-        self._animation_shape_map: dict[str, str] = {}
-        self._animation_policy: dict[str, object] | None = None
+        self._animation_pipeline = AnimationPipeline(trace_writer=self._trace_writer)
+        self._text_renderer: DrawingMLTextRenderer | None = None
+        self._shape_renderer: DrawingMLShapeRenderer | None = None
         if SKIA_AVAILABLE:  # pragma: no branch
             try:
                 self._rasterizer = Rasterizer()
@@ -104,17 +96,32 @@ class DrawingMLWriter:
         self._next_navigation_index = 1
         self._seen_filter_assets.clear()
         self._emf_manager.reset()
-        mask_store = self._mask_store_factory()
-        self._mask_writer = MaskWriter(mask_store=mask_store, tracer=self._tracer)
-        self._mask_writer.bind_assets(self._asset_registry)
+        self._mask_pipeline.reset(assets=self._assets, tracer=self._tracer)
+        self._animation_pipeline.reset(animation_payload, tracer=self._tracer)
+        self._text_renderer = DrawingMLTextRenderer(
+            text_template=self._text_template,
+            wordart_template=self._wordart_template,
+            policy_for=self._policy_for,
+            register_run_navigation=self._register_run_navigation,
+            trace_writer=self._trace_writer,
+            assets=self._assets,
+            logger=logger,
+        )
+        self._shape_renderer = DrawingMLShapeRenderer(
+            rectangle_template=self._rectangle_template,
+            preset_template=self._preset_template,
+            path_template=self._path_template,
+            line_template=self._line_template,
+            picture_template=self._picture_template,
+            path_generator=self._path_generator,
+            policy_for=self._policy_for,
+            register_media=self._register_media,
+            trace_writer=self._trace_writer,
+            animation_pipeline=self._animation_pipeline,
+            rasterizer=self._rasterizer,
+            logger=logger,
+        )
         self._trace_writer("render_start", metadata={"slide_size": slide_size})
-        self._animation_payload = animation_payload
-        self._animation_shape_map = {}
-        self._animation_policy = {}
-        if isinstance(self._animation_payload, dict):
-            payload_policy = self._animation_payload.get("policy")
-            if isinstance(payload_policy, dict):
-                self._animation_policy = dict(payload_policy)
         try:
             fragments, _ = self._render_elements(scene, next_id=2)
             placeholder = "<!-- SHAPES WILL BE INSERTED HERE -->"
@@ -144,11 +151,11 @@ class DrawingMLWriter:
             return result
         finally:
             self._asset_registry = None
-            self._mask_writer = None
+            self._mask_pipeline.clear()
+            self._text_renderer = None
+            self._shape_renderer = None
+            self._animation_pipeline.reset(None)
             self._tracer = prev_tracer
-            self._animation_payload = None
-            self._animation_shape_map = {}
-            self._animation_policy = None
 
     def render_scene_from_ir(
         self,
@@ -410,23 +417,20 @@ class DrawingMLWriter:
             self.register_filter_assets(metadata)
         else:
             metadata = {}
-        self._register_animation_mapping(metadata, shape_id)
+        self._animation_pipeline.register_mapping(metadata, shape_id)
 
         clip_xml, clip_diags = clip_xml_for(getattr(element, "clip", None))
-        mask_xml = ""
-        mask_diags: list[str] = []
-        if self._mask_writer is not None:
-            mask_xml, mask_diags = self._mask_writer.render(element)
-            if mask_xml:
-                self._trace_writer(
-                    "mask_applied",
-                    stage="mask",
-                    metadata={
-                        "shape_id": shape_id,
-                        "length": len(mask_xml),
-                        "element_type": type(element).__name__,
-                    },
-                )
+        mask_xml, mask_diags = self._mask_pipeline.render(element)
+        if mask_xml:
+            self._trace_writer(
+                "mask_applied",
+                stage="mask",
+                metadata={
+                    "shape_id": shape_id,
+                    "length": len(mask_xml),
+                    "element_type": type(element).__name__,
+                },
+            )
         for message in clip_diags:
             self._assets.add_diagnostic(message)
         for message in mask_diags:
@@ -437,193 +441,16 @@ class DrawingMLWriter:
         if isinstance(metadata, dict) and not isinstance(element, Group):
             hyperlink_xml = self._navigation_from_metadata(metadata, scope="shape") or ""
 
-        if isinstance(element, Rectangle):
-            rasterized = self._maybe_rasterize(
-                element,
-                shape_id,
-                metadata,
-                hyperlink_xml=hyperlink_xml,
-                clip_path_xml=clip_xml,
-                mask_xml=mask_xml,
-            )
-            if rasterized is not None:
-                return rasterized
-            xml = shapes_runtime.render_rectangle(
-                element,
-                shape_id,
-                template=self._rectangle_template,
-                paint_to_fill=paint_runtime.paint_to_fill,
-                stroke_to_xml=paint_runtime.stroke_to_xml,
-                hyperlink_xml=hyperlink_xml,
-                clip_path_xml=clip_xml,
-                mask_xml=mask_xml,
-            )
-            return xml, shape_id + 1
-        if isinstance(element, Circle):
-            rasterized = self._maybe_rasterize(
-                element,
-                shape_id,
-                metadata,
-                hyperlink_xml=hyperlink_xml,
-                clip_path_xml=clip_xml,
-                mask_xml=mask_xml,
-            )
-            if rasterized is not None:
-                return rasterized
-            xml = shapes_runtime.render_circle(
-                element,
-                shape_id,
-                template=self._preset_template,
-                paint_to_fill=paint_runtime.paint_to_fill,
-                stroke_to_xml=paint_runtime.stroke_to_xml,
-                hyperlink_xml=hyperlink_xml,
-                clip_path_xml=clip_xml,
-                mask_xml=mask_xml,
-            )
-            return xml, shape_id + 1
-        if isinstance(element, Ellipse):
-            rasterized = self._maybe_rasterize(
-                element,
-                shape_id,
-                metadata,
-                hyperlink_xml=hyperlink_xml,
-                clip_path_xml=clip_xml,
-                mask_xml=mask_xml,
-            )
-            if rasterized is not None:
-                return rasterized
-            xml = shapes_runtime.render_ellipse(
-                element,
-                shape_id,
-                template=self._preset_template,
-                paint_to_fill=paint_runtime.paint_to_fill,
-                stroke_to_xml=paint_runtime.stroke_to_xml,
-                hyperlink_xml=hyperlink_xml,
-                clip_path_xml=clip_xml,
-                mask_xml=mask_xml,
-            )
-            return xml, shape_id + 1
-        if isinstance(element, Line):
-            xml = shapes_runtime.render_line(
-                element,
-                shape_id,
-                template=self._line_template,
-                path_generator=self._path_generator,
-                stroke_to_xml=paint_runtime.stroke_to_xml,
-                paint_to_fill=paint_runtime.paint_to_fill,
-                policy_for=self._policy_for,
-                hyperlink_xml=hyperlink_xml,
-                clip_path_xml=clip_xml,
-                mask_xml=mask_xml,
-            )
-            return xml, shape_id + 1
-        if isinstance(element, Polyline):
-            xml = shapes_runtime.render_polyline(
-                element,
-                shape_id,
-                template=self._path_template,
-                path_generator=self._path_generator,
-                paint_to_fill=paint_runtime.paint_to_fill,
-                stroke_to_xml=paint_runtime.stroke_to_xml,
-                policy_for=self._policy_for,
-                hyperlink_xml=hyperlink_xml,
-                clip_path_xml=clip_xml,
-                mask_xml=mask_xml,
-            )
-            return xml, shape_id + 1
-        if isinstance(element, Polygon):
-            xml = shapes_runtime.render_polygon(
-                element,
-                shape_id,
-                template=self._path_template,
-                path_generator=self._path_generator,
-                paint_to_fill=paint_runtime.paint_to_fill,
-                stroke_to_xml=paint_runtime.stroke_to_xml,
-                policy_for=self._policy_for,
-                hyperlink_xml=hyperlink_xml,
-                clip_path_xml=clip_xml,
-                mask_xml=mask_xml,
-            )
-            return xml, shape_id + 1
-        if isinstance(element, IRPath):
-            rasterized = self._maybe_rasterize(
-                element,
-                shape_id,
-                metadata,
-                hyperlink_xml=hyperlink_xml,
-                clip_path_xml=clip_xml,
-                mask_xml=mask_xml,
-            )
-            if rasterized is not None:
-                return rasterized
-            xml = shapes_runtime.render_path(
-                element,
-                shape_id,
-                template=self._path_template,
-                paint_to_fill=paint_runtime.paint_to_fill,
-                stroke_to_xml=paint_runtime.stroke_to_xml,
-                path_generator=self._path_generator,
-                policy_for=self._policy_for,
-                logger=logger,
-                hyperlink_xml=hyperlink_xml,
-                clip_path_xml=clip_xml,
-                mask_xml=mask_xml,
-            )
-            return xml, shape_id + 1
         if isinstance(element, TextFrame):
-            candidate = getattr(element, "wordart_candidate", None)
-            metadata = element.metadata if isinstance(element.metadata, dict) else {}
-            wordart_meta = metadata.get("wordart") if isinstance(metadata, dict) else {}
-            prefer_native = True
-            if isinstance(wordart_meta, dict):
-                prefer_native = bool(wordart_meta.get("prefer_native", True))
-
-            if (
-                candidate is not None
-                and getattr(candidate, "is_confident", False)
-                and prefer_native
-            ):
-                xml = shapes_runtime.render_wordart(
-                    element,
-                    candidate,
-                    shape_id,
-                    template=self._wordart_template,
-                    policy_for=self._policy_for,
-                    logger=logger,
-                    hyperlink_xml=hyperlink_xml,
-                    clip_path_xml=clip_xml,
-                    mask_xml=mask_xml,
-                    register_run_navigation=self._register_run_navigation,
-                )
-            else:
-                xml = shapes_runtime.render_textframe(
-                    element,
-                    shape_id,
-                    template=self._text_template,
-                    policy_for=self._policy_for,
-                    logger=logger,
-                    hyperlink_xml=hyperlink_xml,
-                    clip_path_xml=clip_xml,
-                    mask_xml=mask_xml,
-                    register_run_navigation=self._register_run_navigation,
-                )
-
-            if getattr(element, "embedding_plan", None) is not None:
-                plan = element.embedding_plan
-                if plan.requires_embedding:
-                    self._assets.add_font_plan(shape_id=shape_id, plan=plan)
-                    self._trace_writer(
-                        "font_plan_registered",
-                        stage="font",
-                        metadata={
-                            "shape_id": shape_id,
-                            "font_family": getattr(plan, "font_family", None),
-                            "requires_embedding": plan.requires_embedding,
-                            "glyph_count": getattr(plan, "glyph_count", None),
-                        },
-                    )
-
-            return xml, shape_id + 1
+            if self._text_renderer is None:
+                raise RuntimeError("Text renderer not initialised for current rendering run.")
+            return self._text_renderer.render(
+                element,
+                shape_id,
+                hyperlink_xml=hyperlink_xml,
+                clip_path_xml=clip_xml,
+                mask_xml=mask_xml,
+            )
         if isinstance(element, Group):
             if hyperlink_xml:
                 if self._assets is not None:
@@ -633,39 +460,22 @@ class DrawingMLWriter:
             if not fragments:
                 return None
             return "\n".join(fragments), next_id
-        if isinstance(element, Image):
-            if element.data is None and element.href is None:
-                logger.warning("Image element missing data and href; skipping image")
-                return None
-            if element.data is None:
-                logger.warning("External image references not yet supported; skipping image")
-                return None
-            rendered = render_picture(
-                element,
-                shape_id,
-                template=self._picture_template,
-                policy_for=self._policy_for,
-                register_media=self._register_media,
-                hyperlink_xml=hyperlink_xml,
-                clip_path_xml=clip_xml,
-                mask_xml=mask_xml,
-            )
-            if rendered is None:
-                return None
-            return rendered, shape_id + 1
+
+        if self._shape_renderer is None:
+            raise RuntimeError("Shape renderer not initialised for current rendering run.")
+        rendered = self._shape_renderer.render(
+            element,
+            shape_id,
+            metadata,
+            hyperlink_xml=hyperlink_xml,
+            clip_path_xml=clip_xml,
+            mask_xml=mask_xml,
+        )
+        if rendered is not None:
+            return rendered
 
         logger.debug("Skipping unsupported IR element type: %s", type(element).__name__)
         return None
-
-    def _register_animation_mapping(self, metadata: dict[str, object] | None, shape_id: int) -> None:
-        if not isinstance(metadata, dict):
-            return
-        element_ids = metadata.get("element_ids")
-        if not isinstance(element_ids, list):
-            return
-        for element_id in element_ids:
-            if isinstance(element_id, str):
-                self._animation_shape_map.setdefault(element_id, str(shape_id))
 
     def _register_run_navigation(self, navigation, text_segment: str) -> str:
         return self._register_navigation_asset(navigation, scope="text_run", text=text_segment)
@@ -704,156 +514,12 @@ class DrawingMLWriter:
         )
 
     def _build_animation_xml(self) -> str:
-        if not self._animation_payload:
-            return ""
-
-        definitions = self._animation_payload.get("definitions") or []
-        timeline = self._animation_payload.get("timeline") or []
-        if not definitions:
-            return ""
-
-        remapped: list[AnimationDefinition] = []
-        tracer = self._tracer
-        for definition in definitions:
-            element_id = getattr(definition, "element_id", None)
-            if not isinstance(element_id, str):
-                self._trace_writer(
-                    "invalid_animation_definition",
-                    stage="animation",
-                    metadata={"reason": "missing_element_id"},
-                )
-                continue
-            shape_id = self._animation_shape_map.get(element_id)
-            if not shape_id:
-                self._trace_writer(
-                    "unmapped_animation",
-                    stage="animation",
-                    metadata={
-                        "element_id": element_id,
-                        "animation_type": definition.animation_type.value,
-                    },
-                )
-                continue
-            remapped.append(replace(definition, element_id=shape_id))
-            self._trace_writer(
-                "mapped_animation",
-                stage="animation",
-                metadata={
-                    "element_id": element_id,
-                    "shape_id": shape_id,
-                    "animation_type": definition.animation_type.value,
-                },
-            )
-
-        if not remapped:
-            if definitions:
-                self._trace_writer(
-                    "timing_skipped",
-                    stage="animation",
-                    metadata={"reason": "no_mapped_definitions", "animation_count": len(definitions)},
-                )
-            return ""
-
-        animation_options = self._animation_policy or {}
-        animation_xml = self._animation_writer.build(remapped, timeline, tracer=tracer, options=animation_options)
-        if animation_xml:
-            self._trace_writer(
-                "timing_emitted",
-                stage="animation",
-                metadata={
-                    "animation_count": len(remapped),
-                    "timeline_frames": len(timeline),
-                    "fallback_mode": animation_options.get("fallback_mode", "native"),
-                },
-            )
-        else:
-            self._trace_writer(
-                "timing_skipped",
-                stage="animation",
-                metadata={
-                    "reason": "writer_returned_empty",
-                    "animation_count": len(remapped),
-                    "fallback_mode": animation_options.get("fallback_mode", "native"),
-                },
-            )
-        return animation_xml
+        return self._animation_pipeline.build()
 
     def _allocate_navigation_rid(self) -> str:
         rid = f"rIdNav{self._next_navigation_index}"
         self._next_navigation_index += 1
         return rid
-
-    def _maybe_rasterize(
-        self,
-        element,
-        shape_id: int,
-        metadata: dict[str, object],
-        *,
-        hyperlink_xml: str,
-        clip_path_xml: str,
-        mask_xml: str,
-    ) -> tuple[str, int] | None:
-        if self._rasterizer is None:
-            return None
-        policy = metadata.setdefault("policy", {}) if isinstance(metadata, dict) else {}
-        geometry_policy = policy.setdefault("geometry", {})
-        fallback = geometry_policy.get("suggest_fallback")
-        if fallback not in {FALLBACK_BITMAP, FALLBACK_RASTERIZE}:
-            return None
-        try:
-            result = self._rasterizer.rasterize(element)
-        except Exception:  # pragma: no cover - defensive
-            logger.debug("Rasterization failed for %s", type(element).__name__, exc_info=True)
-            return None
-        if result is None:
-            return None
-
-        origin = Point(result.bounds.x, result.bounds.y)
-        size_rect = Rect(0.0, 0.0, result.bounds.width, result.bounds.height)
-        image_metadata = {
-            "rasterized": True,
-            "source_shape": type(element).__name__,
-        }
-        element_ids = metadata.get("element_ids") if isinstance(metadata, dict) else None
-        if isinstance(element_ids, list):
-            image_metadata["element_ids"] = list(element_ids)
-            for element_id in element_ids:
-                if isinstance(element_id, str):
-                    self._animation_shape_map.setdefault(element_id, str(shape_id))
-        raster_image = Image(
-            origin=origin,
-            size=size_rect,
-            data=result.data,
-            format="png",
-            metadata=image_metadata,
-        )
-        xml = render_picture(
-            raster_image,
-            shape_id,
-            template=self._picture_template,
-            policy_for=self._policy_for,
-            register_media=self._register_media,
-            hyperlink_xml=hyperlink_xml,
-            clip_path_xml=clip_path_xml,
-            mask_xml=mask_xml,
-        )
-        if xml is None:
-            return None
-        geometry_policy.setdefault("rasterized_media", []).append({"shape_id": shape_id, "format": "png"})
-        self._trace_writer(
-            "geometry_rasterized",
-            stage="media",
-            metadata={
-                "shape_id": shape_id,
-                "format": "png",
-                "source_shape": type(element).__name__,
-            },
-        )
-        return xml, shape_id + 1
-
-
-
-
 
 
 __all__ = ["DrawingMLWriter", "DrawingMLRenderResult", "DEFAULT_SLIDE_SIZE", "EMU_PER_PX"]

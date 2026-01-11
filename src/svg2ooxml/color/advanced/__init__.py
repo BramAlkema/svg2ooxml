@@ -22,6 +22,7 @@ __all__ = [
     'oklab_to_rgb',
     'oklch_to_oklab',
     'oklch_to_rgb',
+    'require_color_engine',
     'rgb_to_oklab',
     'rgb_to_oklch',
     'accessibility',
@@ -29,6 +30,7 @@ __all__ = [
     'color_spaces',
     'core',
     'css_colors',
+    'engine',
     'harmony',
     'manipulation',
     'parser',
@@ -36,8 +38,8 @@ __all__ = [
 ]
 
 # map symbol -> relative module
-_symbol_map = {'ColorAccessibility': 'accessibility', 'ContrastLevel': 'accessibility', 'ColorBlindnessType': 'accessibility', 'ColorBatch': 'batch', 'ColorSpaceConverter': 'color_spaces', 'oklch_to_oklab': 'color_spaces', 'oklch_to_rgb': 'color_spaces', 'rgb_to_oklch': 'color_spaces', 'rgb_to_oklab': 'color_spaces', 'oklab_to_rgb': 'color_spaces', 'oklab_to_oklch': 'color_spaces', 'Color': 'core', 'is_css_color': 'css_colors', 'NAMED_COLORS': 'css_colors', 'get_css_color': 'css_colors', 'ColorHarmony': 'harmony', 'BlendMode': 'manipulation', 'ColorManipulation': 'manipulation', 'ColorParser': 'parser', 'color_to_hex': 'utils'}
-_module_map = {'accessibility': 'accessibility', 'batch': 'batch', 'color_spaces': 'color_spaces', 'core': 'core', 'css_colors': 'css_colors', 'harmony': 'harmony', 'manipulation': 'manipulation', 'parser': 'parser', 'utils': 'utils'}
+_symbol_map = {'ContrastLevel': 'accessibility', 'ColorBlindnessType': 'accessibility', 'ColorAccessibility': 'accessibility', 'ColorBatch': 'batch', 'rgb_to_oklab': 'color_spaces', 'oklab_to_oklch': 'color_spaces', 'oklch_to_rgb': 'color_spaces', 'ColorSpaceConverter': 'color_spaces', 'oklch_to_oklab': 'color_spaces', 'rgb_to_oklch': 'color_spaces', 'oklab_to_rgb': 'color_spaces', 'Color': 'core', 'NAMED_COLORS': 'css_colors', 'get_css_color': 'css_colors', 'is_css_color': 'css_colors', 'require_color_engine': 'engine', 'ColorHarmony': 'harmony', 'BlendMode': 'manipulation', 'ColorManipulation': 'manipulation', 'ColorParser': 'parser', 'color_to_hex': 'utils'}
+_module_map = {'accessibility': 'accessibility', 'batch': 'batch', 'color_spaces': 'color_spaces', 'core': 'core', 'css_colors': 'css_colors', 'engine': 'engine', 'harmony': 'harmony', 'manipulation': 'manipulation', 'parser': 'parser', 'utils': 'utils'}
 
 
 def __getattr__(name: str) -> _Any:  # PEP 562

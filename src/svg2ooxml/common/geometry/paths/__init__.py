@@ -26,7 +26,7 @@ __all__ = [
 ]
 
 # map symbol -> relative module
-_symbol_map = {'to_line_segments': 'drawing', 'approximate_ellipse': 'drawing', 'approximate_circle': 'drawing', 'build_path_commands': 'drawingml', 'compute_path_bounds': 'drawingml', 'PathCommand': 'drawingml', 'parse_path_data': 'parser', 'PathParseError': 'parser', 'PathTessellation': 'resvg_bridge', 'NormalizedSegments': 'resvg_bridge', 'normalize_path_to_segments': 'resvg_bridge', 'TessellationOutput': 'resvg_bridge', 'tessellate_path': 'resvg_bridge', 'compute_segments_bbox': 'segments'}
+_symbol_map = {'approximate_ellipse': 'drawing', 'approximate_circle': 'drawing', 'to_line_segments': 'drawing', 'compute_path_bounds': 'drawingml', 'build_path_commands': 'drawingml', 'PathCommand': 'drawingml', 'PathParseError': 'parser', 'parse_path_data': 'parser', 'TessellationOutput': 'resvg_bridge', 'PathTessellation': 'resvg_bridge', 'NormalizedSegments': 'resvg_bridge', 'normalize_path_to_segments': 'resvg_bridge', 'tessellate_path': 'resvg_bridge', 'compute_segments_bbox': 'segments'}
 _module_map = {'drawing': 'drawing', 'drawingml': 'drawingml', 'parser': 'parser', 'resvg_bridge': 'resvg_bridge', 'segments': 'segments'}
 
 

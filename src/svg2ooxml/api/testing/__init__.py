@@ -12,7 +12,7 @@ __all__ = [
 ]
 
 # map symbol -> relative module
-_symbol_map = {'fetch_secret_from_gcp': 'local_server', 'LocalAPIConfig': 'local_server', 'LocalAPIServer': 'local_server', 'setup_local_environment': 'local_server'}
+_symbol_map = {'fetch_secret_from_gcp': 'local_server', 'LocalAPIConfig': 'local_server', 'setup_local_environment': 'local_server', 'LocalAPIServer': 'local_server'}
 _module_map = {'local_server': 'local_server'}
 
 

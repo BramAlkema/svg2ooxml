@@ -3,7 +3,7 @@
 import pytest
 from lxml import etree
 
-from svg2ooxml.core.parser import UnitConverter
+from svg2ooxml.core.parser.units import UnitConverter
 from svg2ooxml.css import StyleContext, StyleResolver
 from svg2ooxml.core.styling.use_expander import _apply_computed_presentation
 

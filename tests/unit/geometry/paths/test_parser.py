@@ -2,13 +2,8 @@
 
 import pytest
 
-from svg2ooxml.common.geometry.paths import (
-    BezierSegment,
-    LineSegment,
-    Point,
-    compute_segments_bbox,
-    parse_path_data,
-)
+from svg2ooxml.common.geometry.paths import compute_segments_bbox, parse_path_data
+from svg2ooxml.common.geometry.paths.segments import BezierSegment, LineSegment, Point
 
 
 def test_parse_line_commands() -> None:

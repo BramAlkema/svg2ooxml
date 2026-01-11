@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Sequence, Union
 
 from .models import Color
-from .advanced import (
+from .advanced.engine import (
     AdvancedColor,
     COLOR_ENGINE_AVAILABLE as ADVANCED_COLOR_ENGINE_AVAILABLE,
     require_color_engine as _require_advanced_color_engine,

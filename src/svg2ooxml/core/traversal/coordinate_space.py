@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 
 from svg2ooxml.ir.geometry import BezierSegment, LineSegment, Point, SegmentType
 from svg2ooxml.common.geometry import Matrix2D
-from svg2ooxml.common.geometry.transforms import CoordinateSpace as TransformSpace
+from svg2ooxml.common.geometry.transforms.space import CoordinateSpace as TransformSpace
 
 
 @dataclass

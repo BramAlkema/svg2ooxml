@@ -3,7 +3,8 @@
 import math
 import pytest
 
-from svg2ooxml.common.conversions import PPTConverter, DEFAULT_DPI
+from svg2ooxml.common.conversions.powerpoint import PPTConverter
+from svg2ooxml.common.conversions.units import DEFAULT_DPI
 
 
 class TestPPTConverterInit:
@@ -233,7 +234,7 @@ class TestConsistency:
 
     def test_degrees_consistency(self):
         """Test that PPTConverter gives same results as direct function."""
-        from svg2ooxml.common.conversions import degrees_to_ppt
+        from svg2ooxml.common.conversions.angles import degrees_to_ppt
 
         ppt = PPTConverter()
         for angle in [0, 45, 90, 180, 360, -45, -90]:
@@ -241,7 +242,7 @@ class TestConsistency:
 
     def test_opacity_consistency(self):
         """Test that PPTConverter gives same results as direct function."""
-        from svg2ooxml.common.conversions import opacity_to_ppt
+        from svg2ooxml.common.conversions.opacity import opacity_to_ppt
 
         ppt = PPTConverter()
         for opacity in [0.0, 0.25, 0.5, 0.75, 1.0]:
@@ -249,7 +250,7 @@ class TestConsistency:
 
     def test_color_consistency(self):
         """Test that PPTConverter gives same results as direct function."""
-        from svg2ooxml.common.conversions import color_to_hex
+        from svg2ooxml.common.conversions.colors import color_to_hex
 
         ppt = PPTConverter()
         colors = ["#FF0000", "#00FF00", "#0000FF", "FFFFFF"]

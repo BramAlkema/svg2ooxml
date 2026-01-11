@@ -2,15 +2,14 @@
 
 import pytest
 
-from svg2ooxml.common.units import (
+from svg2ooxml.common.units.conversion import (
     ConversionContext,
     UnitConverter,
-    DEFAULT_DPI,
-    EMU_PER_INCH,
     emu_to_px,
     emu_to_unit,
     px_to_emu,
 )
+from svg2ooxml.common.units.scalars import DEFAULT_DPI, EMU_PER_INCH
 
 
 def test_to_emu_pixels() -> None:
