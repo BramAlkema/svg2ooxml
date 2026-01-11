@@ -9,12 +9,15 @@ from typing import TYPE_CHECKING, Any, Dict
 
 from lxml import etree
 
-from svg2ooxml.common.style.resolver import StyleResolver
+from svg2ooxml.core.conversion_context import (
+    ConversionContextBundle,
+    build_conversion_context,
+    clone_policy_context,
+)
 from svg2ooxml.performance.metrics import record_metric
-from svg2ooxml.policy import PolicyContext, PolicyEngine, build_policy_engine
 from svg2ooxml.services import ConversionServices
 
-from .preprocess.services import ParserServices, build_parser_services
+from .preprocess.services import ParserServices
 from .colors.parsing import parse_color
 from .content_cleaner import prepare_svg_content
 from .css_font_parser import CSSFontFaceParser
@@ -25,7 +28,7 @@ from .references import collect_namespaces, has_external_references
 from .result import ParseResult
 from .statistics import compute_statistics
 from .style_context import StyleContext as ParserStyleContext, resolve_viewport
-from .units import UnitConverter, viewbox_to_px
+from .units import viewbox_to_px
 from .validators import has_basic_dimensions
 
 
@@ -57,20 +60,19 @@ class SVGParser:
     def __init__(
         self,
         config: ParserConfig | None = None,
-        services: ConversionServices | ParserServices | None = None,
+        services: ConversionServices | ParserServices | ConversionContextBundle | None = None,
     ) -> None:
         self._config = config or ParserConfig()
         self._logger = logging.getLogger(__name__)
-        self._unit_converter = UnitConverter()
         self._xml_parser = XMLParser(self._config.to_parser_options())
         self._normalizer = SafeSVGNormalizer()
-        self._style_resolver = StyleResolver(self._unit_converter)
         self._font_parser = CSSFontFaceParser()
 
-        parser_services = self._coerce_services(services)
-        self._service_template = parser_services.services
-        self._policy_engine = parser_services.policy_engine
-        self._default_policy_context = parser_services.policy_context
+        context = self._coerce_context(services)
+        self._context_template = context
+        self._policy_engine = context.policy_engine
+        self._unit_converter = context.unit_converter
+        self._style_resolver = context.style_resolver
 
     def parse(self, svg_content: str, *, tracer: "ConversionTracer | None" = None) -> ParseResult:
         """Parse the provided SVG content into an XML tree."""
@@ -187,13 +189,10 @@ class SVGParser:
         # Parse web fonts from @font-face rules
         web_fonts = self._font_parser.parse_stylesheets(root)
 
-        services = self._service_template.clone()
-        policy_context = self._build_policy_context()
-
-        services.register("policy_engine", self._policy_engine)
-        services.register("policy_context", policy_context)
-        services.register("unit_converter", self._unit_converter)
-        services.register("style_resolver", self._style_resolver)
+        context = self._context_template.clone()
+        services = context.services
+        policy_context = context.policy_context
+        policy_engine = context.policy_engine
 
         stats = compute_statistics(root)
         namespaces = collect_namespaces(root)
@@ -263,7 +262,7 @@ class SVGParser:
                 normalization_applied=self._config.apply_normalization,
                 processing_time_ms=elapsed_ms,
                 services=services,
-                policy_engine=self._policy_engine,
+                policy_engine=policy_engine,
                 policy_context=policy_context,
                 style_context=style_context,
                 web_fonts=web_fonts if web_fonts else None,
@@ -290,7 +289,7 @@ class SVGParser:
                 normalization_applied=self._config.apply_normalization,
                 processing_time_ms=elapsed_ms,
                 services=services,
-                policy_engine=self._policy_engine,
+                policy_engine=policy_engine,
                 policy_context=policy_context,
                 style_context=style_context,
                 web_fonts=web_fonts if web_fonts else None,
@@ -302,7 +301,7 @@ class SVGParser:
                 ir_scene = convert_parser_output(
                     result,
                     services=services,
-                    policy_engine=self._policy_engine,
+                    policy_engine=policy_engine,
                     policy_context=policy_context,
                     logger=self._logger,
                 )
@@ -313,7 +312,7 @@ class SVGParser:
 
         result.metadata["style_context"] = style_context
         result.metadata["policy_context"] = policy_context
-        result.metadata["policy_engine"] = self._policy_engine
+        result.metadata["policy_engine"] = policy_engine
         result.metadata["preparse"] = prep_report
         if prep_report:
             self._trace(tracer, "preprocess", metadata=prep_report)
@@ -334,43 +333,27 @@ class SVGParser:
         )
         return result
 
-    def _coerce_services(
+    def _coerce_context(
         self,
-        services: ConversionServices | ParserServices | None,
-    ) -> ParserServices:
+        services: ConversionServices | ParserServices | ConversionContextBundle | None,
+    ) -> ConversionContextBundle:
         if services is None:
-            return build_parser_services()
+            return build_conversion_context()
+        if isinstance(services, ConversionContextBundle):
+            return services.clone()
         if isinstance(services, ParserServices):
-            cloned_services = services.services.clone()
-            cloned_context = self._clone_policy_context(services.policy_context)
+            cloned_context = clone_policy_context(services.policy_context)
             if cloned_context is None:
                 cloned_context = services.policy_engine.evaluate()
-            return ParserServices(
-                services=cloned_services,
+            return build_conversion_context(
+                services=services.services,
                 policy_engine=services.policy_engine,
                 policy_context=cloned_context,
+                unit_converter=services.unit_converter,
+                style_resolver=services.style_resolver,
             )
 
-        base_services = services.clone()
-        engine = build_policy_engine()
-        context = engine.evaluate()
-        return ParserServices(
-            services=base_services,
-            policy_engine=engine,
-            policy_context=context,
-        )
-
-    def _build_policy_context(self) -> PolicyContext:
-        cloned = self._clone_policy_context(self._default_policy_context)
-        if cloned is not None:
-            return cloned
-        return self._policy_engine.evaluate()
-
-    @staticmethod
-    def _clone_policy_context(context: PolicyContext | None) -> PolicyContext | None:
-        if context is None:
-            return None
-        return PolicyContext(selections=dict(context.selections))
+        return build_conversion_context(services=services)
 
     def _strip_whitespace(self, element: etree._Element) -> None:
         """Remove leading/trailing whitespace from text nodes."""
@@ -569,7 +552,7 @@ def parse_svg(
     svg_content: str,
     *,
     config: ParserConfig | None = None,
-    services: ConversionServices | ParserServices | None = None,
+    services: ConversionServices | ParserServices | ConversionContextBundle | None = None,
     tracer: "ConversionTracer | None" = None,
 ) -> ParseResult:
     """Convenience helper that parses ``svg_content`` into a :class:`ParseResult`.
