@@ -27,7 +27,7 @@ __all__ = [
 ]
 
 # map symbol -> relative module
-_symbol_map = {'MIN_EMU_VALUE': 'constants', 'DEFAULT_DPI': 'constants', 'EMU_PER_MM': 'constants', 'MAX_EMU_VALUE': 'constants', 'EMU_PER_CM': 'constants', 'EMU_PER_INCH': 'constants', 'EMU_PER_POINT': 'constants', 'FractionalEMUConverter': 'converter', 'PrecisionOverflowError': 'errors', 'EMUBoundaryError': 'errors', 'FractionalEMUError': 'errors', 'CoordinateValidationError': 'errors', 'PrecisionMetrics': 'precision', 'PrecisionMode': 'types', 'PrecisionContext': 'types'}
+_symbol_map = {'EMU_PER_CM': 'constants', 'DEFAULT_DPI': 'constants', 'EMU_PER_INCH': 'constants', 'EMU_PER_MM': 'constants', 'MIN_EMU_VALUE': 'constants', 'EMU_PER_POINT': 'constants', 'MAX_EMU_VALUE': 'constants', 'FractionalEMUConverter': 'converter', 'EMUBoundaryError': 'errors', 'PrecisionOverflowError': 'errors', 'CoordinateValidationError': 'errors', 'FractionalEMUError': 'errors', 'PrecisionMetrics': 'precision', 'PrecisionContext': 'types', 'PrecisionMode': 'types'}
 _module_map = {'constants': 'constants', 'converter': 'converter', 'errors': 'errors', 'precision': 'precision', 'types': 'types'}
 
 

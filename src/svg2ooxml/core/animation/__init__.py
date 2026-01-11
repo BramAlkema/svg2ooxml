@@ -14,7 +14,7 @@ __all__ = [
 ]
 
 # map symbol -> relative module
-_symbol_map = {'SMILParser': 'parser', 'SMILParsingError': 'parser', 'ParsedAnimation': 'parser', 'TimelineSamplingConfig': 'sampler', 'TimelineSampler': 'sampler'}
+_symbol_map = {'SMILParser': 'parser', 'ParsedAnimation': 'parser', 'SMILParsingError': 'parser', 'TimelineSamplingConfig': 'sampler', 'TimelineSampler': 'sampler'}
 _module_map = {'parser': 'parser', 'sampler': 'sampler'}
 
 

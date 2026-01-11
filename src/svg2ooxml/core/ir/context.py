@@ -10,7 +10,7 @@ from typing import Any, Iterable, Mapping, TYPE_CHECKING
 from svg2ooxml.css import StyleResolver
 from svg2ooxml.common.style.resolver import StyleContext as CSSStyleContext
 from svg2ooxml.core.masks import MaskProcessor
-from svg2ooxml.core.parser import UnitConverter
+from svg2ooxml.core.parser.units import UnitConverter
 from svg2ooxml.core.styling import StyleExtractor
 from svg2ooxml.core.traversal.viewbox import ViewportEngine
 from svg2ooxml.policy import PolicyContext, PolicyEngine

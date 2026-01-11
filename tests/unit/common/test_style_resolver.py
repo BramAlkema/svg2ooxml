@@ -4,7 +4,7 @@ from lxml import etree
 import pytest
 
 from svg2ooxml.common.style.resolver import StyleContext, StyleResolver
-from svg2ooxml.core.parser import UnitConverter
+from svg2ooxml.core.parser.units import UnitConverter
 from svg2ooxml.core.styling.use_expander import _apply_computed_presentation
 
 

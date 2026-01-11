@@ -35,7 +35,7 @@ __all__ = [
 ]
 
 # map symbol -> relative module
-_symbol_map = {'MAX_OKLAB_DISTANCE': 'analysis', 'summarize_palette': 'analysis', 'from_advanced_color': 'bridge', 'to_advanced_color': 'bridge', 'ensure_advanced_color_engine': 'bridge', 'TRANSPARENT': 'models', 'Color': 'models', 'oklch_to_oklab': 'oklab', 'rgb_to_oklch': 'oklab', 'oklch_to_rgb': 'oklab', 'rgb_to_oklab': 'oklab', 'oklab_to_rgb': 'oklab', 'oklab_to_oklch': 'oklab', 'parse_color': 'parsers', 'coerce_color': 'parsers', 'ColorSpaceConverter': 'spaces', 'ColorSpaceResult': 'spaces', 'color_to_hex': 'utils'}
+_symbol_map = {'summarize_palette': 'analysis', 'MAX_OKLAB_DISTANCE': 'analysis', 'ensure_advanced_color_engine': 'bridge', 'to_advanced_color': 'bridge', 'from_advanced_color': 'bridge', 'TRANSPARENT': 'models', 'Color': 'models', 'rgb_to_oklab': 'oklab', 'oklab_to_oklch': 'oklab', 'oklch_to_rgb': 'oklab', 'oklch_to_oklab': 'oklab', 'rgb_to_oklch': 'oklab', 'oklab_to_rgb': 'oklab', 'parse_color': 'parsers', 'coerce_color': 'parsers', 'ColorSpaceConverter': 'spaces', 'ColorSpaceResult': 'spaces', 'color_to_hex': 'utils'}
 _module_map = {'advanced': 'advanced', 'analysis': 'analysis', 'bridge': 'bridge', 'models': 'models', 'names': 'names', 'oklab': 'oklab', 'palettes': 'palettes', 'parsers': 'parsers', 'spaces': 'spaces', 'utils': 'utils'}
 
 

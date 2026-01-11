@@ -14,16 +14,16 @@ import os
 import sys
 from typing import Iterable, Sequence
 
-from svg2ooxml.color import (
+from svg2ooxml.color.analysis import summarize_palette
+from svg2ooxml.color.bridge import (
     ADVANCED_COLOR_ENGINE_AVAILABLE,
-    AdvancedColor,
-    Color,
-    ColorBatch,
-    ColorHarmony,
     ensure_advanced_color_engine,
-    summarize_palette,
     to_advanced_color,
 )
+from svg2ooxml.color.models import Color
+from svg2ooxml.color.advanced.batch import ColorBatch
+from svg2ooxml.color.advanced.engine import AdvancedColor
+from svg2ooxml.color.advanced.harmony import ColorHarmony
 from svg2ooxml.color.parsers import parse_color
 
 try:  # Pillow is optional but required for image sampling.

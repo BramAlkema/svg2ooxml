@@ -26,7 +26,7 @@ from svg2ooxml.policy.constants import FALLBACK_EMF, geometry_fallback_for
 from svg2ooxml.services import ConversionServices
 from svg2ooxml.elements.gradient_processor import GradientComplexity
 from svg2ooxml.elements.pattern_processor import PatternComplexity, PatternType
-from svg2ooxml.drawingml.bridges import (
+from svg2ooxml.drawingml.bridges.resvg_paint_bridge import (
     GradientDescriptor,
     LinearGradientDescriptor,
     MeshGradientDescriptor,

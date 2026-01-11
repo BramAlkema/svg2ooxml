@@ -2,7 +2,8 @@
 
 from lxml import etree
 
-from svg2ooxml.core.parser import UnitConverter, build_style_context, resolve_viewport
+from svg2ooxml.core.parser import build_style_context, resolve_viewport
+from svg2ooxml.core.parser.units import UnitConverter
 
 
 def test_resolve_viewport_uses_explicit_dimensions() -> None:

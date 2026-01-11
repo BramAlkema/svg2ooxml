@@ -22,7 +22,7 @@ __all__ = [
 ]
 
 # map symbol -> relative module
-_symbol_map = {'DrawingMLTextGenerator': 'drawingml_generator', 'DRAWINGML_HUNDREDTHS_PER_POINT': 'drawingml_generator', 'FontResolver': 'fonts', 'default_font_resolver': 'fonts', 'build_text_layout': 'layout', 'TextLayoutAnalyzer': 'layout_analyzer', 'LayoutAnalysisResult': 'layout_analyzer', 'TextLayoutComplexity': 'layout_analyzer', 'TextRenderResult': 'text_coordinator', 'TextRenderCoordinator': 'text_coordinator'}
+_symbol_map = {'DrawingMLTextGenerator': 'drawingml_generator', 'DRAWINGML_HUNDREDTHS_PER_POINT': 'drawingml_generator', 'default_font_resolver': 'fonts', 'FontResolver': 'fonts', 'build_text_layout': 'layout', 'TextLayoutComplexity': 'layout_analyzer', 'LayoutAnalysisResult': 'layout_analyzer', 'TextLayoutAnalyzer': 'layout_analyzer', 'TextRenderResult': 'text_coordinator', 'TextRenderCoordinator': 'text_coordinator'}
 _module_map = {'drawingml_generator': 'drawingml_generator', 'fonts': 'fonts', 'layout': 'layout', 'layout_analyzer': 'layout_analyzer', 'text_coordinator': 'text_coordinator'}
 
 

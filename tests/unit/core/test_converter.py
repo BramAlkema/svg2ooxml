@@ -3,7 +3,7 @@
 from typing import Any
 
 from svg2ooxml.core.converter import Converter
-from svg2ooxml.core.pipeline import ConversionPipeline, DEFAULT_STAGE_NAMES
+from svg2ooxml.core.pipeline.pipeline import ConversionPipeline, DEFAULT_STAGE_NAMES
 from svg2ooxml.core.resvg.normalizer import NormalizationResult
 from svg2ooxml.core.resvg.parser.options import Options
 

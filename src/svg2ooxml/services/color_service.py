@@ -6,14 +6,13 @@ import io
 from dataclasses import dataclass
 from typing import Tuple
 
-from svg2ooxml.color import (
+from svg2ooxml.color.analysis import summarize_palette
+from svg2ooxml.color.bridge import (
     ADVANCED_COLOR_ENGINE_AVAILABLE,
-    Color,
-    ColorSpaceConverter,
-    ColorSpaceResult,
     ensure_advanced_color_engine,
-    summarize_palette,
 )
+from svg2ooxml.color.models import Color
+from svg2ooxml.color.spaces import ColorSpaceConverter, ColorSpaceResult
 from svg2ooxml.services.image_service import ImageResource
 
 

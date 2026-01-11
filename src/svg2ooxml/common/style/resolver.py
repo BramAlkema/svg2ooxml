@@ -11,8 +11,10 @@ from lxml import etree
 
 import tinycss2
 
+from svg2ooxml.core.parser.colors import parse_color
+
 if TYPE_CHECKING:
-    from svg2ooxml.core.parser import ConversionContext, UnitConverter
+    from svg2ooxml.core.parser.units import ConversionContext, UnitConverter
 
 PropertyHandler = Callable[[str], object]
 
@@ -175,7 +177,7 @@ class StyleResolver:
 
     def __init__(self, unit_converter: UnitConverter | None = None) -> None:
         if unit_converter is None:
-            from svg2ooxml.core.parser import UnitConverter
+            from svg2ooxml.core.parser.units import UnitConverter
 
             unit_converter = UnitConverter()
         self._unit_converter = unit_converter
@@ -442,7 +444,6 @@ class StyleResolver:
             return current_hex
         if stripped.startswith("url("):
             return stripped
-        from svg2ooxml.core.parser import parse_color
 
         rgba = parse_color(stripped, current_color=_hex_to_rgba(current_hex))
         if rgba is None:

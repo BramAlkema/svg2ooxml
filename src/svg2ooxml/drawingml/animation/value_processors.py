@@ -11,16 +11,16 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from svg2ooxml.common.conversions import (
-    parse_numeric_list,
+from svg2ooxml.common.conversions.angles import degrees_to_ppt
+from svg2ooxml.common.conversions.colors import color_to_hex
+from svg2ooxml.common.conversions.opacity import opacity_to_ppt
+from svg2ooxml.common.conversions.transforms import (
     parse_angle,
+    parse_numeric_list,
     parse_scale_pair,
     parse_translation_pair,
-    color_to_hex,
-    degrees_to_ppt,
-    opacity_to_ppt,
-    px_to_emu,
 )
+from svg2ooxml.common.conversions.units import px_to_emu
 
 from .constants import ANGLE_ATTRIBUTES, AXIS_MAP
 

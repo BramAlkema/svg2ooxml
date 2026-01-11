@@ -10,7 +10,7 @@ __all__ = [
 ]
 
 # map symbol -> relative module
-_symbol_map = {'RenderDecision': 'render_decisions', 'RenderTracer': 'render_decisions'}
+_symbol_map = {'RenderTracer': 'render_decisions', 'RenderDecision': 'render_decisions'}
 _module_map = {'render_decisions': 'render_decisions'}
 
 

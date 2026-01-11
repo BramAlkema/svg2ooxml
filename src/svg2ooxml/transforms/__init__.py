@@ -6,16 +6,16 @@ from __future__ import annotations
 from importlib import import_module
 import sys
 
-from svg2ooxml.common.geometry.transforms import (
-    CoordinateSpace,
+from svg2ooxml.common.geometry.transforms.decompose import (
     DecomposedTransform,
+    compose_matrix,
+    decompose_matrix,
+)
+from svg2ooxml.common.geometry.transforms.matrix import (
     IDENTITY,
     Matrix,
     Matrix2D,
-    compose_matrix,
-    decompose_matrix,
     matrix,
-    parse_transform,
     parse_transform_list,
     rotate,
     scale,
@@ -23,6 +23,8 @@ from svg2ooxml.common.geometry.transforms import (
     skew_y,
     translate,
 )
+from svg2ooxml.common.geometry.transforms.parser import parse_transform
+from svg2ooxml.common.geometry.transforms.space import CoordinateSpace
 
 __all__ = [
     "Matrix2D",

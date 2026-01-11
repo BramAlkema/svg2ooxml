@@ -14,7 +14,7 @@ from svg2ooxml.color.parsers import parse_color
 
 # Import centralized XML builders for safe DrawingML generation
 from svg2ooxml.drawingml.xml_builder import a_elem, a_sub, to_string
-from svg2ooxml.drawingml.bridges import (
+from svg2ooxml.drawingml.bridges.resvg_paint_bridge import (
     GradientDescriptor,
     LinearGradientDescriptor,
     RadialGradientDescriptor,

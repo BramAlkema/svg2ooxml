@@ -22,7 +22,7 @@ __all__ = [
 ]
 
 # map symbol -> relative module
-_symbol_map = {'StyleExtractor': 'style_extractor', 'StyleResult': 'style_extractor', 'extract_style': 'style_runtime', 'prepend_transform': 'use_expander', 'instantiate_use_target': 'use_expander', 'compute_use_transform': 'use_expander', 'resolve_use_offsets': 'use_expander', 'matrix_to_string': 'use_expander', 'propagate_symbol_use_attributes': 'use_expander', 'apply_use_attributes': 'use_expander', 'apply_use_transform': 'use_expander', 'wrap_symbol_clone': 'use_expander'}
+_symbol_map = {'StyleResult': 'style_extractor', 'StyleExtractor': 'style_extractor', 'extract_style': 'style_runtime', 'instantiate_use_target': 'use_expander', 'apply_use_attributes': 'use_expander', 'apply_use_transform': 'use_expander', 'compute_use_transform': 'use_expander', 'wrap_symbol_clone': 'use_expander', 'propagate_symbol_use_attributes': 'use_expander', 'prepend_transform': 'use_expander', 'resolve_use_offsets': 'use_expander', 'matrix_to_string': 'use_expander'}
 _module_map = {'style_extractor': 'style_extractor', 'style_runtime': 'style_runtime', 'use_expander': 'use_expander'}
 
 

@@ -4,16 +4,10 @@ from __future__ import annotations
 
 import pytest
 
-from svg2ooxml.common.geometry.transforms import (
-    CoordinateSpace,
-    IDENTITY,
-    Matrix,
-    parse_transform,
-    rotate,
-    scale,
-    translate,
-    decompose_matrix,
-)
+from svg2ooxml.common.geometry.transforms.decompose import decompose_matrix
+from svg2ooxml.common.geometry.transforms.matrix import IDENTITY, Matrix, rotate, scale, translate
+from svg2ooxml.common.geometry.transforms.parser import parse_transform
+from svg2ooxml.common.geometry.transforms.space import CoordinateSpace
 
 
 def test_parse_transform_composes_operations() -> None:

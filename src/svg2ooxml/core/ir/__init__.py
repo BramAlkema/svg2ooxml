@@ -35,7 +35,7 @@ __all__ = [
 ]
 
 # map symbol -> relative module
-_symbol_map = {'IRConverterContext': 'context', 'IRScene': 'converter', 'IRConverter': 'converter', 'render_emf_fallback': 'fallbacks', 'hex_to_rgba': 'fallbacks', 'render_bitmap_fallback': 'fallbacks', 'PolicyHooksMixin': 'policy_hooks', 'convert_rect': 'rectangles', 'ResourceTracker': 'resource_tracker', 'ResvgBridge': 'resvg_bridge', 'ShapeConversionMixin': 'shape_converters', 'ShapePipeline': 'shape_pipeline', 'SmartFontBridge': 'smart_font_bridge', 'TextConverter': 'text_converter', 'TextConversionPipeline': 'text_pipeline', 'TextPipeline': 'text_pipeline'}
+_symbol_map = {'IRConverterContext': 'context', 'IRConverter': 'converter', 'IRScene': 'converter', 'hex_to_rgba': 'fallbacks', 'render_emf_fallback': 'fallbacks', 'render_bitmap_fallback': 'fallbacks', 'PolicyHooksMixin': 'policy_hooks', 'convert_rect': 'rectangles', 'ResourceTracker': 'resource_tracker', 'ResvgBridge': 'resvg_bridge', 'ShapeConversionMixin': 'shape_converters', 'ShapePipeline': 'shape_pipeline', 'SmartFontBridge': 'smart_font_bridge', 'TextConverter': 'text_converter', 'TextPipeline': 'text_pipeline', 'TextConversionPipeline': 'text_pipeline'}
 _module_map = {'context': 'context', 'converter': 'converter', 'fallbacks': 'fallbacks', 'policy_hooks': 'policy_hooks', 'rectangles': 'rectangles', 'resource_tracker': 'resource_tracker', 'resvg_bridge': 'resvg_bridge', 'shape_converters': 'shape_converters', 'shape_pipeline': 'shape_pipeline', 'smart_font_bridge': 'smart_font_bridge', 'text_converter': 'text_converter', 'text_pipeline': 'text_pipeline'}
 
 

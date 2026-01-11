@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Iterable
 
-from svg2ooxml.core.parser import parse_color as parse_svg_color
+from svg2ooxml.core.parser.colors import parse_color as parse_svg_color
 from svg2ooxml.core.resvg.geometry.matrix import Matrix as ResvgMatrix
 from svg2ooxml.core.resvg.painting.gradients import (
     GradientStop as ResvgGradientStop,

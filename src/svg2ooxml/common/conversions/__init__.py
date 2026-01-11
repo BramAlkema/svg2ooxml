@@ -33,7 +33,7 @@ __all__ = [
 ]
 
 # map symbol -> relative module
-_symbol_map = {'radians_to_ppt': 'angles', 'degrees_to_ppt': 'angles', 'PPT_ANGLE_SCALE': 'angles', 'ppt_to_radians': 'angles', 'ppt_to_degrees': 'angles', 'parse_color': 'colors', 'hex_to_rgb': 'colors', 'rgb_to_hex': 'colors', 'ppt_to_opacity': 'opacity', 'ppt_to_alpha': 'opacity', 'ppt_to_percentage': 'opacity', 'opacity_to_ppt': 'opacity', 'percentage_to_ppt': 'opacity', 'alpha_to_ppt': 'opacity', 'PPT_OPACITY_SCALE': 'opacity', 'PPTConverter': 'powerpoint', 'parse_translation_pair': 'transforms', 'parse_numeric_list': 'transforms', 'parse_scale_pair': 'transforms', 'parse_angle': 'transforms'}
+_symbol_map = {'ppt_to_radians': 'angles', 'radians_to_ppt': 'angles', 'ppt_to_degrees': 'angles', 'PPT_ANGLE_SCALE': 'angles', 'degrees_to_ppt': 'angles', 'hex_to_rgb': 'colors', 'parse_color': 'colors', 'rgb_to_hex': 'colors', 'PPT_OPACITY_SCALE': 'opacity', 'alpha_to_ppt': 'opacity', 'ppt_to_percentage': 'opacity', 'ppt_to_opacity': 'opacity', 'ppt_to_alpha': 'opacity', 'opacity_to_ppt': 'opacity', 'percentage_to_ppt': 'opacity', 'PPTConverter': 'powerpoint', 'parse_translation_pair': 'transforms', 'parse_scale_pair': 'transforms', 'parse_angle': 'transforms', 'parse_numeric_list': 'transforms'}
 _module_map = {'angles': 'angles', 'colors': 'colors', 'opacity': 'opacity', 'powerpoint': 'powerpoint', 'transforms': 'transforms', 'units': 'units'}
 
 

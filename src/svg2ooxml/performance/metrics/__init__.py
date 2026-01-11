@@ -11,7 +11,7 @@ __all__ = [
 ]
 
 # map symbol -> relative module
-_symbol_map = {'clear_metrics': 'recorder', 'get_buffered_metrics': 'recorder', 'record_metric': 'recorder'}
+_symbol_map = {'get_buffered_metrics': 'recorder', 'clear_metrics': 'recorder', 'record_metric': 'recorder'}
 _module_map = {'recorder': 'recorder'}
 
 
