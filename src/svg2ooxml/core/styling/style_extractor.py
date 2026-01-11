@@ -419,7 +419,7 @@ class StyleExtractor:
             axis_defaults=("x", "y"),
         )
         radius = self._resolve_gradient_length(
-            chain,
+            materialized_chain,
             "r",
             default="50%",
             units=gradient_units,

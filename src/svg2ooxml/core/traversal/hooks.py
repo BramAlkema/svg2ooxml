@@ -743,7 +743,6 @@ class TraversalHooksMixin:
         return clip_ref
 
     def _resolve_mask_ref(self, element: etree._Element) -> tuple[MaskRef | None, MaskInstance | None]:
-        # TODO(ADR-geometry-ir): Surface mask primitives to downstream mappers so native rect/circle masks avoid raster fallbacks.
         mask_ref, mask_instance = clipping.resolve_mask_ref(element, mask_info=self._mask_info)
         if mask_ref is not None and mask_ref.mask_id:
             self._mask_usage.add(mask_ref.mask_id)

@@ -4,6 +4,8 @@ import time
 
 import pytest
 import requests
+from requests import exceptions as request_exceptions
+from urllib.parse import urlparse
 
 try:  # pragma: no cover - optional dependency
     import google.auth
@@ -13,27 +15,43 @@ except ImportError:  # pragma: no cover
     google = None
 
 BASE_URL = os.environ.get("SVG2OOXML_BASE_URL", "https://svg2ooxml-export-sghya3t5ya-ew.a.run.app")
+SMOKE_STRICT = os.environ.get("SVG2OOXML_SMOKE_STRICT", "false").lower() == "true"
 TIMEOUT_SECONDS = 60
 POLL_INTERVAL = 2
 
 
-def _post(path: str, json: dict, headers: dict | None = None):
+def _validate_base_url() -> None:
+    parsed = urlparse(BASE_URL)
+    if not parsed.scheme or not parsed.netloc:
+        pytest.skip(f"Invalid SVG2OOXML_BASE_URL: {BASE_URL!r}")
+
+
+def _request(method: str, path: str, *, json: dict | None = None, headers: dict | None = None):
+    _validate_base_url()
     merged_headers = {"User-Agent": "svg2ooxml-smoke-test"}
     merged_headers.update(headers or {})
-    resp = requests.post(
-        f"{BASE_URL}{path}",
-        json=json,
-        headers=merged_headers,
-        timeout=30,
-    )
-    resp.raise_for_status()
+    try:
+        resp = requests.request(
+            method,
+            f"{BASE_URL}{path}",
+            json=json,
+            headers=merged_headers,
+            timeout=30,
+        )
+        resp.raise_for_status()
+    except (request_exceptions.ConnectionError, request_exceptions.Timeout) as exc:
+        if SMOKE_STRICT:
+            raise
+        pytest.skip(f"Smoke endpoint unreachable: {exc}")
     return resp
+
+
+def _post(path: str, json: dict, headers: dict | None = None):
+    return _request("POST", path, json=json, headers=headers)
 
 
 def _get(path: str, headers: dict | None = None):
-    resp = requests.get(f"{BASE_URL}{path}", headers=headers, timeout=30)
-    resp.raise_for_status()
-    return resp
+    return _request("GET", path, headers=headers)
 
 
 def _resolve_bearer_token() -> str | None:

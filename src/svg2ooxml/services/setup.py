@@ -23,6 +23,9 @@ def configure_services(
     *,
     include_defaults: bool = True,
     filter_strategy: str | None = None,
+    policy_engine: Any | None = None,
+    policy_context: Any | None = None,
+    policy_name: str | None = None,
     **legacy_overrides: Any,
 ) -> ConversionServices:
     """Materialise a ``ConversionServices`` container.
@@ -38,8 +41,26 @@ def configure_services(
     if legacy_overrides:
         override_map.update(legacy_overrides)
 
+    if "policy_engine" in override_map and policy_engine is None:
+        policy_engine = override_map.pop("policy_engine")
+    if "policy_context" in override_map and policy_context is None:
+        policy_context = override_map.pop("policy_context")
+
+    if policy_engine is None and policy_name:
+        from svg2ooxml.policy import build_policy_engine
+
+        policy_engine = build_policy_engine(policy_name)
+    elif policy_engine is not None and policy_name:
+        setter = getattr(policy_engine, "set_policy", None)
+        if callable(setter):
+            setter(policy_name)
+
+    if policy_engine is not None:
+        services.register("policy_engine", policy_engine)
+    if policy_context is not None:
+        services.register("policy_context", policy_context)
+
     if include_defaults:
-        # TODO(ADR-policy-map): Replace implicit provider discovery with policy-driven service bundles.
         ensure_default_providers()
         for name, factory in provider_registry.iter_providers():
             if name in override_map:

@@ -287,6 +287,11 @@ class FilterService:
     def policy_engine(self) -> Any | None:
         return self._policy_engine
 
+    def set_policy_engine(self, engine: Any | None) -> None:
+        """Update the policy engine used for filter evaluation."""
+
+        self._policy_engine = engine
+
     @property
     def registry(self) -> FilterRegistry | None:
         return self._registry

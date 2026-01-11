@@ -86,6 +86,7 @@ The smoke tests verify:
 - `SVG2OOXML_AUDIENCE` - Token audience for identity tokens (default: base URL)
 - `FIREBASE_TOKEN` - Authentication token (Firebase ID or Google Identity)
 - `SVG2OOXML_ANON_TEST` - Set to `true` to skip authenticated tests
+- `SVG2OOXML_SMOKE_STRICT` - Set to `true` to fail on network errors instead of skipping
 - `GCLOUD_BIN` - Path to gcloud binary (default: `gcloud`)
 
 ### Server-Side Environment Variables
@@ -99,6 +100,12 @@ These are set on the Cloud Run service:
 ### "Authentication token missing" error
 
 The test was skipped because no valid token was provided. Use one of the authentication methods above.
+
+### "Smoke endpoint unreachable" skip
+
+The smoke tests skip when the base URL cannot be reached (DNS/timeout). Set
+`SVG2OOXML_BASE_URL` to a reachable service or export
+`SVG2OOXML_SMOKE_STRICT=true` to force a failure instead of skipping.
 
 ### 402 Payment Required error
 

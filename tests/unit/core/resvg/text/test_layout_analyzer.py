@@ -59,6 +59,7 @@ class MockTextNode:
     id: Optional[str] = None
     text_content: Optional[str] = None
     attributes: dict = field(default_factory=dict)
+    styles: dict = field(default_factory=dict)
     children: list = field(default_factory=list)
     transform: Optional[MockMatrix] = None
 
@@ -312,29 +313,26 @@ class TestTextLayoutAnalyzer:
 
         assert analyzer.is_plain_text_layout(node) is True
 
-    def test_has_kerning_placeholder(self):
-        """Test that kerning detection returns False (placeholder)."""
+    def test_has_kerning_detects_font_feature(self):
+        """Test that kerning detection flags explicit kerning settings."""
         analyzer = TextLayoutAnalyzer()
-        node = MockTextNode(text_content="Hello")
+        node = MockTextNode(text_content="Hello", styles={"font-feature-settings": "'kern' 1"})
 
-        # This is a placeholder method that always returns False
-        assert analyzer._has_kerning(node) is False
+        assert analyzer._has_kerning(node) is True
 
-    def test_has_ligatures_placeholder(self):
-        """Test that ligature detection returns False (placeholder)."""
+    def test_has_ligatures_detects_variant(self):
+        """Test that ligature detection flags font-variant-ligatures."""
         analyzer = TextLayoutAnalyzer()
-        node = MockTextNode(text_content="Hello")
+        node = MockTextNode(text_content="Hello", attributes={"font-variant-ligatures": "discretionary-ligatures"})
 
-        # This is a placeholder method that always returns False
-        assert analyzer._has_ligatures(node) is False
+        assert analyzer._has_ligatures(node) is True
 
-    def test_has_glyph_reuse_placeholder(self):
-        """Test that glyph reuse detection returns False (placeholder)."""
+    def test_has_glyph_reuse_detects_feature_settings(self):
+        """Test that advanced font feature settings are detected."""
         analyzer = TextLayoutAnalyzer()
-        node = MockTextNode(text_content="Hello")
+        node = MockTextNode(text_content="Hello", styles={"font-feature-settings": "'calt' 1"})
 
-        # This is a placeholder method that always returns False
-        assert analyzer._has_glyph_reuse(node) is False
+        assert analyzer._has_glyph_reuse(node) is True
 
     def test_empty_attributes_is_plain(self):
         """Test that text with no attributes is plain."""

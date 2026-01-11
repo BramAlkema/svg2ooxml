@@ -17,6 +17,9 @@ export FIREBASE_TOKEN="$(gcloud auth print-identity-token)"
 pytest -m smoke tests/smoke/ -v
 ```
 
+If the base URL is unreachable (DNS/timeout), the smoke tests are skipped by
+default. Set `SVG2OOXML_SMOKE_STRICT=true` to fail instead.
+
 ### Bypassing Quota Limits
 
 The API enforces a 5 export/month limit for free tier users. For testing, you can disable quota checking:

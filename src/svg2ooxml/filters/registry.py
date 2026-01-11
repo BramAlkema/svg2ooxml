@@ -37,8 +37,7 @@ class FilterRegistry:
         self._logger = logging.getLogger(f"{__name__}.{self.__class__.__name__}")
 
     def register_default_filters(self) -> None:
-        """Populate built-in filter handlers (none yet)."""
-        # TODO(ADR-filters-port): Register svg2pptx filter implementations.
+        """Populate built-in filter handlers."""
         self.register(ColorMatrixFilter())
         self.register(FloodFilter())
         self.register(OffsetFilter())

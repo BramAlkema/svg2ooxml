@@ -413,7 +413,8 @@ def radial_gradient_to_paint(gradient: "RadialGradient") -> "RadialGradientPaint
             )
         elif policy_decision == "rasterize_nonuniform":
             # Phase 3: Severe non-uniformity or shear → approximate with solid fill.
-            # TODO: Implement bitmap rasterization path once fidelity policy allows.
+            # DrawingML radial gradients cannot represent anisotropic transforms,
+            # so we fall back to an average stop color to avoid distortions.
             raster_size = _calculate_raster_size(transform_class.s1, transform_class.s2)
 
             # Compute average color from gradient stops as a crude approximation.
