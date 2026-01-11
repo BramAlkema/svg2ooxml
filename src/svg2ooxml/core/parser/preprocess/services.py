@@ -11,8 +11,11 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:  # pragma: no cover - type checking only
+    from svg2ooxml.common.style.resolver import StyleResolver
+    from svg2ooxml.core.parser.units import UnitConverter
     from svg2ooxml.services import ConversionServices
-from svg2ooxml.policy import PolicyContext, PolicyEngine, build_policy_engine
+from svg2ooxml.core.conversion_context import build_conversion_context
+from svg2ooxml.policy import PolicyContext, PolicyEngine
 
 
 @dataclass(frozen=True)
@@ -22,6 +25,8 @@ class ParserServices:
     services: "ConversionServices"
     policy_engine: PolicyEngine
     policy_context: PolicyContext
+    unit_converter: "UnitConverter | None" = None
+    style_resolver: "StyleResolver | None" = None
 
 
 def build_parser_services(
@@ -41,21 +46,20 @@ def build_parser_services(
     if service_overrides:
         service_map.update(service_overrides)
 
-    engine = policy_engine or build_policy_engine(policy_name)
-    if policy_engine is not None and policy_name:
-        engine.set_policy(policy_name)
-
-    context = policy_context or engine.evaluate()
-
-    from svg2ooxml.services import configure_services  # local import to avoid circular dependency
-
-    services = configure_services(
-        service_map,
+    context = build_conversion_context(
+        overrides=service_map or None,
+        policy_engine=policy_engine,
+        policy_context=policy_context,
+        policy_name=policy_name,
         include_defaults=include_defaults,
-        policy_engine=engine,
-        policy_context=context,
     )
-    return ParserServices(services=services, policy_engine=engine, policy_context=context)
+    return ParserServices(
+        services=context.services,
+        policy_engine=context.policy_engine,
+        policy_context=context.policy_context,
+        unit_converter=context.unit_converter,
+        style_resolver=context.style_resolver,
+    )
 
 
 __all__ = ["ParserServices", "build_parser_services"]

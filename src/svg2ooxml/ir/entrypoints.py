@@ -5,10 +5,15 @@ from __future__ import annotations
 import logging
 from typing import Any, TYPE_CHECKING
 
+from svg2ooxml.core.conversion_context import (
+    build_conversion_context,
+    resolve_policy_context,
+    resolve_policy_engine,
+)
 from svg2ooxml.core.ir.converter import IRConverter, IRScene
 from svg2ooxml.core.parser import ParseResult
-from svg2ooxml.policy import PolicyContext, PolicyEngine, build_policy_engine
-from svg2ooxml.services import ConversionServices, configure_services
+from svg2ooxml.policy import PolicyContext, PolicyEngine
+from svg2ooxml.services import ConversionServices
 
 if TYPE_CHECKING:  # pragma: no cover - hint only
     from svg2ooxml.core.tracing import ConversionTracer
@@ -26,41 +31,30 @@ def convert_parser_output(
 ) -> IRScene:
     """Convert a parser result into an IR scene graph."""
 
-    if services is None:
-        base_services = parser_result.services
-        if base_services is not None and hasattr(base_services, "clone"):
-            services = base_services.clone()
-        elif base_services is not None:
-            services = base_services
-        else:
-            services = configure_services()
+    base_services = services or parser_result.services
+    engine = resolve_policy_engine(
+        policy_engine=policy_engine,
+        fallback_engine=parser_result.policy_engine,
+        policy_name=policy_name,
+    )
+    resolved_context = resolve_policy_context(
+        policy_context=policy_context,
+        policy_engine=engine,
+        fallback_context=parser_result.policy_context,
+        fallback_engine=parser_result.policy_engine,
+        allow_fallback=policy_engine is None and policy_name is None,
+    )
+    conversion_context = build_conversion_context(
+        services=base_services,
+        policy_engine=engine,
+        policy_context=resolved_context,
+        clone_services=services is None,
+    )
+    services = conversion_context.services
+    engine = conversion_context.policy_engine
+    policy_context = conversion_context.policy_context
 
     _hydrate_services_from_parser(services, parser_result, logger)
-
-    engine = policy_engine or parser_result.policy_engine
-    if engine is None:
-        engine = build_policy_engine(policy_name)
-    elif (
-        policy_name
-        and policy_engine is None
-        and parser_result.policy_engine is engine
-    ):
-        engine = build_policy_engine(policy_name)
-    elif policy_name:
-        engine.set_policy(policy_name)
-
-    if policy_context is None:
-        if (
-            parser_result.policy_context is not None
-            and parser_result.policy_engine is engine
-            and policy_engine is None
-            and policy_name is None
-        ):
-            policy_context = PolicyContext(
-                selections=dict(parser_result.policy_context.selections)
-            )
-        else:
-            policy_context = engine.evaluate()
 
     pre_stage_events: list[tuple[str, str, str | None, dict[str, Any]]] = []
     if tracer is not None:
