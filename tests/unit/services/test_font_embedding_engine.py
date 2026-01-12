@@ -6,7 +6,11 @@ from pathlib import Path
 
 import pytest
 
-from svg2ooxml.services.fonts.embedding import FontEmbeddingEngine, FontEmbeddingRequest
+from svg2ooxml.services.fonts.embedding import (
+    EmbeddedFontPayload,
+    FontEmbeddingEngine,
+    FontEmbeddingRequest,
+)
 
 
 class _StubFont:
@@ -29,7 +33,6 @@ def _make_request(tmp_path: Path) -> FontEmbeddingRequest:
     )
 
 
-@pytest.mark.xfail(reason="This test is known to be failing. The dummy font is not valid.")
 def test_subset_font_uses_cache(monkeypatch, tmp_path) -> None:
     engine = FontEmbeddingEngine()
     request = _make_request(tmp_path)
@@ -37,6 +40,18 @@ def test_subset_font_uses_cache(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(engine, "_read_embedding_permission", lambda _path: "installable")
     monkeypatch.setattr(engine, "_glyphs_to_text", lambda glyphs: "ABC")
     monkeypatch.setattr(engine, "_perform_subsetting", lambda font, text, req: b"subset")
+    monkeypatch.setattr(
+        engine,
+        "_build_eot_payload",
+        lambda subset_bytes, req: EmbeddedFontPayload(
+            subset_bytes=subset_bytes,
+            eot_bytes=subset_bytes,
+            guid=None,
+            root_string="Stub",
+            style_kind="regular",
+            style_flags={"bold": False, "italic": False, "style_kind": "regular"},
+        ),
+    )
     monkeypatch.setattr("svg2ooxml.services.fonts.embedding.TTFont", lambda *args, **kwargs: _StubFont())
     class _StubOptions:
         def __init__(self) -> None:
