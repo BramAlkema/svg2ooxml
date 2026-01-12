@@ -112,6 +112,11 @@ def _split_pages(svg_text: str, base_title: str | None) -> list[SvgPageSource]:
     help="Duplicate slides to showcase fallback renderings (e.g., native vs EMF/bitmap).",
 )
 @click.option(
+    "--render-tiers/--no-render-tiers",
+    default=False,
+    help="Render four fidelity tiers per slide (direct, mimic, EMF fallback, bitmap fallback).",
+)
+@click.option(
     "--export-slides",
     is_flag=True,
     help="Upload the generated PPTX to Google Slides.",
@@ -130,6 +135,7 @@ def convert(  # noqa: PLR0913  (CLI surface)
     extra_slides: tuple[str, ...],
     split_pages: bool,
     split_fallback_slides: bool,
+    render_tiers: bool,
     export_slides: bool,
     title: str | None,
     folder_id: str | None,
@@ -176,7 +182,7 @@ def convert(  # noqa: PLR0913  (CLI surface)
     click.echo(f"📦 Output: {target_path}")
 
     try:
-        if len(slides) == 1 and not extra_slides and not split_fallback_slides:
+        if len(slides) == 1 and not extra_slides and not split_fallback_slides and not render_tiers:
             result = exporter.convert_string(slides[0].svg_text, target_path, tracer=tracer)
             slide_count = result.slide_count
             trace_payload: dict[str, Any] | None = result.trace_report
@@ -186,6 +192,7 @@ def convert(  # noqa: PLR0913  (CLI surface)
                 target_path,
                 tracer=tracer,
                 split_fallback_variants=split_fallback_slides,
+                render_tiers=render_tiers,
             )
             slide_count = multi_result.slide_count
             trace_payload = {

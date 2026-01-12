@@ -104,3 +104,22 @@ def test_exporter_convert_pages_with_variants(monkeypatch: pytest.MonkeyPatch, t
     assert result.slide_count == 2
     variant_titles = [page_result.title for page_result in result.page_results]
     assert any("Bitmap" in title for title in variant_titles)
+
+
+def test_exporter_convert_pages_with_tiers(tmp_path: Path) -> None:
+    exporter = SvgToPptxExporter()
+    output_path = tmp_path / "tiers.pptx"
+    page = SvgPageSource(
+        svg_text="<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20'><rect width='20' height='20' fill='#f00'/></svg>",
+        title="Tiered",
+    )
+
+    result = exporter.convert_pages([page], output_path, render_tiers=True)
+
+    assert result.slide_count == 4
+    variant_types = [
+        page_result.metadata.get("variant", {}).get("type")
+        for page_result in result.page_results
+        if page_result.metadata
+    ]
+    assert set(variant_types) == {"direct", "mimic", "emf", "bitmap"}

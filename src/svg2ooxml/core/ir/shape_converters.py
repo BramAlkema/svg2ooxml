@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from typing import Any, Callable, Iterable, Sequence
+from typing import Any, Callable, Iterable, Mapping, Sequence
 
 from lxml import etree
 
@@ -111,6 +111,14 @@ class ShapeConversionMixin:
             ShapeConversionMixin._coerce_float(getattr(matrix, "e", None), 0.0),
             ShapeConversionMixin._coerce_float(getattr(matrix, "f", None), 0.0),
         )
+
+    @staticmethod
+    def _geometry_fallback_flags(policy: Mapping[str, Any] | None) -> tuple[bool, bool]:
+        if not policy:
+            return True, True
+        allow_emf = bool(policy.get("allow_emf_fallback", True)) or bool(policy.get("force_emf"))
+        allow_bitmap = bool(policy.get("allow_bitmap_fallback", True)) or bool(policy.get("force_bitmap"))
+        return allow_emf, allow_bitmap
 
     def _resvg_rect_to_rectangle(
         self,
@@ -791,6 +799,7 @@ class ShapeConversionMixin:
         mask_ref, mask_instance = self._resolve_mask_ref(element)
 
         policy = self._policy_options("geometry")
+        allow_emf_fallback, allow_bitmap_fallback = self._geometry_fallback_flags(policy)
         segments, geom_meta, render_mode = apply_geometry_policy(list(segments), policy)
         bitmap_limits = self._bitmap_fallback_limits(policy)
         metadata = dict(style.metadata)
@@ -799,7 +808,10 @@ class ShapeConversionMixin:
             policy_meta = metadata.setdefault("policy", {}).setdefault("geometry", {})
             policy_meta.update(geom_meta)
         if style.fill and not isinstance(style.fill, SolidPaint):
-            render_mode = FALLBACK_BITMAP
+            if allow_bitmap_fallback:
+                render_mode = FALLBACK_BITMAP
+            elif allow_emf_fallback:
+                render_mode = FALLBACK_EMF
 
         fallback_to_bitmap = False
         if render_mode == FALLBACK_EMF:
@@ -817,10 +829,13 @@ class ShapeConversionMixin:
                 self._process_mask_metadata(emf_image)
                 self._trace_geometry_decision(element, "emf", emf_image.metadata if isinstance(emf_image.metadata, dict) else metadata)
                 return emf_image
-            self._logger.warning("Failed to build EMF fallback; attempting bitmap fallback.")
-            fallback_to_bitmap = True
+            if allow_bitmap_fallback:
+                self._logger.warning("Failed to build EMF fallback; attempting bitmap fallback.")
+                fallback_to_bitmap = True
+            else:
+                self._logger.warning("Failed to build EMF fallback; bitmap fallback disabled.")
 
-        if render_mode == FALLBACK_BITMAP or fallback_to_bitmap:
+        if (render_mode == FALLBACK_BITMAP or fallback_to_bitmap) and allow_bitmap_fallback:
             bitmap_image = self._convert_path_to_bitmap(
                 element=element,
                 style=style,
@@ -844,6 +859,8 @@ class ShapeConversionMixin:
                 )
                 return bitmap_image
             self._logger.warning("Failed to rasterize path; falling back to native rendering.")
+        elif render_mode == FALLBACK_BITMAP and not allow_bitmap_fallback:
+            self._logger.warning("Bitmap fallback disabled; falling back to native rendering.")
 
         transformed = coord_space.apply_segments(segments)
         path_object = Path(
@@ -880,6 +897,7 @@ class ShapeConversionMixin:
         self._attach_policy_metadata(metadata, "geometry")
 
         policy = self._policy_options("geometry")
+        allow_emf_fallback, allow_bitmap_fallback = self._geometry_fallback_flags(policy)
         segments = _points_to_segments(points, closed=True)
         segments, geom_meta, render_mode = apply_geometry_policy(list(segments), policy)
         bitmap_limits = self._bitmap_fallback_limits(policy)
@@ -888,7 +906,10 @@ class ShapeConversionMixin:
             policy_meta.update(geom_meta)
 
         if style.fill and not isinstance(style.fill, SolidPaint):
-            render_mode = FALLBACK_BITMAP
+            if allow_bitmap_fallback:
+                render_mode = FALLBACK_BITMAP
+            elif allow_emf_fallback:
+                render_mode = FALLBACK_EMF
 
         fallback_to_bitmap = False
         if render_mode == FALLBACK_EMF:
@@ -905,10 +926,13 @@ class ShapeConversionMixin:
             if emf_image is not None:
                 self._trace_geometry_decision(element, "emf", emf_image.metadata if isinstance(emf_image.metadata, dict) else metadata)
                 return emf_image
-            self._logger.warning("Failed to build EMF fallback; attempting bitmap fallback.")
-            fallback_to_bitmap = True
+            if allow_bitmap_fallback:
+                self._logger.warning("Failed to build EMF fallback; attempting bitmap fallback.")
+                fallback_to_bitmap = True
+            else:
+                self._logger.warning("Failed to build EMF fallback; bitmap fallback disabled.")
 
-        if render_mode == FALLBACK_BITMAP or fallback_to_bitmap:
+        if (render_mode == FALLBACK_BITMAP or fallback_to_bitmap) and allow_bitmap_fallback:
             bitmap_image = self._convert_path_to_bitmap(
                 element=element,
                 style=style,
@@ -931,6 +955,8 @@ class ShapeConversionMixin:
                 )
                 return bitmap_image
             self._logger.warning("Failed to rasterize polygon; falling back to native rendering.")
+        elif render_mode == FALLBACK_BITMAP and not allow_bitmap_fallback:
+            self._logger.warning("Bitmap fallback disabled; falling back to native rendering.")
 
         if any(not isinstance(segment, LineSegment) for segment in segments):
             transformed = coord_space.apply_segments(segments)
@@ -992,6 +1018,7 @@ class ShapeConversionMixin:
         self._attach_policy_metadata(metadata, "geometry")
 
         policy = self._policy_options("geometry")
+        allow_emf_fallback, allow_bitmap_fallback = self._geometry_fallback_flags(policy)
         segments = _points_to_segments(points, closed=False)
         segments, geom_meta, render_mode = apply_geometry_policy(list(segments), policy)
         bitmap_limits = self._bitmap_fallback_limits(policy)
@@ -1000,7 +1027,10 @@ class ShapeConversionMixin:
             policy_meta.update(geom_meta)
 
         if style.fill and not isinstance(style.fill, SolidPaint):
-            render_mode = FALLBACK_BITMAP
+            if allow_bitmap_fallback:
+                render_mode = FALLBACK_BITMAP
+            elif allow_emf_fallback:
+                render_mode = FALLBACK_EMF
 
         fallback_to_bitmap = False
         if render_mode == FALLBACK_EMF:
@@ -1017,10 +1047,13 @@ class ShapeConversionMixin:
             if emf_image is not None:
                 self._trace_geometry_decision(element, "emf", emf_image.metadata if isinstance(emf_image.metadata, dict) else metadata)
                 return emf_image
-            self._logger.warning("Failed to build EMF fallback; attempting bitmap fallback.")
-            fallback_to_bitmap = True
+            if allow_bitmap_fallback:
+                self._logger.warning("Failed to build EMF fallback; attempting bitmap fallback.")
+                fallback_to_bitmap = True
+            else:
+                self._logger.warning("Failed to build EMF fallback; bitmap fallback disabled.")
 
-        if render_mode == FALLBACK_BITMAP or fallback_to_bitmap:
+        if (render_mode == FALLBACK_BITMAP or fallback_to_bitmap) and allow_bitmap_fallback:
             bitmap_image = self._convert_path_to_bitmap(
                 element=element,
                 style=style,
@@ -1043,6 +1076,8 @@ class ShapeConversionMixin:
                 )
                 return bitmap_image
             self._logger.warning("Failed to rasterize polyline; falling back to native rendering.")
+        elif render_mode == FALLBACK_BITMAP and not allow_bitmap_fallback:
+            self._logger.warning("Bitmap fallback disabled; falling back to native rendering.")
 
         if any(not isinstance(segment, LineSegment) for segment in segments):
             transformed = coord_space.apply_segments(segments)
@@ -1093,6 +1128,7 @@ class ShapeConversionMixin:
         clip_ref = self._resolve_clip_ref(element)
         mask_ref, mask_instance = self._resolve_mask_ref(element)
         policy = self._policy_options("geometry")
+        allow_emf_fallback, allow_bitmap_fallback = self._geometry_fallback_flags(policy)
         segments, geom_meta, render_mode = apply_geometry_policy(list(segments), policy)
         bitmap_limits = self._bitmap_fallback_limits(policy)
         metadata = dict(style.metadata)
@@ -1102,7 +1138,10 @@ class ShapeConversionMixin:
             policy_meta.update(geom_meta)
 
         if style.fill and not isinstance(style.fill, SolidPaint):
-            render_mode = FALLBACK_BITMAP
+            if allow_bitmap_fallback:
+                render_mode = FALLBACK_BITMAP
+            elif allow_emf_fallback:
+                render_mode = FALLBACK_EMF
 
         if render_mode == FALLBACK_EMF:
             emf_image = self._convert_path_to_emf(
@@ -1120,25 +1159,28 @@ class ShapeConversionMixin:
                 return emf_image
             self._logger.warning("Failed to build EMF fallback; reverting to native path.")
         elif render_mode == FALLBACK_BITMAP:
-            bitmap_image = self._convert_path_to_bitmap(
-                element=element,
-                style=style,
-                segments=segments,
-                coord_space=coord_space,
-                clip_ref=clip_ref,
-                mask_ref=mask_ref,
-                mask_instance=mask_instance,
-                metadata=metadata,
-                bitmap_limits=bitmap_limits,
-            )
-            if bitmap_image is not None:
-                self._trace_geometry_decision(
-                    element,
-                    "bitmap",
-                    bitmap_image.metadata if isinstance(bitmap_image.metadata, dict) else metadata,
+            if not allow_bitmap_fallback:
+                self._logger.warning("Bitmap fallback disabled; falling back to native rendering.")
+            else:
+                bitmap_image = self._convert_path_to_bitmap(
+                    element=element,
+                    style=style,
+                    segments=segments,
+                    coord_space=coord_space,
+                    clip_ref=clip_ref,
+                    mask_ref=mask_ref,
+                    mask_instance=mask_instance,
+                    metadata=metadata,
+                    bitmap_limits=bitmap_limits,
                 )
-                return bitmap_image
-            self._logger.warning("Failed to rasterize path; falling back to native rendering.")
+                if bitmap_image is not None:
+                    self._trace_geometry_decision(
+                        element,
+                        "bitmap",
+                        bitmap_image.metadata if isinstance(bitmap_image.metadata, dict) else metadata,
+                    )
+                    return bitmap_image
+                self._logger.warning("Failed to rasterize path; falling back to native rendering.")
 
         transformed = coord_space.apply_segments(segments)
         path_object = Path(

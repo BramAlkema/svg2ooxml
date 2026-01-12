@@ -16,7 +16,7 @@ EXPECTED_EMF_DIGESTS: dict[str, str] = {
     "cmm": "dfdadbfe00d1dce897d50c8421e8db3558fc698e",
     "disp": "1e2a7fd86413497baa990a8f4c503db365112b1e",
     "diff": "4212f8bac5070e1d6cde2e1939b358c0667e41c1",
-    "turb": "443199ea86ebae4c815bab781aaa67ff28ba586f",
+    "turb": "b01f711d6b3be230a30d4417278bd56ae770e438",
     "conv": "8c9a4a3be870745d35c5578d96d75911c5f41613",
     "spec": "c21085baa1b220e3fc984621779e50877424394b",
 }

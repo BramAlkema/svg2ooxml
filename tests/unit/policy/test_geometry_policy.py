@@ -36,6 +36,15 @@ def test_apply_geometry_policy_force_bitmap() -> None:
     assert mode == FALLBACK_BITMAP
 
 
+def test_apply_geometry_policy_force_emf() -> None:
+    segments = _build_segments(2)
+
+    _, metadata, mode = apply_geometry_policy(segments, {"force_emf": True})
+
+    assert metadata["render_mode"] == FALLBACK_EMF
+    assert mode == FALLBACK_EMF
+
+
 def test_apply_geometry_policy_simplifies_when_allowed() -> None:
     segments = _build_segments(10)
 
@@ -64,3 +73,19 @@ def test_apply_geometry_policy_marks_complexity_exceeded() -> None:
     assert metadata["render_mode"] == FALLBACK_EMF
     assert "complexity_exceeded" in metadata.get("flags", [])
     assert mode == FALLBACK_EMF
+
+
+def test_apply_geometry_policy_skips_emf_when_disallowed() -> None:
+    segments = _build_segments(6)
+
+    _, metadata, mode = apply_geometry_policy(
+        segments,
+        {
+            "max_segments": 2,
+            "max_complexity": 1.5,
+            "allow_emf_fallback": False,
+        },
+    )
+
+    assert metadata["render_mode"] == FALLBACK_NATIVE
+    assert mode == FALLBACK_NATIVE

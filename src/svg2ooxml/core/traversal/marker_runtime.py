@@ -275,8 +275,9 @@ def _realize_marker_instance(
     marker_policy = converter._policy_options("marker") or converter._policy_options("geometry")
     if marker_policy:
         force_bitmap = bool(marker_policy.get("force_bitmap"))
+        allow_bitmap = bool(marker_policy.get("allow_bitmap_fallback", True)) or force_bitmap
         max_segments = marker_policy.get("max_segments")
-        if force_bitmap or (isinstance(max_segments, (int, float)) and segment_total > max_segments):
+        if allow_bitmap and (force_bitmap or (isinstance(max_segments, (int, float)) and segment_total > max_segments)):
             policy_meta = {
                 "render_mode": FALLBACK_BITMAP,
                 "reason": "marker_complexity",
