@@ -39,7 +39,7 @@ __all__ = [
 ]
 
 # map symbol -> relative module
-_symbol_map = {'FontEmbeddingResult': 'embedding', 'EmbeddingPermission': 'embedding', 'FontOptimisationLevel': 'embedding', 'FontEmbeddingRequest': 'embedding', 'EmbeddedFontPayload': 'embedding', 'FontEmbeddingEngine': 'embedding', 'EOTConversionError': 'eot', 'EOTResult': 'eot', 'build_eot': 'eot', 'FontSource': 'fetcher', 'FontFetcher': 'fetcher', 'MAX_FONT_SIZE': 'fetcher', 'WOFFTableEntry': 'loader', 'LoadedFont': 'loader', 'DATA_URI_PATTERN': 'loader', 'FontLoader': 'loader', 'FontQuery': 'service', 'FontService': 'service', 'FontMatch': 'service', 'FontProvider': 'service', 'parse_directory_list': 'system', 'ENV_FONT_DIRS': 'system', 'FontSystem': 'system', 'FontSystemConfig': 'system', 'collect_font_directories': 'system'}
+_symbol_map = {'FontOptimisationLevel': 'embedding', 'FontEmbeddingEngine': 'embedding', 'EmbeddingPermission': 'embedding', 'FontEmbeddingResult': 'embedding', 'EmbeddedFontPayload': 'embedding', 'FontEmbeddingRequest': 'embedding', 'EOTConversionError': 'eot', 'EOTResult': 'eot', 'build_eot': 'eot', 'FontFetcher': 'fetcher', 'MAX_FONT_SIZE': 'fetcher', 'FontSource': 'fetcher', 'DATA_URI_PATTERN': 'loader', 'FontLoader': 'loader', 'WOFFTableEntry': 'loader', 'LoadedFont': 'loader', 'FontQuery': 'service', 'FontMatch': 'service', 'FontService': 'service', 'FontProvider': 'service', 'collect_font_directories': 'system', 'FontSystemConfig': 'system', 'ENV_FONT_DIRS': 'system', 'FontSystem': 'system', 'parse_directory_list': 'system'}
 _module_map = {'embedding': 'embedding', 'eot': 'eot', 'fetcher': 'fetcher', 'loader': 'loader', 'providers': 'providers', 'service': 'service', 'system': 'system'}
 
 

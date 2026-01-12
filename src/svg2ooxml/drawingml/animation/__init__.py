@@ -25,7 +25,7 @@ __all__ = [
 ]
 
 # map symbol -> relative module
-_symbol_map = {'AnimationPolicy': 'policy', 'TAVBuilder': 'tav_builder', 'ValueFormatter': 'tav_builder', 'format_point_value': 'value_formatters', 'format_numeric_value': 'value_formatters', 'format_color_value': 'value_formatters', 'format_angle_value': 'value_formatters', 'ValueProcessor': 'value_processors', 'DrawingMLAnimationWriter': 'writer', 'AnimationXMLBuilder': 'xml_builders'}
+_symbol_map = {'AnimationPolicy': 'policy', 'ValueFormatter': 'tav_builder', 'TAVBuilder': 'tav_builder', 'format_angle_value': 'value_formatters', 'format_color_value': 'value_formatters', 'format_numeric_value': 'value_formatters', 'format_point_value': 'value_formatters', 'ValueProcessor': 'value_processors', 'DrawingMLAnimationWriter': 'writer', 'AnimationXMLBuilder': 'xml_builders'}
 _module_map = {'constants': 'constants', 'handlers': 'handlers', 'policy': 'policy', 'tav_builder': 'tav_builder', 'value_formatters': 'value_formatters', 'value_processors': 'value_processors', 'writer': 'writer', 'xml_builders': 'xml_builders'}
 
 

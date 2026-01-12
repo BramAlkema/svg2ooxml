@@ -19,7 +19,7 @@ __all__ = [
 ]
 
 # map symbol -> relative module
-_symbol_map = {'PathSamplingMethod': 'curve_text_positioning', 'CurveTextPositioner': 'curve_text_positioning', 'WarpFitResult': 'curve_text_positioning', 'create_path_warp_fitter': 'curve_text_positioning', 'PathWarpFitter': 'curve_text_positioning', 'PathSegment': 'curve_text_positioning', 'create_curve_text_positioner': 'curve_text_positioning', 'PathFeatures': 'wordart_classifier', 'WordArtClassificationResult': 'wordart_classifier', 'classify_text_path_warp': 'wordart_classifier'}
+_symbol_map = {'create_curve_text_positioner': 'curve_text_positioning', 'CurveTextPositioner': 'curve_text_positioning', 'PathSegment': 'curve_text_positioning', 'PathWarpFitter': 'curve_text_positioning', 'create_path_warp_fitter': 'curve_text_positioning', 'WarpFitResult': 'curve_text_positioning', 'PathSamplingMethod': 'curve_text_positioning', 'classify_text_path_warp': 'wordart_classifier', 'WordArtClassificationResult': 'wordart_classifier', 'PathFeatures': 'wordart_classifier'}
 _module_map = {'curve_text_positioning': 'curve_text_positioning', 'wordart_classifier': 'wordart_classifier'}
 
 

@@ -10,7 +10,7 @@ __all__ = [
 ]
 
 # map symbol -> relative module
-_symbol_map = {'RateLimitMiddleware': 'rate_limit', 'RateLimiter': 'rate_limit'}
+_symbol_map = {'RateLimiter': 'rate_limit', 'RateLimitMiddleware': 'rate_limit'}
 _module_map = {'rate_limit': 'rate_limit'}
 
 

@@ -14,7 +14,7 @@ __all__ = [
 ]
 
 # map symbol -> relative module
-_symbol_map = {'process_export_job': 'queue', 'enqueue_export_job': 'queue', 'CloudTasksQueue': 'tasks', 'main': 'worker'}
+_symbol_map = {'enqueue_export_job': 'queue', 'process_export_job': 'queue', 'CloudTasksQueue': 'tasks', 'main': 'worker'}
 _module_map = {'queue': 'queue', 'tasks': 'tasks', 'worker': 'worker'}
 
 

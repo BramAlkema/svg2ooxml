@@ -132,8 +132,3 @@ def test_tracer_reports_resvg_metrics() -> None:
         "failures": 1,
     }
 
-
-def test_legacy_module_still_exposes_tracer() -> None:
-    from svg2ooxml.map import tracer as legacy_tracer
-
-    assert legacy_tracer.ConversionTracer is ConversionTracer

@@ -25,7 +25,7 @@ __all__ = [
 ]
 
 # map symbol -> relative module
-_symbol_map = {'BrushSpec': 'blob', 'PenSpec': 'blob', 'EMU_PER_INCH': 'blob', 'EMFHatchStyle': 'blob', 'EMFBlob': 'blob', 'EMFBrushStyle': 'blob', 'HMM_PER_EMU': 'blob', 'EMFRecordType': 'blob', 'NULL_BRUSH_HANDLE': 'blob', 'NULL_PEN_HANDLE': 'blob', 'EMFMedia': 'packager', 'EMFRelationshipManager': 'packager', 'apply_dash_pattern': 'path', 'flatten_segments': 'path', 'DashPattern': 'path'}
+_symbol_map = {'NULL_BRUSH_HANDLE': 'blob', 'HMM_PER_EMU': 'blob', 'PenSpec': 'blob', 'EMFHatchStyle': 'blob', 'BrushSpec': 'blob', 'NULL_PEN_HANDLE': 'blob', 'EMU_PER_INCH': 'blob', 'EMFRecordType': 'blob', 'EMFBrushStyle': 'blob', 'EMFBlob': 'blob', 'EMFRelationshipManager': 'packager', 'EMFMedia': 'packager', 'flatten_segments': 'path', 'DashPattern': 'path', 'apply_dash_pattern': 'path'}
 _module_map = {'blob': 'blob', 'packager': 'packager', 'path': 'path'}
 
 

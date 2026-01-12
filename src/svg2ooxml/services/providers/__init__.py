@@ -25,7 +25,7 @@ __all__ = [
 ]
 
 # map symbol -> relative module
-_symbol_map = {'ensure_default_providers': 'registry', 'iter_providers': 'registry', 'get_provider': 'registry', 'register_provider': 'registry', 'clear_providers': 'registry', 'get_provider_factories': 'registry'}
+_symbol_map = {'ensure_default_providers': 'registry', 'clear_providers': 'registry', 'register_provider': 'registry', 'iter_providers': 'registry', 'get_provider_factories': 'registry', 'get_provider': 'registry'}
 _module_map = {'color_provider': 'color_provider', 'drawingml_provider': 'drawingml_provider', 'filter_provider': 'filter_provider', 'font_provider': 'font_provider', 'gradient_provider': 'gradient_provider', 'hyperlink_provider': 'hyperlink_provider', 'image_provider': 'image_provider', 'marker_provider': 'marker_provider', 'mask_provider': 'mask_provider', 'pattern_provider': 'pattern_provider', 'registry': 'registry', 'symbol_provider': 'symbol_provider'}
 
 
