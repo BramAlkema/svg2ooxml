@@ -6,24 +6,16 @@ from pathlib import Path
 
 import pytest
 
-from svg2ooxml.services.fonts.embedding import (
-    EmbeddedFontPayload,
-    FontEmbeddingEngine,
-    FontEmbeddingRequest,
-)
+from svg2ooxml.services.fonts.embedding import FontEmbeddingEngine, FontEmbeddingRequest
 
 
-class _StubFont:
-    def __init__(self) -> None:
-        self.closed = False
-
-    def close(self) -> None:  # pragma: no cover - simple stub
-        self.closed = True
+def _resource_font_path() -> Path:
+    return Path(__file__).resolve().parents[2] / "resources" / "ScheherazadeRegOT.ttf"
 
 
 def _make_request(tmp_path: Path) -> FontEmbeddingRequest:
-    font_path = tmp_path / "Stub.ttf"
-    font_path.write_bytes(b"fontdata")
+    font_path = tmp_path / "ScheherazadeRegOT.ttf"
+    font_path.write_bytes(_resource_font_path().read_bytes())
     return FontEmbeddingRequest(
         font_path=str(font_path),
         glyph_ids=(65, 66, 67),
@@ -38,48 +30,13 @@ def test_subset_font_uses_cache(monkeypatch, tmp_path) -> None:
     request = _make_request(tmp_path)
 
     monkeypatch.setattr(engine, "_read_embedding_permission", lambda _path: "installable")
-    monkeypatch.setattr(engine, "_glyphs_to_text", lambda glyphs: "ABC")
-    monkeypatch.setattr(engine, "_perform_subsetting", lambda font, text, req: b"subset")
-    monkeypatch.setattr(
-        engine,
-        "_build_eot_payload",
-        lambda subset_bytes, req: EmbeddedFontPayload(
-            subset_bytes=subset_bytes,
-            eot_bytes=subset_bytes,
-            guid=None,
-            root_string="Stub",
-            style_kind="regular",
-            style_flags={"bold": False, "italic": False, "style_kind": "regular"},
-        ),
-    )
-    monkeypatch.setattr("svg2ooxml.services.fonts.embedding.TTFont", lambda *args, **kwargs: _StubFont())
-    class _StubOptions:
-        def __init__(self) -> None:
-            self.hinting = True
-            self.desubroutinize = False
-            self.legacy_kern = True
-
-    class _StubSubsetter:
-        def __init__(self, options=None) -> None:  # pragma: no cover - trivial stub
-            self.options = options
-
-        def populate(self, text=None) -> None:  # pragma: no cover - trivial stub
-            self.text = text
-
-        def subset(self, font=None) -> None:  # pragma: no cover - trivial stub
-            self.font = font
-
-    monkeypatch.setattr(
-        "svg2ooxml.services.fonts.embedding.fonttools_subset",
-        type("StubSubsetModule", (), {"Options": _StubOptions, "Subsetter": _StubSubsetter}),
-    )
 
     result_a = engine.subset_font(request)
     result_b = engine.subset_font(request)
 
     assert result_a is not None
     assert result_b is result_a
-    assert result_a.bytes_written == 6
+    assert result_a.bytes_written > 0
     assert engine.stats()["subset_success"] == 1
     assert engine.stats()["subset_cache_hits"] == 1
 
