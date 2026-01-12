@@ -10,7 +10,7 @@ __all__ = [
 ]
 
 # map symbol -> relative module
-_symbol_map = {'collect_resvg_mask_info': 'resvg_clip_mask', 'collect_resvg_clip_definitions': 'resvg_clip_mask'}
+_symbol_map = {'collect_resvg_clip_definitions': 'resvg_clip_mask', 'collect_resvg_mask_info': 'resvg_clip_mask'}
 _module_map = {'resvg_clip_mask': 'resvg_clip_mask'}
 
 

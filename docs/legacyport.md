@@ -27,8 +27,8 @@
   target the modern helpers.
 
 ### 2. UVBTC mapper extraction
-- ✅ `svg2ooxml.map.mapper` now forwards directly to `core.pipeline.mappers` and `core.traversal.clip_geometry`, and the legacy mapper package has been removed.
-- **Replace** any remaining `svg2ooxml.map` imports in downstream tools with the structured modules.
+- ✅ `svg2ooxml.map` compatibility shims are removed; callers should import from `core.pipeline.mappers` and `core.traversal`.
+- ✅ Replace any remaining `svg2ooxml.map` imports in downstream tools with the structured modules (or `svg2ooxml.public` for high-level entrypoints).
 - **Document** the new mapper surface so external callers understand the supported entry points.
 
 ### 3. Pipeline API surface

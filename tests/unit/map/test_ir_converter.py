@@ -77,12 +77,6 @@ def _register_filter(parse_result: ParseResult, filter_markup: str) -> None:
     parse_result.filters = filters  # type: ignore[assignment]
 
 
-def test_legacy_core_module_exposes_ir_converter() -> None:
-    from svg2ooxml.map.converter.core import IRConverter as LegacyIRConverter
-
-    assert LegacyIRConverter is IRConverter
-
-
 def test_convert_rect_produces_rectangle() -> None:
     parse_result = _build_parse_result(
         "<svg width='200' height='200' xmlns='http://www.w3.org/2000/svg'>"

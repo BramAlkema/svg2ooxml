@@ -10,7 +10,7 @@ __all__ = [
 ]
 
 # map symbol -> relative module
-_symbol_map = {'ParserServices': 'services', 'build_parser_services': 'services'}
+_symbol_map = {'build_parser_services': 'services', 'ParserServices': 'services'}
 _module_map = {'services': 'services'}
 
 

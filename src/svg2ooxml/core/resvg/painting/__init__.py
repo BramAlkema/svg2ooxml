@@ -24,7 +24,7 @@ __all__ = [
 ]
 
 # map symbol -> relative module
-_symbol_map = {'parse_rgb': 'colors', 'RadialGradient': 'gradients', 'LinearGradient': 'gradients', 'PatternPaint': 'gradients', 'GradientStop': 'gradients', 'PaintReference': 'paint', 'TextStyle': 'paint', 'StrokeStyle': 'paint', 'parse_color': 'paint', 'resolve_fill': 'paint', 'resolve_stroke': 'paint', 'FillStyle': 'paint', 'resolve_text_style': 'paint', 'Color': 'paint'}
+_symbol_map = {'parse_rgb': 'colors', 'RadialGradient': 'gradients', 'GradientStop': 'gradients', 'LinearGradient': 'gradients', 'PatternPaint': 'gradients', 'StrokeStyle': 'paint', 'resolve_fill': 'paint', 'resolve_text_style': 'paint', 'FillStyle': 'paint', 'PaintReference': 'paint', 'TextStyle': 'paint', 'Color': 'paint', 'resolve_stroke': 'paint', 'parse_color': 'paint'}
 _module_map = {'colors': 'colors', 'gradients': 'gradients', 'paint': 'paint'}
 
 

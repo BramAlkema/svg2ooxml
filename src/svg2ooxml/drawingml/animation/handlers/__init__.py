@@ -22,7 +22,7 @@ __all__ = [
 ]
 
 # map symbol -> relative module
-_symbol_map = {'AnimationHandler': 'base', 'AnimationDefinition': 'base', 'ColorAnimationHandler': 'color', 'MotionAnimationHandler': 'motion', 'NumericAnimationHandler': 'numeric', 'OpacityAnimationHandler': 'opacity', 'SetAnimationHandler': 'set', 'TransformAnimationHandler': 'transform'}
+_symbol_map = {'AnimationDefinition': 'base', 'AnimationHandler': 'base', 'ColorAnimationHandler': 'color', 'MotionAnimationHandler': 'motion', 'NumericAnimationHandler': 'numeric', 'OpacityAnimationHandler': 'opacity', 'SetAnimationHandler': 'set', 'TransformAnimationHandler': 'transform'}
 _module_map = {'base': 'base', 'color': 'color', 'motion': 'motion', 'numeric': 'numeric', 'opacity': 'opacity', 'set': 'set', 'transform': 'transform'}
 
 

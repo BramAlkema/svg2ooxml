@@ -22,7 +22,7 @@ __all__ = [
 ]
 
 # map symbol -> relative module
-_symbol_map = {'decompose_matrix': 'decompose', 'DecomposedTransform': 'decompose', 'compose_matrix': 'decompose', 'scale': 'matrix', 'matrix': 'matrix', 'rotate': 'matrix', 'translate': 'matrix', 'skew_x': 'matrix', 'skew_y': 'matrix', 'parse_transform': 'parser', 'CoordinateSpace': 'space'}
+_symbol_map = {'compose_matrix': 'decompose', 'decompose_matrix': 'decompose', 'DecomposedTransform': 'decompose', 'translate': 'matrix', 'scale': 'matrix', 'skew_x': 'matrix', 'matrix': 'matrix', 'skew_y': 'matrix', 'rotate': 'matrix', 'parse_transform': 'parser', 'CoordinateSpace': 'space'}
 _module_map = {'decompose': 'decompose', 'matrix': 'matrix', 'parser': 'parser', 'space': 'space'}
 
 

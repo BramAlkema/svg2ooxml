@@ -10,7 +10,7 @@ __all__ = [
 ]
 
 # map symbol -> relative module
-_symbol_map = {'MaskProcessor': 'processor', 'MaskProcessingResult': 'processor'}
+_symbol_map = {'MaskProcessingResult': 'processor', 'MaskProcessor': 'processor'}
 _module_map = {'processor': 'processor'}
 
 
