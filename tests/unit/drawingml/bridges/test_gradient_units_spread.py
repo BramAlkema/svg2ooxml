@@ -207,9 +207,9 @@ class TestRadialGradientUnitsSpread:
         # Transform should be baked in (set to None)
         assert paint.transform is None
 
-    def test_severe_transform_solid_fallback(self):
-        """Test that severe transforms return SolidPaint but would have preserved units/spread."""
-        from svg2ooxml.ir.paint import SolidPaint
+    def test_severe_transform_raster_fallback_preserves_metadata(self):
+        """Test that severe transforms request raster fallback and keep units/spread."""
+        from svg2ooxml.ir.paint import RadialGradientPaint
 
         stops = [
             GradientStop(offset=0.0, color=Color(r=255, g=0, b=0, a=1.0)),
@@ -230,10 +230,11 @@ class TestRadialGradientUnitsSpread:
 
         paint = radial_gradient_to_paint(gradient)
 
-        # Phase 3: Severe transforms return SolidPaint fallback
-        assert isinstance(paint, SolidPaint)
-        # Note: units/spread are not preserved in solid fallback
-        # This is expected behavior - solid color doesn't need gradient metadata
+        assert isinstance(paint, RadialGradientPaint)
+        assert paint.policy_decision == "rasterize_nonuniform"
+        assert paint.gradient_units == "userSpaceOnUse"
+        assert paint.spread_method == "pad"
+        assert paint.transform is not None
 
 
 class TestGradientUnitsSpreadCombinations:

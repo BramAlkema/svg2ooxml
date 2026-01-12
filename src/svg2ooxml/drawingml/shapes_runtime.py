@@ -364,9 +364,7 @@ def render_textframe(
     if note_parts:
         logger.debug("Text frame %s policy notes: %s", shape_id, "; ".join(note_parts))
 
-    runs_xml = build_runs_xml(frame.runs or [], register_navigation=register_run_navigation)
-    if not runs_xml:
-        runs_xml = build_runs_xml([Run(text="", font_family="Arial", font_size_pt=12.0)], register_navigation=register_run_navigation)
+    runs_xml = _resolve_runs_xml(frame, register_run_navigation)
 
     body_extra = ""
 
@@ -420,9 +418,7 @@ def render_wordart(
     if note_parts:
         logger.debug("WordArt %s policy notes: %s", shape_id, "; ".join(note_parts))
 
-    runs_xml = build_runs_xml(frame.runs or [], register_navigation=register_run_navigation)
-    if not runs_xml:
-        runs_xml = build_runs_xml([Run(text="", font_family="Arial", font_size_pt=12.0)], register_navigation=register_run_navigation)
+    runs_xml = _resolve_runs_xml(frame, register_run_navigation)
 
     body_extra = "        <a:normAutofit/>\n"
 
@@ -473,6 +469,40 @@ def build_runs_xml(runs: Iterable[Run], register_navigation=None) -> str:
                 fragments.append("<a:br/>")
             fragments.append(run_fragment(run, segment, navigation_handler))
     return "".join(fragments)
+
+
+def _resolve_runs_xml(frame: TextFrame, register_navigation) -> str:
+    resvg_runs = _resvg_runs_xml(frame, register_navigation)
+    if resvg_runs:
+        return resvg_runs
+    runs_xml = build_runs_xml(frame.runs or [], register_navigation=register_navigation)
+    if not runs_xml:
+        runs_xml = build_runs_xml(
+            [Run(text="", font_family="Arial", font_size_pt=12.0)],
+            register_navigation=register_navigation,
+        )
+    return runs_xml
+
+
+def _resvg_runs_xml(frame: TextFrame, register_navigation) -> str:
+    metadata = getattr(frame, "metadata", None)
+    if not isinstance(metadata, dict):
+        return ""
+    resvg_text = metadata.get("resvg_text")
+    if not isinstance(resvg_text, dict):
+        return ""
+    if resvg_text.get("strategy") != "runs":
+        return ""
+    runs_xml = resvg_text.get("runs_xml")
+    if not isinstance(runs_xml, str) or not runs_xml.strip():
+        return ""
+    if register_navigation is not None and _frame_has_navigation(frame):
+        return ""
+    return runs_xml
+
+
+def _frame_has_navigation(frame: TextFrame) -> bool:
+    return any(getattr(run, "navigation", None) is not None for run in frame.runs or [])
 
 
 def run_fragment(run: Run, text_segment: str, navigation_factory) -> str:

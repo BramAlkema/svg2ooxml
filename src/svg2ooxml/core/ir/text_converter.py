@@ -44,6 +44,9 @@ class _FontMetrics:
     cmap: dict[int, str]
     advances: dict[str, int]
     default_advance: float
+    ascender: int
+    descender: int
+    line_gap: int
 
 
 _FONT_METRICS_CACHE: dict[str, _FontMetrics] = {}
@@ -77,6 +80,36 @@ def _load_font_metrics(path: str) -> _FontMetrics | None:
             default_advance = float(sum(advances.values()) / len(advances))
         else:
             default_advance = float(units_per_em) * 0.5
+
+        ascender = None
+        descender = None
+        line_gap = None
+        if "OS/2" in font:
+            os2 = font["OS/2"]
+            ascender = getattr(os2, "sTypoAscender", None)
+            descender = getattr(os2, "sTypoDescender", None)
+            line_gap = getattr(os2, "sTypoLineGap", None)
+            win_ascent = getattr(os2, "usWinAscent", None)
+            win_descent = getattr(os2, "usWinDescent", None)
+            if ascender is None and win_ascent is not None:
+                ascender = int(win_ascent)
+            if descender is None and win_descent is not None:
+                descender = -int(win_descent)
+        if "hhea" in font:
+            hhea = font["hhea"]
+            if ascender is None:
+                ascender = int(getattr(hhea, "ascent", 0))
+            if descender is None:
+                descender = int(getattr(hhea, "descent", 0))
+            if line_gap is None:
+                line_gap = int(getattr(hhea, "lineGap", 0))
+
+        if ascender is None:
+            ascender = int(units_per_em * 0.8)
+        if descender is None:
+            descender = -int(units_per_em * 0.2)
+        if line_gap is None:
+            line_gap = 0
     finally:
         try:
             font.close()
@@ -88,6 +121,9 @@ def _load_font_metrics(path: str) -> _FontMetrics | None:
         cmap=cmap,
         advances=advances,
         default_advance=default_advance,
+        ascender=ascender,
+        descender=descender,
+        line_gap=line_gap,
     )
     _FONT_METRICS_CACHE[path] = metrics
     return metrics
@@ -159,7 +195,13 @@ class TextConverter:
     # Public surface consumed by IRConverter
     # ------------------------------------------------------------------
 
-    def convert(self, *, element: etree._Element, coord_space: CoordinateSpace) -> TextFrame | None:
+    def convert(
+        self,
+        *,
+        element: etree._Element,
+        coord_space: CoordinateSpace,
+        resvg_node: Any | None = None,
+    ) -> TextFrame | None:
         base_style = self._context.style_resolver.compute_text_style(
             element,
             context=self._context.css_context,
@@ -192,6 +234,8 @@ class TextConverter:
         bbox = self._estimate_text_bbox(processed_runs, origin_x, origin_y, font_service=font_service)
 
         metadata: dict[str, Any] = dict(run_metadata)
+        if resvg_node is not None:
+            self._attach_resvg_text_metadata(resvg_node, metadata)
         self._context.attach_policy_metadata(metadata, "text")
         if policy_meta_accum:
             policy_meta = metadata.setdefault("policy", {}).setdefault("text", {})
@@ -378,6 +422,45 @@ class TextConverter:
             and first.rgb == second.rgb
         )
 
+    def _attach_resvg_text_metadata(self, resvg_node: Any, metadata: dict[str, Any]) -> None:
+        if not hasattr(resvg_node, "text_content"):
+            return
+        try:
+            from svg2ooxml.core.resvg.text.layout_analyzer import TextLayoutAnalyzer
+            from svg2ooxml.core.resvg.text.drawingml_generator import DrawingMLTextGenerator
+        except Exception:
+            return
+
+        resvg_meta: dict[str, Any] = metadata.setdefault("resvg_text", {})
+        analysis = TextLayoutAnalyzer().analyze(resvg_node)
+        resvg_meta["complexity"] = analysis.complexity
+        if analysis.details:
+            resvg_meta["details"] = analysis.details
+        resvg_meta["is_plain"] = analysis.is_plain
+
+        if metadata.get("text_path_id"):
+            resvg_meta["strategy"] = "text_path"
+            return
+        if not analysis.is_plain:
+            resvg_meta["strategy"] = "emf"
+            return
+
+        generator = DrawingMLTextGenerator(
+            font_service=self._context.services.resolve("font"),
+            embedding_engine=self._context.services.resolve("font_embedding"),
+        )
+        try:
+            runs_xml = generator.generate_runs_xml(resvg_node)
+        except Exception:
+            resvg_meta["strategy"] = "error"
+            return
+
+        if runs_xml:
+            resvg_meta["strategy"] = "runs"
+            resvg_meta["runs_xml"] = runs_xml
+        else:
+            resvg_meta["strategy"] = "empty"
+
     @staticmethod
     def _estimate_text_bbox(
         runs: list[Run],
@@ -409,6 +492,9 @@ class TextConverter:
         max_width = 0.0
         current_width = 0.0
         line_count = 1
+        max_ascent_px = 0.0
+        max_descent_px = 0.0
+        max_gap_px = 0.0
         for run in runs:
             text = (run.text or "").replace("\r\n", "\n").replace("\r", "\n")
             if not text:
@@ -421,18 +507,32 @@ class TextConverter:
                     line_count += 1
                 if part:
                     current_width += _estimate_run_width(part, run, font_service)
+            metrics = _resolve_font_metrics(font_service, run)
+            if metrics is not None:
+                font_px = run.font_size_pt * (96.0 / 72.0)
+                scale = font_px / metrics.units_per_em
+                ascender_px = max(0.0, metrics.ascender * scale)
+                descender_px = max(0.0, -metrics.descender * scale)
+                gap_px = max(0.0, metrics.line_gap * scale)
+                max_ascent_px = max(max_ascent_px, ascender_px)
+                max_descent_px = max(max_descent_px, descender_px)
+                max_gap_px = max(max_gap_px, gap_px)
         max_width = max(max_width, current_width)
 
-        # Height: Use proper line height calculation
-        # Line height = font size + leading (extra space between lines)
-        # Standard line height is 1.2-1.5x font size
-        # We use 1.5x to ensure text doesn't clip
-        line_height = max_font_px * 1.5
-        height = line_height * max(1, line_count)
+        metrics_found = max_ascent_px > 0.0 or max_descent_px > 0.0
+        if metrics_found:
+            line_height = max_ascent_px + max_descent_px + max_gap_px
+            min_line_height = max_font_px * 1.2
+            if line_height < min_line_height:
+                line_height = min_line_height
+            y_offset = max_ascent_px if max_ascent_px > 0.0 else max_font_px * 0.8
+        else:
+            # Line height = font size + leading (extra space between lines)
+            # Use 1.5x to avoid clipping when metrics are unavailable.
+            line_height = max_font_px * 1.5
+            y_offset = max_font_px * 0.8
 
-        # Origin offset: Position top of bbox above the baseline
-        # Typical font ascent is ~0.75-0.8 of font size
-        y_offset = max_font_px * 0.8
+        height = line_height * max(1, line_count)
 
         return Rect(origin_x, origin_y - y_offset, max_width, height)
 

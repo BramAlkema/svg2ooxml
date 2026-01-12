@@ -23,7 +23,7 @@ from svg2ooxml.common.units.scalars import EMU_PER_POINT
 from svg2ooxml.color.models import Color as CentralizedColor
 
 # Import centralized XML builders for safe DrawingML generation
-from svg2ooxml.drawingml.xml_builder import p_elem, a_sub, to_string
+from svg2ooxml.drawingml.xml_builder import a_elem, p_elem, a_sub, to_string
 from lxml import etree  # For type annotations
 
 if TYPE_CHECKING:
@@ -227,6 +227,16 @@ class DrawingMLTextGenerator:
 
         # Serialize to string with namespace prefixes
         return to_string(txBody)
+
+    def generate_runs_xml(self, node: TextNode) -> str:
+        """Generate <a:r>/<a:br> XML for a text node.
+
+        This helper returns only the run fragments that belong inside the
+        paragraph, suitable for plugging into existing text templates.
+        """
+        paragraph = a_elem("p")
+        self._generate_runs_into_parent(node, paragraph)
+        return "".join(to_string(child) for child in paragraph)
 
     def _generate_runs_into_parent(self, node: TextNode, parent: etree._Element) -> None:
         """Generate text run elements and append to parent paragraph.

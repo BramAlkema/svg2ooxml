@@ -8,12 +8,11 @@ can then be converted to DrawingML using paint_runtime.py.
 ⚠️  **IMPORTANT**: Transform matrices are APPLIED (baked into coordinates) by this adapter!
 The IR transform field is set to None since coordinates are already transformed.
 
-❌ **KNOWN LIMITATION**: Radial gradients with non-uniform scale/skew transforms will render
-incorrectly because:
+⚠️ **KNOWN LIMITATION**: Radial gradients with non-uniform scale/skew transforms require
+bitmap fallback for correct output because:
   - Non-uniform scale (e.g., scale(2,1)) turns circles into ellipses
   - DrawingML radial gradients only support circular footprints
-  - Current implementation computes single radius value (circle) not ellipse axes
-  - Result: Stretched/skewed gradients will have wrong shape
+  - Vector output cannot represent ellipses; raster fallback is required
 
 📝 **See docs/tasks/resvg-transform-limitations.md** for:
   - Detailed analysis of non-uniform transform failures
@@ -386,6 +385,8 @@ def radial_gradient_to_paint(gradient: "RadialGradient") -> "RadialGradientPaint
     transform_class = None
     policy_decision = None
     had_transform = gradient.transform is not None
+    use_raw_coordinates = False
+    transform_matrix = None
 
     if had_transform:
         # Classify the transform using SVD analysis
@@ -412,52 +413,38 @@ def radial_gradient_to_paint(gradient: "RadialGradient") -> "RadialGradientPaint
                 gradient.href or "(none)",
             )
         elif policy_decision == "rasterize_nonuniform":
-            # Phase 3: Severe non-uniformity or shear → approximate with solid fill.
+            # Phase 3: Severe non-uniformity or shear → rasterize gradient texture.
             # DrawingML radial gradients cannot represent anisotropic transforms,
-            # so we fall back to an average stop color to avoid distortions.
+            # so keep raw coordinates + transform to support bitmap fallback.
             raster_size = _calculate_raster_size(transform_class.s1, transform_class.s2)
-
-            # Compute average color from gradient stops as a crude approximation.
-            total_r, total_g, total_b, total_a = 0.0, 0.0, 0.0, 0.0
-            for stop in gradient.stops:
-                total_r += stop.color.r
-                total_g += stop.color.g
-                total_b += stop.color.b
-                total_a += stop.color.a
-            count = len(gradient.stops)
-            avg_r = int(total_r / count)
-            avg_g = int(total_g / count)
-            avg_b = int(total_b / count)
-            avg_opacity = total_a / count
-
-            avg_rgb = f"{avg_r:02X}{avg_g:02X}{avg_b:02X}"
             reason = "shear" if transform_class.has_shear else f"non-uniform scale (ratio={transform_class.ratio:.3f})"
             logger.info(
                 "Radial gradient has %s: "
-                "solid color fallback (avg of %d stops). "
+                "raster fallback requested. "
                 "Transform: [[%.3f, %.3f], [%.3f, %.3f]], "
                 "Singular values: s1=%.3f, s2=%.3f, "
                 "Raster size would be: %dpx, "
                 "Gradient ID: %s",
                 reason,
-                count,
                 gradient.transform.a, gradient.transform.c,
                 gradient.transform.b, gradient.transform.d,
                 transform_class.s1, transform_class.s2,
                 raster_size,
                 gradient.href or "(none)",
             )
-
-            from svg2ooxml.ir.paint import SolidPaint
-            return SolidPaint(rgb=avg_rgb, opacity=avg_opacity)
+            use_raw_coordinates = True
+            transform_matrix = _matrix_to_numpy(gradient.transform)
 
     # Apply transform to gradient coordinates (if present)
     # This bakes the transform into the coordinates, so paint_runtime doesn't need to handle it
-    center = _apply_matrix_to_point(gradient.cx, gradient.cy, gradient.transform)
+    if use_raw_coordinates:
+        center = (gradient.cx, gradient.cy)
+    else:
+        center = _apply_matrix_to_point(gradient.cx, gradient.cy, gradient.transform)
 
     # Transform radius by applying transform to a point at (cx + r, cy) and measuring distance
     import math
-    if gradient.transform is not None:
+    if gradient.transform is not None and not use_raw_coordinates:
         # Transform a point on the circle's edge
         edge_point = _apply_matrix_to_point(gradient.cx + gradient.r, gradient.cy, gradient.transform)
         # Calculate new radius as distance from transformed center to transformed edge
@@ -470,7 +457,10 @@ def radial_gradient_to_paint(gradient: "RadialGradient") -> "RadialGradientPaint
     # Use focal point if different from center, otherwise None
     focal_point = None
     if abs(gradient.fx - gradient.cx) > 1e-6 or abs(gradient.fy - gradient.cy) > 1e-6:
-        focal_point = _apply_matrix_to_point(gradient.fx, gradient.fy, gradient.transform)
+        if use_raw_coordinates:
+            focal_point = (gradient.fx, gradient.fy)
+        else:
+            focal_point = _apply_matrix_to_point(gradient.fx, gradient.fy, gradient.transform)
 
     # Normalize gradient ID (None if empty/missing)
     grad_id = gradient.href if gradient.href and gradient.href.strip() else None
@@ -480,7 +470,7 @@ def radial_gradient_to_paint(gradient: "RadialGradient") -> "RadialGradientPaint
         center=center,
         radius=radius,
         focal_point=focal_point,
-        transform=None,  # Transform already applied to coordinates
+        transform=transform_matrix,  # Used by raster fallback for non-uniform transforms
         gradient_id=grad_id,
         # Phase 1: Telemetry fields
         gradient_transform=gradient.transform,  # Preserve original for telemetry
