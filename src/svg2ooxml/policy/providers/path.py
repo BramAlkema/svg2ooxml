@@ -30,6 +30,8 @@ class PathPolicyProvider(PolicyProvider):
             "min_dash_segment_pct": 0.01,
             "force_emf": False,
             "force_bitmap": False,
+            "allow_emf_fallback": True,
+            "allow_bitmap_fallback": True,
             "conservative_clipping": False,
         },
         "balanced": {
@@ -49,6 +51,8 @@ class PathPolicyProvider(PolicyProvider):
             "min_dash_segment_pct": 0.01,
             "force_emf": False,
             "force_bitmap": False,
+            "allow_emf_fallback": True,
+            "allow_bitmap_fallback": True,
             "conservative_clipping": False,
         },
         "low": {
@@ -68,6 +72,8 @@ class PathPolicyProvider(PolicyProvider):
             "min_dash_segment_pct": 0.015,
             "force_emf": False,
             "force_bitmap": False,
+            "allow_emf_fallback": True,
+            "allow_bitmap_fallback": True,
             "conservative_clipping": True,
         },
         "compatibility": {
@@ -87,6 +93,8 @@ class PathPolicyProvider(PolicyProvider):
             "min_dash_segment_pct": 0.02,
             "force_emf": False,
             "force_bitmap": False,
+            "allow_emf_fallback": True,
+            "allow_bitmap_fallback": True,
             "conservative_clipping": True,
         },
     }
@@ -135,7 +143,7 @@ class PathPolicyProvider(PolicyProvider):
             "quality": quality,
         }
         for key, value in payload.items():
-            if key in {"simplify_paths", "force_emf", "force_bitmap", "conservative_clipping", "prefer_dash_presets", "allow_custom_dash", "respect_dashoffset"}:
+            if key in {"simplify_paths", "force_emf", "force_bitmap", "allow_emf_fallback", "allow_bitmap_fallback", "conservative_clipping", "prefer_dash_presets", "allow_custom_dash", "respect_dashoffset"}:
                 result[key] = bool(value)
             elif key in {"max_segments", "max_dash_segments", "max_bitmap_side"}:
                 result[key] = self._coerce_int(value)

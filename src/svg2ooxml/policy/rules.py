@@ -125,6 +125,8 @@ _BASE_GEOMETRY: dict[str, Any] = {
     "min_dash_segment_pct": _BASE_THRESHOLDS["min_dash_segment_pct"],
     "force_emf": False,
     "force_bitmap": False,
+    "allow_emf_fallback": True,
+    "allow_bitmap_fallback": True,
     "conservative_clipping": False,
 }
 

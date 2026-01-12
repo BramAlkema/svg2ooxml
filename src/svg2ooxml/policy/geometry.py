@@ -33,8 +33,15 @@ def apply_geometry_policy(
     metadata: dict[str, Any] = {}
     mode = FALLBACK_NATIVE
 
-    if policy.get("force_bitmap"):
+    force_bitmap = bool(policy.get("force_bitmap"))
+    force_emf = bool(policy.get("force_emf"))
+    allow_emf = bool(policy.get("allow_emf_fallback", True))
+    allow_bitmap = bool(policy.get("allow_bitmap_fallback", True))
+
+    if force_bitmap:
         mode = FALLBACK_BITMAP
+    elif force_emf:
+        mode = FALLBACK_EMF
 
     max_segments = policy.get("max_segments")
     simplify = bool(policy.get("simplify_paths"))
@@ -65,6 +72,11 @@ def apply_geometry_policy(
             metadata.setdefault("flags", []).append("complexity_exceeded")
             if mode == FALLBACK_NATIVE:
                 mode = FALLBACK_EMF
+
+    if mode == FALLBACK_EMF and not allow_emf and not force_emf:
+        mode = FALLBACK_NATIVE
+    if mode == FALLBACK_BITMAP and not allow_bitmap and not force_bitmap:
+        mode = FALLBACK_NATIVE
 
     metadata["render_mode"] = mode
     return current, metadata, mode

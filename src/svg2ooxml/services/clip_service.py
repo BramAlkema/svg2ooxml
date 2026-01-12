@@ -161,7 +161,34 @@ class StructuredClipService:
             policy = getattr(analysis, "policy", None)
             if isinstance(policy, dict) and "fallback_order" in policy:
                 return tuple(str(item).lower() for item in policy["fallback_order"] if item)
+        policy_order = self._policy_fallback_order()
+        if policy_order:
+            return policy_order
         return ("native", "mimic", "emf", "raster")
+
+    def _policy_fallback_order(self) -> tuple[str, ...] | None:
+        services = self._services
+        if services is None:
+            return None
+        context = getattr(services, "policy_context", None)
+        if context is None and hasattr(services, "resolve"):
+            context = services.resolve("policy_context")
+        if context is None:
+            return None
+        policy = None
+        if hasattr(context, "get"):
+            policy = context.get("clip")
+        if policy is None:
+            selections = getattr(context, "selections", {}) or {}
+            policy = selections.get("clip")
+        if not isinstance(policy, dict):
+            return None
+        order = policy.get("fallback_order")
+        if isinstance(order, str):
+            return tuple(part.strip().lower() for part in order.split(",") if part.strip())
+        if isinstance(order, (list, tuple)):
+            return tuple(str(item).lower() for item in order if item)
+        return None
 
     def _attempt_native(self, clip_ref: ClipRef, analysis: ClipAnalysis | Any | None) -> ClipComputeResult | None:
         result = compute_clip_geometry(clip_ref)

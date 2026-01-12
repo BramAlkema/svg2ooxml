@@ -104,6 +104,98 @@ def derive_variants_from_trace(
     return variants
 
 
+def build_fidelity_tier_variants() -> List[FallbackVariant]:
+    """Return tiered slide variants covering direct, mimic, EMF, and bitmap output."""
+
+    base_vector_overrides = {
+        "geometry": {
+            "allow_emf_fallback": False,
+            "allow_bitmap_fallback": False,
+            "simplify_paths": False,
+        },
+        "filter": {"strategy": "native"},
+        "mask": {
+            "allow_vector_mask": True,
+            "force_emf": False,
+            "force_raster": False,
+        },
+        "clip": {},
+    }
+
+    tiers = [
+        (
+            "direct",
+            " (Direct)",
+            {
+                **base_vector_overrides,
+                "mask": {**base_vector_overrides["mask"], "fallback_order": ("native",)},
+                "clip": {"fallback_order": ("native",)},
+            },
+        ),
+        (
+            "mimic",
+            " (Mimic)",
+            {
+                **base_vector_overrides,
+                "geometry": {
+                    **base_vector_overrides["geometry"],
+                    "simplify_paths": True,
+                },
+                "mask": {**base_vector_overrides["mask"], "fallback_order": ("native", "mimic")},
+                "clip": {"fallback_order": ("native", "mimic")},
+            },
+        ),
+        (
+            "emf",
+            " (EMF)",
+            {
+                "geometry": {
+                    "allow_emf_fallback": True,
+                    "allow_bitmap_fallback": False,
+                },
+                "filter": {"strategy": "emf"},
+                "mask": {
+                    "allow_vector_mask": True,
+                    "force_emf": False,
+                    "force_raster": False,
+                    "fallback_order": ("native", "mimic", "emf"),
+                },
+                "clip": {"fallback_order": ("native", "mimic", "emf")},
+            },
+        ),
+        (
+            "bitmap",
+            " (Bitmap)",
+            {
+                "geometry": {
+                    "allow_emf_fallback": True,
+                    "allow_bitmap_fallback": True,
+                },
+                "filter": {"strategy": "raster"},
+                "mask": {
+                    "allow_vector_mask": True,
+                    "force_emf": False,
+                    "force_raster": False,
+                    "fallback_order": ("native", "mimic", "emf", "raster"),
+                },
+                "clip": {"fallback_order": ("native", "mimic", "emf", "raster")},
+            },
+        ),
+    ]
+
+    variants: list[FallbackVariant] = []
+    for name, suffix, overrides in tiers:
+        variants.append(
+            FallbackVariant(
+                name=name,
+                policy_overrides=overrides,
+                title_suffix=suffix,
+            )
+        )
+
+    return variants
+
+
 def expand_page_with_variants(
     page: "SvgPageSource",
     variants: Sequence[FallbackVariant],
@@ -136,4 +228,9 @@ def expand_page_with_variants(
     return clones
 
 
-__all__ = ["FallbackVariant", "derive_variants_from_trace", "expand_page_with_variants"]
+__all__ = [
+    "FallbackVariant",
+    "build_fidelity_tier_variants",
+    "derive_variants_from_trace",
+    "expand_page_with_variants",
+]
