@@ -61,14 +61,17 @@ class _PackagedMedia:
 
 
 @dataclass
-class _SlideEntry:
+class SlideAssembly:
     index: int
     filename: str
     rel_id: str
     slide_id: int
+    slide_xml: str
+    slide_size: tuple[int, int]
     media: list[_PackagedMedia]
     navigation: list[NavigationAsset] = field(default_factory=list)
     masks: list[_MaskAsset] = field(default_factory=list)
+    font_assets: list[FontAsset] = field(default_factory=list)
 
 
 @dataclass
@@ -108,7 +111,7 @@ class _MaskAsset:
         return path.as_posix()
 
 
-class _PackagingContext:
+class PackagingContext:
     """Assign unique identifiers and filenames while packaging."""
 
     def __init__(self) -> None:
@@ -161,6 +164,58 @@ class _PackagingContext:
         return mapping.get(content_type, ".bin")
 
 
+class SlideAssembler:
+    """Build slide-level packaging metadata from DrawingML render results."""
+
+    def __init__(self, context: PackagingContext) -> None:
+        self._context = context
+
+    def assemble(self, render_results: Sequence[DrawingMLRenderResult]) -> list[SlideAssembly]:
+        slides: list[SlideAssembly] = []
+        for index, result in enumerate(render_results, start=1):
+            rel_id, slide_id = self._context.allocate_slide_entry()
+            slide_filename = f"slide{index}.xml"
+            media_parts: list[_PackagedMedia] = []
+            for asset in result.assets.iter_media():
+                assigned_name = self._context.assign_media_filename(asset, index)
+                media_parts.append(
+                    _PackagedMedia(
+                        relationship_id=asset.relationship_id,
+                        filename=assigned_name,
+                        content_type=asset.content_type,
+                        data=asset.data,
+                    )
+                )
+
+            mask_parts: list[_MaskAsset] = []
+            for mask in result.assets.iter_masks():
+                mask_parts.append(
+                    _MaskAsset(
+                        relationship_id=mask["relationship_id"],
+                        part_name=mask["part_name"],
+                        content_type=mask["content_type"],
+                        data=mask["data"],
+                    )
+                )
+
+            slides.append(
+                SlideAssembly(
+                    index=index,
+                    filename=slide_filename,
+                    rel_id=rel_id,
+                    slide_id=slide_id,
+                    slide_xml=result.slide_xml,
+                    slide_size=result.slide_size,
+                    media=media_parts,
+                    navigation=list(result.assets.iter_navigation()),
+                    masks=mask_parts,
+                    font_assets=list(result.assets.iter_fonts()),
+                )
+            )
+
+        return slides
+
+
 ALLOWED_SLIDE_SIZE_MODES = {"multipage", "same"}
 
 
@@ -175,7 +230,6 @@ class PPTXPackageBuilder:
             self._base_template / "ppt" / "slides" / "_rels" / "slide.xml.rels"
         ).read_text(encoding="utf-8")
         self._writer = DrawingMLWriter(template_dir=self._assets_root)
-        self._tracer: "ConversionTracer | None" = None
         if slide_size_mode is not None and slide_size_mode not in ALLOWED_SLIDE_SIZE_MODES:
             raise ValueError(
                 f"Unsupported slide_size_mode {slide_size_mode!r}. "
@@ -227,18 +281,61 @@ class PPTXPackageBuilder:
         slide_size_mode: str | None = None,
     ) -> Path:
         """Package pre-rendered slides returned by DrawingMLWriter."""
+        if not render_results:
+            raise ValueError("At least one render result is required to build a PPTX package.")
 
+        context = PackagingContext()
+        slide_assemblies = SlideAssembler(context).assemble(render_results)
+        package_writer = PackageWriter(
+            base_template=self._base_template,
+            content_types_template=self._content_types_template,
+            slide_rels_template=self._slide_rels_template,
+            slide_size_mode=self._slide_size_mode,
+        )
+        return package_writer.write_package(
+            slide_assemblies,
+            output_path,
+            tracer=tracer,
+            persist_trace=persist_trace,
+            slide_size_mode=slide_size_mode,
+        )
+
+class PackageWriter:
+    """Write PPTX packages using prepared slide assemblies."""
+
+    def __init__(
+        self,
+        *,
+        base_template: Path,
+        content_types_template: str,
+        slide_rels_template: str,
+        slide_size_mode: str | None = None,
+    ) -> None:
+        self._base_template = base_template
+        self._content_types_template = content_types_template
+        self._slide_rels_template = slide_rels_template
+        self._slide_size_mode = slide_size_mode
+        self._tracer: "ConversionTracer | None" = None
+
+    def write_package(
+        self,
+        slides: Sequence[SlideAssembly],
+        output_path: str | Path,
+        *,
+        tracer: "ConversionTracer | None" = None,
+        persist_trace: bool | None = None,
+        slide_size_mode: str | None = None,
+    ) -> Path:
+        """Package prepared slide assemblies into a PPTX file."""
         prev_tracer = self._tracer
         self._tracer = tracer
         should_persist_trace = (tracer is not None) if persist_trace is None else (bool(persist_trace) and tracer is not None)
 
-        if not render_results:
-            raise ValueError("At least one render result is required to build a PPTX package.")
+        if not slides:
+            raise ValueError("At least one slide assembly is required to build a PPTX package.")
 
         output = Path(output_path)
         output.parent.mkdir(parents=True, exist_ok=True)
-
-        context = _PackagingContext()
 
         try:
             with temporary_directory(prefix="svg2ooxml_pptx_") as temp_path:
@@ -246,7 +343,7 @@ class PPTXPackageBuilder:
                 self._ensure_theme_extension(temp_path)
                 self._trace_packaging(
                     "packaging_start",
-                    metadata={"slide_count": len(render_results)},
+                    metadata={"slide_count": len(slides)},
                 )
 
                 slides_dir = temp_path / "ppt" / "slides"
@@ -258,101 +355,74 @@ class PPTXPackageBuilder:
                 if template_slide_rels.exists():
                     template_slide_rels.unlink()
 
-                slide_entries: list[_SlideEntry] = []
                 all_media: list[_PackagedMedia] = []
                 font_assets: list[FontAsset] = []
                 all_masks: list[_MaskAsset] = []
+                packaged_fonts: list[_PackagedFont] = []
 
-                for index, result in enumerate(render_results, start=1):
-                    rel_id, slide_id = context.allocate_slide_entry()
-                    slide_filename = f"slide{index}.xml"
-                    (slides_dir / slide_filename).write_text(result.slide_xml, encoding="utf-8")
+                for slide in slides:
+                    (slides_dir / slide.filename).write_text(slide.slide_xml, encoding="utf-8")
                     self._trace_packaging(
                         "slide_xml_written",
-                    metadata={"filename": slide_filename, "index": index},
-                )
+                        metadata={"filename": slide.filename, "index": slide.index},
+                    )
 
-                    media_parts: list[_PackagedMedia] = []
-                    mask_parts: list[_MaskAsset] = []
-                    navigation_assets = list(result.assets.iter_navigation())
-                    for asset in result.assets.iter_media():
-                        assigned_name = context.assign_media_filename(asset, index)
-                        media_parts.append(
-                            _PackagedMedia(
-                                relationship_id=asset.relationship_id,
-                                filename=assigned_name,
-                                content_type=asset.content_type,
-                                data=asset.data,
-                            )
-                        )
+                    for part in slide.media:
                         self._trace_packaging(
                             "media_enqueued",
                             metadata={
-                                "relationship_id": asset.relationship_id,
-                                "filename": assigned_name,
-                                "content_type": asset.content_type,
+                                "relationship_id": part.relationship_id,
+                                "filename": part.filename,
+                                "content_type": part.content_type,
                             },
                         )
-                    mask_snapshot = list(result.assets.iter_masks())
-                    for mask in mask_snapshot:
-                        mask_parts.append(
-                            _MaskAsset(
-                                relationship_id=mask["relationship_id"],
-                                part_name=mask["part_name"],
-                                content_type=mask["content_type"],
-                                data=mask["data"],
-                            )
-                        )
+
+                    for mask in slide.masks:
                         self._trace_packaging(
                             "mask_enqueued",
                             metadata={
-                                "relationship_id": mask["relationship_id"],
-                                "part_name": mask["part_name"],
+                                "relationship_id": mask.relationship_id,
+                                "part_name": mask.part_name,
                             },
                         )
-                    self._write_slide_relationships(slides_dir, index, media_parts, navigation_assets, mask_parts)
+
+                    self._write_slide_relationships(
+                        slides_dir,
+                        slide.index,
+                        slide.media,
+                        slide.navigation,
+                        slide.masks,
+                    )
                     self._trace_packaging(
                         "slide_relationships_updated",
-                        metadata={"index": index, "media_count": len(media_parts), "mask_count": len(mask_parts)},
+                        metadata={"index": slide.index, "media_count": len(slide.media), "mask_count": len(slide.masks)},
                     )
 
-                    slide_entries.append(
-                        _SlideEntry(
-                            index=index,
-                            filename=slide_filename,
-                            rel_id=rel_id,
-                            slide_id=slide_id,
-                            media=media_parts,
-                            masks=mask_parts,
-                            navigation=navigation_assets,
-                        )
-                    )
-
-                    all_media.extend(media_parts)
-                    font_assets.extend(result.assets.iter_fonts())
-                    all_masks.extend(mask_parts)
+                    all_media.extend(slide.media)
+                    font_assets.extend(slide.font_assets)
+                    all_masks.extend(slide.masks)
 
                     self._write_media_parts(temp_path, all_media)
                     self._write_mask_parts(temp_path, all_masks)
                     packaged_fonts = self._write_font_parts(temp_path, font_assets)
 
                 presentation_slide_size = self._select_slide_size(
-                    render_results,
+                    slides,
                     slide_size_mode=slide_size_mode,
                 )
 
-                self._update_presentation_parts(temp_path, slide_entries, packaged_fonts, presentation_slide_size)
+                self._update_presentation_parts(temp_path, slides, packaged_fonts, presentation_slide_size)
                 self._write_required_presentation_parts(temp_path)
-                self._write_content_types(temp_path, slide_entries, all_media, packaged_fonts, all_masks)
+                self._write_content_types(temp_path, slides, all_media, packaged_fonts, all_masks)
                 self._trace_packaging(
-                        "content_types_updated",
-                        metadata={
-                            "slide_count": len(slide_entries),
-                            "media_count": len(all_media),
-                            "font_count": len(packaged_fonts),
-                            "mask_count": len(all_masks),
-                        },
-                    )
+                    "content_types_updated",
+                    metadata={
+                        "slide_count": len(slides),
+                        "media_count": len(all_media),
+                        "font_count": len(packaged_fonts),
+                        "mask_count": len(all_masks),
+                    },
+                )
 
                 with zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED) as archive:
                     for file_path in temp_path.rglob("*"):
@@ -618,7 +688,7 @@ class PPTXPackageBuilder:
     def _update_presentation_parts(
         self,
         package_root: Path,
-        slide_entries: Sequence[_SlideEntry],
+        slides: Sequence[SlideAssembly],
         fonts: Sequence[_PackagedFont],
         slide_size: tuple[int, int] | None = None,
     ) -> None:
@@ -650,7 +720,7 @@ class PPTXPackageBuilder:
             for child in list(slide_list):
                 slide_list.remove(child)
 
-        for entry in slide_entries:
+        for entry in slides:
             attrs = {
                 "id": str(entry.slide_id),
                 f"{{{R_DOC_NS}}}id": entry.rel_id,
@@ -708,7 +778,7 @@ class PPTXPackageBuilder:
 
         existing_rel_ids = {rel.get("Id") for rel in rels_root.findall(f"{{{REL_NS}}}Relationship")}
 
-        for entry in slide_entries:
+        for entry in slides:
             if entry.rel_id in existing_rel_ids:
                 continue
             ET.SubElement(
@@ -749,19 +819,19 @@ class PPTXPackageBuilder:
 
     def _select_slide_size(
         self,
-        render_results: Sequence[DrawingMLRenderResult],
+        slides: Sequence[SlideAssembly],
         *,
         slide_size_mode: str | None,
     ) -> tuple[int, int] | None:
-        if not render_results:
+        if not slides:
             return None
 
         mode = self._resolve_slide_size_mode(slide_size_mode)
         if mode == "same":
-            selected = render_results[0].slide_size
+            selected = slides[0].slide_size
         else:
-            widths = [result.slide_size[0] for result in render_results]
-            heights = [result.slide_size[1] for result in render_results]
+            widths = [slide.slide_size[0] for slide in slides]
+            heights = [slide.slide_size[1] for slide in slides]
             max_width = max([DEFAULT_SLIDE_SIZE[0], *widths])
             max_height = max([DEFAULT_SLIDE_SIZE[1], *heights])
             selected = (max_width, max_height)
@@ -772,7 +842,7 @@ class PPTXPackageBuilder:
                 "mode": mode,
                 "width_emu": selected[0],
                 "height_emu": selected[1],
-                "slide_count": len(render_results),
+                "slide_count": len(slides),
             },
         )
         return selected
@@ -899,7 +969,7 @@ class PPTXPackageBuilder:
     def _write_content_types(
         self,
         package_root: Path,
-        slide_entries: Sequence[_SlideEntry],
+        slides: Sequence[SlideAssembly],
         media_parts: Sequence[_PackagedMedia],
         fonts: Sequence[_PackagedFont],
         mask_parts: Sequence[_MaskAsset],
@@ -912,7 +982,7 @@ class PPTXPackageBuilder:
             if part.startswith("/ppt/slides/slide"):
                 root.remove(node)
 
-        for entry in slide_entries:
+        for entry in slides:
             ET.SubElement(
                 root,
                 f"{{{CONTENT_NS}}}Override",
