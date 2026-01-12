@@ -1,7 +1,7 @@
 """Tests for Phase 3: Radial gradient rasterization fallback.
 
-This test suite verifies the solid color fallback for radial gradients with
-severe non-uniform transforms that cannot be accurately rendered as circles.
+This test suite verifies that severe non-uniform transforms retain gradient
+data for bitmap fallback instead of collapsing to a flat solid color.
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ from svg2ooxml.drawingml.bridges.resvg_gradient_adapter import (
     _calculate_raster_size,
     radial_gradient_to_paint,
 )
-from svg2ooxml.ir.paint import SolidPaint, RadialGradientPaint
+from svg2ooxml.ir.paint import RadialGradientPaint
 
 
 class TestRasterSizeCalculation:
@@ -76,11 +76,11 @@ class TestRasterSizeCalculation:
         assert size == 200  # ceil(100.0 * 2.0) = 200
 
 
-class TestSolidColorFallback:
-    """Test solid color fallback for severe non-uniform transforms."""
+class TestRasterFallback:
+    """Test raster fallback metadata for severe non-uniform transforms."""
 
-    def test_severe_non_uniform_scale_returns_solid(self):
-        """Test severe non-uniform scale returns SolidPaint."""
+    def test_severe_non_uniform_scale_requests_raster(self):
+        """Test severe non-uniform scale returns raster-capable gradient."""
         transform = Matrix(a=2.0, b=0.0, c=0.0, d=1.0, e=0.0, f=0.0)
         stops = [
             GradientStop(offset=0.0, color=Color(r=255, g=0, b=0, a=1.0)),
@@ -99,12 +99,12 @@ class TestSolidColorFallback:
 
         paint = radial_gradient_to_paint(gradient)
 
-        # Should return SolidPaint, not RadialGradientPaint
-        assert isinstance(paint, SolidPaint)
-        assert not isinstance(paint, RadialGradientPaint)
+        assert isinstance(paint, RadialGradientPaint)
+        assert paint.policy_decision == "rasterize_nonuniform"
+        assert paint.transform is not None
 
-    def test_skew_transform_returns_solid(self):
-        """Test skew/shear transform returns SolidPaint."""
+    def test_skew_transform_requests_raster(self):
+        """Test skew/shear transform returns raster-capable gradient."""
         # SkewX(30°): tan(30°) ≈ 0.577
         transform = Matrix(a=1.0, b=0.0, c=0.577, d=1.0, e=0.0, f=0.0)
         stops = [
@@ -124,11 +124,11 @@ class TestSolidColorFallback:
 
         paint = radial_gradient_to_paint(gradient)
 
-        # Should return SolidPaint for shear
-        assert isinstance(paint, SolidPaint)
+        assert isinstance(paint, RadialGradientPaint)
+        assert paint.policy_decision == "rasterize_nonuniform"
 
-    def test_average_color_calculation_two_stops(self):
-        """Test average color calculation with two stops."""
+    def test_raster_fallback_preserves_two_stop_colors(self):
+        """Test raster fallback preserves stop colors/opacity."""
         transform = Matrix(a=3.0, b=0.0, c=0.0, d=1.0, e=0.0, f=0.0)
         stops = [
             GradientStop(offset=0.0, color=Color(r=100, g=200, b=50, a=1.0)),
@@ -147,20 +147,13 @@ class TestSolidColorFallback:
 
         paint = radial_gradient_to_paint(gradient)
 
-        assert isinstance(paint, SolidPaint)
-        # Average: r=(100+200)/2=150, g=(200+100)/2=150, b=(50+150)/2=100
-        # Hex: 150=0x96, 150=0x96, 100=0x64
-        expected_r = int((100 + 200) / 2)  # 150
-        expected_g = int((200 + 100) / 2)  # 150
-        expected_b = int((50 + 150) / 2)   # 100
-        expected_rgb = f"{expected_r:02X}{expected_g:02X}{expected_b:02X}"
-        assert paint.rgb == expected_rgb  # "969664"
+        assert isinstance(paint, RadialGradientPaint)
+        assert paint.policy_decision == "rasterize_nonuniform"
+        assert [stop.rgb for stop in paint.stops] == ["64C832", "C86496"]
+        assert [stop.opacity for stop in paint.stops] == [1.0, pytest.approx(0.8)]
 
-        # Average opacity: (1.0 + 0.8) / 2 = 0.9
-        assert paint.opacity == pytest.approx(0.9)
-
-    def test_average_color_calculation_three_stops(self):
-        """Test average color calculation with three stops."""
+    def test_raster_fallback_preserves_three_stop_colors(self):
+        """Test raster fallback preserves three-stop gradients."""
         transform = Matrix(a=5.0, b=0.0, c=0.0, d=1.0, e=0.0, f=0.0)
         stops = [
             GradientStop(offset=0.0, color=Color(r=0, g=0, b=0, a=1.0)),
@@ -180,19 +173,13 @@ class TestSolidColorFallback:
 
         paint = radial_gradient_to_paint(gradient)
 
-        assert isinstance(paint, SolidPaint)
-        # Average: r=(0+150+255)/3=135, g=(0+150+255)/3=135, b=(0+150+255)/3=135
-        expected_r = int((0 + 150 + 255) / 3)  # 135
-        expected_g = int((0 + 150 + 255) / 3)  # 135
-        expected_b = int((0 + 150 + 255) / 3)  # 135
-        expected_rgb = f"{expected_r:02X}{expected_g:02X}{expected_b:02X}"
-        assert paint.rgb == expected_rgb  # "878787"
+        assert isinstance(paint, RadialGradientPaint)
+        assert paint.policy_decision == "rasterize_nonuniform"
+        assert [stop.rgb for stop in paint.stops] == ["000000", "969696", "FFFFFF"]
+        assert [stop.opacity for stop in paint.stops] == [1.0, pytest.approx(0.5), pytest.approx(0.0)]
 
-        # Average opacity: (1.0 + 0.5 + 0.0) / 3 = 0.5
-        assert paint.opacity == pytest.approx(0.5)
-
-    def test_uniform_scale_does_not_return_solid(self):
-        """Test uniform scale does NOT return SolidPaint (returns RadialGradientPaint)."""
+    def test_uniform_scale_does_not_request_raster(self):
+        """Test uniform scale returns radial gradient without raster fallback."""
         transform = Matrix(a=2.0, b=0.0, c=0.0, d=2.0, e=0.0, f=0.0)
         stops = [
             GradientStop(offset=0.0, color=Color(r=255, g=0, b=0, a=1.0)),
@@ -213,10 +200,10 @@ class TestSolidColorFallback:
 
         # Should return RadialGradientPaint for uniform scale
         assert isinstance(paint, RadialGradientPaint)
-        assert not isinstance(paint, SolidPaint)
+        assert paint.policy_decision == "vector_ok"
 
-    def test_mild_anisotropy_does_not_return_solid(self):
-        """Test mild anisotropy does NOT return SolidPaint."""
+    def test_mild_anisotropy_keeps_vector_warning(self):
+        """Test mild anisotropy returns radial gradient with warning policy."""
         transform = Matrix(a=1.015, b=0.0, c=0.0, d=1.0, e=0.0, f=0.0)
         stops = [
             GradientStop(offset=0.0, color=Color(r=255, g=0, b=0, a=1.0)),
@@ -239,8 +226,8 @@ class TestSolidColorFallback:
         assert isinstance(paint, RadialGradientPaint)
         assert paint.policy_decision == "vector_warn_mild_anisotropy"
 
-    def test_no_transform_does_not_return_solid(self):
-        """Test no transform does NOT return SolidPaint."""
+    def test_no_transform_keeps_vector_gradient(self):
+        """Test no transform returns a native radial gradient."""
         stops = [
             GradientStop(offset=0.0, color=Color(r=255, g=0, b=0, a=1.0)),
             GradientStop(offset=1.0, color=Color(r=0, g=0, b=255, a=1.0)),
@@ -293,8 +280,8 @@ class TestLoggingOutputPhase3:
         assert any("Raster size would be:" in record.message for record in caplog.records)
         assert any("200px" in record.message for record in caplog.records)  # ceil(100 * 2.0) = 200
 
-    def test_severe_anisotropy_mentions_solid_color_fallback(self, caplog):
-        """Test that severe anisotropy log mentions solid color fallback."""
+    def test_severe_anisotropy_mentions_raster_fallback(self, caplog):
+        """Test that severe anisotropy log mentions raster fallback."""
         import logging
         caplog.set_level(logging.INFO)
 
@@ -316,9 +303,8 @@ class TestLoggingOutputPhase3:
 
         radial_gradient_to_paint(gradient)
 
-        # Check that log mentions solid color fallback
-        assert any("solid color fallback" in record.message for record in caplog.records)
-        assert any("avg of 2 stops" in record.message for record in caplog.records)
+        # Check that log mentions raster fallback
+        assert any("raster fallback requested" in record.message for record in caplog.records)
 
     def test_skew_log_mentions_shear_reason(self, caplog):
         """Test that skew transform log mentions shear as reason."""

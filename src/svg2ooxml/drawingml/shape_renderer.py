@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 import logging
 from typing import Callable
 
 from svg2ooxml.ir.geometry import Point, Rect
+from svg2ooxml.ir.paint import RadialGradientPaint, SolidPaint
 from svg2ooxml.ir.scene import Group, Image, Path as IRPath
 from svg2ooxml.ir.shapes import Circle, Ellipse, Rectangle, Line, Polygon, Polyline
 from svg2ooxml.policy.constants import FALLBACK_BITMAP, FALLBACK_RASTERIZE
@@ -226,13 +228,19 @@ class DrawingMLShapeRenderer:
         clip_path_xml: str,
         mask_xml: str,
     ) -> tuple[str, int] | None:
+        gradient_raster = self._needs_gradient_raster(element)
         if self._rasterizer is None:
+            if gradient_raster:
+                self._apply_gradient_fallback(element, metadata)
             return None
         policy = metadata.setdefault("policy", {}) if isinstance(metadata, dict) else {}
         geometry_policy = policy.setdefault("geometry", {})
         fallback = geometry_policy.get("suggest_fallback")
-        if fallback not in {FALLBACK_BITMAP, FALLBACK_RASTERIZE}:
+        if not gradient_raster and fallback not in {FALLBACK_BITMAP, FALLBACK_RASTERIZE}:
             return None
+        if gradient_raster:
+            geometry_policy.setdefault("suggest_fallback", FALLBACK_RASTERIZE)
+            geometry_policy.setdefault("gradient_rasterize", True)
         try:
             result = self._rasterizer.rasterize(element)
         except Exception:  # pragma: no cover - defensive
@@ -281,6 +289,57 @@ class DrawingMLShapeRenderer:
             },
         )
         return xml, shape_id + 1
+
+    def _needs_gradient_raster(self, element) -> bool:
+        fill = getattr(element, "fill", None)
+        if isinstance(fill, RadialGradientPaint) and fill.policy_decision == "rasterize_nonuniform":
+            return True
+        stroke = getattr(element, "stroke", None)
+        if stroke is not None:
+            paint = getattr(stroke, "paint", None)
+            if isinstance(paint, RadialGradientPaint) and paint.policy_decision == "rasterize_nonuniform":
+                return True
+        return False
+
+    def _apply_gradient_fallback(self, element, metadata: dict[str, object]) -> None:
+        policy = metadata.setdefault("policy", {}) if isinstance(metadata, dict) else {}
+        geometry_policy = policy.setdefault("geometry", {})
+        geometry_policy.setdefault("gradient_fallback", "solid")
+
+        fill = getattr(element, "fill", None)
+        if isinstance(fill, RadialGradientPaint) and fill.policy_decision == "rasterize_nonuniform":
+            element.fill = self._average_gradient_paint(fill)
+
+        stroke = getattr(element, "stroke", None)
+        if stroke is not None:
+            paint = getattr(stroke, "paint", None)
+            if isinstance(paint, RadialGradientPaint) and paint.policy_decision == "rasterize_nonuniform":
+                element.stroke = replace(stroke, paint=self._average_gradient_paint(paint))
+
+    @staticmethod
+    def _average_gradient_paint(paint: RadialGradientPaint) -> SolidPaint:
+        if not paint.stops:
+            return SolidPaint(rgb="000000", opacity=1.0)
+        total_r = total_g = total_b = total_a = 0.0
+        for stop in paint.stops:
+            token = (stop.rgb or "000000").strip().lstrip("#")
+            if len(token) != 6:
+                token = "000000"
+            try:
+                total_r += int(token[0:2], 16)
+                total_g += int(token[2:4], 16)
+                total_b += int(token[4:6], 16)
+            except ValueError:
+                total_r += 0.0
+                total_g += 0.0
+                total_b += 0.0
+            total_a += float(stop.opacity)
+        count = max(len(paint.stops), 1)
+        avg_r = int(round(total_r / count))
+        avg_g = int(round(total_g / count))
+        avg_b = int(round(total_b / count))
+        avg_opacity = total_a / count
+        return SolidPaint(rgb=f"{avg_r:02X}{avg_g:02X}{avg_b:02X}", opacity=avg_opacity)
 
 
 __all__ = ["DrawingMLShapeRenderer"]

@@ -118,6 +118,10 @@ class TraversalHooksMixin:
                     current_navigation=current_navigation,
                     traverse_callback=traverse_callback,
                 )
+            if tag == "text":
+                resvg_lookup = getattr(self, "_resvg_element_lookup", {})
+                resvg_node = resvg_lookup.get(element) if isinstance(resvg_lookup, dict) else None
+                return handler(element=element, coord_space=coord_space, resvg_node=resvg_node)
             return handler(element=element, coord_space=coord_space)
         except Exception as exc:  # pragma: no cover - defensive logging
             self._logger.error("Failed to convert <%s>: %s", tag, exc)

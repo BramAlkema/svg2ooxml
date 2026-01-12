@@ -235,9 +235,10 @@ def decide_radial_policy(a, b, c, d, mild_ratio=1.02):
 
 **Phase 3: Rasterization Fallback** (✅ COMPLETE - 2025-01-04)
 - [x] Implement `_calculate_raster_size()` helper with clamping (64–4096 px) ✅
-- [x] Implement solid color fallback for "rasterize_nonuniform" policy ✅
-  - Compute average color from gradient stops ✅
-  - Return SolidPaint instead of malformed RadialGradientPaint ✅
+- [x] Route "rasterize_nonuniform" gradients through raster fallback ✅
+  - Preserve raw gradient coordinates + transform for bitmap rendering ✅
+  - Use rasterizer gradient shaders when available ✅
+  - Fall back to averaged solid paint when rasterization is unavailable ✅
   - Log raster_size in telemetry (for future full bitmap implementation) ✅
 - [x] Add comprehensive Phase 3 tests (21 tests, all passing) ✅
   - Test size calculation with various inputs and clamping ✅

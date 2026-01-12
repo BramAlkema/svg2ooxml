@@ -51,8 +51,8 @@ class TextPipeline:
             converter = TextConverter(context, pipeline=pipeline)
         self._converter = converter
 
-    def convert(self, *, element, coord_space: "CoordinateSpace"):
-        return self._converter.convert(element=element, coord_space=coord_space)
+    def convert(self, *, element, coord_space: "CoordinateSpace", resvg_node=None):
+        return self._converter.convert(element=element, coord_space=coord_space, resvg_node=resvg_node)
 
     @property
     def converter(self) -> "TextConverter":
