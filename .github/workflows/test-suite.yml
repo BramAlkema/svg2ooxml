@@ -11,9 +11,22 @@ jobs:
   unit:
     runs-on: ubuntu-latest
 
+    permissions:
+      contents: read
+      id-token: write
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+
+      - name: Setup gcloud CLI
+        uses: google-github-actions/setup-gcloud@v2
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -45,12 +58,11 @@ jobs:
           FIREBASE_AUTH_EMULATOR_HOST: localhost:9099
           # Test encryption key (base64-encoded 32-byte key for testing)
           TOKEN_ENCRYPTION_KEY: dGVzdC1lbmNyeXB0aW9uLWtleS0zMi1ieXRlcy10ZXN0LWtleQo=
-          # Firebase token for smoke tests
-          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+          # Cloud Run audience for smoke tests
+          SVG2OOXML_AUDIENCE: https://svg2ooxml-export-sghya3t5ya-ew.a.run.app
         run: |
           # Skip pre-existing failures unrelated to current features
           python -m pytest -m "not visual" --maxfail=1 --disable-warnings \
             --ignore=tests/integration/core/test_pipeline.py \
             --ignore=tests/integration/test_filter_emf_regression.py \
-            --ignore=tests/unit/api/test_background_queue.py \
-            --ignore=tests/smoke/
+            --ignore=tests/unit/api/test_background_queue.py
