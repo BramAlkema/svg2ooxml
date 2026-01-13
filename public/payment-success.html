@@ -13,7 +13,7 @@
 
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      background: linear-gradient(135deg, #0a0a1a 0%, #1a1a2e 50%, #0a0a1a 100%);
       display: flex;
       align-items: center;
       justify-content: center;
@@ -22,30 +22,33 @@
     }
 
     .container {
-      background: white;
-      border-radius: 12px;
-      padding: 48px;
+      background: rgba(26, 26, 46, 0.9);
+      backdrop-filter: blur(10px);
+      border-radius: 16px;
+      padding: 50px;
       max-width: 500px;
       width: 100%;
       text-align: center;
-      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(0, 212, 255, 0.2);
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
     }
 
     .success-icon {
-      width: 80px;
-      height: 80px;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      width: 90px;
+      height: 90px;
+      background: linear-gradient(135deg, #00d4ff 0%, #8b5cf6 100%);
       border-radius: 50%;
       display: flex;
       align-items: center;
       justify-content: center;
-      margin: 0 auto 24px;
+      margin: 0 auto 28px;
       animation: scale-in 0.5s ease-out;
+      box-shadow: 0 8px 30px rgba(0, 212, 255, 0.4);
     }
 
     .success-icon svg {
-      width: 48px;
-      height: 48px;
+      width: 50px;
+      height: 50px;
       stroke: white;
       stroke-width: 3;
       fill: none;
@@ -67,30 +70,31 @@
     h1 {
       font-size: 28px;
       font-weight: 700;
-      color: #1a1a1a;
-      margin-bottom: 12px;
+      color: #ffffff;
+      margin-bottom: 14px;
     }
 
     p {
       font-size: 16px;
-      color: #666;
-      line-height: 1.6;
+      color: #94a3b8;
+      line-height: 1.7;
       margin-bottom: 24px;
     }
 
     .benefits {
-      background: #f8f9fa;
-      border-radius: 8px;
+      background: rgba(0, 212, 255, 0.08);
+      border: 1px solid rgba(0, 212, 255, 0.15);
+      border-radius: 12px;
       padding: 24px;
-      margin: 24px 0;
+      margin: 28px 0;
       text-align: left;
     }
 
     .benefits h2 {
       font-size: 18px;
       font-weight: 600;
-      color: #1a1a1a;
-      margin-bottom: 16px;
+      color: #00d4ff;
+      margin-bottom: 18px;
     }
 
     .benefits ul {
@@ -100,54 +104,56 @@
 
     .benefits li {
       font-size: 15px;
-      color: #666;
-      padding: 8px 0;
-      padding-left: 28px;
+      color: #c8d4e6;
+      padding: 10px 0;
+      padding-left: 30px;
       position: relative;
     }
 
     .benefits li::before {
-      content: '✓';
+      content: '\2713';
       position: absolute;
       left: 0;
-      color: #667eea;
+      color: #4ade80;
       font-weight: 700;
       font-size: 18px;
     }
 
     .button {
       display: inline-block;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      background: linear-gradient(135deg, #00d4ff 0%, #8b5cf6 100%);
       color: white;
-      padding: 14px 32px;
+      padding: 16px 40px;
       border-radius: 8px;
       text-decoration: none;
       font-weight: 600;
       font-size: 16px;
-      transition: transform 0.2s, box-shadow 0.2s;
-      margin-top: 8px;
+      transition: all 0.3s ease;
+      margin-top: 10px;
+      box-shadow: 0 4px 20px rgba(0, 212, 255, 0.3);
     }
 
     .button:hover {
       transform: translateY(-2px);
-      box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4);
+      box-shadow: 0 8px 30px rgba(0, 212, 255, 0.5);
     }
 
     .footer {
-      margin-top: 32px;
-      padding-top: 24px;
-      border-top: 1px solid #e0e0e0;
+      margin-top: 35px;
+      padding-top: 25px;
+      border-top: 1px solid rgba(0, 212, 255, 0.15);
       font-size: 14px;
-      color: #999;
+      color: #64748b;
     }
 
     .footer a {
-      color: #667eea;
+      color: #00d4ff;
       text-decoration: none;
+      transition: color 0.2s;
     }
 
     .footer a:hover {
-      text-decoration: underline;
+      color: #8b5cf6;
     }
   </style>
 </head>
@@ -159,7 +165,7 @@
       </svg>
     </div>
 
-    <h1>🎉 Welcome to Pro!</h1>
+    <h1>Welcome to Pro!</h1>
     <p>Your payment was successful. You now have unlimited access to svg2ooxml.</p>
 
     <div class="benefits">
