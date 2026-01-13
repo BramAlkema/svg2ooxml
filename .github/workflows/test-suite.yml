@@ -52,13 +52,21 @@ jobs:
           pip install -e .[color,api,cloud,slides,render]
           if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
 
+      - name: Get Cloud Run ID token
+        id: id-token
+        run: |
+          TOKEN=$(gcloud auth print-identity-token --audiences=https://svg2ooxml-export-sghya3t5ya-ew.a.run.app)
+          echo "::add-mask::$TOKEN"
+          echo "token=$TOKEN" >> $GITHUB_OUTPUT
+
       - name: Run test suite
         env:
           # Mock Firebase for tests (Firebase emulator not required for unit tests)
           FIREBASE_AUTH_EMULATOR_HOST: localhost:9099
           # Test encryption key (base64-encoded 32-byte key for testing)
           TOKEN_ENCRYPTION_KEY: dGVzdC1lbmNyeXB0aW9uLWtleS0zMi1ieXRlcy10ZXN0LWtleQo=
-          # Cloud Run audience for smoke tests
+          # Cloud Run ID token for smoke tests
+          FIREBASE_TOKEN: ${{ steps.id-token.outputs.token }}
           SVG2OOXML_AUDIENCE: https://svg2ooxml-export-sghya3t5ya-ew.a.run.app
         run: |
           # Skip pre-existing failures unrelated to current features
