@@ -55,7 +55,9 @@ jobs:
       - name: Get Cloud Run ID token
         id: id-token
         run: |
-          TOKEN=$(gcloud auth print-identity-token --audiences=https://svg2ooxml-export-sghya3t5ya-ew.a.run.app)
+          TOKEN=$(gcloud auth print-identity-token \
+            --impersonate-service-account=svg2ooxml-runner@powerful-layout-467812-p1.iam.gserviceaccount.com \
+            --audiences=https://svg2ooxml-export-sghya3t5ya-ew.a.run.app)
           echo "::add-mask::$TOKEN"
           echo "token=$TOKEN" >> $GITHUB_OUTPUT
 
