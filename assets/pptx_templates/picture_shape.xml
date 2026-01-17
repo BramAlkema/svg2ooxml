@@ -1,7 +1,9 @@
 <p:pic>
     <p:nvPicPr>
         <p:cNvPr id="{SHAPE_ID}" name="{SHAPE_NAME}">{HYPERLINK_XML}</p:cNvPr>
-        <p:cNvPicPr/>
+        <p:cNvPicPr>
+            <a:picLocks noChangeAspect="1"/>
+        </p:cNvPicPr>
         <p:nvPr/>
     </p:nvPicPr>
     <p:blipFill>
@@ -18,6 +20,6 @@
         <a:prstGeom prst="rect">
             <a:avLst/>
         </a:prstGeom>
-{CLIP_PATH_XML}{MASK_XML}{EFFECTS_XML}        <a:noFill/>
+{CLIP_PATH_XML}{MASK_XML}{EFFECTS_XML}
     </p:spPr>
 </p:pic>

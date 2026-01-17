@@ -86,15 +86,26 @@ def _load_font_metrics(path: str) -> _FontMetrics | None:
         line_gap = None
         if "OS/2" in font:
             os2 = font["OS/2"]
-            ascender = getattr(os2, "sTypoAscender", None)
-            descender = getattr(os2, "sTypoDescender", None)
-            line_gap = getattr(os2, "sTypoLineGap", None)
+            typo_ascender = getattr(os2, "sTypoAscender", None)
+            typo_descender = getattr(os2, "sTypoDescender", None)
+            typo_gap = getattr(os2, "sTypoLineGap", None)
             win_ascent = getattr(os2, "usWinAscent", None)
             win_descent = getattr(os2, "usWinDescent", None)
-            if ascender is None and win_ascent is not None:
-                ascender = int(win_ascent)
-            if descender is None and win_descent is not None:
-                descender = -int(win_descent)
+            use_typo_metrics = bool(getattr(os2, "fsSelection", 0) & 0x80)
+
+            if use_typo_metrics and typo_ascender is not None:
+                ascender = int(typo_ascender)
+                if typo_descender is not None:
+                    descender = int(typo_descender)
+                if typo_gap is not None:
+                    line_gap = int(typo_gap)
+            else:
+                if win_ascent is not None:
+                    ascender = int(win_ascent)
+                if win_descent is not None:
+                    descender = -int(win_descent)
+                if line_gap is None and typo_gap is not None:
+                    line_gap = int(typo_gap)
         if "hhea" in font:
             hhea = font["hhea"]
             if ascender is None:
@@ -202,10 +213,7 @@ class TextConverter:
         coord_space: CoordinateSpace,
         resvg_node: Any | None = None,
     ) -> TextFrame | None:
-        base_style = self._context.style_resolver.compute_text_style(
-            element,
-            context=self._context.css_context,
-        )
+        base_style = self._compute_text_style_with_inheritance(element)
         runs, run_metadata = self._collect_text_runs(element, base_style)
         if not runs:
             return None
@@ -224,14 +232,16 @@ class TextConverter:
 
         x = _parse_float(element.get("x"), default=0.0) or 0.0
         y = _parse_float(element.get("y"), default=0.0) or 0.0
+        anchor_token = base_style.get("text_anchor") or element.get("text-anchor") or "start"
         anchor = {
             "middle": TextAnchor.MIDDLE,
             "end": TextAnchor.END,
-        }.get(element.get("text-anchor"), TextAnchor.START)
+        }.get(str(anchor_token).strip().lower(), TextAnchor.START)
 
         origin_x, origin_y = coord_space.apply_point(x, y)
         font_service = self._context.services.resolve("font")
         bbox = self._estimate_text_bbox(processed_runs, origin_x, origin_y, font_service=font_service)
+        bbox = self._apply_text_anchor(bbox, anchor)
 
         metadata: dict[str, Any] = dict(run_metadata)
         if resvg_node is not None:
@@ -313,6 +323,17 @@ class TextConverter:
         if isinstance(candidate, TextPolicyDecision):
             return candidate
         return None
+
+    def _compute_text_style_with_inheritance(self, element: etree._Element) -> dict[str, Any]:
+        parent_style: dict[str, Any] | None = None
+        parent = element.getparent()
+        if isinstance(parent, etree._Element) and isinstance(parent.tag, str):
+            parent_style = self._compute_text_style_with_inheritance(parent)
+        return self._context.style_resolver.compute_text_style(
+            element,
+            context=self._context.css_context,
+            parent_style=parent_style,
+        )
 
     def _collect_text_runs(
         self,
@@ -521,11 +542,15 @@ class TextConverter:
 
         metrics_found = max_ascent_px > 0.0 or max_descent_px > 0.0
         if metrics_found:
-            line_height = max_ascent_px + max_descent_px + max_gap_px
+            raw_line_height = max_ascent_px + max_descent_px + max_gap_px
             min_line_height = max_font_px * 1.2
-            if line_height < min_line_height:
-                line_height = min_line_height
-            y_offset = max_ascent_px if max_ascent_px > 0.0 else max_font_px * 0.8
+            line_height = max(raw_line_height, min_line_height)
+            baseline_span = max_ascent_px + max_descent_px
+            if baseline_span > 0.0:
+                baseline_ratio = max_ascent_px / baseline_span
+                y_offset = line_height * baseline_ratio
+            else:
+                y_offset = max_font_px * 0.8
         else:
             # Line height = font size + leading (extra space between lines)
             # Use 1.5x to avoid clipping when metrics are unavailable.
@@ -535,6 +560,14 @@ class TextConverter:
         height = line_height * max(1, line_count)
 
         return Rect(origin_x, origin_y - y_offset, max_width, height)
+
+    @staticmethod
+    def _apply_text_anchor(bbox: Rect, anchor: TextAnchor) -> Rect:
+        if anchor == TextAnchor.MIDDLE:
+            return Rect(bbox.x - bbox.width / 2.0, bbox.y, bbox.width, bbox.height)
+        if anchor == TextAnchor.END:
+            return Rect(bbox.x - bbox.width, bbox.y, bbox.width, bbox.height)
+        return bbox
 
     @staticmethod
     def _coerce_hex_color(token: str) -> str:

@@ -131,7 +131,7 @@ class SvgToPptxExporter:
             )
 
         env_slide_mode = os.environ.get("SVG2OOXML_SLIDE_SIZE_MODE")
-        mode = slide_size_mode or env_slide_mode or "multipage"
+        mode = slide_size_mode or env_slide_mode or "same"
         if mode not in ALLOWED_SLIDE_SIZE_MODES:
             raise ValueError(
                 f"Invalid slide_size_mode: {mode!r}. "

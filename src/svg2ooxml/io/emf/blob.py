@@ -98,6 +98,9 @@ class EMFBlob:
         self.width_emu = int(width_emu)
         self.height_emu = int(height_emu)
         self.dpi = dpi
+        self._scale = self.dpi / EMU_PER_INCH
+        self.width_px = max(1, int(round(self.width_emu * self._scale)))
+        self.height_px = max(1, int(round(self.height_emu * self._scale)))
         self._records: list[bytes] = []
         self._handles: list[int] = []
         self._next_handle = 1
@@ -118,6 +121,12 @@ class EMFBlob:
         if padding:
             data += b"\x00" * padding
         return data
+
+    def _to_px(self, value: int | float) -> int:
+        return int(round(value * self._scale))
+
+    def _to_px_point(self, point: Tuple[int | float, int | float]) -> Tuple[int, int]:
+        return (self._to_px(point[0]), self._to_px(point[1]))
 
     # ------------------------------------------------------------------
     # Public helpers
@@ -245,14 +254,19 @@ class EMFBlob:
         off_bmi = 8 + 18 * 4
         off_bits = off_bmi + len(bmi_padded)
 
+        dest_left_px = self._to_px(dest_left)
+        dest_top_px = self._to_px(dest_top)
+        dest_width_px = max(1, self._to_px(dest_width))
+        dest_height_px = max(1, self._to_px(dest_height))
+
         payload = struct.pack(
             "<" + "i" * 18,
-            int(dest_left),
-            int(dest_top),
-            int(dest_left + dest_width),
-            int(dest_top + dest_height),
-            int(dest_left),
-            int(dest_top),
+            int(dest_left_px),
+            int(dest_top_px),
+            int(dest_left_px + dest_width_px),
+            int(dest_top_px + dest_height_px),
+            int(dest_left_px),
+            int(dest_top_px),
             int(src_left),
             int(src_top),
             int(src_width),
@@ -263,8 +277,8 @@ class EMFBlob:
             int(len(bits)),
             0,
             int(rop),
-            int(dest_width),
-            int(dest_height),
+            int(dest_width_px),
+            int(dest_height_px),
         )
         payload += bmi_padded + bits_padded
         self._append_record(EMFRecordType.EMR_STRETCHDIBITS, payload)
@@ -280,7 +294,8 @@ class EMFBlob:
     ) -> int:
         """Return a cached pen handle."""
 
-        spec = PenSpec(rgb, max(1, int(width_px)), line_cap, line_join, pen_style)
+        scaled_width = max(1, self._to_px(width_px))
+        spec = PenSpec(rgb, scaled_width, line_cap, line_join, pen_style)
         handle = self._pen_cache.get(spec)
         if handle is None:
             handle = self.create_pen(
@@ -324,7 +339,7 @@ class EMFBlob:
         if dash_pattern is not None and not dash_pattern.is_solid():
             float_points = [(float(x), float(y)) for x, y in points]
             segments = [
-                [(int(round(px)), int(round(py))) for px, py in segment]
+                [(px, py) for px, py in segment]
                 for segment in apply_dash_pattern(float_points, dash_pattern)
             ]
             segments = [segment for segment in segments if len(segment) >= 2]
@@ -363,7 +378,13 @@ class EMFBlob:
         """Intersect the current clip region with the supplied rectangle."""
 
         self._append_record(EMFRecordType.EMR_SAVEDC, b"")
-        rect_payload = struct.pack("<4l", left, top, right, bottom)
+        rect_payload = struct.pack(
+            "<4l",
+            self._to_px(left),
+            self._to_px(top),
+            self._to_px(right),
+            self._to_px(bottom),
+        )
         self._append_record(EMFRecordType.EMR_INTERSECTCLIPRECT, rect_payload)
         self._clip_depth += 1
 
@@ -398,7 +419,7 @@ class EMFBlob:
     ) -> None:
         """Draw a filled polygon using the supplied brush/pen handles."""
 
-        coord_list = _normalise_points(points)
+        coord_list = self._ensure_int_points(points)
         if len(coord_list) < 3:
             return
         self._select_brush(brush_handle)
@@ -414,7 +435,7 @@ class EMFBlob:
     ) -> None:
         """Draw a stroked polyline using the supplied pen handle."""
 
-        coord_list = _normalise_points(points)
+        coord_list = self._ensure_int_points(points)
         if len(coord_list) < 2:
             return
         self._select_pen(pen_handle)
@@ -428,7 +449,11 @@ class EMFBlob:
             self.create_null_brush()
         else:
             self.select_object(brush_handle)
-        rect = struct.pack("<4l", left, top, left + width, top + height)
+        left_px = self._to_px(left)
+        top_px = self._to_px(top)
+        width_px = max(1, self._to_px(width))
+        height_px = max(1, self._to_px(height))
+        rect = struct.pack("<4l", left_px, top_px, left_px + width_px, top_px + height_px)
         self._append_record(EMFRecordType.EMR_RECTANGLE, rect)
 
     def finalize(self) -> bytes:
@@ -439,10 +464,15 @@ class EMFBlob:
         record_count = len(self._records)
 
         header = bytearray(self._records[0])
-        struct.pack_into("<I", header, 44, total_size)
-        struct.pack_into("<I", header, 48, record_count)
-        struct.pack_into("<H", header, 52, len(self._handles))
+        struct.pack_into("<I", header, 48, total_size)
+        struct.pack_into("<I", header, 52, record_count)
+        struct.pack_into("<H", header, 56, len(self._handles))
         self._records[0] = bytes(header)
+
+        eof_payload = struct.pack("<III", 0, 0, total_size)
+        self._records[-1] = (
+            struct.pack("<II", int(EMFRecordType.EMR_EOF), 8 + len(eof_payload)) + eof_payload
+        )
 
         return b"".join(self._records)
 
@@ -531,28 +561,38 @@ class EMFBlob:
         payload = header + struct.pack("<II", polygon_count, total_points) + counts_blob + points_blob
         self._append_record(EMFRecordType.EMR_POLYPOLYGON, payload)
 
-    @staticmethod
-    def _ensure_int_points(points: Iterable[Tuple[int | float, int | float]]) -> List[Tuple[int, int]]:
-        return [(int(round(x)), int(round(y))) for x, y in points]
+    def _ensure_int_points(self, points: Iterable[Tuple[int | float, int | float]]) -> List[Tuple[int, int]]:
+        return [self._to_px_point((x, y)) for x, y in points]
 
     def _init_header(self) -> None:
         width_hmm = int(round(self.width_emu * HMM_PER_EMU))
         height_hmm = int(round(self.height_emu * HMM_PER_EMU))
-        width_px = max(1, int(round(self.width_emu / EMU_PER_INCH * self.dpi)))
-        height_px = max(1, int(round(self.height_emu / EMU_PER_INCH * self.dpi)))
+        width_mm = max(1, int(round(width_hmm / 100)))
+        height_mm = max(1, int(round(height_hmm / 100)))
+        width_device = self.width_px
+        height_device = self.height_px
 
         header_size = 108
         payload = bytearray(header_size)
         struct.pack_into("<I", payload, 0, int(EMFRecordType.EMR_HEADER))
         struct.pack_into("<I", payload, 4, header_size)
-        struct.pack_into("<4l", payload, 8, 0, 0, self.width_emu, self.height_emu)
+        struct.pack_into("<4l", payload, 8, 0, 0, width_device, height_device)
         struct.pack_into("<4l", payload, 24, 0, 0, width_hmm, height_hmm)
-        payload[40:48] = b"ENHMETA "
-        struct.pack_into("<III", payload, 48, 0x10000, 0, 0)
-        struct.pack_into("<HHHH", payload, 60, 0, 0, 0, 0)
-        struct.pack_into("<III", payload, 68, 0, width_px, height_px)
-        struct.pack_into("<II", payload, 80, self.dpi, self.dpi)
-        struct.pack_into("<II", payload, 88, max(1, width_hmm // 100), max(1, height_hmm // 100))
+        struct.pack_into("<I", payload, 40, 0x464D4520)  # " EMF"
+        struct.pack_into("<I", payload, 44, 0x00010000)
+        struct.pack_into("<I", payload, 48, 0)  # nBytes placeholder
+        struct.pack_into("<I", payload, 52, 0)  # nRecords placeholder
+        struct.pack_into("<H", payload, 56, 0)  # nHandles placeholder
+        struct.pack_into("<H", payload, 58, 0)  # reserved
+        struct.pack_into("<I", payload, 60, 0)  # nDescription
+        struct.pack_into("<I", payload, 64, 0)  # offDescription
+        struct.pack_into("<I", payload, 68, 0)  # nPalEntries
+        struct.pack_into("<II", payload, 72, width_device, height_device)
+        struct.pack_into("<II", payload, 80, width_mm, height_mm)
+        struct.pack_into("<I", payload, 88, 0)  # cbPixelFormat
+        struct.pack_into("<I", payload, 92, 0)  # offPixelFormat
+        struct.pack_into("<I", payload, 96, 0)  # bOpenGL
+        struct.pack_into("<II", payload, 100, max(1, width_hmm * 10), max(1, height_hmm * 10))
         self._records.append(bytes(payload))
 
 

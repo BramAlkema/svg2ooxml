@@ -181,6 +181,9 @@ class FilterRenderer:
         match = HOOK_PATTERN.search(drawingml)
         if not match:
             return None, {}, drawingml
+        prefix = drawingml[: match.start()]
+        if prefix.strip():
+            return None, {}, drawingml
         name = match.group("name")
         attr_block = match.group("attrs") or ""
         attrs = {m.group(1): m.group(2) for m in ATTR_PATTERN.finditer(attr_block)}

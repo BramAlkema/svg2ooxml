@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from enum import IntEnum
+import os
 from typing import TYPE_CHECKING, Any
 
 from lxml import etree
@@ -20,6 +21,7 @@ PropertyHandler = Callable[[str], object]
 
 _DEFAULT_FONT_SIZE_PT = 12.0
 _DEFAULT_FILL = "#000000"
+_DEFAULT_UNITLESS_FONT_SCALE = float(os.getenv("SVG2OOXML_UNITLESS_FONT_SCALE", "0.875"))
 
 
 class CSSOrigin(IntEnum):
@@ -57,7 +59,11 @@ def _normalize_font_weight(value: str) -> str:
     return mapping.get(token, token)
 
 
-def _parse_font_size_token(value: str, base_pt: float) -> float:
+def _normalize_text_anchor(value: str) -> str:
+    return value.strip().lower()
+
+
+def _parse_font_size_token(value: str, base_pt: float, *, unitless_scale: float) -> float:
     token = value.strip().lower()
     try:
         if token.endswith("px"):
@@ -68,7 +74,7 @@ def _parse_font_size_token(value: str, base_pt: float) -> float:
             return float(token[:-2]) * base_pt
         if token.endswith("%"):
             return base_pt * float(token[:-1]) / 100.0
-        return float(token)
+        return float(token) * unitless_scale
     except ValueError:
         return base_pt
 
@@ -161,6 +167,7 @@ class StyleResolver:
         "font_weight": "normal",
         "font_style": "normal",
         "text_decoration": "none",
+        "text_anchor": "start",
         "fill": _DEFAULT_FILL,
     }
 
@@ -170,17 +177,28 @@ class StyleResolver:
         "font-weight": PropertyDescriptor("font_weight", _normalize_font_weight),
         "font-style": PropertyDescriptor("font_style", str.strip),
         "text-decoration": PropertyDescriptor("text_decoration", str.strip),
+        "text-anchor": PropertyDescriptor("text_anchor", _normalize_text_anchor),
         "fill": PropertyDescriptor("fill", str.strip),
     }
 
     _TEXT_CSS_MAP = _TEXT_ATTRIBUTE_MAP
 
-    def __init__(self, unit_converter: UnitConverter | None = None) -> None:
+    def __init__(
+        self,
+        unit_converter: UnitConverter | None = None,
+        *,
+        unitless_font_size_scale: float | None = None,
+    ) -> None:
         if unit_converter is None:
             from svg2ooxml.core.parser.units import UnitConverter
 
             unit_converter = UnitConverter()
         self._unit_converter = unit_converter
+        self._unitless_font_size_scale = (
+            float(unitless_font_size_scale)
+            if unitless_font_size_scale is not None
+            else _DEFAULT_UNITLESS_FONT_SCALE
+        )
         self._css_rules: list[CSSRule] = []
 
     # ------------------------------------------------------------------ #
@@ -429,7 +447,11 @@ class StyleResolver:
 
         if descriptor.key == "font_size_pt":
             base = float(style.get("font_size_pt", _DEFAULT_FONT_SIZE_PT))
-            style["font_size_pt"] = _parse_font_size_token(value, base)
+            style["font_size_pt"] = _parse_font_size_token(
+                value,
+                base,
+                unitless_scale=self._unitless_font_size_scale,
+            )
         elif descriptor.key == "fill":
             current = style.get("fill", _DEFAULT_FILL)
             style["fill"] = self._resolve_color(value, current if isinstance(current, str) else _DEFAULT_FILL)
