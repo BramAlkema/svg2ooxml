@@ -28,6 +28,7 @@ Folders outside `src/` remain unchanged:
   new [ADR-016](docs/adr/ADR-016-gcloud-client-setup.md) describes the gcloud
   configuration needed to interact with the Cloud Run export service described
   in ADR-014.
+- `docs/ROADMAP.md` – project-wide status and priorities.
 - `assets/`, `testing/`, `reports/` – fixtures, golden outputs, and generated
   artefacts.
 

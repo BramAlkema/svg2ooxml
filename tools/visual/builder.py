@@ -4,12 +4,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Sequence
 
+from svg2ooxml.core.parser import ParserConfig, SVGParser
 from svg2ooxml.drawingml.writer import DrawingMLWriter
 from svg2ooxml.io.pptx_writer import PPTXPackageBuilder
 from svg2ooxml.ir.entrypoints import convert_parser_output
-from svg2ooxml.core.parser import ParserConfig, SVGParser
 from svg2ooxml.services import configure_services
 
 
@@ -30,13 +29,13 @@ class PptxBuilder:
         self,
         *,
         filter_strategy: str | None = "resvg",
-        slide_size_mode: str | None = "multipage",
+        slide_size_mode: str | None = "same",
     ) -> None:
         self._parser = SVGParser(ParserConfig())
         self._writer = DrawingMLWriter()
         self._builder = PPTXPackageBuilder(slide_size_mode=slide_size_mode)
         self._filter_strategy = filter_strategy
-        self._slide_size_mode = slide_size_mode or "multipage"
+        self._slide_size_mode = slide_size_mode or "same"
 
     def build_from_svg(self, svg_text: str, output_path: Path) -> PptxBuildResult:
         """Parse *svg_text*, convert to IR, and materialise a PPTX file."""
@@ -45,7 +44,7 @@ class PptxBuilder:
         if not parse_result.success or parse_result.svg_root is None:
             raise VisualBuildError(f"SVG parsing failed: {parse_result.error_message}")
 
-        # Use the parser's services which includes the StyleResolver with loaded CSS rules
+        # Use the parser's services which includes the StyleResolver with loaded CSS rules.
         services = parse_result.services
         if services is None:
             services = configure_services(filter_strategy=self._filter_strategy)

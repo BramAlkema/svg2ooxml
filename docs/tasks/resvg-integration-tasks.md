@@ -568,7 +568,7 @@ resvg.RadialGradient → [adapter] → ir.RadialGradientPaint → [paint_runtime
 
 ### Task 4.1: Build Visual Differ Tool
 **Status**: ✅ Complete
-**File**: `tests/visual/differ.py`
+**File**: `tools/visual/diff.py`
 **Priority**: High
 
 **Completed Sub-tasks**:

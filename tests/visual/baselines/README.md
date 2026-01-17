@@ -127,7 +127,7 @@ CI will fail if SSIM score falls below the threshold for any fixture.
 
 ## References
 
-- Visual differ implementation: `tests/visual/differ.py`
+- Visual differ implementation: `tools/visual/diff.py`
 - Test fixtures: `tests/visual/fixtures/resvg/`
 - Test suite: `tests/visual/test_resvg_visual.py`
 - Baseline update tool: `tools/visual/update_baselines.py`

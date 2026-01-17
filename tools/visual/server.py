@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import html
 import logging
+import os
 from pathlib import Path
 from typing import Iterable
 from uuid import uuid4
@@ -13,7 +14,7 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
-from tests.visual.helpers.builder import PptxBuilder, VisualBuildError
+from tools.visual.builder import PptxBuilder, VisualBuildError
 from tools.visual.renderer import LibreOfficeRenderer, VisualRendererError, default_renderer
 
 logger = logging.getLogger(__name__)
@@ -45,7 +46,15 @@ def create_app(
     output_root = Path(output_root or DEFAULT_OUTPUT_ROOT).resolve()
     output_root.mkdir(parents=True, exist_ok=True)
 
-    pptx_builder = builder or PptxBuilder()
+    if builder is None:
+        filter_strategy = os.getenv("SVG2OOXML_VISUAL_FILTER_STRATEGY", "resvg")
+        slide_size_mode = os.getenv("SVG2OOXML_SLIDE_SIZE_MODE", "same")
+        pptx_builder = PptxBuilder(
+            filter_strategy=filter_strategy,
+            slide_size_mode=slide_size_mode,
+        )
+    else:
+        pptx_builder = builder
     pptx_renderer = renderer or default_renderer()
     app = FastAPI(title="svg2ooxml Visual Diff", version="0.1")
 
@@ -139,7 +148,7 @@ def create_app(
 
         if rendered_images:
             png_tags = "".join(
-                f'<figure><img src="/artefacts/{token}/render/{img.name}" alt="Slide {index}" />'
+                f'<figure><img class="media" src="/artefacts/{token}/render/{img.name}" alt="Slide {index}" />'
                 f'<figcaption>Slide {index}</figcaption></figure>'
                 for index, img in enumerate(rendered_images, start=1)
             )
@@ -159,7 +168,7 @@ def create_app(
               h1, h2 {{ margin-bottom: 0.5rem; }}
               .columns {{ display: flex; gap: 2rem; flex-wrap: wrap; }}
               .pane {{ flex: 1 1 420px; min-width: 360px; }}
-              object, img {{ border: 1px solid #d2d6dc; border-radius: 6px; width: 100%; }}
+              .media {{ border: 1px solid #d2d6dc; border-radius: 6px; max-width: 100%; height: auto; }}
               figure {{ margin: 0 0 1rem 0; }}
               figcaption {{ margin-top: 0.25rem; font-size: 0.85rem; color: #52606d; }}
               .meta {{ margin-top: 1rem; }}
@@ -178,7 +187,7 @@ def create_app(
             <div class="columns">
               <section class="pane">
                 <h2>Source SVG</h2>
-                <object data="data:image/svg+xml;base64,{svg_b64}" type="image/svg+xml"></object>
+                <img class="media" src="data:image/svg+xml;base64,{svg_b64}" alt="SVG source" />
               </section>
               <section class="pane">
                 <h2>PPTX Render</h2>

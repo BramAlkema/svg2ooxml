@@ -10,7 +10,7 @@ pytest.importorskip("PIL")
 
 from PIL import Image  # type: ignore[import]  # noqa: E402
 
-from tests.visual.helpers.diff import ImageDiffError
+from tools.visual.diff import ImageDiffError
 
 
 def _make_image(path: Path, color: tuple[int, int, int, int]) -> None:

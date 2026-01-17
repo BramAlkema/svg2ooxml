@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, Sequence
+from typing import Sequence
 
 
 @dataclass
@@ -15,7 +15,7 @@ class GoldenRepository:
 
     def __init__(self, root: Path | None = None) -> None:
         if root is None:
-            root = Path(__file__).resolve().parents[2] / "visual" / "golden"
+            root = Path(__file__).resolve().parents[2] / "tests" / "visual" / "golden"
         self.root = root
 
     def path_for(self, rel_path: str | Path) -> Path:

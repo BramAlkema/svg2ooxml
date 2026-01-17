@@ -40,7 +40,7 @@ from svg2ooxml.services import configure_services
 # Import visual tools if available
 try:
     from PIL import Image
-    from tests.visual.differ import VisualDiffer
+    from tools.visual.diff import VisualDiffer
     from tools.visual.renderer import LibreOfficeRenderer
     VISUAL_AVAILABLE = True
 except ImportError:

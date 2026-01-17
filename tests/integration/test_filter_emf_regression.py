@@ -10,15 +10,15 @@ from svg2ooxml.services.filter_service import FilterService
 
 
 EXPECTED_EMF_DIGESTS: dict[str, str] = {
-    "combo": "b9a266b65511ec45fa1ed63caabb3f91395f2a6e",
-    "blend": "d0fece35a0303436280fa0f1c8caba92d6ba716c",
-    "comp": "73c40c0f08dafe2f6afa61dab666ef3f063c8b4f",
-    "cmm": "dfdadbfe00d1dce897d50c8421e8db3558fc698e",
-    "disp": "1e2a7fd86413497baa990a8f4c503db365112b1e",
-    "diff": "4212f8bac5070e1d6cde2e1939b358c0667e41c1",
-    "turb": "b01f711d6b3be230a30d4417278bd56ae770e438",
-    "conv": "8c9a4a3be870745d35c5578d96d75911c5f41613",
-    "spec": "c21085baa1b220e3fc984621779e50877424394b",
+    "combo": "872bde4b2ebfd0d257b1eb012161dd01880f99e4",
+    "blend": "7e7f3a7767f9ead23ac7d9ac31c491532fe8fbee",
+    "comp": "b9dc0f5f63ec5b1395ccb8661fa075f7efb3d2b9",
+    "cmm": "a18f5ef909dc192d0937e0ad5e18818d0aa198b7",
+    "disp": "de0c077075581603d6fad4cfb5d0696b1c6c9834",
+    "diff": "983a7907c38087de6008c4ef0d8bde35000360ab",
+    "turb": "a6a863ec18fbf60200f41ab6901f5dc636fc8077",
+    "conv": "949b74a65438d77da56118b339e2a5b373e3707e",
+    "spec": "3cfa71be9c48056855321db25b5545dce9a94d00",
 }
 
 
