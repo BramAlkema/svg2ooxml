@@ -17,7 +17,7 @@
 {CLIP_PATH_XML}{MASK_XML}
     </p:spPr>
     <p:txBody>
-        <a:bodyPr>
+        <a:bodyPr wrap="none" lIns="0" tIns="0" rIns="0" bIns="0" anchor="t">
 {BODY_EXTRA}        </a:bodyPr>
         <a:lstStyle/>
         <a:p>

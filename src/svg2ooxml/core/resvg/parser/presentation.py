@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+import os
 from typing import Iterable, Optional
 
 from .tree import SvgNode
@@ -25,6 +26,7 @@ PRESENTATION_KEYS = {
 
 
 _TRANSFORM_RE = re.compile(r"([a-zA-Z]+)\s*\(([^)]*)\)")
+_DEFAULT_UNITLESS_FONT_SCALE = float(os.getenv("SVG2OOXML_UNITLESS_FONT_SCALE", "0.875"))
 
 
 @dataclass(frozen=True)
@@ -65,6 +67,13 @@ def _parse_optional_positive(value: str | None) -> Optional[float]:
     if number < 0:
         return None
     return number
+
+
+def _parse_font_size(value: str | None) -> Optional[float]:
+    number = _parse_optional_positive(value)
+    if number is None:
+        return None
+    return number * _DEFAULT_UNITLESS_FONT_SCALE
 
 
 def _parse_opacity(value: str | None) -> Optional[float]:
@@ -124,7 +133,7 @@ def collect_presentation(node: SvgNode) -> Presentation:
         opacity=_parse_opacity(attrs.get("opacity")),
         transform=parse_transform(attrs.get("transform")),
         font_family=attrs.get("font-family"),
-        font_size=_parse_optional_positive(attrs.get("font-size")),
+        font_size=_parse_font_size(attrs.get("font-size")),
         font_style=attrs.get("font-style"),
         font_weight=attrs.get("font-weight"),
     )

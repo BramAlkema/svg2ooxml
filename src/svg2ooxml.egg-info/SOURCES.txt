@@ -76,6 +76,7 @@ docs/guides/rasterization.md
 examples/.gitkeep
 scripts/setup-cloud-tasks.sh
 src/svg2ooxml/__init__.py
+src/svg2ooxml/public.py
 src/svg2ooxml.egg-info/PKG-INFO
 src/svg2ooxml.egg-info/SOURCES.txt
 src/svg2ooxml.egg-info/dependency_links.txt
@@ -131,6 +132,7 @@ src/svg2ooxml/color/advanced/batch.py
 src/svg2ooxml/color/advanced/color_spaces.py
 src/svg2ooxml/color/advanced/core.py
 src/svg2ooxml/color/advanced/css_colors.py
+src/svg2ooxml/color/advanced/engine.py
 src/svg2ooxml/color/advanced/harmony.py
 src/svg2ooxml/color/advanced/manipulation.py
 src/svg2ooxml/color/advanced/parser.py
@@ -181,6 +183,7 @@ src/svg2ooxml/common/units/conversion.py
 src/svg2ooxml/common/units/converters.py
 src/svg2ooxml/common/units/scalars.py
 src/svg2ooxml/core/__init__.py
+src/svg2ooxml/core/conversion_context.py
 src/svg2ooxml/core/converter.py
 src/svg2ooxml/core/multipage.py
 src/svg2ooxml/core/pptx_exporter.py
@@ -195,11 +198,15 @@ src/svg2ooxml/core/auth/token_store.py
 src/svg2ooxml/core/hyperlinks/__init__.py
 src/svg2ooxml/core/hyperlinks/processor.py
 src/svg2ooxml/core/ir/__init__.py
+src/svg2ooxml/core/ir/context.py
 src/svg2ooxml/core/ir/converter.py
 src/svg2ooxml/core/ir/fallbacks.py
 src/svg2ooxml/core/ir/policy_hooks.py
 src/svg2ooxml/core/ir/rectangles.py
+src/svg2ooxml/core/ir/resource_tracker.py
+src/svg2ooxml/core/ir/resvg_bridge.py
 src/svg2ooxml/core/ir/shape_converters.py
+src/svg2ooxml/core/ir/shape_pipeline.py
 src/svg2ooxml/core/ir/smart_font_bridge.py
 src/svg2ooxml/core/ir/text_converter.py
 src/svg2ooxml/core/ir/text_pipeline.py
@@ -294,6 +301,7 @@ src/svg2ooxml/core/traversal/bridges/__init__.py
 src/svg2ooxml/core/traversal/bridges/resvg_clip_mask.py
 src/svg2ooxml/css/__init__.py
 src/svg2ooxml/drawingml/__init__.py
+src/svg2ooxml/drawingml/animation_pipeline.py
 src/svg2ooxml/drawingml/assets.py
 src/svg2ooxml/drawingml/clipmask.py
 src/svg2ooxml/drawingml/custgeom_generator.py
@@ -303,6 +311,7 @@ src/svg2ooxml/drawingml/generator.py
 src/svg2ooxml/drawingml/image.py
 src/svg2ooxml/drawingml/markers.py
 src/svg2ooxml/drawingml/mask_generator.py
+src/svg2ooxml/drawingml/mask_pipeline.py
 src/svg2ooxml/drawingml/mask_store.py
 src/svg2ooxml/drawingml/mask_writer.py
 src/svg2ooxml/drawingml/navigation.py
@@ -310,7 +319,9 @@ src/svg2ooxml/drawingml/paint_runtime.py
 src/svg2ooxml/drawingml/raster_adapter.py
 src/svg2ooxml/drawingml/rasterizer.py
 src/svg2ooxml/drawingml/result.py
+src/svg2ooxml/drawingml/shape_renderer.py
 src/svg2ooxml/drawingml/shapes_runtime.py
+src/svg2ooxml/drawingml/text_renderer.py
 src/svg2ooxml/drawingml/writer.py
 src/svg2ooxml/drawingml/xml_builder.py
 src/svg2ooxml/drawingml/animation/__init__.py
@@ -340,7 +351,9 @@ src/svg2ooxml/elements/image_processor.py
 src/svg2ooxml/elements/pattern_processor.py
 src/svg2ooxml/filters/__init__.py
 src/svg2ooxml/filters/base.py
+src/svg2ooxml/filters/planner.py
 src/svg2ooxml/filters/registry.py
+src/svg2ooxml/filters/renderer.py
 src/svg2ooxml/filters/resvg_bridge.py
 src/svg2ooxml/filters/effects/__init__.py
 src/svg2ooxml/filters/effects/component_transfer.py
@@ -368,7 +381,6 @@ src/svg2ooxml/filters/primitives/turbulence.py
 src/svg2ooxml/filters/utils/__init__.py
 src/svg2ooxml/filters/utils/dml.py
 src/svg2ooxml/filters/utils/parsing.py
-src/svg2ooxml/geometry/__init__.py
 src/svg2ooxml/io/__init__.py
 src/svg2ooxml/io/pptx_writer.py
 src/svg2ooxml/io/svg_reader.py
@@ -390,14 +402,8 @@ src/svg2ooxml/ir/scene.py
 src/svg2ooxml/ir/shapes.py
 src/svg2ooxml/ir/text.py
 src/svg2ooxml/ir/text_path.py
-src/svg2ooxml/map/__init__.py
-src/svg2ooxml/map/hyperlinks.py
-src/svg2ooxml/map/tracer.py
-src/svg2ooxml/map/converter/__init__.py
-src/svg2ooxml/map/mapper/__init__.py
 src/svg2ooxml/paint/__init__.py
 src/svg2ooxml/paint/resvg_bridge.py
-src/svg2ooxml/parser/__init__.py
 src/svg2ooxml/performance/__init__.py
 src/svg2ooxml/performance/metrics/__init__.py
 src/svg2ooxml/performance/metrics/recorder.py
@@ -6084,7 +6090,6 @@ tests/unit/map/test_emf_fallback.py
 tests/unit/map/test_geometry_utils.py
 tests/unit/map/test_gradient_mesh_baseline.py
 tests/unit/map/test_group_mapper.py
-tests/unit/map/test_hyperlinks_shim.py
 tests/unit/map/test_image_mapper.py
 tests/unit/map/test_ir_converter.py
 tests/unit/map/test_mapper_scaffolding.py

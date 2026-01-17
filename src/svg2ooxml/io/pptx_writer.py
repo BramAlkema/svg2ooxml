@@ -1010,6 +1010,8 @@ class PackageWriter:
                     f"{{{CONTENT_NS}}}Default",
                     {"Extension": ext, "ContentType": content_type},
                 )
+            elif default.get("ContentType") != content_type:
+                default.set("ContentType", content_type)
 
         existing_overrides = {
             node.get("PartName"): node for node in root.findall(f"{{{CONTENT_NS}}}Override")

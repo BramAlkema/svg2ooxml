@@ -56,7 +56,7 @@ class DrawingMLWriter:
         self._asset_registry: AssetRegistry | None = None
         self._next_media_index = 1
         self._next_navigation_index = 1
-        self._seen_filter_assets: set[str] = set()
+        self._seen_filter_relationships: set[str] = set()
         self._mask_pipeline = MaskPipeline()
         self._rasterizer: Rasterizer | None = None
         self._animation_pipeline = AnimationPipeline(trace_writer=self._trace_writer)
@@ -94,7 +94,7 @@ class DrawingMLWriter:
         self._asset_registry = AssetRegistry()
         self._next_media_index = 1
         self._next_navigation_index = 1
-        self._seen_filter_assets.clear()
+        self._seen_filter_relationships.clear()
         self._emf_manager.reset()
         self._mask_pipeline.reset(assets=self._assets, tracer=self._tracer)
         self._animation_pipeline.reset(animation_payload, tracer=self._tracer)
@@ -319,8 +319,6 @@ class DrawingMLWriter:
                 data_hex = asset.get("data_hex")
                 if not isinstance(data_hex, str) or not data_hex:
                     continue
-                if data_hex in self._seen_filter_assets:
-                    continue
 
                 asset_type = asset.get("type")
                 if asset_type == "emf":
@@ -336,32 +334,36 @@ class DrawingMLWriter:
                         width_emu=width_emu,
                         height_emu=height_emu,
                     )
-                    asset["relationship_id"] = entry.relationship_id
+                    if preferred_id is None:
+                        asset["relationship_id"] = entry.relationship_id
+                        preferred_id = entry.relationship_id
                     if entry.width_emu is not None:
                         asset["width_emu"] = entry.width_emu
                     if entry.height_emu is not None:
                         asset["height_emu"] = entry.height_emu
-                    if is_new:
-                        self._assets.add_media(
-                            relationship_id=entry.relationship_id,
-                            filename=entry.filename,
-                            data=entry.data,
-                            content_type="image/x-emf",
-                            width_emu=entry.width_emu,
-                            height_emu=entry.height_emu,
-                            source="filter",
-                        )
-                        self._trace_writer(
-                            "filter_asset_registered",
-                            stage="filter",
-                            metadata={
-                                "format": "emf",
-                                "relationship_id": entry.relationship_id,
-                                "width_emu": entry.width_emu,
-                                "height_emu": entry.height_emu,
-                            },
-                        )
-                    self._seen_filter_assets.add(data_hex)
+                    rel_id = preferred_id or entry.relationship_id
+                    if rel_id in self._seen_filter_relationships:
+                        continue
+                    self._assets.add_media(
+                        relationship_id=rel_id,
+                        filename=entry.filename,
+                        data=entry.data,
+                        content_type="image/x-emf",
+                        width_emu=entry.width_emu,
+                        height_emu=entry.height_emu,
+                        source="filter",
+                    )
+                    self._trace_writer(
+                        "filter_asset_registered",
+                        stage="filter",
+                        metadata={
+                            "format": "emf",
+                            "relationship_id": rel_id,
+                            "width_emu": entry.width_emu,
+                            "height_emu": entry.height_emu,
+                        },
+                    )
+                    self._seen_filter_relationships.add(rel_id)
                     continue
 
                 ext = "png"
@@ -371,6 +373,8 @@ class DrawingMLWriter:
                 if not isinstance(rel_id, str) or not rel_id:
                     rel_id = f"rId{self._next_media_index}"
                     asset["relationship_id"] = rel_id
+                if rel_id in self._seen_filter_relationships:
+                    continue
                 filename = f"media_{self._next_media_index}.{ext}"
                 self._next_media_index += 1
                 self._assets.add_media(
@@ -388,7 +392,7 @@ class DrawingMLWriter:
                         "relationship_id": rel_id,
                     },
                 )
-                self._seen_filter_assets.add(data_hex)
+                self._seen_filter_relationships.add(rel_id)
 
     @staticmethod
     def _content_type_for_format(ext: str) -> str:

@@ -33,6 +33,27 @@ def test_style_resolver_applies_attributes() -> None:
     assert style["font_weight"] == "bold"
 
 
+def test_style_resolver_applies_text_anchor_attribute() -> None:
+    resolver = StyleResolver()
+    element = etree.fromstring("<text text-anchor='middle'>Hello</text>")
+
+    style = resolver.compute_text_style(element)
+
+    assert style["text_anchor"] == "middle"
+
+
+def test_style_resolver_inherits_text_anchor_from_parent() -> None:
+    resolver = StyleResolver()
+    group = etree.fromstring("<g text-anchor='end'><text>Hello</text></g>")
+    text_node = group.find("text")
+    assert text_node is not None
+
+    parent_style = resolver.compute_text_style(group)
+    child_style = resolver.compute_text_style(text_node, parent_style=parent_style)
+
+    assert child_style["text_anchor"] == "end"
+
+
 def test_style_resolver_parses_inline_styles() -> None:
     resolver = StyleResolver()
     element = etree.fromstring(
@@ -54,6 +75,15 @@ def test_style_resolver_supports_percentage_font_size() -> None:
     style = resolver.compute_text_style(element, parent_style=parent)
 
     assert style["font_size_pt"] == pytest.approx(15.0)
+
+
+def test_style_resolver_scales_unitless_font_size() -> None:
+    resolver = StyleResolver(unitless_font_size_scale=0.875)
+    element = etree.fromstring("<text style='font-size: 32'>Hello</text>")
+
+    style = resolver.compute_text_style(element)
+
+    assert style["font_size_pt"] == pytest.approx(28.0)
 
 
 def test_style_resolver_resolves_current_color() -> None:

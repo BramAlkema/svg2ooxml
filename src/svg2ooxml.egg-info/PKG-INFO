@@ -16,11 +16,6 @@ Requires-Dist: mypy>=1.8; extra == "dev"
 Requires-Dist: pre-commit>=3.5; extra == "dev"
 Requires-Dist: pytest>=7.4; extra == "dev"
 Requires-Dist: ruff>=0.4.0; extra == "dev"
-Requires-Dist: huey>=2.5.4; extra == "dev"
-Requires-Dist: redis>=5.0.1; extra == "dev"
-Requires-Dist: google-cloud-tasks>=2.16.0; extra == "dev"
-Requires-Dist: firebase-admin>=6.5.0; extra == "dev"
-Requires-Dist: fonttools>=4.59.2; extra == "dev"
 Provides-Extra: accel
 Requires-Dist: numpy>=1.24; extra == "accel"
 Provides-Extra: color
