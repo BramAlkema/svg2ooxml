@@ -6,11 +6,13 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import os
 import urllib.request
 from pathlib import Path
 from typing import Iterable, TypedDict
 
-from tools.visual.diff import ImageDiffError
+from tools.visual.browser_renderer import BrowserRenderError
+from tools.visual.diff import ImageDiffError, VisualDiffer
 from tools.visual.stack import default_visual_stack
 from tools.visual.renderer import LibreOfficeRenderer, VisualRendererError, default_renderer
 
@@ -66,6 +68,7 @@ def run_suite(
     builder = stack.builder
     golden = stack.golden
     diff = stack.diff
+    browser_renderer = stack.browser_renderer
 
     for name, svg_path in _resolve_scenarios(names):
         logger.info("Running scenario %s", name)
@@ -76,11 +79,15 @@ def run_suite(
         scenario_dir = output_dir / name
         render_dir = scenario_dir / "render"
         diff_dir = scenario_dir / "diff"
+        browser_dir = scenario_dir / "browser"
         render_dir.mkdir(parents=True, exist_ok=True)
         diff_dir.mkdir(parents=True, exist_ok=True)
+        browser_dir.mkdir(parents=True, exist_ok=True)
         for stale in render_dir.glob("*.png"):
             stale.unlink()
         for stale in diff_dir.glob("*.png"):
+            stale.unlink()
+        for stale in browser_dir.glob("*.png"):
             stale.unlink()
 
         pptx_path = scenario_dir / "presentation.pptx"
@@ -106,6 +113,45 @@ def run_suite(
                 logger.warning("%s: failed to submit export job – %s", name, exc)
             else:
                 logger.info("%s: submitted export job %s", name, job_payload.get("job_id"))
+
+        if os.getenv("SVG2OOXML_VISUAL_BROWSER_COMPARE") == "1":
+            if not browser_renderer or not browser_renderer.available:
+                logger.warning("%s: Playwright browser renderer is not available.", name)
+            else:
+                browser_threshold = float(os.getenv("SVG2OOXML_VISUAL_BROWSER_THRESHOLD", "0.90"))
+                browser_path = browser_dir / f"{name}.png"
+                try:
+                    browser_renderer.render_svg(svg_text, browser_path)
+                except BrowserRenderError as exc:
+                    logger.warning("%s: browser render failed – %s", name, exc)
+                else:
+                    if not rendered.images:
+                        logger.warning("%s: no rendered slides to compare for browser parity.", name)
+                    else:
+                        from PIL import Image
+
+                        actual_path = Path(rendered.images[0])
+                        if len(rendered.images) > 1:
+                            logger.warning(
+                                "%s: multiple rendered slides; comparing only %s",
+                                name,
+                                actual_path.name,
+                            )
+                        browser_img = Image.open(browser_path)
+                        actual_img = Image.open(actual_path)
+                        differ = VisualDiffer(threshold=browser_threshold)
+                        result = differ.compare(browser_img, actual_img, generate_diff=True)
+                        if not result.passed:
+                            diff_path = diff_dir / f"{name}_browser_diff.png"
+                            result.save_diff(diff_path)
+                            logger.error(
+                                "%s: browser parity failed (SSIM %.4f < %.2f, diff %.2f%%). Diff: %s",
+                                name,
+                                result.ssim_score,
+                                browser_threshold,
+                                result.pixel_diff_percentage,
+                                diff_path,
+                            )
 
         baseline_dir = golden.path_for(Path("w3c") / name)
         if not baseline_dir.exists() or not any(baseline_dir.glob("*.png")):
