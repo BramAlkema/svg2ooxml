@@ -4,7 +4,7 @@ This package provides utilities for visual comparison of rendered outputs,
 enabling automated detection of visual regressions in PPTX generation.
 
 Usage:
-    from tests.visual.differ import VisualDiffer, DiffResult
+    from tools.visual.diff import VisualDiffer, DiffResult
 
     differ = VisualDiffer(threshold=0.95)
     result = differ.compare(baseline_image, actual_image)
@@ -12,4 +12,4 @@ Usage:
         result.save_diff("output/diff.png")
 """
 
-__all__ = ["differ"]
+__all__ = ["diff"]

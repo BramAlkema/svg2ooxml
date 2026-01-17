@@ -12,7 +12,7 @@ from PIL import Image
 
 pytest.importorskip("skimage.metrics")
 
-from tests.visual.differ import DiffResult, VisualDiffer
+from tools.visual.diff import DiffResult, ImageDiffError, VisualDiffer
 
 
 @pytest.fixture
@@ -242,14 +242,16 @@ class TestDiffImageGeneration:
             Image.fromarray(actual),
         )
         
-        # Diff image should have red overlay on right half
+        # Diff image should have a red overlay blended onto the changed region
         diff_arr = np.array(result.diff_image)
         
         # Left half (unchanged) should be black (or close to actual)
         assert np.all(diff_arr[:, 0, :] == [0, 0, 0])
         
-        # Right half (changed) should be red
-        assert np.all(diff_arr[:, 99, :] == [255, 0, 0])
+        # Right half (changed) should be red-tinted over blue
+        expected = np.array([128, 0, 127], dtype=np.int16)
+        actual_pixel = diff_arr[:, 99, :].astype(np.int16)
+        assert np.all(np.abs(actual_pixel - expected) <= 1)
     
     def test_diff_image_size_matches_input(self, solid_red_image, solid_blue_image):
         """Test that diff image has same size as input."""
@@ -308,12 +310,12 @@ class TestEdgeCases:
     """Test edge cases and error conditions."""
     
     def test_different_image_sizes_raises(self):
-        """Test that comparing images of different sizes raises ValueError."""
+        """Test that comparing images of different sizes raises ImageDiffError."""
         small = Image.new("RGB", (50, 50), color=(255, 0, 0))
-        large = Image.new("RGB", (100, 100), color=(255, 0, 0))
+        large = Image.new("RGB", (100, 70), color=(255, 0, 0))
         
         differ = VisualDiffer()
-        with pytest.raises(ValueError, match="shapes don't match"):
+        with pytest.raises(ImageDiffError, match="Image sizes differ"):
             differ.compare(small, large)
     
     def test_grayscale_images_converted(self):
@@ -402,8 +404,18 @@ class TestIntegration:
         # Verify diff was saved
         assert diff_path.exists()
         
-        # Verify diff has red overlay in center
+        # Verify diff has red overlay blended in the center
         diff_img = Image.open(diff_path)
         diff_arr = np.array(diff_img)
         center_pixel = diff_arr[50, 50]
-        assert tuple(center_pixel) == (255, 0, 0)  # Red
+        alpha = 128 / 255
+        expected = np.array(
+            [
+                round((1 - alpha) * 100 + alpha * 255),
+                round((1 - alpha) * 100),
+                round((1 - alpha) * 100),
+            ],
+            dtype=np.int16,
+        )
+        actual_pixel = center_pixel.astype(np.int16)
+        assert np.all(np.abs(actual_pixel - expected) <= 1)

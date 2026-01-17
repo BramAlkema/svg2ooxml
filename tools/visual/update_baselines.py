@@ -15,8 +15,8 @@ for entry in (REPO_ROOT, SRC_ROOT):
     if str(entry) not in sys.path:
         sys.path.insert(0, str(entry))
 
-from tests.visual.helpers.builder import PptxBuilder
-from tests.visual.helpers.golden import GoldenRepository
+from tools.visual.builder import PptxBuilder
+from tools.visual.golden import GoldenRepository
 from tools.visual.renderer import LibreOfficeRenderer, VisualRendererError, default_renderer
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
@@ -26,6 +26,10 @@ SCENARIOS = {
     "rect_scene": {
         "source": Path("tests/visual/fixtures/simple_rect.svg"),
         "golden": Path("rect_scene"),
+    },
+    "simple-rect": {
+        "source": Path("tests/visual/fixtures/simple_rect.svg"),
+        "golden": Path("w3c/simple-rect"),
     },
     "struct-use-10-f": {
         "source": Path("tests/svg/struct-use-10-f.svg"),
@@ -140,16 +144,27 @@ def main() -> None:
         "--soffice",
         help="Explicit path to the soffice binary (defaults to PATH lookup).",
     )
+    parser.add_argument(
+        "--soffice-profile",
+        help="LibreOffice user profile directory passed via -env:UserInstallation.",
+    )
     args = parser.parse_args()
 
+    user_installation = args.soffice_profile or os.getenv("SVG2OOXML_SOFFICE_USER_INSTALL")
     if args.soffice:
-        renderer = LibreOfficeRenderer(soffice_path=args.soffice)
+        renderer = LibreOfficeRenderer(
+            soffice_path=args.soffice,
+            user_installation=user_installation,
+        )
     else:
         soffice_override = os.getenv("SVG2OOXML_SOFFICE_PATH")
         if soffice_override:
-            renderer = LibreOfficeRenderer(soffice_path=soffice_override)
+            renderer = LibreOfficeRenderer(
+                soffice_path=soffice_override,
+                user_installation=user_installation,
+            )
         else:
-            renderer = default_renderer()
+            renderer = default_renderer(user_installation=user_installation)
     if not renderer.available:
         raise SystemExit("LibreOffice (soffice) is not available. Please install it first.")
 

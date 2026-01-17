@@ -2,7 +2,11 @@ from __future__ import annotations
 
 import pytest
 
-# Import fixtures so pytest registers them for the visual suite.
-from tests.visual.helpers import visual_tools  # noqa: F401
+from tools.visual.stack import default_visual_stack
+
+
+@pytest.fixture
+def visual_tools():
+    return default_visual_stack()
 
 pytestmark = pytest.mark.visual

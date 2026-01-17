@@ -4,6 +4,8 @@ This plan operationalises [ADR-017](adr/ADR-017-resvg-rendering-strategy.md) so
 the team can move svg2ooxml’s filter rendering pipeline to a resvg-first
 strategy while keeping production consumers stable.
 
+**Last updated**: 2026-01-17
+
 ## Objectives
 
 - Make resvg the primary fallback after native DrawingML emission and relegate
@@ -19,7 +21,7 @@ strategy while keeping production consumers stable.
 | ----- | ---- | ------------- | ------------- |
 | P1 – Parity & Telemetry | Ship resvg fallback and capture metadata. | Complete | `FilterService` executes native → resvg → legacy, tracer marks `resvg_attempt`/`resvg_success`, docs updated. |
 | P2 – Promotion & Policy | Promote simple resvg stacks to vector/EMF where possible and wire policies. | Complete | Policy engine now enforces per-primitive promotion limits, tracer records policy blocks, and promotion metadata covers all supported vector stacks. |
-| P3 – Coverage & Validation | Prove resvg handles real workloads. | Upcoming | Integration + visual suites cover complex filters; telemetry dashboards show resvg handling ≥85 % of staged documents without regression reports. |
+| P3 – Coverage & Validation | Prove resvg handles real workloads. | In progress | Integration + visual suites cover complex filters; telemetry dashboards show resvg handling ≥85 % of staged documents without regression reports. |
 | P4 – Default to resvg | Flip exporter default and retire unused legacy helpers. | Pending parity proof | Exporter defaults to `filter_strategy="resvg"`; legacy pathway disabled unless explicitly requested; release notes published. |
 
 ## Work Breakdown
@@ -59,14 +61,13 @@ strategy while keeping production consumers stable.
    - Introduce comparison jobs in CI (nightly) that run
      `SVG2OOXML_VISUAL_FILTER_STRATEGY=resvg` vs `legacy` and report pixel
      diffs.
-   - [x] Add a lighting regression comparison (`tests/visual/test_filter_lighting_scene.py`)
-     to measure resvg vs legacy rendering deltas without requiring golden assets.
+   - [ ] Add a lighting regression comparison in the visual suite (no golden assets required).
 
 3. **Staging telemetry**
 - [x] Emit `resvg_plan_characterised` / `resvg_promotion_policy_blocked` tracer
     events so downstream telemetry captures plan composition and policy fallbacks.
 - [x] Feed `resvg_metrics` counters into conversion summaries for dashboards.
-- [ ] Instrument API workers to emit counters for resvg vs legacy pathway.
+- [ ] Instrument API workers to emit resvg vs legacy split counters (beyond `resvg_metrics`).
 - [ ] Build a simple dashboard (e.g. Looker/BigQuery or temporary CSV) tracking
      adoption and fallbacks.
     - See `docs/telemetry/resvg_metrics.md` for wiring notes and sample queries.
@@ -93,21 +94,23 @@ strategy while keeping production consumers stable.
 | Resvg-first pipeline landed | ✅ | `FilterService` now returns resvg results before legacy fallbacks. |
 | Policy override spec | ✅ | Promotion limits for offset/merge/component-transfer/convolve landed; lighting budgets moved to Phase 3. |
 | EMF promotion prototype | ✅ | Single-primitive and stack promotions now cover flood/composite, blend, color matrix, morphology/tile, component-transfer, offset, merge, and convolve matrix. |
-| Visual regression suite | ⏳ | Needs CI integration. |
+| Resvg metrics aggregation | ✅ | `resvg_metrics` rolled into conversion summaries for telemetry. |
+| Visual regression suite | ⏳ | Suite exists; CI integration + lighting fixture pending. |
+| Telemetry dashboard | ⏳ | Needs ingestion + dashboard wiring (see `docs/telemetry/resvg_metrics.md`). |
 | Exporter default flip | ⏳ | Blocked on parity metrics. |
 
 Update this table as milestones progress.
 
 ## Current Focus
 
-- Monitor the extended policy override schema (`allow_promotion`, `max_arithmetic_coeff`, offset/merge/component/convolve limits) and keep the unit coverage in sync with new knobs.
-- Extend EMF/vector promotion to lighting primitives using the enriched plan metadata and lighting helpers.
-- Finalise staging telemetry (counters/dashboards) so resvg vs legacy adoption remains observable.
+- Close visual regression gaps (refresh baselines, wire CI comparisons, add lighting visual test).
+- Finalise staging telemetry (resvg vs legacy split counters + dashboard wiring).
+- Define parity gates and rollout steps for flipping the resvg default.
 
 ## Immediate Next Steps (Q1)
 
-1. Validate extended policy overrides and land supporting unit tests. *(done)*
-2. Prototype EMF promotion for lighting primitives using the enriched lighting metadata and plan summaries.
-3. Scope lighting parity: lighting descriptors now capture surface scale, constants, light parameters, and planner metadata; next step is EMF/vector promotion for `feDiffuseLighting`/`feSpecularLighting` plus policy knobs.
-4. Expand tracer payloads and ship dashboards for staging telemetry.
-5. Begin collecting parity metrics on key customer documents.
+1. Wire CI visual comparisons (resvg vs legacy) and refresh baselines.
+2. Add a lighting regression visual test to the visual suite.
+3. Emit resvg vs legacy split counters in API workers and wire dashboards.
+4. Collect parity metrics on key customer documents and define go/no-go thresholds.
+5. Prepare the default flip + legacy deprecation plan (docs + release notes).

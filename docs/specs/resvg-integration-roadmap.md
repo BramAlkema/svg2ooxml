@@ -2,8 +2,9 @@
 
 **Feature**: Complete Resvg Integration for Native Vector Rendering
 **Priority**: High
-**Status**: Planning
+**Status**: In progress (P1-P2 complete; P3 in progress)
 **Created**: 2025-11-03
+**Last updated**: 2026-01-17
 
 ---
 
@@ -20,17 +21,17 @@ Currently, svg2ooxml uses a hybrid rendering approach with legacy helpers for fi
 ### 1.2 Success Criteria
 
 **Must Have**:
-- ⏳ Native vector promotion for priority filter primitives (feComposite, feBlend)
-- ⏳ Complete pyportresvg integration for fills, strokes, gradients, markers, masks, clips
-- ⏳ Resvg-based text shaping with DrawingML fallback
-- ⏳ Comprehensive telemetry for native vs. EMF/raster decisions
-- ⏳ Visual regression testing infrastructure
+- ✅ Native vector promotion for priority filter primitives (feComposite, feBlend)
+- ✅ Complete pyportresvg integration for fills, strokes, gradients, markers, masks, clips
+- ✅ Resvg-based text shaping with DrawingML fallback (plain text runs; complex cases fall back)
+- ✅ Telemetry for resvg decisions + promotion policy blocks (`resvg_metrics` aggregation)
+- 🟡 Visual regression testing infrastructure (suite + baselines exist; CI comparisons pending)
 - ⏳ Default to resvg rendering paths with monitoring
 
 **Should Have**:
-- Performance metrics for resvg vs. legacy paths
-- Automatic quality scoring for rendering decisions
-- Gradual rollout mechanism with feature flags
+- 🟡 Performance metrics for resvg vs. legacy paths (counters exist; dashboards pending)
+- ⏳ Automatic quality scoring for rendering decisions
+- 🟡 Gradual rollout mechanism with feature flags (strategy/policy knobs exist; default flip pending)
 
 **Nice to Have**:
 - Interactive visual diff viewer
@@ -43,6 +44,21 @@ Currently, svg2ooxml uses a hybrid rendering approach with legacy helpers for fi
 - ❌ Full CSS3 filter support beyond SVG 1.1/2.0
 - ❌ Dynamic filter animations
 - ❌ WebGL-based rendering
+
+### 1.4 Status Update (Actuals as of 2026-01-17)
+
+**Completed**:
+- Resvg-first filter pipeline (native → resvg → legacy) with promotion + policy gates.
+- Lighting/turbulence parsing with EMF promotion prototypes for lighting and unit/integration coverage.
+- Resvg geometry/paint bridges for fills, strokes, gradients, markers, masks, and clips.
+- Resvg text analysis + DrawingML runs for plain text with fallback for complex cases.
+- Resvg metrics aggregated into conversion summaries for downstream telemetry.
+
+**Outstanding / Gaps**:
+- Wire visual regression comparisons into CI (resvg vs. legacy).
+- Add a dedicated lighting visual regression fixture/test in the visual suite.
+- Publish dashboards for `conversion.resvg_metrics` + adoption ratios.
+- Flip exporter defaults to resvg and deprecate legacy helpers.
 
 ---
 
@@ -117,8 +133,8 @@ Currently, svg2ooxml uses a hybrid rendering approach with legacy helpers for fi
 - **Fallback**: EMF for complex modes (color-dodge, color-burn, etc.)
 
 **Turbulence/Lighting**:
-- **Strategy**: Always EMF (pathologically complex)
-- **Rationale**: No DrawingML equivalent, computational intensity
+- **Strategy**: Resvg renders turbulence/lighting to bitmap; lighting stacks may promote to EMF when policy allows.
+- **Rationale**: No direct DrawingML equivalent; resvg preserves fidelity while promotions keep editability in limited cases.
 
 #### 3.1.2 Masking Path Promotion
 
@@ -187,52 +203,34 @@ def map_blend_mode(svg_mode: str) -> str | None:
 
 #### 3.2.1 Decision Tracking
 
-**Data Structure**:
+**Data Structure (actual)**:
 ```python
-@dataclass
-class RenderDecision:
-    """Record of a rendering decision."""
-    element_type: str  # "filter", "shape", "text", etc.
-    element_id: str | None
-    strategy: str  # "native", "emf", "raster"
-    rationale: str  # Why this decision was made
-    complexity_score: float  # 0.0 = simple, 1.0 = complex
-    timestamp: float  # Unix timestamp (seconds since epoch)
-    context: dict[str, Any]  # Additional metadata
+@dataclass(slots=True)
+class StageTrace:
+    stage: str
+    action: str
+    metadata: Dict[str, Any] = field(default_factory=dict)
+    subject: str | None = None
 ```
 
-**Location**: `src/svg2ooxml/telemetry/render_decisions.py`
+`ConversionTracer` aggregates stage totals into `resvg_metrics` for reporting.
+
+**Location**: `src/svg2ooxml/core/tracing/conversion.py`
 
 #### 3.2.2 Tracer Integration
 
-**Existing Tracer Enhancement**:
+**Current Tracer Integration**:
 ```python
-# In src/svg2ooxml/common/trace.py
-class Tracer:
-    def record_filter_decision(
-        self,
-        filter_id: str,
-        strategy: str,
-        rationale: str,
-        complexity: float
-    ):
-        """Record filter rendering decision."""
-        self.data.setdefault("filter_decisions", []).append({
-            "filter_id": filter_id,
-            "strategy": strategy,
-            "rationale": rationale,
-            "complexity": complexity,
-            "timestamp": time.time(),
-        })
-
-    def get_strategy_summary(self) -> dict[str, int]:
-        """Get count of native vs. EMF vs. raster."""
-        decisions = self.data.get("filter_decisions", [])
-        return {
-            "native": sum(1 for d in decisions if d["strategy"] == "native"),
-            "emf": sum(1 for d in decisions if d["strategy"] == "emf"),
-            "raster": sum(1 for d in decisions if d["strategy"] == "raster"),
-        }
+# In src/svg2ooxml/services/filter_service.py
+def _trace(action: str, **meta: Any) -> None:
+    if tracer is None:
+        return
+    tracer.record_stage_event(
+        stage="filter",
+        action=action,
+        subject=filter_id,
+        metadata=meta,
+    )
 ```
 
 #### 3.2.3 Reporting
@@ -300,7 +298,7 @@ def convert_shape_with_resvg(svg_element, context):
     )
 ```
 
-**Location**: `src/svg2ooxml/core/resvg_integration/shape_converter.py`
+**Location**: `src/svg2ooxml/drawingml/bridges/resvg_shape_adapter.py`, `src/svg2ooxml/core/ir/shape_pipeline.py`
 
 #### 3.3.2 Paint Type Mapping
 
@@ -364,7 +362,7 @@ def convert_linear_gradient(ir_gradient):
 
 **Note**: Exact approach depends on pyportresvg API capabilities - may need custom marker expansion logic.
 
-**Location**: `src/svg2ooxml/core/resvg_integration/marker_converter.py`
+**Location**: `src/svg2ooxml/render/markers.py`
 
 ---
 
@@ -469,7 +467,7 @@ def convert_resvg_text_to_drawingml(resvg_text):
 - Resvg uses loaded font for shaping
 - DrawingML embeds font (existing pipeline)
 
-**Location**: `src/svg2ooxml/core/resvg_integration/text_converter.py`
+**Location**: `src/svg2ooxml/core/ir/text_converter.py`, `src/svg2ooxml/core/resvg/text/drawingml_generator.py`
 
 ---
 
@@ -477,9 +475,13 @@ def convert_resvg_text_to_drawingml(resvg_text):
 
 #### 3.5.1 Visual Regression Testing
 
+**Actuals**:
+- Visual tests live in `tests/visual/test_resvg_visual.py` with baselines under `tests/visual/baselines/resvg/`.
+- CI currently skips visual tests; a comparison job (resvg vs legacy) is still required.
+
 **Infrastructure**:
 ```python
-# tests/visual/resvg_mode_tests.py
+# tests/visual/test_resvg_visual.py
 class ResvgVisualTests:
     """Visual regression tests in resvg-only mode."""
 
@@ -602,21 +604,21 @@ class ResvgMetrics:
     user_reported_issues: int
 ```
 
-**Dashboard Queries**:
+**Dashboard Queries (actual metrics source)**:
 ```sql
--- Native rendering rate over time
+-- Resvg promotion + policy blocks over time
 SELECT
-    DATE(timestamp) as date,
-    COUNT(*) as total,
-    SUM(CASE WHEN strategy = 'native' THEN 1 ELSE 0 END) as native,
-    SUM(CASE WHEN strategy = 'native' THEN 1 ELSE 0 END) * 100.0 / COUNT(*) as native_pct
-FROM render_decisions
-WHERE element_type = 'filter'
-GROUP BY date
-ORDER BY date DESC;
+  TIMESTAMP_TRUNC(timestamp, DAY) AS day,
+  SUM(conversion.resvg_metrics.promotions) AS promotions,
+  SUM(conversion.resvg_metrics.policy_blocks) AS policy_blocks,
+  SUM(conversion.resvg_metrics.lighting_candidates) AS lighting_candidates
+FROM `project.firestore_exports.svg_jobs_raw`
+WHERE conversion.resvg_metrics IS NOT NULL
+GROUP BY day
+ORDER BY day DESC;
 ```
 
-**Location**: `src/svg2ooxml/telemetry/dashboard.py`
+**Location**: `docs/telemetry/resvg_metrics.md` (dashboard wiring pending)
 
 #### 3.6.3 Legacy Code Retirement
 
@@ -654,29 +656,27 @@ src/svg2ooxml/core/text/legacy_shaping.py
 **Tasks**:
 
 1. **Implement feComposite → Boolean Helpers**
-   - File: `src/svg2ooxml/core/traversal/filters/composite.py`
-   - Hook masking paths into boolean operations
-   - Extract mask geometry from filter input
-   - Convert to DrawingML path with boolean
+   - File: `src/svg2ooxml/filters/primitives/composite.py`
+   - Native composite/masking handling with DrawingML fallbacks
+   - Track operator support + fallback reasons
    - Unit tests: 15+ test cases
 
 2. **Implement feBlend → fillOverlay**
-   - File: `src/svg2ooxml/drawingml/fill_overlay.py`
+   - File: `src/svg2ooxml/filters/primitives/blend.py`
    - Map blend modes to DrawingML
    - "Simple fill" heuristic detection
    - Handle gradient + blend combinations
    - Unit tests: 10+ test cases
 
 3. **Add Telemetry System**
-   - File: `src/svg2ooxml/telemetry/render_decisions.py`
-   - RenderDecision dataclass
-   - Tracer integration
-   - JSON reporting
+   - File: `src/svg2ooxml/core/tracing/conversion.py`
+   - Aggregate `resvg_metrics` from filter stage events
+   - Primitive decision logging inside filter primitives
    - Unit tests: 5+ test cases
 
 4. **Update Filter Strategy Router**
-   - File: `src/svg2ooxml/core/filters/strategy.py`
-   - Route feComposite/feBlend to native converters
+   - File: `src/svg2ooxml/services/filter_service.py`, `src/svg2ooxml/filters/renderer.py`
+   - Route native/resvg/legacy strategies
    - Fallback logic for unsupported modes
    - Integration tests: 5+ test cases
 
@@ -697,21 +697,21 @@ src/svg2ooxml/core/text/legacy_shaping.py
 **Tasks**:
 
 1. **Create Resvg Shape Converter**
-   - File: `src/svg2ooxml/core/resvg_integration/shape_converter.py`
+   - File: `src/svg2ooxml/drawingml/bridges/resvg_shape_adapter.py`, `src/svg2ooxml/core/ir/shape_pipeline.py`
    - Unified shape conversion pipeline
    - Geometry extraction from resvg
    - Paint extraction (fill, stroke, gradient)
    - Unit tests: 20+ test cases
 
 2. **Implement Gradient Converters**
-   - File: `src/svg2ooxml/core/resvg_integration/gradient_converter.py`
+   - File: `src/svg2ooxml/drawingml/bridges/resvg_gradient_adapter.py`
    - Linear gradient → DrawingML
    - Radial gradient → DrawingML
    - Gradient stop mapping
    - Unit tests: 10+ test cases
 
 3. **Implement Marker Converter**
-   - File: `src/svg2ooxml/core/resvg_integration/marker_converter.py`
+   - File: `src/svg2ooxml/render/markers.py`
    - Expand markers to geometry
    - Group as sub-paths
    - Handle marker orientations
@@ -740,14 +740,14 @@ src/svg2ooxml/core/text/legacy_shaping.py
 **Tasks**:
 
 1. **Implement Plain Text Detection**
-   - File: `src/svg2ooxml/core/resvg_integration/text_analyzer.py`
+   - File: `src/svg2ooxml/core/resvg/text/layout_analyzer.py`
    - Detect simple vs. complex layouts
    - Transform complexity scoring
    - Glyph reuse detection
    - Unit tests: 12+ test cases
 
 2. **Create DrawingML Text Generator**
-   - File: `src/svg2ooxml/core/resvg_integration/text_converter.py`
+   - File: `src/svg2ooxml/core/ir/text_converter.py`, `src/svg2ooxml/core/resvg/text/drawingml_generator.py`
    - Convert resvg text runs to DrawingML
    - Font properties mapping
    - Color/style handling
@@ -782,26 +782,31 @@ src/svg2ooxml/core/text/legacy_shaping.py
 **Tasks**:
 
 1. **Build Visual Differ Tool**
-   - File: `tests/visual/differ.py`
+   - File: `tools/visual/diff.py`
    - Pixel-by-pixel comparison
    - Diff image generation
    - Scoring algorithm
    - Unit tests: 5+ test cases
 
 2. **Create Visual Regression Suite**
-   - File: `tests/visual/resvg_mode_tests.py`
+   - File: `tests/visual/test_resvg_visual.py`
    - Blend mode tests
    - Gradient tests
    - Text rendering tests
    - 10+ visual test cases
 
-3. **Collect Real-World Test Corpus**
+3. **Wire CI Visual Comparisons**
+   - Run resvg vs legacy visual diffs on a schedule
+   - Publish diff artifacts + summary
+   - Gate default flip on parity thresholds
+
+4. **Collect Real-World Test Corpus**
    - Gather 20 real decks (Figma, Sketch, AI)
    - Document expected fidelity
    - Store baselines
    - Metadata tracking
 
-4. **Run Comprehensive Testing**
+5. **Run Comprehensive Testing**
    - Execute visual regression suite
    - Test real-world corpus
    - Measure metrics (native rate, fidelity)
@@ -810,8 +815,8 @@ src/svg2ooxml/core/text/legacy_shaping.py
 **Deliverables**:
 - ✅ Visual regression infrastructure
 - ✅ 10+ visual tests
-- ✅ 20-deck test corpus
-- ✅ Fidelity report
+- 🟡 20-deck test corpus
+- 🟡 Fidelity report
 
 **Success Metrics**:
 - Visual fidelity score > 0.90 across corpus
@@ -830,7 +835,7 @@ src/svg2ooxml/core/text/legacy_shaping.py
    - Add rollout percentage mechanism
 
 2. **Deploy Monitoring**
-   - File: `src/svg2ooxml/telemetry/dashboard.py`
+   - File: `docs/telemetry/resvg_metrics.md` (dashboard wiring pending)
    - Database schema for metrics
    - Dashboard queries
    - Alerting thresholds

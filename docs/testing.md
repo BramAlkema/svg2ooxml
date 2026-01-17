@@ -38,7 +38,10 @@ Pick an SVG fixture or provide a file path to compare the raw markup with
 LibreOffice-rendered PPTX slides side-by-side in the browser. Install
 LibreOffice (`soffice`); the viewer auto-detects the standard macOS bundle path
 (`/Applications/LibreOffice.app/Contents/MacOS/soffice`). Use
-`SVG2OOXML_SOFFICE_PATH` for custom installs or Linux distributions.
+`SVG2OOXML_SOFFICE_PATH` for custom installs or Linux distributions. If headless
+LibreOffice fails on macOS (exit code 1 or 134), set
+`SVG2OOXML_SOFFICE_USER_INSTALL` to a writable directory (e.g. `/tmp/lo_profile`)
+or pass `--soffice-profile` when running the visual tools.
 
 The W3C sanity suite wraps the same tooling for a fixed list of fixtures:
 

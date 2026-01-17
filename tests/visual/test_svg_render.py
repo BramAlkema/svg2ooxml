@@ -6,7 +6,6 @@ from pathlib import Path
 
 import pytest
 
-from tests.visual.helpers.diff import ImageDiffError
 from tools.visual.renderer import LibreOfficeRenderer, VisualRendererError
 
 FIXTURE_SVG = Path(__file__).parent / "fixtures" / "simple_rect.svg"

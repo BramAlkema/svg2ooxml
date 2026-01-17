@@ -8,10 +8,13 @@ import platform
 import plistlib
 import shutil
 import subprocess
+import zipfile
+import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Sequence
 
+from PIL import Image
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +31,14 @@ class RenderedSlideSet:
     renderer: str
 
 
+def _normalize_user_installation(user_installation: str | None) -> str | None:
+    if not user_installation:
+        return None
+    if user_installation.startswith("file:"):
+        return user_installation
+    return Path(user_installation).resolve().as_uri()
+
+
 class LibreOfficeRenderer:
     """Render PPTX files to PNG using LibreOffice (soffice) headless mode."""
 
@@ -36,9 +47,15 @@ class LibreOfficeRenderer:
         soffice_path: str | None = None,
         *,
         timeout: float | None = 90.0,
+        user_installation: str | None = None,
+        png_dpi: float | None = 96.0,
     ) -> None:
         self._timeout = timeout
         self._command_path = soffice_path or shutil.which("soffice")
+        self._user_installation = _normalize_user_installation(user_installation)
+        if png_dpi is not None and png_dpi <= 0:
+            raise ValueError("png_dpi must be > 0 or None to disable normalization.")
+        self._png_dpi = png_dpi
 
     # ------------------------------------------------------------------
     # Capability helpers
@@ -58,6 +75,19 @@ class LibreOfficeRenderer:
     # Rendering
     # ------------------------------------------------------------------
 
+    def base_args(self) -> list[str]:
+        args = [
+            "--headless",
+            "--nologo",
+            "--nodefault",
+            "--nofirststartwizard",
+            "--norestore",
+            "--nolockcheck",
+        ]
+        if self._user_installation:
+            args.append(f"-env:UserInstallation={self._user_installation}")
+        return args
+
     def render(self, pptx_path: Path | str, output_dir: Path | str) -> RenderedSlideSet:
         """Render *pptx_path* into PNG images under *output_dir*."""
 
@@ -72,10 +102,7 @@ class LibreOfficeRenderer:
         output_dir.mkdir(parents=True, exist_ok=True)
 
         soffice_args = [
-            "--headless",
-            "--nologo",
-            "--nodefault",
-            "--nofirststartwizard",
+            *self.base_args(),
             "--convert-to",
             "png:impress_png_Export",
             "--outdir",
@@ -134,6 +161,9 @@ class LibreOfficeRenderer:
                 f"LibreOffice completed but produced no PNG files in {output_dir}."
             )
 
+        if self._png_dpi is not None:
+            self._normalize_pngs(pptx_path, generated, self._png_dpi)
+
         logger.debug("Generated %d slide image(s).", len(generated))
         return RenderedSlideSet(images=tuple(generated), renderer="soffice")
 
@@ -171,8 +201,30 @@ class LibreOfficeRenderer:
         app_name = info.get("CFBundleName") or info.get("CFBundleDisplayName")
         return bundle_id, app_name
 
+    def _normalize_pngs(
+        self,
+        pptx_path: Path,
+        images: Sequence[Path],
+        png_dpi: float,
+    ) -> None:
+        target_size = _slide_size_to_pixels(pptx_path, png_dpi)
+        if target_size is None:
+            logger.warning("Unable to resolve slide size for %s; skipping PNG normalization.", pptx_path)
+            return
 
-def default_renderer() -> LibreOfficeRenderer:
+        for image_path in images:
+            with Image.open(image_path) as img:
+                if img.size == target_size:
+                    continue
+                resized = img.resize(target_size, resample=Image.LANCZOS)
+                resized.save(image_path)
+
+
+def default_renderer(
+    *,
+    timeout: float | None = 90.0,
+    user_installation: str | None = None,
+) -> LibreOfficeRenderer:
     """Return a renderer using an explicit path, macOS default, or PATH lookup."""
 
     soffice_override = os.getenv("SVG2OOXML_SOFFICE_PATH")
@@ -180,7 +232,67 @@ def default_renderer() -> LibreOfficeRenderer:
         mac_default = Path("/Applications/LibreOffice.app/Contents/MacOS/soffice")
         if mac_default.exists():
             soffice_override = str(mac_default)
-    return LibreOfficeRenderer(soffice_path=soffice_override)
+    if user_installation is None:
+        user_installation = os.getenv("SVG2OOXML_SOFFICE_USER_INSTALL")
+    png_dpi = _resolve_png_dpi()
+    return LibreOfficeRenderer(
+        soffice_path=soffice_override,
+        timeout=timeout,
+        user_installation=user_installation,
+        png_dpi=png_dpi,
+    )
+
+
+def _resolve_png_dpi() -> float | None:
+    env_value = os.getenv("SVG2OOXML_SOFFICE_PNG_DPI")
+    if env_value is None or env_value == "":
+        return 96.0
+    if env_value.lower() in {"none", "off", "false"}:
+        return None
+    try:
+        dpi = float(env_value)
+    except ValueError as exc:
+        raise ValueError(f"Invalid SVG2OOXML_SOFFICE_PNG_DPI value: {env_value!r}") from exc
+    if dpi <= 0:
+        return None
+    return dpi
+
+
+def _slide_size_to_pixels(pptx_path: Path, dpi: float) -> tuple[int, int] | None:
+    size_emu = _read_slide_size_emu(pptx_path)
+    if size_emu is None:
+        return None
+    width_emu, height_emu = size_emu
+    emu_per_inch = 914400
+    width_px = int(round((width_emu / emu_per_inch) * dpi))
+    height_px = int(round((height_emu / emu_per_inch) * dpi))
+    if width_px <= 0 or height_px <= 0:
+        return None
+    return (width_px, height_px)
+
+
+def _read_slide_size_emu(pptx_path: Path) -> tuple[int, int] | None:
+    try:
+        with zipfile.ZipFile(pptx_path, "r") as archive:
+            xml = archive.read("ppt/presentation.xml")
+    except (KeyError, FileNotFoundError, zipfile.BadZipFile) as exc:
+        logger.warning("Unable to read presentation.xml from %s: %s", pptx_path, exc)
+        return None
+
+    try:
+        root = ET.fromstring(xml)
+    except ET.ParseError as exc:
+        logger.warning("Unable to parse presentation.xml from %s: %s", pptx_path, exc)
+        return None
+
+    ns = {"p": "http://schemas.openxmlformats.org/presentationml/2006/main"}
+    node = root.find("p:sldSz", ns)
+    if node is None:
+        return None
+    try:
+        return (int(node.attrib["cx"]), int(node.attrib["cy"]))
+    except (KeyError, ValueError):
+        return None
 
 
 __all__ = [

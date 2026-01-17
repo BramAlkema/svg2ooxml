@@ -101,10 +101,13 @@ def test_emf_blob_draw_polyline_requires_two_points() -> None:
 def test_emf_blob_fill_polypolygon_writes_record() -> None:
     blob = EMFBlob(914400, 914400)
     brush = blob.create_solid_brush(0x0000FF)
-    blob.fill_polypolygon([
-        [(0, 0), (100, 0), (100, 100)],
-        [(200, 200), (300, 200), (300, 300)],
-    ], brush_handle=brush)
+    blob.fill_polypolygon(
+        [
+            [(0, 0), (10000, 0), (10000, 10000)],
+            [(20000, 20000), (30000, 20000), (30000, 30000)],
+        ],
+        brush_handle=brush,
+    )
     emf_bytes = blob.finalize()
     records = [record_type for record_type, _ in _records(emf_bytes)]
     assert EMFRecordType.EMR_POLYPOLYGON in records

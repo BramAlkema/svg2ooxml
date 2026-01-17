@@ -10,10 +10,9 @@ import urllib.request
 from pathlib import Path
 from typing import Iterable, TypedDict
 
-from tests.visual.helpers.builder import PptxBuilder
-from tests.visual.helpers.diff import ImageDiff, ImageDiffError
-from tests.visual.helpers.golden import GoldenRepository
-from tools.visual.renderer import VisualRendererError, default_renderer
+from tools.visual.diff import ImageDiffError
+from tools.visual.stack import default_visual_stack
+from tools.visual.renderer import LibreOfficeRenderer, VisualRendererError, default_renderer
 
 logger = logging.getLogger("w3c_suite")
 
@@ -42,17 +41,31 @@ def _resolve_scenarios(names: Iterable[str] | None) -> list[tuple[str, Path]]:
     return resolved
 
 
-def run_suite(names: Iterable[str] | None, output_dir: Path, export: ExportOptions | None = None) -> None:
-    renderer = default_renderer()
+def run_suite(
+    names: Iterable[str] | None,
+    output_dir: Path,
+    export: ExportOptions | None = None,
+    *,
+    soffice_path: str | None = None,
+    soffice_profile: str | None = None,
+) -> None:
+    if soffice_path:
+        renderer = LibreOfficeRenderer(
+            soffice_path=soffice_path,
+            user_installation=soffice_profile,
+        )
+    else:
+        renderer = default_renderer(user_installation=soffice_profile)
     if not renderer.available:
         raise SystemExit(
             "LibreOffice (soffice) is not available. Install it or set "
             "SVG2OOXML_SOFFICE_PATH before running the suite."
         )
 
-    builder = PptxBuilder()
-    golden = GoldenRepository(Path("tests/visual/golden"))
-    diff = ImageDiff()
+    stack = default_visual_stack()
+    builder = stack.builder
+    golden = stack.golden
+    diff = stack.diff
 
     for name, svg_path in _resolve_scenarios(names):
         logger.info("Running scenario %s", name)
@@ -65,6 +78,10 @@ def run_suite(names: Iterable[str] | None, output_dir: Path, export: ExportOptio
         diff_dir = scenario_dir / "diff"
         render_dir.mkdir(parents=True, exist_ok=True)
         diff_dir.mkdir(parents=True, exist_ok=True)
+        for stale in render_dir.glob("*.png"):
+            stale.unlink()
+        for stale in diff_dir.glob("*.png"):
+            stale.unlink()
 
         pptx_path = scenario_dir / "presentation.pptx"
         svg_text = svg_path.read_text(encoding="utf-8")
@@ -147,6 +164,14 @@ def main() -> None:
         default="slides",
         help="Export format when posting scenarios to the API",
     )
+    parser.add_argument(
+        "--soffice",
+        help="Explicit path to the soffice binary (defaults to PATH lookup).",
+    )
+    parser.add_argument(
+        "--soffice-profile",
+        help="LibreOffice user profile directory passed via -env:UserInstallation.",
+    )
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO if not args.verbose else logging.DEBUG)
@@ -161,7 +186,13 @@ def main() -> None:
             "output_format": args.export_format,
         }
 
-    run_suite(args.scenarios, output_dir, export=export_opts)
+    run_suite(
+        args.scenarios,
+        output_dir,
+        export=export_opts,
+        soffice_path=args.soffice,
+        soffice_profile=args.soffice_profile,
+    )
 
 
 def _submit_export_job(*, svg_text: str, scenario_name: str, export_options: ExportOptions) -> dict[str, object]:

@@ -39,6 +39,10 @@ def _request(method: str, path: str, *, json: dict | None = None, headers: dict 
             timeout=30,
         )
         resp.raise_for_status()
+    except request_exceptions.HTTPError as exc:
+        if not SMOKE_STRICT and resp.status_code == 404:
+            pytest.skip(f"Smoke endpoint returned 404: {resp.url}")
+        raise
     except (request_exceptions.ConnectionError, request_exceptions.Timeout) as exc:
         if SMOKE_STRICT:
             raise

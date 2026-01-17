@@ -1,5 +1,7 @@
 # svg2ooxml
 
+> **Note (2026-01-16):** GCP project `powerful-layout-467812-p1` was deleted to stop billing charges. The Cloud Run service is no longer available. Can be restored within 30 days via `gcloud projects undelete powerful-layout-467812-p1`.
+
 SVG → Office Open XML conversion toolkit. The project is an evolution of the
 internal svg2pptx converter and is being rebuilt around a small, well-typed
 core that can run locally without GCP dependencies.
@@ -129,6 +131,8 @@ Supporting folders:
 
 For a deeper dive, read `docs/structure.md`, `docs/testing.md`, and the ADRs in
 `docs/adr/`.
+
+Project status and priorities live in `docs/ROADMAP.md`.
 
 ## Visual Review
 
