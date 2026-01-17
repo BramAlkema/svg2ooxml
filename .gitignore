@@ -17,11 +17,19 @@ __pycache__/
 # Local build and temp dirs
 tmp/
 .tmp_render/
+.tmp_compare/
+.visual_server/
 .visual_tmp/
 reports/
 
 # Misc generated files
 Untitled *.pptx
+Emf embedding example.pptx
+cannotdisplay.pptx
+demo_tiers_composite_filters.pptx
+test_emf3inclusion.pptx
+thisiswhatitshouldlooklike.pptx
+whatisshouldlooklike.pptx
 
 # Cloud credentials (never commit!)
 service-account*.json
@@ -31,6 +39,7 @@ credentials.json
 # Local environment variables
 .env
 .env.local
+.envrc
 
 # Documentation (local notes)
 docs/adr/*.md
