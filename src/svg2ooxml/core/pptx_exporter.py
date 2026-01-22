@@ -151,6 +151,7 @@ class SvgToPptxExporter:
         output_path: Path | None = None,
         *,
         tracer: ConversionTracer | None = None,
+        policy_overrides: Dict[str, Dict[str, Any]] | None = None,
     ) -> SvgToPptxResult:
         """Convert the SVG located at *input_path* into a PPTX package."""
 
@@ -164,6 +165,7 @@ class SvgToPptxExporter:
             target_path,
             tracer=tracer,
             source_path=str(input_path),
+            policy_overrides=policy_overrides,
         )
 
     def convert_string(
@@ -173,11 +175,17 @@ class SvgToPptxExporter:
         *,
         tracer: ConversionTracer | None = None,
         source_path: str | None = None,
+        policy_overrides: Dict[str, Dict[str, Any]] | None = None,
     ) -> SvgToPptxResult:
         """Convert an SVG payload into a PPTX written to *output_path*."""
 
         active_tracer = tracer or ConversionTracer()
-        render_result, scene = self._render_svg(svg_text, active_tracer, source_path=source_path)
+        render_result, scene = self._render_svg(
+            svg_text, 
+            active_tracer, 
+            source_path=source_path,
+            policy_overrides=policy_overrides,
+        )
         pptx_path = self._builder.build_from_results(
             [render_result],
             output_path,
@@ -431,6 +439,7 @@ class SvgToPptxExporter:
             services=services_override,
             policy_engine=parse_result.policy_engine,
             policy_context=policy_context,
+            overrides=effective_overrides or None,
             tracer=tracer,
         )
         if scene.metadata is None:

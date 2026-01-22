@@ -26,6 +26,10 @@ class Run:
     underline: bool = False
     strike: bool = False
     rgb: str = "000000"
+    fill_opacity: float = 1.0
+    stroke_rgb: str | None = None
+    stroke_width_px: float | None = None
+    stroke_opacity: float | None = None
     navigation: Any | None = None
     language: str | None = None
     kerning: float | None = None
@@ -40,10 +44,16 @@ class Run:
             raise ValueError("font size must be positive")
         if len(self.rgb) != 6:
             raise ValueError("rgb must be 6 hex characters")
+        if self.stroke_rgb is not None and len(self.stroke_rgb) != 6:
+            raise ValueError("stroke_rgb must be 6 hex characters")
 
     @property
     def has_decoration(self) -> bool:
         return self.underline or self.strike
+
+    @property
+    def has_stroke(self) -> bool:
+        return self.stroke_rgb is not None and (self.stroke_width_px or 0.0) > 0.0
 
     @property
     def weight_class(self) -> int:
@@ -60,6 +70,10 @@ class EnhancedRun:
     underline: bool = False
     strike: bool = False
     rgb: str = "000000"
+    fill_opacity: float = 1.0
+    stroke_rgb: str | None = None
+    stroke_width_px: float | None = None
+    stroke_opacity: float | None = None
     font_metadata: FontMetadata | None = None
     text_decorations: list[str] = field(default_factory=list)
     style_inheritance: dict[str, Any] = field(default_factory=dict)
@@ -79,6 +93,8 @@ class EnhancedRun:
             raise ValueError("font size must be positive")
         if len(self.rgb) != 6:
             raise ValueError("rgb must be 6 hex characters")
+        if self.stroke_rgb is not None and len(self.stroke_rgb) != 6:
+            raise ValueError("stroke_rgb must be 6 hex characters")
 
     @property
     def has_decoration(self) -> bool:
@@ -87,6 +103,10 @@ class EnhancedRun:
             or self.strike
             or bool(self.text_decorations)
         )
+
+    @property
+    def has_stroke(self) -> bool:
+        return self.stroke_rgb is not None and (self.stroke_width_px or 0.0) > 0.0
 
     @property
     def weight_class(self) -> int:
@@ -124,6 +144,10 @@ class EnhancedRun:
             underline=self.underline,
             strike=self.strike,
             rgb=self.rgb,
+            fill_opacity=self.fill_opacity,
+            stroke_rgb=self.stroke_rgb,
+            stroke_width_px=self.stroke_width_px,
+            stroke_opacity=self.stroke_opacity,
             language=self.language,
             kerning=self.kerning,
             letter_spacing=self.letter_spacing,

@@ -243,6 +243,9 @@ def _apply_overrides(
             case "text.wordart.enable":
                 wordart = replace(decision.wordart, enable_detection=bool(value))
                 decision = replace(decision, wordart=wordart)
+            case "text.wordart.prefer_native":
+                wordart = replace(decision.wordart, prefer_native_wordart=bool(value))
+                decision = replace(decision, wordart=wordart)
             case "text.wordart.confidence_threshold":
                 wordart = replace(decision.wordart, confidence_threshold=float(value))
                 decision = replace(decision, wordart=wordart)

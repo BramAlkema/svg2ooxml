@@ -182,6 +182,10 @@ class StyleResolver:
         "text-decoration": PropertyDescriptor("text_decoration", str.strip),
         "text-anchor": PropertyDescriptor("text_anchor", _normalize_text_anchor),
         "fill": PropertyDescriptor("fill", str.strip),
+        "fill-opacity": PropertyDescriptor("fill_opacity", str.strip),
+        "stroke": PropertyDescriptor("stroke", str.strip),
+        "stroke-width": PropertyDescriptor("stroke_width", str.strip),
+        "stroke-opacity": PropertyDescriptor("stroke_opacity", str.strip),
     }
 
     _TEXT_CSS_MAP = _TEXT_ATTRIBUTE_MAP

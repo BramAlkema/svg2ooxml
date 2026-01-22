@@ -259,7 +259,7 @@ class DrawingMLTextGenerator:
             a_sub(parent, "endParaRPr")
             return
 
-        for text, text_style, fill_style, preserve_space in segments:
+        for text, text_style, fill_style, stroke_style, preserve_space in segments:
             normalized = self._normalize_text_segment(text, preserve_space=preserve_space)
             if not normalized:
                 continue
@@ -270,7 +270,7 @@ class DrawingMLTextGenerator:
 
                 r = a_sub(parent, "r")
                 rPr = a_sub(r, "rPr")
-                self._populate_run_properties(rPr, text_style, fill_style)
+                self._populate_run_properties(rPr, text_style, fill_style, stroke_style)
 
                 t = a_sub(r, "t")
                 text_value = part if part else " "
@@ -284,6 +284,7 @@ class DrawingMLTextGenerator:
         rPr: etree._Element,
         text_style: TextStyle | None,
         fill_style: FillStyle | None,
+        stroke_style: StrokeStyle | None = None,
     ) -> None:
         """Populate <a:rPr> run properties element from text style.
 
@@ -293,6 +294,7 @@ class DrawingMLTextGenerator:
         - font-weight → b
         - font-style → i
         - fill color → solidFill
+        - stroke/outline → ln
 
         Uses lxml for safe attribute escaping (no need for manual escaping).
 
@@ -300,12 +302,34 @@ class DrawingMLTextGenerator:
             rPr: The <a:rPr> element to populate
             text_style: TextStyle with font properties
             fill_style: FillStyle with color information
+            stroke_style: Optional StrokeStyle for outlines
         """
-        # Fill color
+        # Fill color and opacity
         if fill_style and fill_style.color:
             hex_color = _color_to_hex(fill_style.color)
             solidFill = a_sub(rPr, "solidFill")
-            a_sub(solidFill, "srgbClr", val=hex_color)
+            
+            fill_alpha = int(round(fill_style.opacity * 100000))
+            if fill_alpha < 100000:
+                srgbClr = a_sub(solidFill, "srgbClr", val=hex_color)
+                a_sub(srgbClr, "alpha", val=str(fill_alpha))
+            else:
+                a_sub(solidFill, "srgbClr", val=hex_color)
+
+        # Outline (stroke)
+        if stroke_style and stroke_style.width is not None and stroke_style.width > 0:
+            stroke_color = stroke_style.color or getattr(fill_style, "color", None)
+            if stroke_color:
+                hex_color = _color_to_hex(stroke_color)
+                ln = a_sub(rPr, "ln", w=str(px_to_emu(stroke_style.width)))
+                strokeFill = a_sub(ln, "solidFill")
+                
+                stroke_alpha = int(round(stroke_style.opacity * 100000))
+                if stroke_alpha < 100000:
+                    srgbClr = a_sub(strokeFill, "srgbClr", val=hex_color)
+                    a_sub(srgbClr, "alpha", val=str(stroke_alpha))
+                else:
+                    a_sub(strokeFill, "srgbClr", val=hex_color)
 
         if text_style:
             # Font size in hundredths of a point (e.g., 12pt = 1200)
@@ -333,17 +357,19 @@ class DrawingMLTextGenerator:
     def _collect_text_segments(
         self,
         node: TextNode,
-    ) -> list[tuple[str, TextStyle | None, FillStyle | None, bool]]:
-        segments: list[tuple[str, TextStyle | None, FillStyle | None, bool]] = []
+    ) -> list[tuple[str, TextStyle | None, FillStyle | None, StrokeStyle | None, bool]]:
+        segments: list[tuple[str, TextStyle | None, FillStyle | None, StrokeStyle | None, bool]] = []
 
         def visit(
             current,
             inherited_text_style: TextStyle | None,
             inherited_fill_style: FillStyle | None,
+            inherited_stroke_style: StrokeStyle | None,
             preserve_space: bool,
         ) -> None:
             text_style = current.text_style or inherited_text_style
             fill_style = current.fill or inherited_fill_style
+            stroke_style = current.stroke or inherited_stroke_style
             source = getattr(current, "source", None)
             xml_space = None
             if source is not None:
@@ -352,18 +378,18 @@ class DrawingMLTextGenerator:
             if source is not None:
                 text = getattr(source, "text", None)
                 if text:
-                    segments.append((text, text_style, fill_style, node_preserve))
+                    segments.append((text, text_style, fill_style, stroke_style, node_preserve))
             for child in getattr(current, "children", []) or []:
-                visit(child, text_style, fill_style, node_preserve)
+                visit(child, text_style, fill_style, stroke_style, node_preserve)
                 child_source = getattr(child, "source", None)
                 tail = getattr(child_source, "tail", None) if child_source is not None else None
                 if tail:
-                    segments.append((tail, text_style, fill_style, node_preserve))
+                    segments.append((tail, text_style, fill_style, stroke_style, node_preserve))
 
-        visit(node, node.text_style, node.fill, False)
+        visit(node, node.text_style, node.fill, node.stroke, False)
 
         if not segments and node.text_content:
-            segments.append((node.text_content, node.text_style, node.fill, False))
+            segments.append((node.text_content, node.text_style, node.fill, node.stroke, False))
 
         return segments
 

@@ -312,11 +312,33 @@ class CurveTextPositioner:
                     current_point = end_point
 
             elif cmd == 'A':
-                # Arc - simplified to line for now (could be enhanced)
+                # Arc - approximate with segments
                 if len(args) >= 7:
+                    rx, ry = abs(args[0]), abs(args[1])
+                    rotation = args[2]
+                    large_arc = bool(args[3])
+                    sweep = bool(args[4])
                     end_point = Point(args[5], args[6])
-                    segment = self._create_line_segment(current_point, end_point)
-                    segments.append(segment)
+                    
+                    if rx == 0 or ry == 0 or current_point == end_point:
+                        segment = self._create_line_segment(current_point, end_point)
+                        segments.append(segment)
+                    else:
+                        # Simple approximation: subdivide into a few lines to capture curvature
+                        # For better accuracy we would use proper arc-to-bezier conversion
+                        mid_x = (current_point.x + end_point.x) / 2.0
+                        mid_y = (current_point.y + end_point.y) / 2.0
+                        # Nudge midpoint to avoid perfect flatness if it's an arc
+                        # This is a very rough heuristic to help the classifier
+                        offset = min(rx, ry) * (0.5 if large_arc else 0.2)
+                        if sweep:
+                            mid_y += offset
+                        else:
+                            mid_y -= offset
+                        
+                        segments.append(self._create_line_segment(current_point, Point(mid_x, mid_y)))
+                        segments.append(self._create_line_segment(Point(mid_x, mid_y), end_point))
+                    
                     current_point = end_point
 
             elif cmd == 'Z':
