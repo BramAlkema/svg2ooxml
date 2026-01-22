@@ -13,8 +13,9 @@ from .tree import SvgDocument, SvgNode
 def _normalize_text(value: str | None) -> str | None:
     if value is None:
         return None
-    stripped = value.strip()
-    return stripped or None
+    if value == "":
+        return None
+    return value
 
 
 def _normalize_attributes(elem: etree._Element) -> tuple[dict[str, str], dict[str, str]]:

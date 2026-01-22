@@ -144,7 +144,6 @@ src/svg2ooxml/common/tempfiles.py
 src/svg2ooxml/common/time.py
 src/svg2ooxml/common/types.py
 src/svg2ooxml/common/compat/__init__.py
-src/svg2ooxml/common/compat/fonttools.py
 src/svg2ooxml/common/conversions/__init__.py
 src/svg2ooxml/common/conversions/angles.py
 src/svg2ooxml/common/conversions/colors.py
@@ -223,6 +222,7 @@ src/svg2ooxml/core/parser/result.py
 src/svg2ooxml/core/parser/sanitizers.py
 src/svg2ooxml/core/parser/statistics.py
 src/svg2ooxml/core/parser/style_context.py
+src/svg2ooxml/core/parser/svg_font_parser.py
 src/svg2ooxml/core/parser/svg_parser.py
 src/svg2ooxml/core/parser/switch_evaluator.py
 src/svg2ooxml/core/parser/units.py
@@ -459,11 +459,15 @@ src/svg2ooxml/services/fonts/__init__.py
 src/svg2ooxml/services/fonts/embedding.py
 src/svg2ooxml/services/fonts/eot.py
 src/svg2ooxml/services/fonts/fetcher.py
+src/svg2ooxml/services/fonts/fontforge_utils.py
 src/svg2ooxml/services/fonts/loader.py
+src/svg2ooxml/services/fonts/opentype_utils.py
 src/svg2ooxml/services/fonts/service.py
+src/svg2ooxml/services/fonts/svg_font_converter.py
 src/svg2ooxml/services/fonts/system.py
 src/svg2ooxml/services/fonts/providers/__init__.py
 src/svg2ooxml/services/fonts/providers/directory.py
+src/svg2ooxml/services/fonts/providers/svgfont.py
 src/svg2ooxml/services/fonts/providers/webfont.py
 src/svg2ooxml/services/providers/__init__.py
 src/svg2ooxml/services/providers/color_provider.py
@@ -6156,10 +6160,6 @@ tests/visual/golden/marker_clip.xml
 tests/visual/golden/rect_scene/rect_scene.png
 tests/visual/golden/w3c/.gitkeep
 tests/visual/golden/w3c/struct-use-10-f/struct-use-10-f.png
-tests/visual/helpers/__init__.py
-tests/visual/helpers/builder.py
-tests/visual/helpers/diff.py
-tests/visual/helpers/golden.py
 tools/.gitkeep
 tools/__init__.py
 tools/color_palette_report.py

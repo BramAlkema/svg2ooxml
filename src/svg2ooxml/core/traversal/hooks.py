@@ -275,11 +275,6 @@ class TraversalHooksMixin:
                     },
                 )
 
-        if hasattr(ir_object, "effects"):
-            for result in effect_results:
-                if result.effect is not None:
-                    ir_object.effects.append(result.effect)  # type: ignore[attr-defined]
-
         selected_result = effect_results[-1]
         chosen_strategy = selected_result.strategy
         fallback_mode = selected_result.fallback
@@ -308,6 +303,30 @@ class TraversalHooksMixin:
                         assets.extend(prior_assets)
         detailed[filter_id] = selected_meta
 
+        if isinstance(ir_object, Group):
+            filter_types = {
+                str(result.metadata.get("filter_type", "")).lower()
+                for result in effect_results
+                if isinstance(result.metadata, dict) and result.metadata.get("filter_type")
+            }
+            if not filter_types:
+                fallback_type = selected_meta.get("filter_type")
+                if isinstance(fallback_type, str) and fallback_type:
+                    filter_types = {fallback_type.lower()}
+            targets = self._collect_group_effect_targets(ir_object, filter_types)
+        elif hasattr(ir_object, "effects"):
+            targets = [ir_object]
+        else:
+            targets = []
+
+        for result in effect_results:
+            if result.effect is None:
+                continue
+            for target in targets:
+                if result.effect in target.effects:  # type: ignore[attr-defined]
+                    continue
+                target.effects.append(result.effect)  # type: ignore[attr-defined]
+
         policy = metadata.setdefault("policy", {})
 
         assets = selected_meta.get("fallback_assets")
@@ -334,6 +353,27 @@ class TraversalHooksMixin:
             filter_entry.setdefault("bounds", bbox_dict)
         if descriptor_payload is not None:
             filter_entry.setdefault("descriptor", descriptor_payload)
+
+    def _collect_group_effect_targets(
+        self,
+        group: Group,
+        filter_types: set[str],
+    ) -> list[Any]:
+        if "gaussian_blur" not in filter_types:
+            return []
+
+        targets: list[Any] = []
+
+        def _walk(node: Any) -> None:
+            if isinstance(node, Group):
+                for child in node.children:
+                    _walk(child)
+                return
+            if hasattr(node, "effects"):
+                targets.append(node)
+
+        _walk(group)
+        return targets
 
     def _collect_filter_inputs(self, ir_object: Any) -> dict[str, Any]:
         descriptor = self._shape_descriptor(ir_object)

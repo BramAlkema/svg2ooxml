@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import Any, TYPE_CHECKING
 
 from svg2ooxml.core.conversion_context import (
@@ -55,6 +56,21 @@ def convert_parser_output(
     policy_context = conversion_context.policy_context
 
     _hydrate_services_from_parser(services, parser_result, logger)
+
+    # Register local image resolver
+    source_path = parser_result.metadata.get("source_path")
+    if source_path:
+        try:
+            from svg2ooxml.services.image_service import FileResolver
+            image_service = services.image_service
+            if image_service is not None:
+                base_dir = Path(source_path).parent
+                image_service.register_resolver(FileResolver(base_dir))
+                if logger:
+                    logger.debug("Registered FileResolver with base_dir: %s", base_dir)
+        except Exception as exc:  # pragma: no cover - defensive logging
+            if logger:
+                logger.warning("Failed to register FileResolver: %s", exc)
 
     pre_stage_events: list[tuple[str, str, str | None, dict[str, Any]]] = []
     if tracer is not None:
@@ -109,7 +125,12 @@ def _hydrate_services_from_parser(
 
                 # Create font loader with fetcher for remote fonts
                 fetcher = FontFetcher()
-                loader = FontLoader(fetcher=fetcher, allow_network=True)
+                loader = FontLoader(
+                    fetcher=fetcher,
+                    allow_network=True,
+                    base_dir=_resolve_base_dir(parser_result),
+                    allow_svg_fonts=_allow_svg_font_conversion(parser_result.policy_context),
+                )
 
                 # Create provider with loader enabled
                 provider = WebFontProvider(
@@ -128,6 +149,51 @@ def _hydrate_services_from_parser(
             except Exception as exc:  # pragma: no cover - defensive logging
                 if logger:
                     logger.warning("Failed to register web fonts: %s", exc)
+
+    if parser_result.svg_fonts:
+        font_service = services.resolve("font")
+        if font_service is not None:
+            try:
+                from svg2ooxml.services.fonts.providers.svgfont import SvgFontProvider
+
+                if _allow_svg_font_conversion(parser_result.policy_context):
+                    provider = SvgFontProvider(fonts=tuple(parser_result.svg_fonts))
+                    font_service.prepend_provider(provider)
+                    if logger:
+                        logger.debug(
+                            "Registered SvgFontProvider with %d inline SVG font(s)",
+                            len(parser_result.svg_fonts),
+                        )
+            except Exception as exc:  # pragma: no cover - defensive logging
+                if logger:
+                    logger.warning("Failed to register SVG fonts: %s", exc)
+
+
+def _allow_svg_font_conversion(policy_context: PolicyContext | None) -> bool:
+    if policy_context is None:
+        return True
+    text_policy = policy_context.get("text") if hasattr(policy_context, "get") else None
+    if isinstance(text_policy, dict):
+        decision = text_policy.get("decision")
+        try:
+            from svg2ooxml.policy.text_policy import TextPolicyDecision
+        except Exception:
+            TextPolicyDecision = None  # type: ignore[assignment]
+        if TextPolicyDecision is not None and isinstance(decision, TextPolicyDecision):
+            return bool(decision.embedding.allow_svg_font_conversion)
+        embedding = text_policy.get("embedding")
+        if isinstance(embedding, dict) and "allow_svg_font_conversion" in embedding:
+            return bool(embedding.get("allow_svg_font_conversion"))
+    return True
+
+
+def _resolve_base_dir(parser_result: ParseResult) -> Path | None:
+    source_path = None
+    if isinstance(parser_result.metadata, dict):
+        source_path = parser_result.metadata.get("source_path")
+    if isinstance(source_path, str) and source_path:
+        return Path(source_path).expanduser().resolve().parent
+    return None
 
 
 __all__ = ["IRScene", "convert_parser_output"]

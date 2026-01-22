@@ -14,6 +14,7 @@ FontEmbeddingEngine for font subsetting/embedding when configured.
 
 from __future__ import annotations
 
+import re
 from typing import TYPE_CHECKING
 
 # Import centralized unit conversion constants
@@ -258,8 +259,8 @@ class DrawingMLTextGenerator:
             a_sub(parent, "endParaRPr")
             return
 
-        for text, text_style, fill_style in segments:
-            normalized = self._normalize_text_segment(text)
+        for text, text_style, fill_style, preserve_space in segments:
+            normalized = self._normalize_text_segment(text, preserve_space=preserve_space)
             if not normalized:
                 continue
             parts = normalized.split("\n")
@@ -300,6 +301,12 @@ class DrawingMLTextGenerator:
             text_style: TextStyle with font properties
             fill_style: FillStyle with color information
         """
+        # Fill color
+        if fill_style and fill_style.color:
+            hex_color = _color_to_hex(fill_style.color)
+            solidFill = a_sub(rPr, "solidFill")
+            a_sub(solidFill, "srgbClr", val=hex_color)
+
         if text_style:
             # Font size in hundredths of a point (e.g., 12pt = 1200)
             # Uses centralized conversion with proper rounding
@@ -321,54 +328,67 @@ class DrawingMLTextGenerator:
 
             # Font family (lxml handles special characters like & automatically)
             if text_style.font_families:
-                latin = a_sub(rPr, "latin", typeface=text_style.font_families[0])
-
-        # Fill color
-        if fill_style and fill_style.color:
-            hex_color = _color_to_hex(fill_style.color)
-            solidFill = a_sub(rPr, "solidFill")
-            a_sub(solidFill, "srgbClr", val=hex_color)
+                a_sub(rPr, "latin", typeface=text_style.font_families[0])
 
     def _collect_text_segments(
         self,
         node: TextNode,
-    ) -> list[tuple[str, TextStyle | None, FillStyle | None]]:
-        segments: list[tuple[str, TextStyle | None, FillStyle | None]] = []
+    ) -> list[tuple[str, TextStyle | None, FillStyle | None, bool]]:
+        segments: list[tuple[str, TextStyle | None, FillStyle | None, bool]] = []
 
         def visit(
             current,
             inherited_text_style: TextStyle | None,
             inherited_fill_style: FillStyle | None,
+            preserve_space: bool,
         ) -> None:
             text_style = current.text_style or inherited_text_style
             fill_style = current.fill or inherited_fill_style
             source = getattr(current, "source", None)
+            xml_space = None
+            if source is not None:
+                xml_space = source.get("{http://www.w3.org/XML/1998/namespace}space")
+            node_preserve = preserve_space or (xml_space == "preserve")
             if source is not None:
                 text = getattr(source, "text", None)
                 if text:
-                    segments.append((text, text_style, fill_style))
+                    segments.append((text, text_style, fill_style, node_preserve))
             for child in getattr(current, "children", []) or []:
-                visit(child, text_style, fill_style)
+                visit(child, text_style, fill_style, node_preserve)
                 child_source = getattr(child, "source", None)
                 tail = getattr(child_source, "tail", None) if child_source is not None else None
                 if tail:
-                    segments.append((tail, text_style, fill_style))
+                    segments.append((tail, text_style, fill_style, node_preserve))
 
-        visit(node, node.text_style, node.fill)
+        visit(node, node.text_style, node.fill, False)
 
         if not segments and node.text_content:
-            segments.append((node.text_content, node.text_style, node.fill))
+            segments.append((node.text_content, node.text_style, node.fill, False))
 
         return segments
 
     @staticmethod
-    def _normalize_text_segment(text: str | None) -> str:
+    def _normalize_text_segment(text: str | None, *, preserve_space: bool = False) -> str:
         if not text:
             return ""
         token = text.replace("\r\n", "\n").replace("\r", "\n")
+        if preserve_space:
+            if token.strip() == "":
+                return "\n" if "\n" in token else " "
+            return token
+        if "\n" in token:
+            collapsed = re.sub(r"\s+", " ", token)
+            return collapsed.strip()
         if token.strip() == "":
-            return "\n" if "\n" in token else " "
-        return token
+            return " "
+        leading_space = token[:1].isspace()
+        trailing_space = token[-1:].isspace()
+        core = re.sub(r"\s+", " ", token.strip())
+        if leading_space:
+            core = f" {core}"
+        if trailing_space:
+            core = f"{core} "
+        return core
 
     def resolve_font(
         self,

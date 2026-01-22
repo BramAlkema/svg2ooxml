@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import base64
 import logging
 import os
 import re
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Tuple
@@ -31,6 +33,11 @@ class RenderedSvg:
     renderer: str
 
 
+_FONT_FAMILY_ALIASES = {
+    "SVGFreeSansASCII": "Arial",
+}
+
+
 class BrowserSvgRenderer:
     """Render SVG markup to PNG using Playwright-managed browsers."""
 
@@ -40,10 +47,12 @@ class BrowserSvgRenderer:
         engine: str = "chromium",
         timeout: float | None = 30.0,
         device_scale_factor: float | None = None,
+        background: str | None = "white",
     ) -> None:
         self._engine = engine
         self._timeout = timeout
         self._device_scale_factor = device_scale_factor
+        self._background = background
 
     @property
     def available(self) -> bool:
@@ -51,7 +60,13 @@ class BrowserSvgRenderer:
 
         return sync_playwright is not None
 
-    def render_svg(self, svg_text: str, output_path: Path | str) -> RenderedSvg:
+    def render_svg(
+        self,
+        svg_text: str,
+        output_path: Path | str,
+        *,
+        source_path: Path | str | None = None,
+    ) -> RenderedSvg:
         """Render SVG markup to a PNG file."""
 
         if not self.available:
@@ -64,8 +79,35 @@ class BrowserSvgRenderer:
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
         width, height = _extract_dimensions(svg_text)
-        html = _wrap_svg(svg_text, width=width, height=height)
+        svg_text = _rewrite_svg_font_aliases(svg_text)
+        temp_svg_path: Path | None = None
+        if source_path is not None:
+            svg_path = Path(source_path)
+            if not svg_path.exists():
+                raise BrowserRenderError(f"SVG source path not found: {svg_path}")
+            if not svg_path.is_file():
+                raise BrowserRenderError(f"SVG source path is not a file: {svg_path}")
+            source_text = svg_path.read_text(encoding="utf-8")
+            rewritten = _rewrite_svg_font_aliases(source_text)
+            if rewritten != source_text:
+                with tempfile.NamedTemporaryFile(
+                    "w",
+                    suffix=".svg",
+                    delete=False,
+                    encoding="utf-8",
+                    dir=svg_path.parent,
+                ) as handle:
+                    handle.write(rewritten)
+                    temp_svg_path = Path(handle.name)
+                svg_src = temp_svg_path.resolve().as_uri()
+            else:
+                svg_src = svg_path.resolve().as_uri()
+        else:
+            svg_b64 = base64.b64encode(svg_text.encode("utf-8")).decode("ascii")
+            svg_src = f"data:image/svg+xml;base64,{svg_b64}"
+        html = _wrap_svg(svg_src, width=width, height=height, background=self._background)
 
+        html_path: Path | None = None
         try:
             with sync_playwright() as playwright:
                 browser_type = getattr(playwright, self._engine, None)
@@ -76,8 +118,27 @@ class BrowserSvgRenderer:
                 if self._device_scale_factor:
                     viewport["deviceScaleFactor"] = self._device_scale_factor
                 page = browser.new_page(viewport=viewport)
-                page.set_content(html, wait_until="load")
-                page.screenshot(path=str(output_path), omit_background=True)
+                if self._timeout is not None:
+                    page.set_default_timeout(int(self._timeout * 1000))
+                if source_path is not None:
+                    with tempfile.NamedTemporaryFile(
+                        "w",
+                        suffix=".html",
+                        delete=False,
+                        encoding="utf-8",
+                    ) as handle:
+                        handle.write(html)
+                        html_path = Path(handle.name)
+                    page.goto(html_path.as_uri(), wait_until="load")
+                else:
+                    page.set_content(html, wait_until="load")
+                page.wait_for_function(
+                    "document.images.length > 0 && "
+                    "document.images[0].complete && "
+                    "document.images[0].naturalWidth > 0"
+                )
+                omit_background = self._background is None
+                page.screenshot(path=str(output_path), omit_background=omit_background)
                 browser.close()
         except BrowserRenderError:
             raise
@@ -86,6 +147,11 @@ class BrowserSvgRenderer:
             if PlaywrightError and isinstance(exc, PlaywrightError):
                 detail = str(exc)
             raise BrowserRenderError(f"Browser render failed: {detail}") from exc
+        finally:
+            if html_path and html_path.exists():
+                html_path.unlink()
+            if temp_svg_path and temp_svg_path.exists():
+                temp_svg_path.unlink()
 
         if not output_path.exists():
             raise BrowserRenderError(f"Browser did not produce image: {output_path}")
@@ -99,7 +165,13 @@ def default_browser_renderer() -> BrowserSvgRenderer:
     engine = os.getenv("SVG2OOXML_BROWSER_ENGINE", "chromium")
     scale_raw = os.getenv("SVG2OOXML_BROWSER_SCALE")
     scale = float(scale_raw) if scale_raw else None
-    return BrowserSvgRenderer(engine=engine, device_scale_factor=scale)
+    background_raw = os.getenv("SVG2OOXML_BROWSER_BACKGROUND", "white").strip()
+    background = None if background_raw.lower() in {"none", "transparent"} else background_raw
+    return BrowserSvgRenderer(
+        engine=engine,
+        device_scale_factor=scale,
+        background=background,
+    )
 
 
 def _extract_dimensions(svg_text: str) -> Tuple[int, int]:
@@ -135,7 +207,8 @@ def _parse_float(token: str) -> float | None:
         return None
 
 
-def _wrap_svg(svg_text: str, *, width: int, height: int) -> str:
+def _wrap_svg(svg_src: str, *, width: int, height: int, background: str | None) -> str:
+    background_value = background or "transparent"
     return f"""<!doctype html>
 <html>
   <head>
@@ -146,15 +219,27 @@ def _wrap_svg(svg_text: str, *, width: int, height: int) -> str:
         padding: 0;
         width: {width}px;
         height: {height}px;
-        background: transparent;
+        background: {background_value};
+      }}
+      img {{
+        display: block;
+        width: {width}px;
+        height: {height}px;
       }}
     </style>
   </head>
   <body>
-    {svg_text}
+    <img alt="svg" src="{svg_src}" />
   </body>
 </html>
 """
+
+
+def _rewrite_svg_font_aliases(svg_text: str) -> str:
+    rewritten = svg_text
+    for source, target in _FONT_FAMILY_ALIASES.items():
+        rewritten = re.sub(rf"\\b{re.escape(source)}\\b", target, rewritten)
+    return rewritten
 
 
 __all__ = ["BrowserSvgRenderer", "BrowserRenderError", "RenderedSvg", "default_browser_renderer"]

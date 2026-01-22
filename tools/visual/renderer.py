@@ -162,10 +162,83 @@ class LibreOfficeRenderer:
             )
 
         if self._png_dpi is not None:
-            self._normalize_pngs(pptx_path, generated, self._png_dpi)
+            _normalize_pngs(pptx_path, generated, self._png_dpi)
 
         logger.debug("Generated %d slide image(s).", len(generated))
         return RenderedSlideSet(images=tuple(generated), renderer="soffice")
+
+
+class PowerPointRenderer:
+    """Render PPTX files to PNG using Microsoft PowerPoint via AppleScript."""
+
+    def __init__(
+        self,
+        *,
+        backend: str = "auto",
+        delay: float = 1.5,
+        slideshow_delay: float = 1.0,
+        slide_delay: float = 0.15,
+        open_timeout: float = 120.0,
+        capture_timeout: float = 5.0,
+        use_keys: bool = True,
+        allow_reopen: bool = True,
+        png_dpi: float | None = None,
+    ) -> None:
+        self._backend = backend
+        self._delay = delay
+        self._slideshow_delay = slideshow_delay
+        self._slide_delay = slide_delay
+        self._open_timeout = open_timeout
+        self._capture_timeout = capture_timeout
+        self._use_keys = use_keys
+        self._allow_reopen = allow_reopen
+        self._png_dpi = _resolve_png_dpi() if png_dpi is None else png_dpi
+
+    @property
+    def available(self) -> bool:
+        return platform.system() == "Darwin" and shutil.which("osascript") is not None
+
+    def render(self, pptx_path: Path | str, output_dir: Path | str) -> RenderedSlideSet:
+        if not self.available:
+            raise VisualRendererError("PowerPoint capture requires macOS with osascript available.")
+
+        pptx_path = Path(pptx_path)
+        if not pptx_path.exists():
+            raise VisualRendererError(f"PPTX path does not exist: {pptx_path}")
+
+        output_dir = Path(output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        try:
+            from tools.visual import powerpoint_capture
+
+            powerpoint_capture.capture_pptx_slideshow_all(
+                pptx_path,
+                output_dir,
+                self._delay,
+                self._slideshow_delay,
+                self._slide_delay,
+                self._open_timeout,
+                self._capture_timeout,
+                exit_after=True,
+                use_keys=self._use_keys,
+                allow_reopen=self._allow_reopen,
+                backend=self._backend,
+            )
+        except Exception as exc:
+            raise VisualRendererError(str(exc)) from exc
+
+        generated = sorted(output_dir.glob("slide_*.png"))
+        if not generated:
+            raise VisualRendererError(
+                f"PowerPoint capture completed but produced no PNG files in {output_dir}."
+            )
+
+        if self._png_dpi is not None:
+            self._normalize_pngs(pptx_path, generated, self._png_dpi)
+
+        logger.debug("Generated %d slide image(s).", len(generated))
+        return RenderedSlideSet(images=tuple(generated), renderer="powerpoint")
 
     def _macos_open_command(self, args: Sequence[str]) -> list[str] | None:
         open_path = shutil.which("open")
@@ -207,17 +280,25 @@ class LibreOfficeRenderer:
         images: Sequence[Path],
         png_dpi: float,
     ) -> None:
-        target_size = _slide_size_to_pixels(pptx_path, png_dpi)
-        if target_size is None:
-            logger.warning("Unable to resolve slide size for %s; skipping PNG normalization.", pptx_path)
-            return
+        _normalize_pngs(pptx_path, images, png_dpi)
 
-        for image_path in images:
-            with Image.open(image_path) as img:
-                if img.size == target_size:
-                    continue
-                resized = img.resize(target_size, resample=Image.LANCZOS)
-                resized.save(image_path)
+
+def _normalize_pngs(
+    pptx_path: Path,
+    images: Sequence[Path],
+    png_dpi: float,
+) -> None:
+    target_size = _slide_size_to_pixels(pptx_path, png_dpi)
+    if target_size is None:
+        logger.warning("Unable to resolve slide size for %s; skipping PNG normalization.", pptx_path)
+        return
+
+    for image_path in images:
+        with Image.open(image_path) as img:
+            if img.size == target_size:
+                continue
+            resized = img.resize(target_size, resample=Image.LANCZOS)
+            resized.save(image_path)
 
 
 def default_renderer(
@@ -297,6 +378,7 @@ def _read_slide_size_emu(pptx_path: Path) -> tuple[int, int] | None:
 
 __all__ = [
     "LibreOfficeRenderer",
+    "PowerPointRenderer",
     "RenderedSlideSet",
     "VisualRendererError",
     "default_renderer",

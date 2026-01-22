@@ -53,7 +53,7 @@ def _convert_single_svg_impl(
     parser = SVGParser(services=parser_services)
 
     start = time.perf_counter()
-    result = parser.parse(svg_text)
+    result = parser.parse(svg_text, source_path=str(filename))
     elapsed = time.perf_counter() - start
 
     response: dict[str, Any] = {

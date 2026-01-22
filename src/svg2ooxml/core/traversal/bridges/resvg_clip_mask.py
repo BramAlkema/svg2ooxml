@@ -224,16 +224,107 @@ def _gather_segments(
             hints["unsupported_nodes"].append(tag or "unknown")
 
 
+def _parse_number(value: Any, default: float = 0.0) -> float:
+    if value is None:
+        return default
+    if isinstance(value, (int, float)):
+        return float(value)
+    value = str(value).strip()
+    if not value:
+        return default
+    try:
+        if value.endswith("%"):
+            # Percentages without context are tricky, but returning the ratio is 
+            # better than crashing. In many mask/clip contexts, this is resolved
+            # later or handled via units.
+            return float(value[:-1]) / 100.0
+        return float(value)
+    except ValueError:
+        return default
+
+
 def _shape_segments(node: BaseNode, transform: ResvgMatrix) -> List[SegmentType]:
-    attributes = getattr(node, "attributes", {})
+    from svg2ooxml.core.resvg.usvg_tree import (
+        CircleNode,
+        EllipseNode,
+        LineNode,
+        PolyNode,
+        RectNode,
+    )
+
     tag = getattr(node, "tag", "").lower()
+    if isinstance(node, RectNode):
+        x = node.x
+        y = node.y
+        width = node.width
+        height = node.height
+        if node.rx or node.ry:
+            return []
+        points = [
+            Point(x, y),
+            Point(x + width, y),
+            Point(x + width, y + height),
+            Point(x, y + height),
+            Point(x, y),
+        ]
+        return _transform_points(points, transform)
+
+    if isinstance(node, CircleNode):
+        cx = node.cx
+        cy = node.cy
+        radius = node.r
+        segments = normalize_path_to_segments(
+            f"M {cx - radius} {cy} A {radius} {radius} 0 1 0 {cx + radius} {cy} "
+            f"A {radius} {radius} 0 1 0 {cx - radius} {cy}",
+            tolerance=DEFAULT_TOLERANCE,
+        ).segments
+        return _apply_transform_to_segments(segments, transform)
+
+    if isinstance(node, EllipseNode):
+        cx = node.cx
+        cy = node.cy
+        rx = node.rx
+        ry = node.ry
+        segments = normalize_path_to_segments(
+            f"M {cx - rx} {cy} A {rx} {ry} 0 1 0 {cx + rx} {cy} "
+            f"A {rx} {ry} 0 1 0 {cx - rx} {cy}",
+            tolerance=DEFAULT_TOLERANCE,
+        ).segments
+        return _apply_transform_to_segments(segments, transform)
+
+    if isinstance(node, PolyNode):
+        points_list = node.points
+        if not points_list:
+            return []
+        # PolyNode.points is a flat tuple of floats
+        path_str = f"M {points_list[0]} {points_list[1]} "
+        for i in range(2, len(points_list), 2):
+            path_str += f"L {points_list[i]} {points_list[i+1]} "
+        
+        segments = normalize_path_to_segments(
+            path_str,
+            close_path=(tag == "polygon"),
+            tolerance=DEFAULT_TOLERANCE,
+        ).segments
+        return _apply_transform_to_segments(segments, transform)
+
+    if isinstance(node, LineNode):
+        return _apply_transform_to_segments(
+            [
+                LineSegment(Point(node.x1, node.y1), Point(node.x2, node.y2)),
+            ],
+            transform,
+        )
+
+    # Fallback for GenericNode or if not matched above
+    attributes = getattr(node, "attributes", {})
     if tag == "rect":
-        x = float(attributes.get("x", 0.0) or 0.0)
-        y = float(attributes.get("y", 0.0) or 0.0)
-        width = float(attributes.get("width", 0.0) or 0.0)
-        height = float(attributes.get("height", 0.0) or 0.0)
-        rx = attributes.get("rx")
-        ry = attributes.get("ry")
+        x = _parse_number(attributes.get("x"), 0.0)
+        y = _parse_number(attributes.get("y"), 0.0)
+        width = _parse_number(attributes.get("width"), 0.0)
+        height = _parse_number(attributes.get("height"), 0.0)
+        rx = _parse_number(attributes.get("rx"), 0.0)
+        ry = _parse_number(attributes.get("ry"), 0.0)
         if rx or ry:
             return []
         points = [
@@ -246,48 +337,15 @@ def _shape_segments(node: BaseNode, transform: ResvgMatrix) -> List[SegmentType]
         return _transform_points(points, transform)
 
     if tag == "circle":
-        cx = float(attributes.get("cx", 0.0) or 0.0)
-        cy = float(attributes.get("cy", 0.0) or 0.0)
-        radius = float(attributes.get("r", 0.0) or 0.0)
+        cx = _parse_number(attributes.get("cx"), 0.0)
+        cy = _parse_number(attributes.get("cy"), 0.0)
+        radius = _parse_number(attributes.get("r"), 0.0)
         segments = normalize_path_to_segments(
             f"M {cx - radius} {cy} A {radius} {radius} 0 1 0 {cx + radius} {cy} "
             f"A {radius} {radius} 0 1 0 {cx - radius} {cy}",
             tolerance=DEFAULT_TOLERANCE,
         ).segments
         return _apply_transform_to_segments(segments, transform)
-
-    if tag == "ellipse":
-        cx = float(attributes.get("cx", 0.0) or 0.0)
-        cy = float(attributes.get("cy", 0.0) or 0.0)
-        rx = float(attributes.get("rx", 0.0) or 0.0)
-        ry = float(attributes.get("ry", 0.0) or 0.0)
-        segments = normalize_path_to_segments(
-            f"M {cx - rx} {cy} A {rx} {ry} 0 1 0 {cx + rx} {cy} "
-            f"A {rx} {ry} 0 1 0 {cx - rx} {cy}",
-            tolerance=DEFAULT_TOLERANCE,
-        ).segments
-        return _apply_transform_to_segments(segments, transform)
-
-    if tag in {"polygon", "polyline"}:
-        points_attr = attributes.get("points", "")
-        segments = normalize_path_to_segments(
-            f"M {points_attr}",
-            close_path=(tag == "polygon"),
-            tolerance=DEFAULT_TOLERANCE,
-        ).segments
-        return _apply_transform_to_segments(segments, transform)
-
-    if tag == "line":
-        x1 = float(attributes.get("x1", 0.0) or 0.0)
-        y1 = float(attributes.get("y1", 0.0) or 0.0)
-        x2 = float(attributes.get("x2", 0.0) or 0.0)
-        y2 = float(attributes.get("y2", 0.0) or 0.0)
-        return _apply_transform_to_segments(
-            [
-                LineSegment(Point(x1, y1), Point(x2, y2)),
-            ],
-            transform,
-        )
 
     return []
 
@@ -353,13 +411,10 @@ def _compute_primitives_bbox(primitives: Iterable[dict[str, Any]]) -> Rect | Non
         attributes = primitive.get("attributes", {})
         transform_tuple = _normalize_transform_tuple(primitive.get("transform"))
         if primitive_type in {"rect", "image"}:
-            try:
-                x = float(attributes.get("x", 0.0) or 0.0)
-                y = float(attributes.get("y", 0.0) or 0.0)
-                width = float(attributes.get("width", 0.0) or 0.0)
-                height = float(attributes.get("height", 0.0) or 0.0)
-            except (TypeError, ValueError):
-                continue
+            x = _parse_number(attributes.get("x"), 0.0)
+            y = _parse_number(attributes.get("y"), 0.0)
+            width = _parse_number(attributes.get("width"), 0.0)
+            height = _parse_number(attributes.get("height"), 0.0)
             corners = [
                 Point(x, y),
                 Point(x + width, y),
@@ -409,14 +464,11 @@ def _combine_transform(
 
 
 def _parse_region(attributes: Dict[str, Any]) -> Rect | None:
-    try:
-        x = float(attributes.get("x", 0.0) or 0.0)
-        y = float(attributes.get("y", 0.0) or 0.0)
-        width = float(attributes.get("width", 0.0) or 0.0)
-        height = float(attributes.get("height", 0.0) or 0.0)
-        return Rect(x=x, y=y, width=width, height=height)
-    except (TypeError, ValueError):
-        return None
+    x = _parse_number(attributes.get("x"), 0.0)
+    y = _parse_number(attributes.get("y"), 0.0)
+    width = _parse_number(attributes.get("width"), 0.0)
+    height = _parse_number(attributes.get("height"), 0.0)
+    return Rect(x=x, y=y, width=width, height=height)
 
 
 def _normalize_mask_mode(mask_type: str | None) -> str | None:

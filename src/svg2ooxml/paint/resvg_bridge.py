@@ -102,7 +102,7 @@ def resolve_fill_paint(fill: FillStyle | None, tree: Tree) -> Paint:
     if fill is None:
         return None
     if fill.color is not None:
-        return _color_to_solid(fill.color, fill.opacity)
+        return _color_to_solid(fill.color, _clamp01(fill.opacity))
     if fill.reference is not None:
         return _resolve_paint_reference(fill.reference, tree)
     return None
@@ -116,7 +116,7 @@ def resolve_stroke_style(stroke: StrokeStyle | None, tree: Tree) -> Stroke | Non
 
     paint: Paint
     if stroke.color is not None:
-        paint = _color_to_solid(stroke.color, _coerce_float(getattr(stroke, "opacity", 1.0), 1.0))
+        paint = _color_to_solid(stroke.color, _clamp01(_coerce_float(getattr(stroke, "opacity", 1.0), 1.0)))
     elif stroke.reference is not None:
         paint = _resolve_paint_reference(stroke.reference, tree)
     else:
@@ -124,9 +124,7 @@ def resolve_stroke_style(stroke: StrokeStyle | None, tree: Tree) -> Stroke | Non
 
     width = _coerce_float(getattr(stroke, "width", None), 0.0)
 
-    # DEBUG
-    if width > 5.0:
-        print(f"DEBUG resolve_stroke_style: stroke.width={stroke.width} → IR width={width}")
+
 
     if paint is None and width <= 0.0:
         return None
@@ -139,12 +137,10 @@ def resolve_stroke_style(stroke: StrokeStyle | None, tree: Tree) -> Stroke | Non
         miter_limit=4.0,
         dash_array=None,
         dash_offset=0.0,
-        opacity=_coerce_float(getattr(stroke, "opacity", 1.0), 1.0),
+        opacity=_clamp01(_coerce_float(getattr(stroke, "opacity", 1.0), 1.0)),
     )
 
-    # DEBUG
-    if width > 5.0:
-        print(f"DEBUG resolve_stroke_style: returning Stroke with width={result.width}")
+
 
     return result
 
@@ -203,7 +199,7 @@ def _convert_pattern(definition_id: str, pattern: ResvgPatternPaint) -> PatternP
 
 
 def _convert_stops(stops: Iterable[ResvgGradientStop]) -> list[GradientStop]:
-    return [
+    parsed = [
         GradientStop(
             offset=stop.offset,
             rgb=_color_to_hex(stop.color),
@@ -211,6 +207,13 @@ def _convert_stops(stops: Iterable[ResvgGradientStop]) -> list[GradientStop]:
         )
         for stop in stops
     ]
+    if len(parsed) == 1:
+        first = parsed[0]
+        return [
+            GradientStop(offset=0.0, rgb=first.rgb, opacity=first.opacity),
+            GradientStop(offset=1.0, rgb=first.rgb, opacity=first.opacity),
+        ]
+    return parsed
 
 
 def _color_to_solid(color: Color, opacity: float | None) -> SolidPaint | None:

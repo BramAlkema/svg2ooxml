@@ -424,14 +424,15 @@ class FilterService:
         if isinstance(context.options, dict):
             policy_options = context.options.get("policy") or {}
 
-        if self._strategy != "auto":
-            return self._strategy
-
+        # Prioritize policy-defined strategy if present
         policy_strategy = policy_options.get("strategy")
         if isinstance(policy_strategy, str):
             normalized = policy_strategy.strip().lower()
             if normalized in ALLOWED_STRATEGIES:
                 return normalized
+
+        if self._strategy != "auto":
+            return self._strategy
 
         return self._strategy
 

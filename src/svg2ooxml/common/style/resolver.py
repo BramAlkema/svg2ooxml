@@ -13,6 +13,7 @@ from lxml import etree
 import tinycss2
 
 from svg2ooxml.core.parser.colors import parse_color
+from svg2ooxml.common.units.scalars import PX_PER_INCH
 
 if TYPE_CHECKING:
     from svg2ooxml.core.parser.units import ConversionContext, UnitConverter
@@ -21,7 +22,9 @@ PropertyHandler = Callable[[str], object]
 
 _DEFAULT_FONT_SIZE_PT = 12.0
 _DEFAULT_FILL = "#000000"
-_DEFAULT_UNITLESS_FONT_SCALE = float(os.getenv("SVG2OOXML_UNITLESS_FONT_SCALE", "0.875"))
+_DEFAULT_UNITLESS_FONT_SCALE = float(
+    os.getenv("SVG2OOXML_UNITLESS_FONT_SCALE", str(72.0 / PX_PER_INCH))
+)
 
 
 class CSSOrigin(IntEnum):

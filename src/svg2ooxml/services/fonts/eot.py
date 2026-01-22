@@ -2,7 +2,7 @@
 
 PowerPoint stores embedded fonts as `.fntdata` parts that wrap OpenType payloads
 in the EOT container defined by ECMA‑376 §21.1.7.6. This module converts the
-subsetted OpenType bytes produced by :mod:`fontTools` into spec-compliant EOT
+subsetted OpenType bytes produced by FontForge into spec-compliant EOT
 streams and exposes a thin metadata wrapper that downstream packaging code can
 use when emitting `<p:embeddedFontLst>` entries. Optional GUID/root-string
 support and obfuscation hooks mirror the ODTTF algorithm in case we need to
@@ -16,15 +16,16 @@ adapted to fit svg2ooxml’s coding style.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from io import BytesIO
 import struct
 import uuid
-from typing import Final
+from typing import Final, Iterable
 
-try:  # pragma: no cover - optional dependency guard
-    from fontTools.ttLib import TTFont
-except Exception:  # pragma: no cover
-    TTFont = None  # type: ignore[assignment]
+from svg2ooxml.services.fonts.fontforge_utils import (
+    FONTFORGE_AVAILABLE,
+    get_table_data,
+    open_font,
+)
+from svg2ooxml.services.fonts.opentype_utils import parse_head_checksum, parse_os2_table
 
 
 EOT_VERSION: Final[int] = 0x00020001
@@ -146,7 +147,7 @@ def build_eot(
     Parameters
     ----------
     font_bytes:
-        Raw TTF/OTF stream (typically produced by fontTools subsetting).
+        Raw TTF/OTF stream (typically produced by FontForge subsetting).
     resolved_family / resolved_style:
         Optional overrides from the font resolver; fall back to name table entries.
     root_string:
@@ -162,23 +163,18 @@ def build_eot(
 
     if not isinstance(font_bytes, (bytes, bytearray)):
         raise EOTConversionError("font_bytes must be a byte buffer")
-    if TTFont is None:  # pragma: no cover - environments without fontTools
-        raise EOTConversionError("fontTools is required for EOT conversion")
+    if not FONTFORGE_AVAILABLE:  # pragma: no cover - environments without FontForge
+        raise EOTConversionError("FontForge is required for EOT conversion")
 
     normalized_root = _normalize_root_string(root_string, guid)
     normalized_guid = _normalize_guid(guid)
 
-    font: TTFont | None = None
     try:
-        font = _load_font(font_bytes)
-        names = _extract_font_names(font, resolved_family, resolved_style)
-        metrics = _extract_font_metrics(font)
-    finally:
-        if font is not None:
-            try:
-                font.close()
-            except Exception:  # pragma: no cover - cleanup best effort
-                pass
+        with open_font(font_bytes, suffix=".ttf") as font:
+            names = _extract_font_names(font, resolved_family, resolved_style)
+            metrics = _extract_font_metrics(font)
+    except Exception as exc:
+        raise EOTConversionError(f"failed to parse font: {exc}") from exc
 
     string_table = _build_string_table(names, normalized_root)
     header = _assemble_header(metrics, string_table, len(font_bytes))
@@ -207,50 +203,23 @@ def build_eot(
         guid=normalized_guid,
     )
 
-
-def _load_font(font_bytes: bytes) -> TTFont:
-    try:
-        return TTFont(BytesIO(bytes(font_bytes)), lazy=False)
-    except Exception as exc:  # pragma: no cover - defensive guard
-        raise EOTConversionError(f"failed to parse font: {exc}") from exc
-
-
-def _extract_font_names(font: "TTFont", resolved_family: str | None, resolved_style: str | None) -> _FontNames:
-    try:
-        name_table = font["name"]
-    except KeyError as exc:  # pragma: no cover - OpenType fonts must include the name table
-        raise EOTConversionError(f"font missing required table: {exc}") from exc
-
-    family = resolved_family or _get_name(name_table, 1) or "EmbeddedFont"
-    style = resolved_style or _get_name(name_table, 2) or "Regular"
-    version = _get_name(name_table, 5) or "1.0"
-    full = _get_name(name_table, 4) or f"{family} {style}".strip()
+def _extract_font_names(font: object, resolved_family: str | None, resolved_style: str | None) -> _FontNames:
+    family = resolved_family or _get_sfnt_name(font, 1) or _get_attr(font, "familyname") or "EmbeddedFont"
+    style = resolved_style or _get_sfnt_name(font, 2) or _get_attr(font, "weight") or "Regular"
+    version = _get_sfnt_name(font, 5) or _get_attr(font, "version") or "1.0"
+    full = _get_sfnt_name(font, 4) or _get_attr(font, "fullname") or f"{family} {style}".strip()
     return _FontNames(family=family, style=style, full=full, version=version)
 
 
-def _extract_font_metrics(font: "TTFont") -> _FontMetrics:
-    try:
-        os2 = font["OS/2"]
-        head = font["head"]
-    except KeyError as exc:
-        raise EOTConversionError(f"font missing required table: {exc}") from exc
+def _extract_font_metrics(font: object) -> _FontMetrics:
+    os2 = parse_os2_table(get_table_data(font, "OS/2"))
+    checksum_adjustment = parse_head_checksum(get_table_data(font, "head"))
 
-    panose = _extract_panose(os2)
-    charset = _guess_charset(os2)
+    panose = os2.panose
+    charset = _guess_charset(os2.codepage_ranges[0])
     italic = _is_italic(os2, font)
-    weight = int(getattr(os2, "usWeightClass", 400))
-    fs_type = int(getattr(os2, "fsType", 0)) & 0xFFFF
-    unicode_ranges = (
-        int(getattr(os2, "ulUnicodeRange1", 0)),
-        int(getattr(os2, "ulUnicodeRange2", 0)),
-        int(getattr(os2, "ulUnicodeRange3", 0)),
-        int(getattr(os2, "ulUnicodeRange4", 0)),
-    )
-    codepage_ranges = (
-        int(getattr(os2, "ulCodePageRange1", 0)),
-        int(getattr(os2, "ulCodePageRange2", 0)),
-    )
-    checksum_adjustment = int(getattr(head, "checkSumAdjustment", 0)) & 0xFFFFFFFF
+    weight = int(os2.weight or 400)
+    fs_type = int(os2.fs_type or 0) & 0xFFFF
 
     return _FontMetrics(
         panose=panose,
@@ -258,8 +227,8 @@ def _extract_font_metrics(font: "TTFont") -> _FontMetrics:
         italic=italic,
         weight=weight,
         fs_type=fs_type,
-        unicode_ranges=unicode_ranges,
-        codepage_ranges=codepage_ranges,
+        unicode_ranges=os2.unicode_ranges,
+        codepage_ranges=os2.codepage_ranges,
         checksum_adjustment=checksum_adjustment,
     )
 
@@ -365,56 +334,59 @@ def _encode_utf16le(value: str | None) -> bytes:
     return encoded
 
 
-def _get_name(name_table, name_id: int) -> str:
-    try:
-        value = name_table.getDebugName(name_id)
-    except Exception:
-        value = None
+def _get_attr(font: object, name: str) -> str:
+    value = getattr(font, name, None)
     if isinstance(value, str):
         return value.strip()
     return ""
 
 
-def _extract_panose(os2) -> bytes:
-    panose = getattr(os2, "panose", None)
-    if panose is None:
-        return b"\x00" * 10
-    try:
-        return bytes(
-            int(getattr(panose, attr, 0)) & 0xFF
-            for attr in (
-                "bFamilyType",
-                "bSerifStyle",
-                "bWeight",
-                "bProportion",
-                "bContrast",
-                "bStrokeVariation",
-                "bArmStyle",
-                "bLetterForm",
-                "bMidline",
-                "bXHeight",
-            )
-        )
-    except Exception:  # pragma: no cover - defensive
-        return bytes(getattr(panose, "data", b"\x00" * 10))[:10].ljust(10, b"\x00")
+def _get_sfnt_name(font: object, name_id: int) -> str:
+    names = getattr(font, "sfnt_names", None)
+    if not names:
+        return ""
+    for record in _iter_sfnt_names(names):
+        try:
+            record_id = int(record[3])
+        except Exception:
+            continue
+        if record_id != name_id:
+            continue
+        return _decode_sfnt_value(record[4])
+    return ""
 
 
-def _guess_charset(os2) -> int:
-    code_page_range1 = int(getattr(os2, "ulCodePageRange1", 0))
+def _iter_sfnt_names(records: Iterable[tuple]) -> Iterable[tuple]:
+    for record in records:
+        if len(record) < 5:
+            continue
+        yield record
+
+
+def _decode_sfnt_value(value: object) -> str:
+    if isinstance(value, bytes):
+        for encoding in ("utf-16-be", "utf-16le", "utf-8"):
+            try:
+                return value.decode(encoding).strip()
+            except Exception:
+                continue
+        return value.decode("latin-1", errors="ignore").strip()
+    if isinstance(value, str):
+        return value.strip()
+    return ""
+
+
+def _guess_charset(code_page_range1: int) -> int:
     if code_page_range1 & 0x20000000:
         return 2  # SYMBOL_CHARSET
     return 1  # DEFAULT_CHARSET
 
 
-def _is_italic(os2, font: "TTFont") -> bool:
-    selection = int(getattr(os2, "fsSelection", 0))
-    if selection & 0x01:
+def _is_italic(os2, font: object) -> bool:
+    if getattr(os2, "fs_selection", 0) & 0x01:
         return True
-    try:
-        post_table = font["post"]
-        return bool(getattr(post_table, "italicAngle", 0))
-    except Exception:
-        return False
+    italic_angle = getattr(font, "italicangle", 0)
+    return bool(italic_angle)
 
 
 def _normalize_root_string(value: str | None, guid: uuid.UUID | str | None) -> str:

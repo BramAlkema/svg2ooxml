@@ -730,7 +730,12 @@ class PackageWriter:
         if fonts:
             font_list = root.find("p:embeddedFontLst", ns)
             if font_list is None:
-                font_list = ET.SubElement(root, f"{{{P_NS}}}embeddedFontLst")
+                font_list = ET.Element(f"{{{P_NS}}}embeddedFontLst")
+                default_text = root.find("p:defaultTextStyle", ns)
+                if default_text is not None:
+                    root.insert(list(root).index(default_text), font_list)
+                else:
+                    root.append(font_list)
             else:
                 for child in list(font_list):
                     font_list.remove(child)
@@ -751,19 +756,18 @@ class PackageWriter:
                 font_attrs = {"typeface": family}
                 if representative and representative.pitch_family is not None:
                     font_attrs["pitchFamily"] = str(representative.pitch_family)
+                else:
+                    font_attrs["pitchFamily"] = "0"
                 if representative and representative.charset is not None:
                     font_attrs["charset"] = str(representative.charset)
+                else:
+                    font_attrs["charset"] = "0"
                 ET.SubElement(entry_elem, f"{{{P_NS}}}font", font_attrs)
-                if representative and representative.guid:
-                    ET.SubElement(entry_elem, f"{{{P_NS}}}fontKey", {"guid": representative.guid})
                 for style_kind in FONT_STYLE_ORDER:
                     tagged = style_map.get(style_kind)
                     if tagged is None:
                         continue
-                    attrs = {
-                        f"{{{R_DOC_NS}}}id": tagged.relationship_id,
-                        f"{{{R_DOC_NS}}}subsetted": "1" if tagged.subsetted else "0",
-                    }
+                    attrs = {f"{{{R_DOC_NS}}}id": tagged.relationship_id}
                     ET.SubElement(entry_elem, f"{{{P_NS}}}{FONT_STYLE_TAGS[style_kind]}", attrs)
 
         tree.write(presentation_path, encoding="utf-8", xml_declaration=True)

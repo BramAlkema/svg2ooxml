@@ -80,9 +80,9 @@ class DiffuseLightingFilter(Filter):
         return FilterResult(
             success=True,
             drawingml="",
-            fallback="emf",
+            fallback="raster",
             metadata=metadata,
-            warnings=["feDiffuseLighting approximated via EMF fallback"],
+            warnings=["feDiffuseLighting rendered via resvg rasterization"],
         )
 
 
@@ -107,14 +107,14 @@ class SpecularLightingFilter(Filter):
             "light": light.params if light else None,
             "light_type": light.kind if light else None,
             "native_support": False,
-            "fallback_reason": "specular_lighting_requires_emf",
+            "fallback_reason": "specular_lighting_rendered_via_resvg",
         }
         return FilterResult(
             success=True,
             drawingml="",
-            fallback="emf",
+            fallback="raster",
             metadata=metadata,
-            warnings=["feSpecularLighting approximated via EMF fallback"],
+            warnings=["feSpecularLighting rendered via resvg rasterization"],
         )
 
 

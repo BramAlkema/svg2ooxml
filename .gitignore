@@ -1,6 +1,7 @@
 # Python environments
 .venv/
 .venv_*/
+.venv3*/
 __pycache__/
 
 # Tooling caches and coverage

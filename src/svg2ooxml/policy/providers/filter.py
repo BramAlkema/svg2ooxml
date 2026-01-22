@@ -22,6 +22,7 @@ class FilterPolicyProvider(PolicyProvider):
         "max_glow_radius",
         "max_glow_alpha",
         "preferred_glow_strategy",
+        "blur_strategy",
         "max_filter_primitives",
         "max_filter_complexity",
         "native_blur",
@@ -43,6 +44,7 @@ class FilterPolicyProvider(PolicyProvider):
             "max_glow_radius": 16.0,
             "max_glow_alpha": 0.95,
             "preferred_glow_strategy": "source",
+            "blur_strategy": "soft_edge",
             "max_filter_primitives": 7,
             "max_filter_complexity": 80,
             "native_blur": True,
@@ -62,6 +64,7 @@ class FilterPolicyProvider(PolicyProvider):
             "max_glow_radius": 8.0,
             "max_glow_alpha": 0.75,
             "preferred_glow_strategy": "inherit",
+            "blur_strategy": "soft_edge",
             "max_filter_primitives": 5,
             "max_filter_complexity": 50,
             "native_blur": True,
@@ -81,6 +84,7 @@ class FilterPolicyProvider(PolicyProvider):
             "max_glow_radius": 8.0,
             "max_glow_alpha": 0.7,
             "preferred_glow_strategy": "flood",
+            "blur_strategy": "soft_edge",
             "max_filter_primitives": 3,
             "max_filter_complexity": 30,
             "native_blur": True,
@@ -100,6 +104,7 @@ class FilterPolicyProvider(PolicyProvider):
             "max_glow_radius": 6.0,
             "max_glow_alpha": 0.6,
             "preferred_glow_strategy": "flood",
+            "blur_strategy": "soft_edge",
             "max_filter_primitives": 2,
             "max_filter_complexity": 20,
             "native_blur": True,
@@ -209,6 +214,7 @@ class FilterPolicyProvider(PolicyProvider):
         result["max_glow_radius"] = self._coerce_float(payload.get("max_glow_radius"))
         result["max_glow_alpha"] = self._coerce_float(payload.get("max_glow_alpha"))
         result["preferred_glow_strategy"] = self._coerce_glow_strategy(payload.get("preferred_glow_strategy"))
+        result["blur_strategy"] = self._coerce_blur_strategy(payload.get("blur_strategy"))
         result["max_filter_primitives"] = self._coerce_int(payload.get("max_filter_primitives"))
         result["max_filter_complexity"] = self._coerce_int(payload.get("max_filter_complexity"))
         result["native_blur"] = self._coerce_bool(payload.get("native_blur"))
@@ -249,6 +255,20 @@ class FilterPolicyProvider(PolicyProvider):
             if token in {"inherit", "source", "flood", "style"}:
                 return token
         return "inherit"
+
+    @staticmethod
+    def _coerce_blur_strategy(value: Any) -> str:
+        if isinstance(value, str):
+            token = value.strip().lower().replace("-", "_")
+            if token in {"soft_edge", "softedge", "soft_edge"}:
+                return "soft_edge"
+            if token in {"blur"}:
+                return "blur"
+            if token in {"outer_shadow", "outershdw", "shadow", "drop_shadow"}:
+                return "outer_shadow"
+            if token in {"inner_shadow", "innershdw", "inner"}:
+                return "inner_shadow"
+        return "soft_edge"
 
     @staticmethod
     def _coerce_telemetry_level(value: Any) -> str:

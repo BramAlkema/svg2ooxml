@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 import os
-import tempfile
 from dataclasses import dataclass, field
 from enum import Enum
 from hashlib import sha1
@@ -12,15 +11,14 @@ from pathlib import Path
 from typing import Iterable, Mapping, Sequence
 import uuid
 
-from svg2ooxml.common.tempfiles import project_temp_dir
 from svg2ooxml.services.fonts.eot import build_eot, EOTConversionError
-
-try:  # pragma: no cover - optional dependency
-    from fontTools import subset as fonttools_subset
-    from fontTools.ttLib import TTFont
-except Exception:  # pragma: no cover - environments without fontTools
-    fonttools_subset = None  # type: ignore[assignment]
-    TTFont = None  # type: ignore[assignment]
+from svg2ooxml.services.fonts.fontforge_utils import (
+    FONTFORGE_AVAILABLE,
+    generate_font_bytes,
+    get_table_data,
+    open_font,
+)
+from svg2ooxml.services.fonts.opentype_utils import parse_os2_table
 
 logger = logging.getLogger(__name__)
 
@@ -97,7 +95,7 @@ class EmbeddedFontPayload:
 
 
 class FontEmbeddingEngine:
-    """Subset fonts using fontTools when available and track simple stats."""
+    """Subset fonts using FontForge when available and track simple stats."""
 
     def __init__(self) -> None:
         self._stats: dict[str, int] = {
@@ -138,7 +136,12 @@ class FontEmbeddingEngine:
             self._stats["subset_failures"] += 1
             return None
 
-        permission = self._read_embedding_permission(request.font_path)
+        font_data = None
+        if isinstance(request.metadata, Mapping):
+            data = request.metadata.get("font_data")
+            if isinstance(data, (bytes, bytearray)):
+                font_data = bytes(data)
+        permission = self._read_embedding_permission(request.font_path, font_data)
         if not isinstance(permission, EmbeddingPermission):
             if isinstance(permission, str) and permission in EmbeddingPermission._value2member_map_:
                 permission = EmbeddingPermission(permission)
@@ -163,7 +166,7 @@ class FontEmbeddingEngine:
         if strategy == "none":
             result = self._subset_copy(request, permission)
         else:
-            result = self._subset_with_fonttools(request, text_payload, permission)
+            result = self._subset_with_fontforge(request, text_payload, permission)
 
         if result is None:
             self._stats["subset_failures"] += 1
@@ -226,40 +229,33 @@ class FontEmbeddingEngine:
             packaging_metadata=metadata,
         )
 
-    def _subset_with_fonttools(
+    def _subset_with_fontforge(
         self,
         request: FontEmbeddingRequest,
         text_payload: str,
         permission: EmbeddingPermission,
     ) -> FontEmbeddingResult | None:
-        if TTFont is None or fonttools_subset is None:  # pragma: no cover - optional dependency guard
-            logger.debug("fontTools not available; cannot subset font %s", request.font_path)
+        if not FONTFORGE_AVAILABLE:  # pragma: no cover - optional dependency guard
+            logger.debug("FontForge not available; cannot subset font %s", request.font_path)
             return None
 
-        font = None
+        subset_bytes = None
         try:
             # Check if font data is already loaded (e.g., from web fonts)
             if "font_data" in request.metadata:
-                from io import BytesIO
                 font_data = request.metadata["font_data"]
                 if not isinstance(font_data, bytes):
                     logger.debug("Invalid font_data type in metadata: %s", type(font_data))
                     return None
-                font = TTFont(BytesIO(font_data), lazy=False)
+                with open_font(font_data, suffix=".ttf") as font:
+                    subset_bytes = self._perform_subsetting(font, text_payload)
             else:
-                # Fall back to reading from filesystem
-                font = TTFont(request.font_path, lazy=False)
-
-            subset_bytes = self._perform_subsetting(font, text_payload, request)
+                font_suffix = Path(request.font_path).suffix or ".ttf"
+                with open_font(request.font_path, suffix=font_suffix) as font:
+                    subset_bytes = self._perform_subsetting(font, text_payload)
         except Exception as exc:  # pragma: no cover - defensive
-            logger.debug("fontTools subsetting failed: %s", exc)
+            logger.debug("FontForge subsetting failed: %s", exc)
             subset_bytes = None
-        finally:
-            try:
-                if font is not None:
-                    font.close()
-            except Exception:  # pragma: no cover - best effort cleanup
-                pass
 
         if subset_bytes is None:
             return None
@@ -346,60 +342,49 @@ class FontEmbeddingEngine:
 
     def _perform_subsetting(
         self,
-        font: "TTFont",
+        font: object,
         text: str,
-        request: FontEmbeddingRequest,
     ) -> bytes | None:
-        options = fonttools_subset.Options()
-        options.hinting = request.preserve_hinting
-        strategy = (request.subset_strategy or "glyph").lower()
-        if strategy == "glyph":
-            options.desubroutinize = False
-        elif strategy == "character":
-            options.desubroutinize = False
-        elif strategy == "aggressive":
-            options.desubroutinize = True
-            options.hinting = False
-            options.legacy_kern = False
-
-        optimisation = request.optimisation
-        if optimisation == FontOptimisationLevel.NONE:
-            options.hinting = request.preserve_hinting
-            options.drop_tables = []
-        elif optimisation == FontOptimisationLevel.BASIC:
-            # Keep essential layout tables but remove bitmap strikes.
-            options.drop_tables = ["sbix", "EBLC", "EBDT"]
-        elif optimisation == FontOptimisationLevel.AGGRESSIVE:
-            options.hinting = False
-            options.drop_tables = ["DSIG", "GPOS", "GSUB", "sbix", "EBLC", "EBDT"]
-
-        if not request.preserve_layout_tables:
-            tables = set(options.drop_tables or [])
-            tables.update({"GPOS", "GSUB", "BASE"})
-            options.drop_tables = sorted(tables)
-
         try:
-            subsetter = fonttools_subset.Subsetter(options=options)
-            subsetter.populate(text=text)
-            subsetter.subset(font)
+            selection = getattr(font, "selection", None)
+            if selection is None:
+                return None
 
-            with tempfile.NamedTemporaryFile(
-                suffix=".ttf",
-                delete=False,
-                dir=project_temp_dir(),
-            ) as temp_file:
-                temp_path = Path(temp_file.name)
-            try:
-                font.save(temp_path)
-                data = temp_path.read_bytes()
-            finally:
+            selection.none()
+            selected_any = False
+            for ch in sorted(set(text)):
+                codepoint = ord(ch)
                 try:
-                    temp_path.unlink()
-                except OSError:
-                    pass
-            return data
+                    if selected_any:
+                        selection.select(("more", "unicode"), codepoint)
+                    else:
+                        selection.select(("unicode",), codepoint)
+                        selected_any = True
+                except Exception:
+                    continue
+
+            for glyph_name in (".notdef", ".null", "nonmarkingreturn"):
+                try:
+                    if selected_any:
+                        selection.select(("more", "glyphs"), glyph_name)
+                    else:
+                        selection.select(("glyphs",), glyph_name)
+                        selected_any = True
+                except Exception:
+                    continue
+
+            if not selected_any:
+                return None
+
+            try:
+                selection.invert()
+                getattr(font, "clear")()
+            except Exception as exc:
+                logger.debug("FontForge glyph pruning failed: %s", exc)
+
+            return generate_font_bytes(font, suffix=".ttf")
         except Exception as exc:  # pragma: no cover - defensive path
-            logger.debug("fontTools subset operation failed: %s", exc)
+            logger.debug("FontForge subset operation failed: %s", exc)
             return None
 
     def _glyphs_to_text(self, glyph_ids: Iterable[int]) -> str:
@@ -424,18 +409,26 @@ class FontEmbeddingEngine:
             return len(set(request.characters))
         return 0
 
-    def _read_embedding_permission(self, font_path: str) -> EmbeddingPermission:
-        if TTFont is None:  # pragma: no cover - optional dependency guard
+    def _read_embedding_permission(
+        self,
+        font_path: str,
+        font_data: bytes | None = None,
+    ) -> EmbeddingPermission:
+        if not FONTFORGE_AVAILABLE:  # pragma: no cover - optional dependency guard
             return EmbeddingPermission.UNKNOWN
         try:
-            font = TTFont(font_path, lazy=True)
+            if font_data is not None:
+                with open_font(font_data, suffix=".ttf") as font:
+                    os2_table = get_table_data(font, "OS/2")
+            else:
+                font_suffix = Path(font_path).suffix or ".ttf"
+                with open_font(font_path, suffix=font_suffix) as font:
+                    os2_table = get_table_data(font, "OS/2")
         except Exception:
             return EmbeddingPermission.UNKNOWN
         try:
-            if "OS/2" not in font:
-                return EmbeddingPermission.INSTALLABLE
-            os2_table = font["OS/2"]
-            fs_type = int(getattr(os2_table, "fsType", 0))
+            os2 = parse_os2_table(os2_table)
+            fs_type = int(os2.fs_type or 0)
             if fs_type & 0x0002:
                 return EmbeddingPermission.RESTRICTED
             if fs_type & 0x0004:
@@ -449,11 +442,6 @@ class FontEmbeddingEngine:
             return EmbeddingPermission.INSTALLABLE
         except Exception:  # pragma: no cover - defensive fallback
             return EmbeddingPermission.UNKNOWN
-        finally:
-            try:
-                font.close()
-            except Exception:
-                pass
 
     def _cache_key(self, request: FontEmbeddingRequest) -> str:
         digest = sha1()

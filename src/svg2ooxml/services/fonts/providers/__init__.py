@@ -6,14 +6,21 @@ from typing import Any as _Any
 __all__ = [
     'DirectoryFontProvider',
     'FONT_EXTENSIONS',
+    'SvgFontProvider',
     'WebFontProvider',
     'directory',
+    'svgfont',
     'webfont'
 ]
 
 # map symbol -> relative module
-_symbol_map = {'FONT_EXTENSIONS': 'directory', 'DirectoryFontProvider': 'directory', 'WebFontProvider': 'webfont'}
-_module_map = {'directory': 'directory', 'webfont': 'webfont'}
+_symbol_map = {
+    'FONT_EXTENSIONS': 'directory',
+    'DirectoryFontProvider': 'directory',
+    'SvgFontProvider': 'svgfont',
+    'WebFontProvider': 'webfont',
+}
+_module_map = {'directory': 'directory', 'svgfont': 'svgfont', 'webfont': 'webfont'}
 
 
 def __getattr__(name: str) -> _Any:  # PEP 562

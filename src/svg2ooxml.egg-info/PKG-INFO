@@ -29,7 +29,6 @@ Requires-Dist: numpy>=1.24; extra == "render"
 Provides-Extra: slides
 Requires-Dist: python-pptx>=0.6.23; extra == "slides"
 Requires-Dist: cryptography>=41.0; extra == "slides"
-Requires-Dist: fonttools>=4.59.2; extra == "slides"
 Provides-Extra: api
 Requires-Dist: fastapi>=0.109.0; extra == "api"
 Requires-Dist: uvicorn[standard]>=0.27.0; extra == "api"
@@ -49,6 +48,8 @@ Requires-Dist: scikit-image>=0.21.0; extra == "visual-testing"
 Requires-Dist: Pillow>=10.0.0; extra == "visual-testing"
 
 # svg2ooxml
+
+> **Note (2026-01-16):** GCP project `powerful-layout-467812-p1` was deleted to stop billing charges. The Cloud Run service is no longer available. Can be restored within 30 days via `gcloud projects undelete powerful-layout-467812-p1`.
 
 SVG → Office Open XML conversion toolkit. The project is an evolution of the
 internal svg2pptx converter and is being rebuilt around a small, well-typed
@@ -179,6 +180,8 @@ Supporting folders:
 
 For a deeper dive, read `docs/structure.md`, `docs/testing.md`, and the ADRs in
 `docs/adr/`.
+
+Project status and priorities live in `docs/ROADMAP.md`.
 
 ## Visual Review
 

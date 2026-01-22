@@ -3,6 +3,29 @@
 Run the FastAPI service on your laptop against the real Firestore/Drive stack so
 you can iterate on Slides uploads without redeploying to Cloud Run.
 
+### Google Slides upload (ADC + desktop OAuth)
+
+Service accounts usually have 0 Drive quota, so use a user OAuth client for
+Slides uploads. The quickest flow is Application Default Credentials (ADC) with
+the desktop OAuth client JSON.
+
+1. Create a **Desktop app** OAuth client in the GCP project.
+2. Download the JSON and place it in the repo root (or update the script path).
+3. Run the helper script to avoid line-wrap scope errors:
+
+```bash
+bash gcloud_adc_remote_bootstrap.sh
+```
+
+4. Verify credentials were saved:
+
+```bash
+gcloud auth application-default print-access-token | head -c 20
+```
+
+If you see `invalid_scope` errors, it is usually caused by line breaks in the
+scope list. Re-run the script above (it uses a single-line `--scopes` value).
+
 ### 1. Prerequisites
 
 - `gcloud` CLI authenticated against `powerful-layout-467812-p1`

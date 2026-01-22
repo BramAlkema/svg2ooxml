@@ -12,6 +12,8 @@ from typing import Any, Dict, Optional, Tuple
 
 try:  # pragma: no cover - optional dependency
     from google.auth.transport.requests import Request
+    from google.auth import default as google_auth_default
+    from google.auth.exceptions import DefaultCredentialsError
     from google.oauth2 import service_account
     from google.oauth2.credentials import Credentials
     from google_auth_oauthlib.flow import InstalledAppFlow
@@ -82,8 +84,15 @@ class GoogleSlidesUploader:
                 self.creds.refresh(Request())
             else:
                 if not self.credentials_path.exists():
-                    self._print_credentials_instructions()
-                    return False
+                    try:
+                        self.creds, _ = google_auth_default(scopes=SCOPES)
+                    except DefaultCredentialsError:
+                        self._print_credentials_instructions()
+                        return False
+                    print("✅ Using application default credentials.")
+                    self.drive_service = build("drive", "v3", credentials=self.creds)
+                    self.slides_service = build("slides", "v1", credentials=self.creds)
+                    return True
 
                 print("🌐 Opening browser for authentication...")
                 flow = InstalledAppFlow.from_client_secrets_file(
@@ -250,6 +259,13 @@ class GoogleSlidesUploader:
         print("2. Create a project and enable Drive & Slides APIs")
         print("3. Create OAuth 2.0 desktop credentials")
         print("4. Download credentials.json and save it to ~/.svg2ooxml/credentials.json")
+        print("\nOr, with gcloud:")
+        print(
+            "gcloud auth application-default login "
+            "--scopes=https://www.googleapis.com/auth/drive.file,"
+            "https://www.googleapis.com/auth/drive,"
+            "https://www.googleapis.com/auth/presentations.readonly"
+        )
 
 
 __all__ = ["GoogleSlidesUploader", "SlidesInfo"]

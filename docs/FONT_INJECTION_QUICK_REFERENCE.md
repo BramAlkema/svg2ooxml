@@ -151,7 +151,7 @@ class FontEmbeddingRequest:
 
 **Key methods:**
 - `subset_font(request)` - Main entry point
-- `_subset_with_fonttools()` - Lines 200-247: Uses fontTools
+- `_subset_with_fontforge()` - Lines 200-247: Uses FontForge
 - `_subset_copy()` - Lines 167-198: Direct copy for restricted fonts
 
 **Critical section (_subset_copy, 178-188):**
@@ -331,9 +331,8 @@ Doesn't explicitly copy match.metadata items (like font_data)
 - **Solution:** Merge match.metadata into request.metadata
 
 ### Issue 3: Subsetting with In-Memory Data
-fontTools expects file path, not bytes
-- But could load from BytesIO if needed
-- Current code doesn't support in-memory subsetting
+FontForge expects a file path, not raw bytes
+- Use a temp file when subsetting web fonts
 
 ---
 

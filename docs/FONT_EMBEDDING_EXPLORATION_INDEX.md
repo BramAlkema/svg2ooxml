@@ -72,7 +72,7 @@ This directory contains comprehensive documentation about how fonts are embedded
 - FontEmbeddingEngine class: `/Users/ynse/projects/svg2ooxml/src/svg2ooxml/services/fonts/embedding.py`
 - Lines 105-154: Main subset_font() method
 - Lines 167-198: Direct copy strategy
-- Lines 200-247: fontTools subsetting strategy
+- Lines 200-247: FontForge subsetting strategy
 
 **Asset Collection:**
 - DrawingMLWriter: `/Users/ynse/projects/svg2ooxml/src/svg2ooxml/drawingml/writer.py`
@@ -155,7 +155,7 @@ FontLoader.data
    - Solution: Explicitly merge match.metadata
 
 3. **Subsetting URLs:**
-   - fontTools can't subset from URL paths
+   - FontForge can't subset from URL paths
    - Need to check metadata["font_data"] before trying filesystem access
 
 ---
@@ -192,7 +192,7 @@ FontLoader.data
 ## Dependencies
 
 ### External Libraries
-- **fontTools** (embedding.py): Font subsetting and TTFont manipulation
+- **FontForge** (embedding.py): Font subsetting
 - **brotli** (loader.py): WOFF2 decompression
 - **gzip** (loader.py): WOFF decompression (stdlib)
 - **base64** (loader.py): Data URI decoding (stdlib)
@@ -215,11 +215,11 @@ FontLoader.data
    - Ensure all FontMatch metadata flows to planning stage
 
 2. **Handle in-memory fonts in embedding engine:**
-   - Check request.metadata["font_data"] in _subset_copy() and _subset_with_fonttools()
+   - Check request.metadata["font_data"] in _subset_copy() and _subset_with_fontforge()
    - Avoid filesystem access for URL-based fonts
 
 3. **Support in-memory subsetting:**
-   - Load font from BytesIO for fontTools operations
+   - Load font via temp file for FontForge operations
    - Allows subsetting without temp files for web fonts
 
 4. **Add comprehensive tests:**

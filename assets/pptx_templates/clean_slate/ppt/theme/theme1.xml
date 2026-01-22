@@ -17,26 +17,69 @@
         </a:clrScheme>
         <a:fontScheme name="Office">
             <a:majorFont>
-                <a:latin typeface="Calibri Light"/>
+                <a:latin typeface="Arial"/>
+                <a:ea typeface=""/>
+                <a:cs typeface=""/>
             </a:majorFont>
             <a:minorFont>
-                <a:latin typeface="Calibri"/>
+                <a:latin typeface="Arial"/>
+                <a:ea typeface=""/>
+                <a:cs typeface=""/>
             </a:minorFont>
         </a:fontScheme>
         <a:fmtScheme name="Office">
             <a:fillStyleLst>
                 <a:solidFill><a:schemeClr val="phClr"/></a:solidFill>
+                <a:gradFill rotWithShape="1">
+                    <a:gsLst>
+                        <a:gs pos="0"><a:schemeClr val="phClr"><a:tint val="50000"/><a:satMod val="300000"/></a:schemeClr></a:gs>
+                        <a:gs pos="100000"><a:schemeClr val="phClr"><a:shade val="50000"/><a:satMod val="300000"/></a:schemeClr></a:gs>
+                    </a:gsLst>
+                    <a:lin ang="16200000" scaled="1"/>
+                </a:gradFill>
+                <a:gradFill rotWithShape="1">
+                    <a:gsLst>
+                        <a:gs pos="0"><a:schemeClr val="phClr"><a:tint val="70000"/><a:satMod val="300000"/></a:schemeClr></a:gs>
+                        <a:gs pos="100000"><a:schemeClr val="phClr"><a:shade val="30000"/><a:satMod val="300000"/></a:schemeClr></a:gs>
+                    </a:gsLst>
+                    <a:lin ang="16200000" scaled="0"/>
+                </a:gradFill>
             </a:fillStyleLst>
             <a:lnStyleLst>
                 <a:ln w="9525" cap="flat" cmpd="sng" algn="ctr">
                     <a:solidFill><a:schemeClr val="phClr"/></a:solidFill>
+                    <a:prstDash val="solid"/>
+                </a:ln>
+                <a:ln w="25400" cap="flat" cmpd="sng" algn="ctr">
+                    <a:solidFill><a:schemeClr val="phClr"/></a:solidFill>
+                    <a:prstDash val="solid"/>
+                </a:ln>
+                <a:ln w="38100" cap="flat" cmpd="sng" algn="ctr">
+                    <a:solidFill><a:schemeClr val="phClr"/></a:solidFill>
+                    <a:prstDash val="solid"/>
                 </a:ln>
             </a:lnStyleLst>
             <a:effectStyleLst>
                 <a:effectStyle><a:effectLst/></a:effectStyle>
+                <a:effectStyle><a:effectLst/></a:effectStyle>
+                <a:effectStyle><a:effectLst/></a:effectStyle>
             </a:effectStyleLst>
             <a:bgFillStyleLst>
                 <a:solidFill><a:schemeClr val="phClr"/></a:solidFill>
+                <a:gradFill rotWithShape="1">
+                    <a:gsLst>
+                        <a:gs pos="0"><a:schemeClr val="phClr"><a:tint val="40000"/><a:satMod val="350000"/></a:schemeClr></a:gs>
+                        <a:gs pos="100000"><a:schemeClr val="phClr"><a:shade val="20000"/><a:satMod val="255000"/></a:schemeClr></a:gs>
+                    </a:gsLst>
+                    <a:lin ang="16200000" scaled="1"/>
+                </a:gradFill>
+                <a:gradFill rotWithShape="1">
+                    <a:gsLst>
+                        <a:gs pos="0"><a:schemeClr val="phClr"><a:tint val="80000"/><a:satMod val="300000"/></a:schemeClr></a:gs>
+                        <a:gs pos="100000"><a:schemeClr val="phClr"><a:shade val="30000"/><a:satMod val="200000"/></a:schemeClr></a:gs>
+                    </a:gsLst>
+                    <a:lin ang="16200000" scaled="0"/>
+                </a:gradFill>
             </a:bgFillStyleLst>
         </a:fmtScheme>
     </a:themeElements>

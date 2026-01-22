@@ -7,7 +7,7 @@ import logging
 import struct
 from collections import defaultdict
 from dataclasses import replace
-from typing import Any, Callable
+from typing import Any, Callable, Mapping
 
 import numpy as np
 from lxml import etree
@@ -544,6 +544,13 @@ class FilterRenderer:
         trace: Callable[..., None] | None = None,
     ) -> FilterEffectResult | None:
         if not plan.primitives:
+            return None
+
+        # Check global promotion policy
+        policy = context.options.get("policy") if isinstance(context.options, dict) else None
+        if isinstance(policy, Mapping) and policy.get("allow_promotion") is False:
+            if trace is not None:
+                trace("resvg_promotion_policy_blocked", reason="global_allow_promotion=false")
             return None
 
         matched_elements = self._match_plan_elements(filter_element, plan)

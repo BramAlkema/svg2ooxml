@@ -13,6 +13,7 @@ from svg2ooxml.core.parser.xml_utils import children
 from svg2ooxml.core.pipeline.navigation import NavigationSpec, parse_svg_navigation
 
 from svg2ooxml.core.traversal.coordinate_space import CoordinateSpace
+from svg2ooxml.core.traversal.viewbox import viewbox_matrix_from_element
 from svg2ooxml.core.traversal.transform_parser import TransformParser
 from svg2ooxml.core.traversal import runtime as traversal_runtime
 
@@ -41,6 +42,35 @@ class ElementTraversal:
         self._normalized_lookup = normalized_lookup or {}
 
     def extract(self, svg_root: etree._Element) -> list:
+        viewbox_matrix = None
+        if svg_root is not None:
+            converter = self._converter
+            unit_converter = getattr(converter, "_unit_converter", None)
+            if unit_converter is not None:
+                default_width = 800.0
+                default_height = 600.0
+                conversion_context = getattr(converter, "_conversion_context", None)
+                if conversion_context is not None:
+                    width_value = getattr(conversion_context, "width", None)
+                    height_value = getattr(conversion_context, "height", None)
+                    if width_value:
+                        default_width = float(width_value)
+                    if height_value:
+                        default_height = float(height_value)
+                viewbox_matrix, _ = viewbox_matrix_from_element(
+                    svg_root,
+                    unit_converter,
+                    default_width=default_width,
+                    default_height=default_height,
+                )
+
+        if viewbox_matrix is not None and not viewbox_matrix.is_identity():
+            self._coord_space.push(viewbox_matrix)
+            try:
+                return self._extract_recursive(svg_root, current_navigation=None)
+            finally:
+                self._coord_space.pop()
+
         return self._extract_recursive(svg_root, current_navigation=None)
 
     def navigation_from_attributes(self, element: etree._Element):

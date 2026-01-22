@@ -107,7 +107,12 @@ def convert_rect(
 def _parse_float(value: str | None, *, default: float | None = None) -> float | None:
     if value is None:
         return default
+    value = value.strip()
+    if not value:
+        return default
     try:
+        if value.endswith("%"):
+            return float(value[:-1]) / 100.0
         return float(value)
     except ValueError:
         return default

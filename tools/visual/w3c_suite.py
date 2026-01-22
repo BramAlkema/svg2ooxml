@@ -14,13 +14,27 @@ from typing import Iterable, TypedDict
 from tools.visual.browser_renderer import BrowserRenderError
 from tools.visual.diff import ImageDiffError, VisualDiffer
 from tools.visual.stack import default_visual_stack
-from tools.visual.renderer import LibreOfficeRenderer, VisualRendererError, default_renderer
+from tools.visual.renderer import (
+    LibreOfficeRenderer,
+    PowerPointRenderer,
+    VisualRendererError,
+    default_renderer,
+)
 
 logger = logging.getLogger("w3c_suite")
 
 
 SCENARIOS = {
     "struct-use-10-f": Path("tests/svg/struct-use-10-f.svg"),
+    "struct-use-11-f": Path("tests/svg/struct-use-11-f.svg"),
+    "styling-css-01-b": Path("tests/svg/styling-css-01-b.svg"),
+    "text-tspan-01-b": Path("tests/svg/text-tspan-01-b.svg"),
+    "filters-gauss-01-b": Path("tests/svg/filters-gauss-01-b.svg"),
+    "filters-diffuse-01-f": Path("tests/svg/filters-diffuse-01-f.svg"),
+    "filters-specular-01-f": Path("tests/svg/filters-specular-01-f.svg"),
+    "filters-light-01-f": Path("tests/svg/filters-light-01-f.svg"),
+    "filters-light-02-f": Path("tests/svg/filters-light-02-f.svg"),
+    "coords-trans-09-t": Path("tests/svg/coords-trans-09-t.svg"),
     "simple-rect": Path("tests/visual/fixtures/simple_rect.svg"),
 }
 
@@ -48,21 +62,36 @@ def run_suite(
     output_dir: Path,
     export: ExportOptions | None = None,
     *,
+    renderer_name: str = "soffice",
     soffice_path: str | None = None,
     soffice_profile: str | None = None,
+    powerpoint_backend: str = "auto",
+    powerpoint_open_timeout: float = 120.0,
+    powerpoint_capture_timeout: float = 5.0,
+    powerpoint_no_reopen: bool = False,
 ) -> None:
-    if soffice_path:
-        renderer = LibreOfficeRenderer(
-            soffice_path=soffice_path,
-            user_installation=soffice_profile,
+    if renderer_name == "powerpoint":
+        renderer = PowerPointRenderer(
+            backend=powerpoint_backend,
+            open_timeout=powerpoint_open_timeout,
+            capture_timeout=powerpoint_capture_timeout,
+            allow_reopen=not powerpoint_no_reopen,
         )
+        if not renderer.available:
+            raise SystemExit("PowerPoint rendering is only available on macOS.")
     else:
-        renderer = default_renderer(user_installation=soffice_profile)
-    if not renderer.available:
-        raise SystemExit(
-            "LibreOffice (soffice) is not available. Install it or set "
-            "SVG2OOXML_SOFFICE_PATH before running the suite."
-        )
+        if soffice_path:
+            renderer = LibreOfficeRenderer(
+                soffice_path=soffice_path,
+                user_installation=soffice_profile,
+            )
+        else:
+            renderer = default_renderer(user_installation=soffice_profile)
+        if not renderer.available:
+            raise SystemExit(
+                "LibreOffice (soffice) is not available. Install it or set "
+                "SVG2OOXML_SOFFICE_PATH before running the suite."
+            )
 
     stack = default_visual_stack()
     builder = stack.builder
@@ -92,14 +121,14 @@ def run_suite(
 
         pptx_path = scenario_dir / "presentation.pptx"
         svg_text = svg_path.read_text(encoding="utf-8")
-        build_result = builder.build_from_svg(svg_text, pptx_path)
+        build_result = builder.build_from_svg(svg_text, pptx_path, source_path=svg_path)
         logger.info("%s: generated PPTX (%d slide(s))", name, build_result.slide_count)
 
         try:
             rendered = renderer.render(build_result.pptx_path, render_dir)
         except VisualRendererError as exc:
-            logger.warning("%s: rendering failed – %s", name, exc)
-            continue
+            logger.error("%s: rendering failed – %s", name, exc)
+            raise SystemExit(1) from exc
         logger.info("%s: rendered %d slide image(s)", name, len(rendered.images))
 
         if export is not None:
@@ -121,7 +150,11 @@ def run_suite(
                 browser_threshold = float(os.getenv("SVG2OOXML_VISUAL_BROWSER_THRESHOLD", "0.90"))
                 browser_path = browser_dir / f"{name}.png"
                 try:
-                    browser_renderer.render_svg(svg_text, browser_path)
+                    browser_renderer.render_svg(
+                        svg_text,
+                        browser_path,
+                        source_path=svg_path,
+                    )
                 except BrowserRenderError as exc:
                     logger.warning("%s: browser render failed – %s", name, exc)
                 else:
@@ -218,6 +251,35 @@ def main() -> None:
         "--soffice-profile",
         help="LibreOffice user profile directory passed via -env:UserInstallation.",
     )
+    parser.add_argument(
+        "--renderer",
+        choices=("soffice", "powerpoint"),
+        default="soffice",
+        help="PPTX renderer to use for visual diffs.",
+    )
+    parser.add_argument(
+        "--powerpoint-backend",
+        choices=("auto", "screencapture", "sckit"),
+        default="auto",
+        help="PowerPoint capture backend when --renderer=powerpoint.",
+    )
+    parser.add_argument(
+        "--powerpoint-open-timeout",
+        type=float,
+        default=120.0,
+        help="Seconds to wait for PowerPoint to open/repair a presentation.",
+    )
+    parser.add_argument(
+        "--powerpoint-capture-timeout",
+        type=float,
+        default=5.0,
+        help="Seconds to wait for ScreenCaptureKit frame capture.",
+    )
+    parser.add_argument(
+        "--powerpoint-no-reopen",
+        action="store_true",
+        help="Disable periodic reopen attempts while waiting for slides.",
+    )
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO if not args.verbose else logging.DEBUG)
@@ -236,8 +298,13 @@ def main() -> None:
         args.scenarios,
         output_dir,
         export=export_opts,
+        renderer_name=args.renderer,
         soffice_path=args.soffice,
         soffice_profile=args.soffice_profile,
+        powerpoint_backend=args.powerpoint_backend,
+        powerpoint_open_timeout=args.powerpoint_open_timeout,
+        powerpoint_capture_timeout=args.powerpoint_capture_timeout,
+        powerpoint_no_reopen=args.powerpoint_no_reopen,
     )
 
 

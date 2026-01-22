@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import os
 import re
 from dataclasses import dataclass
-import os
 from typing import Iterable, Optional
 
 from .tree import SvgNode
+from svg2ooxml.common.units.scalars import PX_PER_INCH
 
 
 PRESENTATION_KEYS = {
@@ -26,7 +27,9 @@ PRESENTATION_KEYS = {
 
 
 _TRANSFORM_RE = re.compile(r"([a-zA-Z]+)\s*\(([^)]*)\)")
-_DEFAULT_UNITLESS_FONT_SCALE = float(os.getenv("SVG2OOXML_UNITLESS_FONT_SCALE", "0.875"))
+_DEFAULT_UNITLESS_FONT_SCALE = float(
+    os.getenv("SVG2OOXML_UNITLESS_FONT_SCALE", str(72.0 / PX_PER_INCH))
+)
 
 
 @dataclass(frozen=True)

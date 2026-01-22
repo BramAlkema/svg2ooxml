@@ -9,7 +9,7 @@ if TYPE_CHECKING:  # pragma: no cover - type checking only
     from .style_context import StyleContext as ParserStyleContext
     from svg2ooxml.policy import PolicyContext, PolicyEngine
     from svg2ooxml.services.conversion import ConversionServices
-    from svg2ooxml.ir.fonts import FontFaceRule
+    from svg2ooxml.ir.fonts import FontFaceRule, SvgFontDefinition
 
 
 @dataclass(slots=True)
@@ -40,6 +40,7 @@ class ParseResult:
     policy_context: "PolicyContext | None" = None
     style_context: "ParserStyleContext | None" = None
     web_fonts: "list[FontFaceRule] | None" = None
+    svg_fonts: "list[SvgFontDefinition] | None" = None
     metadata: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
@@ -68,6 +69,7 @@ class ParseResult:
         policy_context: "PolicyContext | None" = None,
         style_context: "ParserStyleContext | None" = None,
         web_fonts: "list[FontFaceRule] | None" = None,
+        svg_fonts: "list[SvgFontDefinition] | None" = None,
     ) -> ParseResult:
         """Construct a success result."""
         return cls(
@@ -94,6 +96,7 @@ class ParseResult:
             policy_context=policy_context,
             style_context=style_context,
             web_fonts=web_fonts,
+            svg_fonts=svg_fonts,
         )
 
     @classmethod

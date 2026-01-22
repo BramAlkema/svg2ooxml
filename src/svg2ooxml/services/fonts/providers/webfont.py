@@ -158,7 +158,7 @@ class WebFontProvider(FontProvider):
 
     def _has_compatible_format(self, rule: "FontFaceRule") -> bool:
         """Check if rule has web-compatible font formats."""
-        compatible_formats = {"woff", "woff2", "truetype", "opentype"}
+        compatible_formats = {"woff", "woff2", "truetype", "opentype", "svg"}
         for src in rule.src:
             if src.format and src.format.lower() in compatible_formats:
                 return True
@@ -196,10 +196,6 @@ class WebFontProvider(FontProvider):
             else:
                 # Try each src in order until one loads successfully
                 for src in rule.src:
-                    if src.is_local:
-                        # Skip local fonts (can't load from system)
-                        continue
-
                     try:
                         loaded_font = self.loader.load_from_src(src)
                         if loaded_font:
@@ -234,7 +230,7 @@ class WebFontProvider(FontProvider):
         # Data URIs and remote URLs: embedding allowed
         # Local fonts: embedding not allowed (system font)
         embedding_allowed = True
-        if primary_src and primary_src.is_local:
+        if primary_src and primary_src.url.startswith("local("):
             embedding_allowed = False
 
         metadata: dict[str, object] = {
