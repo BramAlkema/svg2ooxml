@@ -27,6 +27,7 @@ def convert_parser_output(
     policy_context: PolicyContext | None = None,
     *,
     policy_name: str | None = None,
+    overrides: Dict[str, Dict[str, Any]] | None = None,
     logger: logging.Logger | None = None,
     tracer: "ConversionTracer | None" = None,
 ) -> IRScene:
@@ -38,13 +39,47 @@ def convert_parser_output(
         fallback_engine=parser_result.policy_engine,
         policy_name=policy_name,
     )
-    resolved_context = resolve_policy_context(
-        policy_context=policy_context,
-        policy_engine=engine,
-        fallback_context=parser_result.policy_context,
-        fallback_engine=parser_result.policy_engine,
-        allow_fallback=policy_engine is None and policy_name is None,
-    )
+    
+    # If overrides are provided, we should re-evaluate targets affected by them
+    if overrides and engine is not None:
+        # Merge overrides into engine's current options if possible,
+        # or create a new evaluated context.
+        # For now, let's just use the provided policy_context or the parser's one
+        # and manually patch it, since PolicyEngine doesn't support live overrides easily yet.
+        resolved_context = policy_context or parser_result.policy_context
+        if resolved_context is None:
+            resolved_context = engine.evaluate()
+        
+        # Patch the context with overrides
+        for target, values in overrides.items():
+            existing = dict(resolved_context.get(target) or {})
+            existing.update(values)
+            
+            # Re-evaluate via engine if it's a known provider target
+            # This ensures 'decision' objects are updated
+            try:
+                from ..policy.targets import TargetRegistry
+                target_obj = TargetRegistry.default().get(target)
+                if target_obj:
+                    # evaluate() with overrides in options
+                    # PolicyEngine.evaluate uses self._policy.options, so we need to mock it
+                    # or better: the PolicyProvider.evaluate() method usually handles it.
+                    for provider in getattr(engine, "_providers", []):
+                        if provider.supports(target_obj):
+                            # Pass existing (patched) options
+                            new_payload = provider.evaluate(target_obj, existing)
+                            resolved_context.selections[target] = new_payload
+            except Exception:
+                # Fallback to simple dict update if re-evaluation fails
+                resolved_context.selections[target] = existing
+    else:
+        resolved_context = resolve_policy_context(
+            policy_context=policy_context,
+            policy_engine=engine,
+            fallback_context=parser_result.policy_context,
+            fallback_engine=parser_result.policy_engine,
+            allow_fallback=policy_engine is None and policy_name is None,
+        )
     conversion_context = build_conversion_context(
         services=base_services,
         policy_engine=engine,

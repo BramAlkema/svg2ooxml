@@ -353,10 +353,12 @@ class TextConversionPipeline:
         base_confidence = max(0.05, decision.wordart.confidence_threshold)
         confidence = base_confidence * 0.75
         preset = "textWave1"
+        is_path_based = False
 
         if text_path_id:
             preset = "textArchUp"
             confidence = max(confidence, base_confidence + 0.25)
+            is_path_based = True
         elif text_content.isupper() and len(text_content) <= 10:
             preset = "textCircle"
             confidence = max(confidence, base_confidence + 0.15)
@@ -367,10 +369,12 @@ class TextConversionPipeline:
             preset = "textWave1"
             confidence = max(confidence, base_confidence + 0.05)
 
-        aspect_ratio = frame.bbox.width / frame.bbox.height if frame.bbox.height else 1.0
-        if aspect_ratio > 5:
-            preset = "textWave1"
-            confidence = min(confidence, 0.75)
+        # Only apply aspect ratio correction if we don't have a strong path-based hint
+        if not is_path_based:
+            aspect_ratio = frame.bbox.width / frame.bbox.height if frame.bbox.height else 1.0
+            if aspect_ratio > 5:
+                preset = "textWave1"
+                confidence = min(confidence, 0.75)
 
         return preset, confidence
 

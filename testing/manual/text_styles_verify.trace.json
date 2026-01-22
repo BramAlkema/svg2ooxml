@@ -1,0 +1,789 @@
+{
+  "geometry_totals": {
+    "native": 3,
+    "emf": 1
+  },
+  "paint_totals": {
+    "native": 2
+  },
+  "geometry_events": [
+    {
+      "tag": "rect",
+      "decision": "native",
+      "element_id": null,
+      "metadata": {
+        "style": {
+          "source": "resvg",
+          "decision": "native"
+        },
+        "policy": {
+          "geometry": {
+            "quality": "balanced",
+            "max_segments": 1000,
+            "max_complexity_score": 100,
+            "max_complexity_ratio": 0.8,
+            "max_complexity": 0.8,
+            "simplify_paths": true,
+            "max_bitmap_area": 1500000,
+            "max_bitmap_side": 2048,
+            "max_dash_segments": 16,
+            "max_stroke_width": 100.0,
+            "max_miter_limit": 10.0,
+            "prefer_dash_presets": true,
+            "allow_custom_dash": true,
+            "respect_dashoffset": true,
+            "min_dash_segment_pct": 0.01,
+            "force_emf": false,
+            "force_bitmap": false,
+            "allow_emf_fallback": true,
+            "allow_bitmap_fallback": true,
+            "conservative_clipping": false
+          }
+        }
+      }
+    },
+    {
+      "tag": "path",
+      "decision": "emf",
+      "element_id": "arcPath",
+      "metadata": {
+        "style": {
+          "source": "resvg",
+          "decision": "native"
+        },
+        "policy": {
+          "geometry": {
+            "quality": "balanced",
+            "max_segments": 1000,
+            "max_complexity_score": 100,
+            "max_complexity_ratio": 0.8,
+            "max_complexity": 0.8,
+            "simplify_paths": true,
+            "max_bitmap_area": 1500000,
+            "max_bitmap_side": 2048,
+            "max_dash_segments": 16,
+            "max_stroke_width": 100.0,
+            "max_miter_limit": 10.0,
+            "prefer_dash_presets": true,
+            "allow_custom_dash": true,
+            "respect_dashoffset": true,
+            "min_dash_segment_pct": 0.01,
+            "force_emf": false,
+            "force_bitmap": false,
+            "allow_emf_fallback": true,
+            "allow_bitmap_fallback": true,
+            "conservative_clipping": false,
+            "segment_count_before": 20555,
+            "segment_count_after": 980,
+            "simplified": true,
+            "complexity_ratio": 0.98,
+            "flags": [
+              "complexity_exceeded"
+            ],
+            "render_mode": "emf"
+          }
+        },
+        "emf_asset": {
+          "width_emu": 3810000,
+          "height_emu": 952499,
+          "stroke_color": "0000FF",
+          "stroke_width": 0.0,
+          "stroke_cap": "butt",
+          "stroke_join": "miter"
+        }
+      }
+    },
+    {
+      "tag": "text",
+      "decision": "native",
+      "element_id": null,
+      "metadata": {
+        "text_path_id": "arcPath",
+        "text_path_data": "M 50,300 A 200,100 0 0 1 450,300",
+        "text_path_points": [
+          "PathPoint(x=50.0, y=300.0, tangent_angle=0.09966865249116202, distance_along_path=0.0, curvature=0.0, normal_angle=0.0)",
+          "PathPoint(x=54.21052631578947, y=300.42105263157896, tangent_angle=0.09966865249116202, distance_along_path=4.231526577314059, curvature=0.0, normal_angle=0.0)",
+          "PathPoint(x=58.421052631578945, y=300.8421052631579, tangent_angle=0.09966865249116202, distance_along_path=8.463053154628119, curvature=0.0, normal_angle=0.0)",
+          "PathPoint(x=62.631578947368425, y=301.2631578947368, tangent_angle=0.09966865249116202, distance_along_path=12.694579731942177, curvature=0.0, normal_angle=0.0)",
+          "PathPoint(x=66.84210526315789, y=301.6842105263158, tangent_angle=0.09966865249116202, distance_along_path=16.926106309256237, curvature=0.0, normal_angle=0.0)",
+          "PathPoint(x=71.05263157894737, y=302.10526315789474, tangent_angle=0.09966865249116202, distance_along_path=21.157632886570294, curvature=0.0, normal_angle=0.0)",
+          "PathPoint(x=75.26315789473685, y=302.5263157894737, tangent_angle=0.09966865249116202, distance_along_path=25.389159463884354, curvature=0.0, normal_angle=0.0)",
+          "PathPoint(x=79.47368421052632, y=302.94736842105266, tangent_angle=0.09966865249116202, distance_along_path=29.62068604119841, curvature=0.0, normal_angle=0.0)",
+          "PathPoint(x=83.6842105263158, y=303.36842105263156, tangent_angle=0.09966865249116202, distance_along_path=33.852212618512475, curvature=0.0, normal_angle=0.0)",
+          "PathPoint(x=87.89473684210526, y=303.7894736842105, tangent_angle=0.09966865249116202, distance_along_path=38.08373919582653, curvature=0.0, normal_angle=0.0)",
+          "PathPoint(x=92.10526315789474, y=304.2105263157895, tangent_angle=0.09966865249116202, distance_along_path=42.31526577314059, curvature=0.0, normal_angle=0.0)",
+          "PathPoint(x=96.3157894736842, y=304.63157894736844, tangent_angle=0.09966865249116202, distance_along_path=46.546792350454645, curvature=0.0, normal_angle=0.0)",
+          "PathPoint(x=100.52631578947368, y=305.05263157894734, tangent_angle=0.09966865249116202, distance_along_path=50.77831892776871, curvature=0.0, normal_angle=0.0)",
+          "PathPoint(x=104.73684210526316, y=305.4736842105263, tangent_angle=0.09966865249116202, distance_along_path=55.009845505082765, curvature=0.0, normal_angle=0.0)",
+          "PathPoint(x=108.94736842105263, y=305.89473684210526, tangent_angle=0.09966865249116202, distance_along_path=59.24137208239682, curvature=0.0, normal_angle=0.0)",
+          "PathPoint(x=113.15789473684211, y=306.3157894736842, tangent_angle=0.09966865249116202, distance_along_path=63.47289865971088, curvature=0.0, normal_angle=0.0)",
+          "PathPoint(x=117.36842105263159, y=306.7368421052632, tangent_angle=0.09966865249116202, distance_along_path=67.70442523702495, curvature=0.0, normal_angle=0.0)",
+          "PathPoint(x=121.57894736842105, y=307.1578947368421, tangent_angle=0.09966865249116202, distance_along_path=71.935951814339, curvature=0.0, normal_angle=0.0)",
+          "PathPoint(x=125.78947368421053, y=307.57894736842104, tangent_angle=0.09966865249116202, distance_along_path=76.16747839165306, curvature=0.0, normal_angle=0.0)",
+          "PathPoint(x=130.0, y=308.0, tangent_angle=0.09966865249116202, distance_along_path=80.39900496896712, curvature=0.0, normal_angle=0.0)",
+          "PathPoint(x=134.21052631578948, y=308.42105263157896, tangent_angle=0.09966865249116202, distance_along_path=84.63053154628118, curvature=0.0, normal_angle=0.0)",
+          "PathPoint(x=138.42105263157896, y=308.8421052631579, tangent_angle=0.09966865249116202, distance_along_path=88.86205812359523, curvature=0.0, normal_angle=0.0)",
+          "PathPoint(x=142.6315789473684, y=309.2631578947368, tangent_angle=0.09966865249116202, distance_along_path=93.09358470090929, curvature=0.0, normal_angle=0.0)",
+          "PathPoint(x=146.8421052631579, y=309.6842105263158, tangent_angle=0.09966865249116202, distance_along_path=97.32511127822336, curvature=0.0, normal_angle=0.0)",
+          "PathPoint(x=151.05263157894737, y=310.10526315789474, tangent_angle=0.09966865249116202, distance_along_path=101.55663785553742, curvature=0.0, normal_angle=0.0)",
+          "PathPoint(x=155.26315789473682, y=310.5263157894737, tangent_angle=0.09966865249116202, distance_along_path=105.78816443285146, curvature=0.0, normal_angle=0.0)",
+          "PathPoint(x=159.47368421052633, y=310.94736842105266, tangent_angle=0.09966865249116202, distance_along_path=110.01969101016553, curvature=0.0, normal_angle=0.0)",
+          "PathPoint(x=163.68421052631578, y=311.36842105263156, tangent_angle=0.09966865249116202, distance_along_path=114.25121758747959, curvature=0.0, normal_angle=0.0)",
+          "PathPoint(x=167.89473684210526, y=311.7894736842105, tangent_angle=0.09966865249116202, distance_along_path=118.48274416479364, curvature=0.0, normal_angle=0.0)",
+          "PathPoint(x=172.10526315789474, y=312.2105263157895, tangent_angle=0.09966865249116202, distance_along_path=122.71427074210771, curvature=0.0, normal_angle=0.0)",
+          "PathPoint(x=176.31578947368422, y=312.63157894736844, tangent_angle=0.09966865249116202, distance_along_path=126.94579731942176, curvature=0.0, normal_angle=0.0)",
+          "PathPoint(x=180.5263157894737, y=313.0526315789474, tangent_angle=0.09966865249116202, distance_along_path=131.17732389673583, curvature=0.0, normal_angle=0.0)",
+          "PathPoint(x=184.73684210526318, y=313.4736842105263, tangent_angle=0.09966865249116202, distance_along_path=135.4088504740499, curvature=0.0, normal_angle=0.0)",
+          "PathPoint(x=188.94736842105263, y=313.89473684210526, tangent_angle=0.09966865249116202, distance_along_path=139.64037705136394, curvature=0.0, normal_angle=0.0)",
+          "PathPoint(x=193.1578947368421, y=314.3157894736842, tangent_angle=0.09966865249116202, distance_along_path=143.871903628678, curvature=0.0, normal_angle=0.0)",
+          "PathPoint(x=197.36842105263156, y=314.7368421052632, tangent_angle=0.09966865249116202, distance_along_path=148.10343020599205, curvature=0.0, normal_angle=0.0)",
+          "PathPoint(x=201.57894736842107, y=315.1578947368421, tangent_angle=0.09966865249116202, distance_along_path=152.33495678330613, curvature=0.0, normal_angle=0.0)",
+          "PathPoint(x=205.78947368421055, y=315.57894736842104, tangent_angle=0.09966865249116202, distance_along_path=156.5664833606202, curvature=0.0, normal_angle=0.0)",
+          "PathPoint(x=210.0, y=316.0, tangent_angle=0.09966865249116202, distance_along_path=160.79800993793424, curvature=0.0, normal_angle=0.0)",
+          "PathPoint(x=214.2105263157895, y=316.42105263157896, tangent_angle=0.09966865249116202, distance_along_path=165.0295365152483, curvature=0.0, normal_angle=0.0)",
+          "PathPoint(x=218.42105263157893, y=316.8421052631579, tangent_angle=0.09966865249116202, distance_along_path=169.26106309256235, curvature=0.0, normal_angle=0.0)",
+          "PathPoint(x=222.6315789473684, y=317.2631578947368, tangent_angle=0.09966865249116202, distance_along_path=173.4925896698764, curvature=0.0, normal_angle=0.0)",
+          "PathPoint(x=226.8421052631579, y=317.6842105263158, tangent_angle=0.09966865249116202, distance_along_path=177.72411624719047, curvature=0.0, normal_angle=0.0)",
+          "PathPoint(x=231.05263157894737, y=318.10526315789474, tangent_angle=0.09966865249116202, distance_along_path=181.95564282450454, curvature=0.0, normal_angle=0.0)",
+          "PathPoint(x=235.26315789473682, y=318.5263157894737, tangent_angle=0.09966865249116202, distance_along_path=186.18716940181858, curvature=0.0, normal_angle=0.0)",
+          "PathPoint(x=239.4736842105263, y=318.9473684210526, tangent_angle=0.09966865249116202, distance_along_path=190.41869597913265, curvature=0.0, normal_angle=0.0)",
+          "PathPoint(x=243.68421052631578, y=319.36842105263156, tangent_angle=0.09966865249116202, distance_along_path=194.65022255644672, curvature=0.0, normal_angle=0.0)",
+          "PathPoint(x=247.89473684210526, y=319.7894736842105, tangent_angle=0.09966865249116202, distance_along_path=198.88174913376076, curvature=0.0, normal_angle=0.0)",
+          "PathPoint(x=252.10526315789474, y=319.7894736842105, tangent_angle=-0.09966865249116202, distance_along_path=203.11327571107483, curvature=0.0, normal_angle=0.0)",
+          "PathPoint(x=256.3157894736842, y=319.36842105263156, tangent_angle=-0.09966865249116202, distance_along_path=207.3448022883889, curvature=0.0, normal_angle=0.0)",
+          "PathPoint(x=260.52631578947364, y=318.94736842105266, tangent_angle=-0.09966865249116202, distance_along_path=211.57632886570292, curvature=0.0, normal_angle=0.0)",
+          "PathPoint(x=264.7368421052631, y=318.5263157894737, tangent_angle=-0.09966865249116202, distance_along_path=215.807855443017, curvature=0.0, normal_angle=0.0)",
+          "PathPoint(x=268.9473684210526, y=318.10526315789474, tangent_angle=-0.09966865249116202, distance_along_path=220.03938202033106, curvature=0.0, normal_angle=0.0)",
+          "PathPoint(x=273.1578947368421, y=317.6842105263158, tangent_angle=-0.09966865249116202, distance_along_path=224.2709085976451, curvature=0.0, normal_angle=0.0)",
+          "PathPoint(x=277.36842105263156, y=317.2631578947368, tangent_angle=-0.09966865249116202, distance_along_path=228.50243517495917, curvature=0.0, normal_angle=0.0)",
+          "PathPoint(x=281.57894736842104, y=316.8421052631579, tangent_angle=-0.09966865249116202, distance_along_path=232.73396175227325, curvature=0.0, normal_angle=0.0)",
+          "PathPoint(x=285.7894736842105, y=316.42105263157896, tangent_angle=-0.09966865249116202, distance_along_path=236.9654883295873, curvature=0.0, normal_angle=0.0)",
+          "PathPoint(x=290.0, y=316.0, tangent_angle=-0.09966865249116202, distance_along_path=241.19701490690136, curvature=0.0, normal_angle=0.0)",
+          "PathPoint(x=294.2105263157895, y=315.57894736842104, tangent_angle=-0.09966865249116202, distance_along_path=245.42854148421543, curvature=0.0, normal_angle=0.0)",
+          "PathPoint(x=298.42105263157896, y=315.1578947368421, tangent_angle=-0.09966865249116202, distance_along_path=249.6600680615295, curvature=0.0, normal_angle=0.0)",
+          "PathPoint(x=302.6315789473684, y=314.7368421052632, tangent_angle=-0.09966865249116202, distance_along_path=253.89159463884351, curvature=0.0, normal_angle=0.0)",
+          "PathPoint(x=306.84210526315786, y=314.3157894736842, tangent_angle=-0.09966865249116202, distance_along_path=258.1231212161576, curvature=0.0, normal_angle=0.0)",
+          "PathPoint(x=311.0526315789474, y=313.89473684210526, tangent_angle=-0.09966865249116202, distance_along_path=262.35464779347166, curvature=0.0, normal_angle=0.0)",
+          "PathPoint(x=315.2631578947369, y=313.4736842105263, tangent_angle=-0.09966865249116202, distance_along_path=266.5861743707857, curvature=0.0, normal_angle=0.0)",
+          "PathPoint(x=319.47368421052636, y=313.05263157894734, tangent_angle=-0.09966865249116202, distance_along_path=270.8177009480998, curvature=0.0, normal_angle=0.0)",
+          "PathPoint(x=323.68421052631584, y=312.63157894736844, tangent_angle=-0.09966865249116202, distance_along_path=275.04922752541387, curvature=0.0, normal_angle=0.0)",
+          "PathPoint(x=327.89473684210526, y=312.2105263157895, tangent_angle=-0.09966865249116202, distance_along_path=279.2807541027279, curvature=0.0, normal_angle=0.0)",
+          "PathPoint(x=332.10526315789474, y=311.7894736842105, tangent_angle=-0.09966865249116202, distance_along_path=283.51228068004195, curvature=0.0, normal_angle=0.0)",
+          "PathPoint(x=336.3157894736842, y=311.36842105263156, tangent_angle=-0.09966865249116202, distance_along_path=287.743807257356, curvature=0.0, normal_angle=0.0)",
+          "PathPoint(x=340.52631578947364, y=310.94736842105266, tangent_angle=-0.09966865249116202, distance_along_path=291.97533383467004, curvature=0.0, normal_angle=0.0)",
+          "PathPoint(x=344.7368421052631, y=310.5263157894737, tangent_angle=-0.09966865249116202, distance_along_path=296.2068604119841, curvature=0.0, normal_angle=0.0)",
+          "PathPoint(x=348.9473684210526, y=310.10526315789474, tangent_angle=-0.09966865249116202, distance_along_path=300.4383869892982, curvature=0.0, normal_angle=0.0)",
+          "PathPoint(x=353.1578947368421, y=309.6842105263158, tangent_angle=-0.09966865249116202, distance_along_path=304.66991356661225, curvature=0.0, normal_angle=0.0)",
+          "PathPoint(x=357.3684210526316, y=309.2631578947368, tangent_angle=-0.09966865249116202, distance_along_path=308.9014401439263, curvature=0.0, normal_angle=0.0)",
+          "PathPoint(x=361.5789473684211, y=308.8421052631579, tangent_angle=-0.09966865249116202, distance_along_path=313.1329667212404, curvature=0.0, normal_angle=0.0)",
+          "PathPoint(x=365.7894736842106, y=308.42105263157896, tangent_angle=-0.09966865249116202, distance_along_path=317.36449329855446, curvature=0.0, normal_angle=0.0)",
+          "PathPoint(x=370.0, y=308.0, tangent_angle=-0.09966865249116202, distance_along_path=321.5960198758685, curvature=0.0, normal_angle=0.0)",
+          "PathPoint(x=374.2105263157895, y=307.57894736842104, tangent_angle=-0.09966865249116202, distance_along_path=325.82754645318255, curvature=0.0, normal_angle=0.0)",
+          "PathPoint(x=378.42105263157896, y=307.1578947368421, tangent_angle=-0.09966865249116202, distance_along_path=330.0590730304966, curvature=0.0, normal_angle=0.0)",
+          "PathPoint(x=382.6315789473684, y=306.7368421052632, tangent_angle=-0.09966865249116202, distance_along_path=334.29059960781063, curvature=0.0, normal_angle=0.0)",
+          "PathPoint(x=386.84210526315786, y=306.3157894736842, tangent_angle=-0.09966865249116202, distance_along_path=338.5221261851247, curvature=0.0, normal_angle=0.0)",
+          "PathPoint(x=391.0526315789474, y=305.89473684210526, tangent_angle=-0.09966865249116202, distance_along_path=342.7536527624388, curvature=0.0, normal_angle=0.0)",
+          "PathPoint(x=395.26315789473676, y=305.4736842105263, tangent_angle=-0.09966865249116202, distance_along_path=346.9851793397528, curvature=0.0, normal_angle=0.0)",
+          "PathPoint(x=399.4736842105263, y=305.0526315789474, tangent_angle=-0.09966865249116202, distance_along_path=351.21670591706686, curvature=0.0, normal_angle=0.0)",
+          "PathPoint(x=403.6842105263158, y=304.63157894736844, tangent_angle=-0.09966865249116202, distance_along_path=355.44823249438093, curvature=0.0, normal_angle=0.0)",
+          "PathPoint(x=407.89473684210526, y=304.2105263157895, tangent_angle=-0.09966865249116202, distance_along_path=359.679759071695, curvature=0.0, normal_angle=0.0)",
+          "PathPoint(x=412.10526315789474, y=303.7894736842105, tangent_angle=-0.09966865249116202, distance_along_path=363.9112856490091, curvature=0.0, normal_angle=0.0)",
+          "PathPoint(x=416.31578947368416, y=303.36842105263156, tangent_angle=-0.09966865249116202, distance_along_path=368.1428122263231, curvature=0.0, normal_angle=0.0)",
+          "PathPoint(x=420.52631578947364, y=302.94736842105266, tangent_angle=-0.09966865249116202, distance_along_path=372.37433880363716, curvature=0.0, normal_angle=0.0)",
+          "PathPoint(x=424.7368421052631, y=302.5263157894737, tangent_angle=-0.09966865249116202, distance_along_path=376.60586538095123, curvature=0.0, normal_angle=0.0)",
+          "PathPoint(x=428.9473684210526, y=302.10526315789474, tangent_angle=-0.09966865249116202, distance_along_path=380.8373919582653, curvature=0.0, normal_angle=0.0)",
+          "PathPoint(x=433.1578947368421, y=301.6842105263158, tangent_angle=-0.09966865249116202, distance_along_path=385.06891853557937, curvature=0.0, normal_angle=0.0)",
+          "PathPoint(x=437.3684210526316, y=301.2631578947368, tangent_angle=-0.09966865249116202, distance_along_path=389.30044511289344, curvature=0.0, normal_angle=0.0)",
+          "PathPoint(x=441.57894736842104, y=300.8421052631579, tangent_angle=-0.09966865249116202, distance_along_path=393.53197169020746, curvature=0.0, normal_angle=0.0)",
+          "PathPoint(x=445.7894736842105, y=300.42105263157896, tangent_angle=-0.09966865249116202, distance_along_path=397.7634982675215, curvature=0.0, normal_angle=0.0)",
+          "PathPoint(x=450.0, y=300.0, tangent_angle=-0.09966865249116202, distance_along_path=401.9950248448356, curvature=0.0, normal_angle=0.0)"
+        ],
+        "resvg_text": {
+          "complexity": "has_text_path",
+          "details": "Text uses textPath (text on a path)",
+          "is_plain": false,
+          "strategy": "text_path"
+        },
+        "policy": {
+          "text": {
+            "quality": "balanced",
+            "embedding": {
+              "embed_when_available": true,
+              "subset_strategy": "character",
+              "preserve_hinting": false,
+              "package_font_parts": true,
+              "allow_svg_font_conversion": true
+            },
+            "fallback": {
+              "missing_font_behavior": "outline",
+              "glyph_fallback": "vector_outline",
+              "fallback_order": [
+                "Calibri",
+                "Arial",
+                "sans-serif"
+              ],
+              "max_vectorized_glyphs": 2048,
+              "prefer_vector_fallback": true
+            },
+            "wordart": {
+              "enable_detection": true,
+              "prefer_native_wordart": true,
+              "confidence_threshold": 0.1,
+              "allow_outline_fallback": true
+            },
+            "layout": {
+              "kerning_mode": "preserve",
+              "leading_mode": "auto",
+              "language_tagging": true,
+              "track_letter_spacing": true
+            },
+            "allow_effects": true,
+            "max_runs": 2048,
+            "max_complexity": 1024,
+            "diagnostics_level": "summary",
+            "font_directories": [],
+            "decision": "TextPolicyDecision(quality='balanced', embedding=FontEmbeddingPolicy(embed_when_available=True, subset_strategy='character', preserve_hinting=False, package_font_parts=True, allow_svg_font_conversion=True), fallback=TextFallbackPolicy(missing_font_behavior='outline', glyph_fallback='vector_outline', fallback_order=('Calibri', 'Arial', 'sans-serif'), max_vectorized_glyphs=2048, prefer_vector_fallback=True), wordart=WordArtPolicy(enable_detection=True, prefer_native_wordart=True, confidence_threshold=0.1, allow_outline_fallback=True), layout=TextLayoutPolicy(kerning_mode='preserve', leading_mode='auto', language_tagging=True, track_letter_spacing=True), allow_effects=True, max_runs=2048, max_complexity=1024, diagnostics_level='summary', font_directories=())",
+            "rendering_behavior": "outline",
+            "glyph_fallback": "vector_outline",
+            "max_vectorized_glyphs": 2048,
+            "prefer_vector_fallback": true,
+            "wordart_detection": {
+              "enabled": true,
+              "confidence_threshold": 0.1
+            }
+          }
+        },
+        "wordart": {
+          "preset": "textArchUp",
+          "confidence": 0.35,
+          "fallback": "vector_outline",
+          "prefer_native": true,
+          "length": 14,
+          "reason": "heuristic_wordart_classification",
+          "text_path_id": "arcPath"
+        },
+        "font_embedding": {
+          "requires_embedding": false,
+          "subset_strategy": "character",
+          "glyph_count": 9,
+          "preserve_hinting": false,
+          "font_style_kind": "regular",
+          "bold": false,
+          "italic": false,
+          "font_weight": 400,
+          "font_style": "normal",
+          "resolved_family": "Arial",
+          "font_source": "directory",
+          "font_path": "/System/Library/Fonts/Supplemental/Arial.ttf",
+          "engine_available": true,
+          "resolution": "embedding_disallowed"
+        },
+        "smart_font": {
+          "strategy": "lookup",
+          "confidence": 1.0,
+          "matched_runs": 1,
+          "total_runs": 1,
+          "runs": [
+            {
+              "index": 0,
+              "requested_family": "Arial",
+              "weight": 400,
+              "style": "normal",
+              "language": null,
+              "resolved_family": "Arial",
+              "source": "directory",
+              "embedding_allowed": true,
+              "path": "/System/Library/Fonts/Supplemental/Arial.ttf",
+              "provider_metadata": {
+                "source": "directory",
+                "filename": "Arial.ttf",
+                "directory": "/System/Library/Fonts/Supplemental"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "tag": "text",
+      "decision": "native",
+      "element_id": null,
+      "metadata": {
+        "resvg_text": {
+          "complexity": "simple",
+          "is_plain": true,
+          "strategy": "error"
+        },
+        "policy": {
+          "text": {
+            "quality": "balanced",
+            "embedding": {
+              "embed_when_available": true,
+              "subset_strategy": "character",
+              "preserve_hinting": false,
+              "package_font_parts": true,
+              "allow_svg_font_conversion": true
+            },
+            "fallback": {
+              "missing_font_behavior": "outline",
+              "glyph_fallback": "vector_outline",
+              "fallback_order": [
+                "Calibri",
+                "Arial",
+                "sans-serif"
+              ],
+              "max_vectorized_glyphs": 2048,
+              "prefer_vector_fallback": true
+            },
+            "wordart": {
+              "enable_detection": true,
+              "prefer_native_wordart": true,
+              "confidence_threshold": 0.1,
+              "allow_outline_fallback": true
+            },
+            "layout": {
+              "kerning_mode": "preserve",
+              "leading_mode": "auto",
+              "language_tagging": true,
+              "track_letter_spacing": true
+            },
+            "allow_effects": true,
+            "max_runs": 2048,
+            "max_complexity": 1024,
+            "diagnostics_level": "summary",
+            "font_directories": [],
+            "decision": "TextPolicyDecision(quality='balanced', embedding=FontEmbeddingPolicy(embed_when_available=True, subset_strategy='character', preserve_hinting=False, package_font_parts=True, allow_svg_font_conversion=True), fallback=TextFallbackPolicy(missing_font_behavior='outline', glyph_fallback='vector_outline', fallback_order=('Calibri', 'Arial', 'sans-serif'), max_vectorized_glyphs=2048, prefer_vector_fallback=True), wordart=WordArtPolicy(enable_detection=True, prefer_native_wordart=True, confidence_threshold=0.1, allow_outline_fallback=True), layout=TextLayoutPolicy(kerning_mode='preserve', leading_mode='auto', language_tagging=True, track_letter_spacing=True), allow_effects=True, max_runs=2048, max_complexity=1024, diagnostics_level='summary', font_directories=())",
+            "rendering_behavior": "outline",
+            "glyph_fallback": "vector_outline",
+            "max_vectorized_glyphs": 2048,
+            "prefer_vector_fallback": true,
+            "wordart_detection": {
+              "enabled": true,
+              "confidence_threshold": 0.1
+            }
+          }
+        },
+        "wordart": {
+          "preset": "textWave1",
+          "confidence": 0.07500000000000001,
+          "fallback": "vector_outline",
+          "prefer_native": true,
+          "length": 12,
+          "reason": "heuristic_wordart_classification"
+        },
+        "font_embedding": {
+          "requires_embedding": false,
+          "subset_strategy": "character",
+          "glyph_count": 10,
+          "preserve_hinting": false,
+          "font_style_kind": "regular",
+          "bold": false,
+          "italic": false,
+          "font_weight": 400,
+          "font_style": "normal",
+          "resolved_family": "Arial",
+          "font_source": "directory",
+          "font_path": "/System/Library/Fonts/Supplemental/Arial.ttf",
+          "engine_available": true,
+          "resolution": "embedding_disallowed"
+        },
+        "smart_font": {
+          "strategy": "lookup",
+          "confidence": 1.0,
+          "matched_runs": 1,
+          "total_runs": 1,
+          "runs": [
+            {
+              "index": 0,
+              "requested_family": "Arial",
+              "weight": 400,
+              "style": "normal",
+              "language": null,
+              "resolved_family": "Arial",
+              "source": "directory",
+              "embedding_allowed": true,
+              "path": "/System/Library/Fonts/Supplemental/Arial.ttf",
+              "provider_metadata": {
+                "source": "directory",
+                "filename": "Arial.ttf",
+                "directory": "/System/Library/Fonts/Supplemental"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "paint_events": [
+    {
+      "paint_type": "solid",
+      "decision": "native",
+      "paint_id": "fill:F0F0F0",
+      "metadata": {
+        "role": "fill",
+        "color": "F0F0F0",
+        "opacity": 1.0,
+        "element_id": null
+      }
+    },
+    {
+      "paint_type": "solid",
+      "decision": "native",
+      "paint_id": "stroke:arcPath",
+      "metadata": {
+        "role": "stroke",
+        "color": "0000FF",
+        "opacity": 1.0,
+        "element_id": "arcPath"
+      }
+    }
+  ],
+  "stage_totals": {
+    "parser:normalization": 1,
+    "parser:references": 1,
+    "parser:statistics": 1,
+    "parser:preprocess": 1,
+    "resvg:tree_built": 1,
+    "clip:definitions_loaded": 1,
+    "mask:definitions_loaded": 1,
+    "paint:solid": 2,
+    "paint:stroke": 1,
+    "text:text_frame": 2,
+    "converter:conversion_complete": 1,
+    "writer:render_start": 1,
+    "media:media_registered": 1,
+    "writer:render_complete": 1,
+    "packaging:packaging_start": 1,
+    "packaging:slide_xml_written": 1,
+    "packaging:media_enqueued": 1,
+    "packaging:slide_relationships_updated": 1,
+    "packaging:media_part_written": 1,
+    "packaging:slide_size_mode_resolved": 1,
+    "packaging:presentation_dimensions_updated": 1,
+    "packaging:required_part_written": 3,
+    "packaging:presentation_rels_updated": 1,
+    "packaging:content_types_updated": 1,
+    "packaging:pptx_written": 1
+  },
+  "stage_events": [
+    {
+      "stage": "parser",
+      "action": "normalization",
+      "subject": null,
+      "metadata": {
+        "namespaces_fixed": false,
+        "attributes_added": [
+          "version"
+        ],
+        "structure_fixes": [],
+        "encoding_fixes": [],
+        "whitespace_normalized": true,
+        "comments_filtered": true,
+        "log": [
+          {
+            "action": "add_root_attributes",
+            "target": "<svg>",
+            "details": {
+              "attributes": [
+                "version"
+              ]
+            }
+          },
+          {
+            "action": "normalize_whitespace",
+            "details": {
+              "text_nodes": 1,
+              "tail_nodes": 2
+            }
+          },
+          {
+            "action": "filter_comments",
+            "details": {
+              "count": 1
+            }
+          }
+        ],
+        "preparse": {
+          "removed_bom": false,
+          "encoding_replacements": 0,
+          "encoding_replacements_by_char": {},
+          "added_xml_declaration": true
+        }
+      }
+    },
+    {
+      "stage": "parser",
+      "action": "references",
+      "subject": null,
+      "metadata": {
+        "masks": 0,
+        "filters": 0,
+        "symbols": 0,
+        "markers": 0
+      }
+    },
+    {
+      "stage": "parser",
+      "action": "statistics",
+      "subject": null,
+      "metadata": {
+        "element_count": 6,
+        "namespace_count": 1,
+        "processing_time_ms": 1.9595001358538866,
+        "external_references": false
+      }
+    },
+    {
+      "stage": "parser",
+      "action": "preprocess",
+      "subject": null,
+      "metadata": {
+        "removed_bom": false,
+        "encoding_replacements": 0,
+        "encoding_replacements_by_char": {},
+        "added_xml_declaration": true
+      }
+    },
+    {
+      "stage": "resvg",
+      "action": "tree_built",
+      "subject": null,
+      "metadata": {
+        "mapped_elements": 6
+      }
+    },
+    {
+      "stage": "clip",
+      "action": "definitions_loaded",
+      "subject": null,
+      "metadata": {
+        "count": 0
+      }
+    },
+    {
+      "stage": "mask",
+      "action": "definitions_loaded",
+      "subject": null,
+      "metadata": {
+        "count": 0
+      }
+    },
+    {
+      "stage": "paint",
+      "action": "solid",
+      "subject": null,
+      "metadata": {
+        "role": "fill",
+        "color": "F0F0F0",
+        "opacity": 1.0
+      }
+    },
+    {
+      "stage": "paint",
+      "action": "solid",
+      "subject": "arcPath",
+      "metadata": {
+        "role": "stroke",
+        "color": "0000FF",
+        "opacity": 1.0
+      }
+    },
+    {
+      "stage": "paint",
+      "action": "stroke",
+      "subject": "arcPath",
+      "metadata": {
+        "width": 1.0,
+        "opacity": 1.0,
+        "dash_pattern": true,
+        "join": "miter",
+        "cap": "butt"
+      }
+    },
+    {
+      "stage": "text",
+      "action": "text_frame",
+      "subject": "arcPath",
+      "metadata": {
+        "run_count": 1,
+        "uses_text_path": true,
+        "policy_applied": true,
+        "decision": "TextPolicyDecision(quality='balanced', embedding=FontEmbeddingPolicy(embed_when_available=True, subset_strategy='character', preserve_hinting=False, package_font_parts=True, allow_svg_font_conversion=True), fallback=TextFallbackPolicy(missing_font_behavior='outline', glyph_fallback='vector_outline', fallback_order=('Calibri', 'Arial', 'sans-serif'), max_vectorized_glyphs=2048, prefer_vector_fallback=True), wordart=WordArtPolicy(enable_detection=True, prefer_native_wordart=True, confidence_threshold=0.1, allow_outline_fallback=True), layout=TextLayoutPolicy(kerning_mode='preserve', leading_mode='auto', language_tagging=True, track_letter_spacing=True), allow_effects=True, max_runs=2048, max_complexity=1024, diagnostics_level='summary', font_directories=())"
+      }
+    },
+    {
+      "stage": "text",
+      "action": "text_frame",
+      "subject": null,
+      "metadata": {
+        "run_count": 1,
+        "uses_text_path": false,
+        "policy_applied": true,
+        "decision": "TextPolicyDecision(quality='balanced', embedding=FontEmbeddingPolicy(embed_when_available=True, subset_strategy='character', preserve_hinting=False, package_font_parts=True, allow_svg_font_conversion=True), fallback=TextFallbackPolicy(missing_font_behavior='outline', glyph_fallback='vector_outline', fallback_order=('Calibri', 'Arial', 'sans-serif'), max_vectorized_glyphs=2048, prefer_vector_fallback=True), wordart=WordArtPolicy(enable_detection=True, prefer_native_wordart=True, confidence_threshold=0.1, allow_outline_fallback=True), layout=TextLayoutPolicy(kerning_mode='preserve', leading_mode='auto', language_tagging=True, track_letter_spacing=True), allow_effects=True, max_runs=2048, max_complexity=1024, diagnostics_level='summary', font_directories=())"
+      }
+    },
+    {
+      "stage": "converter",
+      "action": "conversion_complete",
+      "subject": null,
+      "metadata": {
+        "element_count": 6
+      }
+    },
+    {
+      "stage": "writer",
+      "action": "render_start",
+      "subject": null,
+      "metadata": {
+        "slide_size": [
+          4762500,
+          3810000
+        ]
+      }
+    },
+    {
+      "stage": "media",
+      "action": "media_registered",
+      "subject": null,
+      "metadata": {
+        "format": "emf",
+        "relationship_id": "rIdEmf1",
+        "new_asset": true,
+        "width_emu": 3810000,
+        "height_emu": 952499,
+        "image_source": null
+      }
+    },
+    {
+      "stage": "writer",
+      "action": "render_complete",
+      "subject": null,
+      "metadata": {
+        "fragment_count": 4,
+        "media_assets": 1,
+        "mask_assets": 0,
+        "font_plans": 0
+      }
+    },
+    {
+      "stage": "packaging",
+      "action": "packaging_start",
+      "subject": null,
+      "metadata": {
+        "slide_count": 1
+      }
+    },
+    {
+      "stage": "packaging",
+      "action": "slide_xml_written",
+      "subject": null,
+      "metadata": {
+        "filename": "slide1.xml",
+        "index": 1
+      }
+    },
+    {
+      "stage": "packaging",
+      "action": "media_enqueued",
+      "subject": null,
+      "metadata": {
+        "relationship_id": "rIdEmf1",
+        "filename": "emf_cf5ea1ff_3810000x952499.emf",
+        "content_type": "image/x-emf"
+      }
+    },
+    {
+      "stage": "packaging",
+      "action": "slide_relationships_updated",
+      "subject": null,
+      "metadata": {
+        "index": 1,
+        "media_count": 1,
+        "mask_count": 0
+      }
+    },
+    {
+      "stage": "packaging",
+      "action": "media_part_written",
+      "subject": "rIdEmf1",
+      "metadata": {
+        "filename": "emf_cf5ea1ff_3810000x952499.emf",
+        "content_type": "image/x-emf"
+      }
+    },
+    {
+      "stage": "packaging",
+      "action": "slide_size_mode_resolved",
+      "subject": null,
+      "metadata": {
+        "mode": "same",
+        "width_emu": 4762500,
+        "height_emu": 3810000,
+        "slide_count": 1
+      }
+    },
+    {
+      "stage": "packaging",
+      "action": "presentation_dimensions_updated",
+      "subject": null,
+      "metadata": {
+        "width_emu": 4762500,
+        "height_emu": 3810000,
+        "width_inches": 5.208333333333333,
+        "height_inches": 4.166666666666667
+      }
+    },
+    {
+      "stage": "packaging",
+      "action": "required_part_written",
+      "subject": null,
+      "metadata": {
+        "file": "presProps.xml"
+      }
+    },
+    {
+      "stage": "packaging",
+      "action": "required_part_written",
+      "subject": null,
+      "metadata": {
+        "file": "viewProps.xml"
+      }
+    },
+    {
+      "stage": "packaging",
+      "action": "required_part_written",
+      "subject": null,
+      "metadata": {
+        "file": "tableStyles.xml"
+      }
+    },
+    {
+      "stage": "packaging",
+      "action": "presentation_rels_updated",
+      "subject": null,
+      "metadata": {
+        "added_required_relationships": true
+      }
+    },
+    {
+      "stage": "packaging",
+      "action": "content_types_updated",
+      "subject": null,
+      "metadata": {
+        "slide_count": 1,
+        "media_count": 1,
+        "font_count": 0,
+        "mask_count": 0
+      }
+    },
+    {
+      "stage": "packaging",
+      "action": "pptx_written",
+      "subject": null,
+      "metadata": {
+        "path": "testing/manual/text_styles_verify.pptx"
+      }
+    }
+  ],
+  "resvg_metrics": {}
+}

@@ -351,11 +351,12 @@ def render_textframe(
     behavior = policy_text.get("rendering_behavior")
     if isinstance(behavior, str) and behavior:
         note_parts.append(f"rendering_behavior={behavior}")
-        logger.warning(
-            "Text frame %s requests %s rendering; emitting live text until fallback support lands.",
-            shape_id,
-            behavior,
-        )
+        if behavior != "outline":
+            logger.warning(
+                "Text frame %s requests %s rendering; emitting live text until fallback support lands.",
+                shape_id,
+                behavior,
+            )
     fallback_font = policy_text.get("font_fallback")
     if isinstance(fallback_font, str) and fallback_font:
         note_parts.append(f"font_fallback={fallback_font}")
@@ -544,7 +545,24 @@ def run_fragment(run: Run, text_segment: str, navigation_factory) -> str:
 
     # Add solidFill
     solidFill = a_sub(rPr, "solidFill")
-    a_sub(solidFill, "srgbClr", val=rgb)
+    fill_alpha = int(round(run.fill_opacity * 100000))
+    if fill_alpha < 100000:
+        srgbClr = a_sub(solidFill, "srgbClr", val=rgb)
+        a_sub(srgbClr, "alpha", val=str(fill_alpha))
+    else:
+        a_sub(solidFill, "srgbClr", val=rgb)
+
+    # Add outline if present
+    if run.has_stroke:
+        ln = a_sub(rPr, "ln", w=str(px_to_emu(run.stroke_width_px or 1.0)))
+        strokeFill = a_sub(ln, "solidFill")
+        stroke_rgb = (run.stroke_rgb or "000000").upper()
+        stroke_alpha = int(round((run.stroke_opacity or 1.0) * 100000))
+        if stroke_alpha < 100000:
+            srgbClr = a_sub(strokeFill, "srgbClr", val=stroke_rgb)
+            a_sub(srgbClr, "alpha", val=str(stroke_alpha))
+        else:
+            a_sub(strokeFill, "srgbClr", val=stroke_rgb)
 
     # Add font typefaces
     a_sub(rPr, "latin", typeface=font_family)

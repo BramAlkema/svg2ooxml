@@ -616,6 +616,19 @@ class TextConverter:
     def _create_run_from_style(self, text: str, style: Mapping[str, Any]) -> Run:
         fill = style.get("fill") or "#000000"
         hex_color = self._coerce_hex_color(fill)
+        fill_opacity = float(style.get("fill_opacity", 1.0))
+        
+        stroke = style.get("stroke")
+        stroke_rgb = None
+        stroke_width = None
+        stroke_opacity = None
+        
+        if stroke and stroke.lower() != "none":
+            stroke_rgb = self._coerce_hex_color(stroke)
+            stroke_width_raw = style.get("stroke_width", "1")
+            stroke_width = self._resolve_text_length(stroke_width_raw, axis="x", font_size_pt=float(style.get("font_size_pt", 12.0)))
+            stroke_opacity = float(style.get("stroke_opacity", 1.0))
+
         font_size = float(style.get("font_size_pt", 12.0))
         font_family = self._normalize_font_family_list(style.get("font_family"))
         weight_token = (style.get("font_weight") or "normal").lower()
@@ -633,6 +646,10 @@ class TextConverter:
             underline=underline,
             strike=strike,
             rgb=hex_color,
+            fill_opacity=fill_opacity,
+            stroke_rgb=stroke_rgb,
+            stroke_width_px=stroke_width,
+            stroke_opacity=stroke_opacity,
         )
 
     def _resolve_text_length(
@@ -680,6 +697,10 @@ class TextConverter:
             and first.underline == second.underline
             and first.strike == second.strike
             and first.rgb == second.rgb
+            and abs(first.fill_opacity - second.fill_opacity) <= 1e-6
+            and first.stroke_rgb == second.stroke_rgb
+            and abs((first.stroke_width_px or 0.0) - (second.stroke_width_px or 0.0)) <= 1e-6
+            and abs((first.stroke_opacity or 1.0) - (second.stroke_opacity or 1.0)) <= 1e-6
         )
 
     def _attach_resvg_text_metadata(self, resvg_node: Any, metadata: dict[str, Any]) -> None:
