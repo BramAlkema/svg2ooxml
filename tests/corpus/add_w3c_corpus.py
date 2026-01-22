@@ -216,8 +216,8 @@ def scan_w3c_tests(
         category_info = categorize_test(svg_file.name)
 
         # Create deck entry
-        # Use relative path from corpus/w3c/ back to tests/svg/
-        svg_file_path = f"../../svg/{svg_file.name}"
+        # Use filename relative to tests/svg/
+        svg_file_path = svg_file.name
 
         deck = {
             "deck_name": svg_file.stem,

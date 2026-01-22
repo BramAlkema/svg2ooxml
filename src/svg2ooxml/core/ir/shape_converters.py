@@ -1228,6 +1228,7 @@ class ShapeConversionMixin:
         bbox = _compute_bbox(transformed_points)
 
         image_policy = self._policy_options("image")
+        style = styles_runtime.extract_style(self, element)
 
         image_service = self._services.image_service
         resource = None
@@ -1248,7 +1249,7 @@ class ShapeConversionMixin:
         )
         clip_ref = self._resolve_clip_ref(element)
         mask_ref, mask_instance = self._resolve_mask_ref(element)
-        metadata: dict[str, Any] = {}
+        metadata: dict[str, Any] = dict(style.metadata)
         if resource and resource.source:
             metadata["image_source"] = resource.source
         if href:
@@ -1274,7 +1275,7 @@ class ShapeConversionMixin:
             clip=clip_ref,
             mask=mask_ref,
             mask_instance=mask_instance,
-            opacity=1.0,
+            opacity=style.opacity,
             transform=None,
             metadata=metadata,
         )
@@ -1318,6 +1319,7 @@ class ShapeConversionMixin:
 
         payload = _first_foreign_child(element)
         payload_type = _classify_foreign_payload(payload) if payload is not None else "empty"
+        style = styles_runtime.extract_style(self, element)
 
         metadata: dict[str, Any] = {
             "foreign_object": {
@@ -1333,6 +1335,7 @@ class ShapeConversionMixin:
 
         if payload is None:
             placeholder = self._foreign_object_placeholder(bbox, clip_ref, mask_ref, mask_instance, metadata)
+            placeholder = replace(placeholder, opacity=style.opacity)
             self._trace_geometry_decision(element, "placeholder", placeholder.metadata)
             self._trace_stage(
                 "foreign_object_placeholder",
@@ -1351,7 +1354,14 @@ class ShapeConversionMixin:
                 coord_space.pop()
             if not children:
                 return None
-            group = Group(children=children, clip=clip_ref, mask=mask_ref, mask_instance=mask_instance, metadata=metadata)
+            group = Group(
+                children=children, 
+                clip=clip_ref, 
+                mask=mask_ref, 
+                mask_instance=mask_instance, 
+                opacity=style.opacity,
+                metadata=metadata
+            )
             self._process_mask_metadata(group)
             self._trace_geometry_decision(element, "native", group.metadata)
             self._trace_stage(
@@ -1365,7 +1375,8 @@ class ShapeConversionMixin:
         if payload_type == "image":
             href = _extract_image_href(payload)
             if not href:
-                return self._foreign_object_placeholder(bbox, clip_ref, mask_ref, mask_instance, metadata)
+                placeholder = self._foreign_object_placeholder(bbox, clip_ref, mask_ref, mask_instance, metadata)
+                return replace(placeholder, opacity=style.opacity)
 
             image_metadata = dict(metadata)
             image_metadata.setdefault("foreign_object", {}).setdefault("href", href)
@@ -1379,7 +1390,7 @@ class ShapeConversionMixin:
                 clip=clip_ref,
                 mask=mask_ref,
                 mask_instance=mask_instance,
-                opacity=1.0,
+                opacity=style.opacity,
                 transform=None,
                 metadata=image_metadata,
             )
@@ -1397,6 +1408,7 @@ class ShapeConversionMixin:
             text_content = _collect_foreign_text(payload)
             if not text_content:
                 placeholder = self._foreign_object_placeholder(bbox, clip_ref, mask_ref, mask_instance, metadata)
+                placeholder = replace(placeholder, opacity=style.opacity)
                 self._trace_geometry_decision(element, "placeholder", placeholder.metadata)
                 self._trace_stage(
                     "foreign_object_placeholder",
@@ -1413,6 +1425,8 @@ class ShapeConversionMixin:
                 runs=[run],
                 metadata=metadata,
             )
+            # TextFrame doesn't have an 'opacity' field, but it's in metadata and runs?
+            # Actually DrawingMLWriter handles text opacity per run.
             self._trace_geometry_decision(element, "native", frame.metadata)
             self._trace_stage(
                 "foreign_object_text",
@@ -1423,6 +1437,7 @@ class ShapeConversionMixin:
             return frame
 
         placeholder = self._foreign_object_placeholder(bbox, clip_ref, mask_ref, mask_instance, metadata)
+        placeholder = replace(placeholder, opacity=style.opacity)
         self._trace_geometry_decision(element, "placeholder", placeholder.metadata)
         self._trace_stage(
             "foreign_object_placeholder",

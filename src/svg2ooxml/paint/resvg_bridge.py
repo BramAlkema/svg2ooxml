@@ -161,8 +161,10 @@ def _resolve_paint_reference(reference: PaintReference, tree: Tree) -> Paint:
     return None
 
 
-def _convert_linear_gradient(definition_id: str, gradient: LinearGradient) -> LinearGradientPaint:
+def _convert_linear_gradient(definition_id: str, gradient: LinearGradient) -> LinearGradientPaint | None:
     stops = _convert_stops(gradient.stops)
+    if not stops:
+        return None
     transform = _matrix_to_array(gradient.transform)
     return LinearGradientPaint(
         stops=stops,
@@ -173,8 +175,10 @@ def _convert_linear_gradient(definition_id: str, gradient: LinearGradient) -> Li
     )
 
 
-def _convert_radial_gradient(definition_id: str, gradient: RadialGradient) -> RadialGradientPaint:
+def _convert_radial_gradient(definition_id: str, gradient: RadialGradient) -> RadialGradientPaint | None:
     stops = _convert_stops(gradient.stops)
+    if not stops:
+        return None
     transform = _matrix_to_array(gradient.transform)
     focal = (gradient.fx, gradient.fy) if (gradient.fx, gradient.fy) != (gradient.cx, gradient.cy) else None
     return RadialGradientPaint(
