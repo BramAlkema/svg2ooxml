@@ -52,25 +52,25 @@ def convert_parser_output(
         
         # Patch the context with overrides
         for target, values in overrides.items():
-            existing = dict(resolved_context.get(target) or {})
-            existing.update(values)
-            
             # Re-evaluate via engine if it's a known provider target
             # This ensures 'decision' objects are updated
             try:
                 from ..policy.targets import TargetRegistry
                 target_obj = TargetRegistry.default().get(target)
                 if target_obj:
-                    # evaluate() with overrides in options
-                    # PolicyEngine.evaluate uses self._policy.options, so we need to mock it
-                    # or better: the PolicyProvider.evaluate() method usually handles it.
+                    # Merge global options with these specific overrides
+                    combined_options = dict(getattr(engine, "_policy").options)
+                    combined_options.update(values)
+                    
                     for provider in getattr(engine, "_providers", []):
                         if provider.supports(target_obj):
-                            # Pass existing (patched) options
-                            new_payload = provider.evaluate(target_obj, existing)
+                            # Pass combined options
+                            new_payload = provider.evaluate(target_obj, combined_options)
                             resolved_context.selections[target] = new_payload
             except Exception:
                 # Fallback to simple dict update if re-evaluation fails
+                existing = dict(resolved_context.get(target) or {})
+                existing.update(values)
                 resolved_context.selections[target] = existing
     else:
         resolved_context = resolve_policy_context(

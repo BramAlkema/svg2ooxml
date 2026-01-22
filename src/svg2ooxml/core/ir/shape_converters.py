@@ -1209,6 +1209,8 @@ class ShapeConversionMixin:
 
     def _convert_image(self, *, element: etree._Element, coord_space: CoordinateSpace):
         href = element.get("href") or element.get("{http://www.w3.org/1999/xlink}href")
+        if not href:
+            return None
         width = _parse_float(element.get("width"))
         height = _parse_float(element.get("height"))
         if width is None or height is None or width <= 0 or height <= 0:
