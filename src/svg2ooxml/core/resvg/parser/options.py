@@ -165,7 +165,7 @@ def _build_image_resolver(config: Config, resources_dir: Optional[Path]) -> Imag
                 return None
             if ";base64" in header:
                 try:
-                    return base64.b64decode(data_str, validate=True)
+                    return base64.b64decode(data_str.strip())
                 except (binascii.Error, ValueError):
                     return None
             return unquote_to_bytes(data_str)

@@ -159,7 +159,12 @@ class SvgToPptxExporter:
 
         svg_text = input_path.read_text(encoding="utf-8")
         target_path = output_path or input_path.with_suffix(".pptx")
-        return self.convert_string(svg_text, target_path, tracer=tracer)
+        return self.convert_string(
+            svg_text,
+            target_path,
+            tracer=tracer,
+            source_path=str(input_path),
+        )
 
     def convert_string(
         self,
@@ -167,11 +172,12 @@ class SvgToPptxExporter:
         output_path: Path,
         *,
         tracer: ConversionTracer | None = None,
+        source_path: str | None = None,
     ) -> SvgToPptxResult:
         """Convert an SVG payload into a PPTX written to *output_path*."""
 
         active_tracer = tracer or ConversionTracer()
-        render_result, scene = self._render_svg(svg_text, active_tracer)
+        render_result, scene = self._render_svg(svg_text, active_tracer, source_path=source_path)
         pptx_path = self._builder.build_from_results(
             [render_result],
             output_path,
@@ -221,10 +227,12 @@ class SvgToPptxExporter:
                 for variant_page in variant_pages:
                     variant_overrides = (variant_page.metadata or {}).get("policy_overrides")
                     variant_tracer = ConversionTracer()
+                    variant_source_path = (variant_page.metadata or {}).get("source_path")
                     variant_render, variant_scene = self._render_svg(
                         variant_page.svg_text,
                         variant_tracer,
                         variant_overrides,
+                        source_path=variant_source_path,
                     )
                     variant_report = variant_tracer.report().to_dict()
 
@@ -261,7 +269,13 @@ class SvgToPptxExporter:
 
             base_overrides = (page.metadata or {}).get("policy_overrides")
             base_tracer = ConversionTracer()
-            render_result, scene = self._render_svg(page.svg_text, base_tracer, base_overrides)
+            source_path = (page.metadata or {}).get("source_path")
+            render_result, scene = self._render_svg(
+                page.svg_text,
+                base_tracer,
+                base_overrides,
+                source_path=source_path,
+            )
             report_dict = base_tracer.report().to_dict()
 
             slide_title = (
@@ -295,10 +309,12 @@ class SvgToPptxExporter:
                 for variant_page in variant_pages:
                     variant_overrides = (variant_page.metadata or {}).get("policy_overrides")
                     variant_tracer = ConversionTracer()
+                    variant_source_path = (variant_page.metadata or {}).get("source_path")
                     variant_render, variant_scene = self._render_svg(
                         variant_page.svg_text,
                         variant_tracer,
                         variant_overrides,
+                        source_path=variant_source_path,
                     )
                     variant_report = variant_tracer.report().to_dict()
 
@@ -358,6 +374,8 @@ class SvgToPptxExporter:
         svg_text: str,
         tracer: ConversionTracer,
         policy_overrides: Dict[str, Dict[str, Any]] | None = None,
+        *,
+        source_path: str | None = None,
     ) -> tuple[DrawingMLRenderResult, IRScene]:
         """Convert SVG text into a rendered DrawingML payload."""
 
@@ -368,7 +386,7 @@ class SvgToPptxExporter:
                 metadata={"strategy": self._filter_strategy},
             )
 
-        parse_result = self._parser.parse(svg_text, tracer=tracer)
+        parse_result = self._parser.parse(svg_text, tracer=tracer, source_path=source_path)
         if not parse_result.success or parse_result.svg_root is None:
             message = parse_result.error_message or "SVG parsing failed."
             raise SvgConversionError(message)
@@ -450,6 +468,8 @@ class SvgToPptxExporter:
                 )
 
         animation_payload = scene.metadata.get("animation_raw") if isinstance(scene.metadata, dict) else None
+        if hasattr(self._writer, "set_image_service"):
+            self._writer.set_image_service(getattr(services_override, "image_service", None))
         render_result = self._writer.render_scene_from_ir(
             scene,
             tracer=tracer,

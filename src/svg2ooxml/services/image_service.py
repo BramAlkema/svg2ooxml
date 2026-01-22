@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import re
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Callable, Sequence
 
 DATA_URI_RE = re.compile(r"^data:(?P<mime>[^;]+)?(;base64)?,(?P<payload>.+)$")
@@ -20,6 +21,35 @@ class ImageResource:
 
 
 Resolver = Callable[[str], ImageResource | None]
+
+
+class FileResolver:
+    """Resolve image hrefs from the local filesystem."""
+
+    def __init__(self, base_dir: Path | str) -> None:
+        self._base_dir = Path(base_dir).resolve()
+
+    @property
+    def base_dir(self) -> Path:
+        return self._base_dir
+
+    def __call__(self, href: str) -> ImageResource | None:
+        if DATA_URI_RE.match(href):
+            return None
+
+        # Try relative to base dir
+        try:
+            target = (self._base_dir / href).resolve()
+            print(f"DEBUG FileResolver: href='{href}' base='{self._base_dir}' target='{target}' exists={target.is_file()}")
+            if target.is_file() and str(target).startswith(str(self._base_dir)):
+                return ImageResource(
+                    data=target.read_bytes(),
+                    source="file",
+                )
+        except Exception as exc:
+            print(f"DEBUG FileResolver error: {exc}")
+            return None
+        return None
 
 
 class ImageService:
@@ -66,9 +96,9 @@ class ImageService:
         if not match:
             return None
         mime_type = match.group("mime") or None
-        payload = match.group("payload")
+        payload = match.group("payload").strip()
         if ";base64," in href:
-            data = base64.b64decode(payload, validate=True)
+            data = base64.b64decode(payload)
         else:
             data = payload.encode("utf-8")
         return ImageResource(data=data, mime_type=mime_type, source="data-uri")

@@ -500,7 +500,7 @@ def _decode_data_uri(uri: str) -> Tuple[Optional[str], bytes]:
     is_base64 = ";base64" in meta
     if is_base64:
         try:
-            data = base64.b64decode(payload, validate=True)
+            data = base64.b64decode(payload.strip())
         except (ValueError, binascii.Error) as exc:
             raise ValueError("invalid base64 payload in data URI") from exc
     else:

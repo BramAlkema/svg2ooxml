@@ -66,10 +66,13 @@ class StyleExtractor:
         paint_style = self._compute_paint_style_with_inheritance(element, context=context)
         metadata: dict[str, Any] = {}
 
+        fill_opacity = float(paint_style.get("fill_opacity", 1.0))
+        fill_opacity = max(0.0, min(1.0, fill_opacity))
+
         fill = self._resolve_paint(
             element,
             paint_style.get("fill"),
-            opacity=float(paint_style.get("fill_opacity", 1.0)),
+            opacity=fill_opacity,
             services=services,
             context=context,
             metadata=metadata,
@@ -85,6 +88,7 @@ class StyleExtractor:
         )
 
         opacity = float(paint_style.get("opacity", 1.0))
+        opacity = max(0.0, min(1.0, opacity))
         effects = self._resolve_effects(element, services, metadata, context)
 
         return StyleResult(fill=fill, stroke=stroke, opacity=opacity, effects=effects, metadata=metadata)
@@ -906,7 +910,14 @@ class StyleExtractor:
             if not stops:
                 stops = list(element.findall(".//stop"))
             if stops:
-                return self._parse_stops(stops, opacity)
+                parsed = self._parse_stops(stops, opacity)
+                if len(parsed) == 1:
+                    first = parsed[0]
+                    return [
+                        GradientStop(offset=0.0, rgb=first.rgb, opacity=first.opacity),
+                        GradientStop(offset=1.0, rgb=first.rgb, opacity=first.opacity),
+                    ]
+                return parsed
         return []
 
     def _parse_stops(

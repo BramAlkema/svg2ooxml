@@ -24,6 +24,7 @@ from .rasterizer import Rasterizer, SKIA_AVAILABLE
 
 if TYPE_CHECKING:  # pragma: no cover - type checking only
     from svg2ooxml.core.tracing import ConversionTracer
+    from svg2ooxml.services.image_service import ImageService
 
 DEFAULT_SLIDE_SIZE = (9144000, 6858000)  # 10" x 7.5"
 
@@ -41,8 +42,9 @@ def _assets_root() -> Path:
 class DrawingMLWriter:
     """Render IR scene graphs into DrawingML shape fragments."""
 
-    def __init__(self, *, template_dir: Path | None = None) -> None:
+    def __init__(self, *, template_dir: Path | None = None, image_service: "ImageService | None" = None) -> None:
         self._template_dir = template_dir or _assets_root()
+        self._image_service = image_service
         self._slide_template = (self._template_dir / "slide_template.xml").read_text(encoding="utf-8")
         self._text_template = (self._template_dir / "text_shape_template.xml").read_text(encoding="utf-8")
         self._rectangle_template = (self._template_dir / "shape_rectangle.xml").read_text(encoding="utf-8")
@@ -74,6 +76,10 @@ class DrawingMLWriter:
         if self._asset_registry is None:
             raise RuntimeError("Asset registry not initialised for current rendering run.")
         return self._asset_registry
+
+    def set_image_service(self, image_service: "ImageService | None") -> None:
+        """Update the image service used for on-the-fly media resolution."""
+        self._image_service = image_service
 
     # ------------------------------------------------------------------
     # Public API
@@ -274,11 +280,22 @@ class DrawingMLWriter:
         filename = f"image{self._next_media_index}.{ext}"
         content_type = self._content_type_for_format(ext)
         self._next_media_index += 1
-        data = image.data if isinstance(image.data, (bytes, bytearray)) else bytes(image.data)
+
+        data = image.data
+        if data is None and image.href and self._image_service is not None:
+            resource = self._image_service.resolve(image.href)
+            if resource is not None:
+                data = resource.data
+
+        if data is None:
+            logger.warning("Image data missing for %s; skipping media registration", image.href or "unknown")
+            return ""
+
+        data_bytes = data if isinstance(data, (bytes, bytearray)) else bytes(data)
         self._assets.add_media(
             relationship_id=r_id,
             filename=filename,
-            data=data,
+            data=data_bytes,
             content_type=content_type,
             source="image",
         )
@@ -292,7 +309,7 @@ class DrawingMLWriter:
                 "width_px": getattr(image.size, "width", None),
                 "height_px": getattr(image.size, "height", None),
                 "image_source": metadata.get("image_source"),
-                "data_bytes": len(data) if isinstance(data, (bytes, bytearray)) else len(bytes(data)),
+                "data_bytes": len(data_bytes),
             },
         )
         return r_id

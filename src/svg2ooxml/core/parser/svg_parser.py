@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Dict
@@ -30,6 +31,7 @@ from .statistics import compute_statistics
 from .style_context import StyleContext as ParserStyleContext, resolve_viewport
 from .units import viewbox_to_px
 from .validators import has_basic_dimensions
+from .svg_font_parser import SVGFontParser
 
 
 @dataclass(slots=True)
@@ -67,6 +69,7 @@ class SVGParser:
         self._xml_parser = XMLParser(self._config.to_parser_options())
         self._normalizer = SafeSVGNormalizer()
         self._font_parser = CSSFontFaceParser()
+        self._svg_font_parser = SVGFontParser()
 
         context = self._coerce_context(services)
         self._context_template = context
@@ -74,7 +77,13 @@ class SVGParser:
         self._unit_converter = context.unit_converter
         self._style_resolver = context.style_resolver
 
-    def parse(self, svg_content: str, *, tracer: "ConversionTracer | None" = None) -> ParseResult:
+    def parse(
+        self,
+        svg_content: str,
+        *,
+        tracer: "ConversionTracer | None" = None,
+        source_path: str | None = None,
+    ) -> ParseResult:
         """Parse the provided SVG content into an XML tree."""
         start_time = time.perf_counter()
 
@@ -188,9 +197,23 @@ class SVGParser:
 
         # Parse web fonts from @font-face rules
         web_fonts = self._font_parser.parse_stylesheets(root)
+        svg_font_result = self._svg_font_parser.parse(root)
+        if svg_font_result.font_faces:
+            web_fonts = list(web_fonts) + list(svg_font_result.font_faces)
 
         context = self._context_template.clone()
         services = context.services
+
+        if source_path:
+            image_service = getattr(services, "image_service", None)
+            if image_service:
+                try:
+                    from svg2ooxml.services.image_service import FileResolver
+                    base_dir = os.path.dirname(source_path)
+                    image_service.register_resolver(FileResolver(base_dir), prepend=True)
+                except ImportError:
+                    self._logger.warning("Could not import FileResolver to handle source_path images.")
+
         policy_context = context.policy_context
         policy_engine = context.policy_engine
 
@@ -266,6 +289,7 @@ class SVGParser:
                 policy_context=policy_context,
                 style_context=style_context,
                 web_fonts=web_fonts if web_fonts else None,
+                svg_fonts=svg_font_result.inline_fonts if svg_font_result.inline_fonts else None,
                 error="SVG element missing width/height or viewBox.",
             )
             self._trace(tracer, "warning", metadata={"reason": "missing_dimensions"})
@@ -293,6 +317,7 @@ class SVGParser:
                 policy_context=policy_context,
                 style_context=style_context,
                 web_fonts=web_fonts if web_fonts else None,
+                svg_fonts=svg_font_result.inline_fonts if svg_font_result.inline_fonts else None,
             )
 
             try:
@@ -314,6 +339,8 @@ class SVGParser:
         result.metadata["policy_context"] = policy_context
         result.metadata["policy_engine"] = policy_engine
         result.metadata["preparse"] = prep_report
+        if source_path:
+            result.metadata["source_path"] = source_path
         if prep_report:
             self._trace(tracer, "preprocess", metadata=prep_report)
         self._emit_metrics(
@@ -554,6 +581,7 @@ def parse_svg(
     config: ParserConfig | None = None,
     services: ConversionServices | ParserServices | ConversionContextBundle | None = None,
     tracer: "ConversionTracer | None" = None,
+    source_path: str | None = None,
 ) -> ParseResult:
     """Convenience helper that parses ``svg_content`` into a :class:`ParseResult`.
 
@@ -562,7 +590,7 @@ def parse_svg(
     """
 
     parser = SVGParser(config=config, services=services)
-    return parser.parse(svg_content, tracer=tracer)
+    return parser.parse(svg_content, tracer=tracer, source_path=source_path)
 
 
 __all__ = ["SVGParser", "ParserConfig", "parse_svg"]
