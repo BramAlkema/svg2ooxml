@@ -1,5 +1,5 @@
-<p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
-      xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+<p:sp
+     >
     <p:nvSpPr>
         <p:cNvPr id="{SHAPE_ID}" name="Text {SHAPE_ID}"/>
         <p:cNvSpPr>

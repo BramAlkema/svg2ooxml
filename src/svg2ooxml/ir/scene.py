@@ -233,7 +233,7 @@ class Image:
     def __post_init__(self) -> None:
         if not (0.0 <= self.opacity <= 1.0):
             raise ValueError("image opacity must be 0.0‐1.0")
-        if not self.data and not self.href:
+        if self.data is None and not self.href:
             raise ValueError("image requires data or href")
 
     @property
