@@ -863,6 +863,9 @@ class ShapeConversionMixin:
             self._logger.warning("Bitmap fallback disabled; falling back to native rendering.")
 
         transformed = coord_space.apply_segments(segments)
+        if not transformed:
+            return None
+
         path_object = Path(
             segments=transformed,
             fill=style.fill,
@@ -1183,6 +1186,9 @@ class ShapeConversionMixin:
                 self._logger.warning("Failed to rasterize path; falling back to native rendering.")
 
         transformed = coord_space.apply_segments(segments)
+        if not transformed:
+            return None
+
         path_object = Path(
             segments=transformed,
             fill=style.fill,
@@ -1262,7 +1268,7 @@ class ShapeConversionMixin:
             size=bbox,
             data=resource.data if resource else None,
             format=format_hint,
-            href=None if resource else href,
+            href=href,
             clip=clip_ref,
             mask=mask_ref,
             mask_instance=mask_instance,
@@ -1652,7 +1658,12 @@ class ShapeConversionMixin:
 def _parse_float(value: str | None, *, default: float | None = None) -> float | None:
     if value is None:
         return default
+    value = value.strip()
+    if not value:
+        return default
     try:
+        if value.endswith("%"):
+            return float(value[:-1]) / 100.0
         return float(value)
     except ValueError:
         return default

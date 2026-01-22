@@ -16,13 +16,13 @@ from svg2ooxml.drawingml.bridges import (
 )
 
 try:  # pragma: no cover - resvg bridge optional while port completes
-    from svg2ooxml.core.resvg.normalizer import normalize_svg_bytes as resvg_normalize_bytes
+    from svg2ooxml.core.resvg.normalizer import normalize_svg_element as resvg_normalize_element
     from svg2ooxml.core.resvg.usvg_tree import BaseNode as ResvgBaseNode, Tree as ResvgTree, PatternNode
     from svg2ooxml.core.resvg.painting.paint import PaintReference
     from svg2ooxml.core.resvg.painting.gradients import LinearGradient, RadialGradient, PatternPaint
     from svg2ooxml.filters.resvg_bridge import resolve_filter_node
 except Exception:  # pragma: no cover - defensive fallback when bridge missing
-    resvg_normalize_bytes = None  # type: ignore
+    resvg_normalize_element = None  # type: ignore
     ResvgBaseNode = None  # type: ignore
     ResvgTree = None  # type: ignore
     PaintReference = None  # type: ignore
@@ -54,22 +54,13 @@ class ResvgBridge:
         self.element_lookup.clear()
         self.tree = None
 
-        if resvg_normalize_bytes is None:
+        if resvg_normalize_element is None:
             self._context.trace_stage("unavailable", stage="resvg", metadata={"reason": "bridge_missing"})
             return
 
         try:
-            svg_bytes = etree.tostring(svg_root, encoding="utf-8")
-        except Exception:  # pragma: no cover - defensive: serialization failed
-            self._context.trace_stage(
-                "serialization_failed",
-                stage="resvg",
-                metadata={"reason": "etree_tostring_failed"},
-            )
-            return
-
-        try:
-            result = resvg_normalize_bytes(svg_bytes)
+            # Use original lxml tree to avoid signature divergence during re-parsing
+            result = resvg_normalize_element(svg_root)
         except Exception:  # pragma: no cover - resvg bridge not ready
             self._context.trace_stage(
                 "normalization_failed",
@@ -83,15 +74,38 @@ class ResvgBridge:
             self._context.trace_stage("empty_tree", stage="resvg")
             return
 
-        dom_signature_map: dict[tuple[tuple[str, int], ...], list[etree._Element]] = defaultdict(list)
-        for element in svg_root.iter():
-            signature = self._element_signature(element)
-            if signature:
-                dom_signature_map[signature].append(element)
+        # 1. Primary mapping: use the 'source' and 'use_source' links established during normalization.
+        # This is 100% reliable because we normalized the original DOM element tree directly.
+        resvg_root_node = getattr(self.tree, "root", None)
+        ignored_tags = {"style", "defs", "metadata", "title", "desc"}
+        if resvg_root_node is not None:
+            for resvg_node in resvg_root_node.iter():
+                # source: the lxml element that was converted into this resvg node
+                source_elem = getattr(resvg_node, "source", None)
+                if isinstance(source_elem, etree._Element):
+                    tag = self._local_name(source_elem.tag).lower()
+                    if tag in ignored_tags:
+                        continue
+                    self.element_lookup[source_elem] = resvg_node
 
+                # use_source: the original <use> element if this node was cloned from a symbol
+                use_elem = getattr(resvg_node, "use_source", None)
+                if isinstance(use_elem, etree._Element):
+                    # For <use> expansion, we map the <use> element to the root of its clone.
+                    # Note: if multiple nodes point to the same use_source, the last one in iteration wins.
+                    # Usually the iteration follows document order, so this is consistent.
+                    self.element_lookup[use_elem] = resvg_node
+
+        # 2. Fallback: ID-based mapping for any elements that might have been missed
+        # (e.g. if source links were somehow lost).
         id_map = getattr(self.tree, "ids", {})
         if id_map:
             for element in svg_root.iter():
+                if element in self.element_lookup:
+                    continue
+                tag = self._local_name(element.tag).lower()
+                if tag in ignored_tags:
+                    continue
                 element_id = element.get("id")
                 if not element_id:
                     continue
@@ -99,40 +113,11 @@ class ResvgBridge:
                 if resvg_node is not None:
                     self.element_lookup[element] = resvg_node
 
-        signature_map: dict[tuple[tuple[str, int], ...], list[ResvgBaseNode]] = defaultdict(list)
-        resvg_root = getattr(self.tree, "root", None)
-        if resvg_root is not None:
-            for resvg_node in resvg_root.iter():
-                source_elem = getattr(resvg_node, "source", None)
-                if isinstance(source_elem, etree._Element):
-                    signature = self._element_signature(source_elem)
-                    if signature:
-                        signature_map[signature].append(resvg_node)
-                use_elem = getattr(resvg_node, "use_source", None)
-                if isinstance(use_elem, etree._Element):
-                    signature = self._element_signature(use_elem)
-                    if signature:
-                        signature_map[signature].append(resvg_node)
-
-        for signature, dom_elements in dom_signature_map.items():
-            nodes = signature_map.get(signature)
-            if not nodes:
-                continue
-            node_index = 0
-            for element in dom_elements:
-                if element in self.element_lookup:
-                    continue
-                if node_index >= len(nodes):
-                    break
-                self.element_lookup[element] = nodes[node_index]
-                node_index += 1
-
         self._context.trace_stage(
             "tree_built",
             stage="resvg",
             metadata={
                 "mapped_elements": len(self.element_lookup),
-                "signature_groups": len(dom_signature_map),
             },
         )
 

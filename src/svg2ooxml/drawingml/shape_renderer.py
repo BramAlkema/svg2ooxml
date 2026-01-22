@@ -218,9 +218,6 @@ class DrawingMLShapeRenderer:
             if element.data is None and element.href is None:
                 self._logger.warning("Image element missing data and href; skipping image")
                 return None
-            if element.data is None:
-                self._logger.warning("External image references not yet supported; skipping image")
-                return None
             rendered = render_picture(
                 element,
                 shape_id,
