@@ -38,11 +38,16 @@ run_category() {
         --output "$SCRIPT_DIR/w3c/w3c_${category_name}_metadata.json"
 
     echo -e "${YELLOW}Running corpus tests for $category_name...${NC}"
+    # Extract only the extra arguments passed to the script (like --mode)
+    # by shifting the 3 internal positional parameters of this function
+    local extra_args=("${@:4}")
+    
     python "$SCRIPT_DIR/run_corpus.py" \
         --corpus-dir "$PROJECT_ROOT/tests/svg" \
         --output-dir "$SCRIPT_DIR/w3c/output_${category_name}" \
         --report "$SCRIPT_DIR/w3c/report_${category_name}.json" \
-        "$@"
+        --metadata "$SCRIPT_DIR/w3c/w3c_${category_name}_metadata.json" \
+        "${extra_args[@]}"
 
     echo -e "${GREEN}✓ Completed $category_name${NC}"
     echo ""
