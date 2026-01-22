@@ -293,8 +293,8 @@ class DrawingMLTextGenerator:
         - font-size → sz (in hundredths of a point, rounded)
         - font-weight → b
         - font-style → i
+        - stroke/outline → ln (MUST come before fill)
         - fill color → solidFill
-        - stroke/outline → ln
 
         Uses lxml for safe attribute escaping (no need for manual escaping).
 
@@ -304,19 +304,7 @@ class DrawingMLTextGenerator:
             fill_style: FillStyle with color information
             stroke_style: Optional StrokeStyle for outlines
         """
-        # Fill color and opacity
-        if fill_style and fill_style.color:
-            hex_color = _color_to_hex(fill_style.color)
-            solidFill = a_sub(rPr, "solidFill")
-            
-            fill_alpha = int(round(fill_style.opacity * 100000))
-            if fill_alpha < 100000:
-                srgbClr = a_sub(solidFill, "srgbClr", val=hex_color)
-                a_sub(srgbClr, "alpha", val=str(fill_alpha))
-            else:
-                a_sub(solidFill, "srgbClr", val=hex_color)
-
-        # Outline (stroke)
+        # 1. Outline (stroke) - MUST come before fill
         if stroke_style and stroke_style.width is not None and stroke_style.width > 0:
             stroke_color = stroke_style.color or getattr(fill_style, "color", None)
             if stroke_color:
@@ -330,6 +318,18 @@ class DrawingMLTextGenerator:
                     a_sub(srgbClr, "alpha", val=str(stroke_alpha))
                 else:
                     a_sub(strokeFill, "srgbClr", val=hex_color)
+
+        # 2. Fill color and opacity
+        if fill_style and fill_style.color:
+            hex_color = _color_to_hex(fill_style.color)
+            solidFill = a_sub(rPr, "solidFill")
+            
+            fill_alpha = int(round(fill_style.opacity * 100000))
+            if fill_alpha < 100000:
+                srgbClr = a_sub(solidFill, "srgbClr", val=hex_color)
+                a_sub(srgbClr, "alpha", val=str(fill_alpha))
+            else:
+                a_sub(solidFill, "srgbClr", val=hex_color)
 
         if text_style:
             # Font size in hundredths of a point (e.g., 12pt = 1200)

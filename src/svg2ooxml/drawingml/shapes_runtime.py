@@ -543,19 +543,10 @@ def run_fragment(run: Run, text_segment: str, navigation_factory) -> str:
             key, val = attr_str.split("=", 1)
             rPr.set(key, val.strip('"'))
 
-    # Add solidFill
-    solidFill = a_sub(rPr, "solidFill")
-    fill_alpha = int(round(run.fill_opacity * 100000))
-    if fill_alpha < 100000:
-        srgbClr = a_sub(solidFill, "srgbClr", val=rgb)
-        a_sub(srgbClr, "alpha", val=str(fill_alpha))
-    else:
-        a_sub(solidFill, "srgbClr", val=rgb)
-
-    # Add outline if present
+    # 1. Add outline (ln) - MUST come before fill
     if run.has_stroke:
-        ln = a_sub(rPr, "ln", w=str(px_to_emu(run.stroke_width_px or 1.0)))
-        strokeFill = a_sub(ln, "solidFill")
+        ln_elem = a_sub(rPr, "ln", w=str(px_to_emu(run.stroke_width_px or 1.0)))
+        strokeFill = a_sub(ln_elem, "solidFill")
         stroke_rgb = (run.stroke_rgb or "000000").upper()
         stroke_alpha = int(round((run.stroke_opacity or 1.0) * 100000))
         if stroke_alpha < 100000:
@@ -564,7 +555,16 @@ def run_fragment(run: Run, text_segment: str, navigation_factory) -> str:
         else:
             a_sub(strokeFill, "srgbClr", val=stroke_rgb)
 
-    # Add font typefaces
+    # 2. Add solidFill
+    solidFill = a_sub(rPr, "solidFill")
+    fill_alpha = int(round(run.fill_opacity * 100000))
+    if fill_alpha < 100000:
+        srgbClr = a_sub(solidFill, "srgbClr", val=rgb)
+        a_sub(srgbClr, "alpha", val=str(fill_alpha))
+    else:
+        a_sub(solidFill, "srgbClr", val=rgb)
+
+    # 3. Add font typefaces
     a_sub(rPr, "latin", typeface=font_family)
     a_sub(rPr, "ea", typeface=east_asian)
     a_sub(rPr, "cs", typeface=complex_script)

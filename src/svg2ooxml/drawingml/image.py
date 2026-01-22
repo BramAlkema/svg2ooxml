@@ -21,10 +21,10 @@ def render_picture(
 
     if image.data is None and image.href is None:
         return None
-    if image.data is None:
-        return None
 
     r_id = register_media(image)
+    if not r_id:
+        return None
     origin = image.origin
     bounds = image.size
     width = max(bounds.width, 1.0)
