@@ -39,10 +39,26 @@ def extract_style(converter, element: etree._Element) -> StyleResult:
     if resvg_node is None:
         logger = getattr(converter, "_logger", None)
         if logger is not None:
-            logger.warning(
-                "style-runtime/missing-resvg-node",
-                extra={"element_id": element.get("id"), "svg_tag": str(element.tag)},
-            )
+            # Only warn for drawable elements that SHOULD be in the resvg tree.
+            # Elements inside <defs> or other non-drawable containers are expected to be missing.
+            is_drawable = tag_name.lower() in {
+                "path", "rect", "circle", "ellipse", "line", "polyline", "polygon", "image", "text", "g", "svg", "use"
+            }
+            
+            # Check if element or any ancestor is inside <defs>
+            in_defs = False
+            curr = element
+            while curr is not None:
+                if str(curr.tag).split("}", 1)[-1].lower() == "defs":
+                    in_defs = True
+                    break
+                curr = curr.getparent()
+
+            if is_drawable and not in_defs:
+                logger.warning(
+                    "style-runtime/missing-resvg-node",
+                    extra={"element_id": element.get("id"), "svg_tag": str(element.tag)},
+                )
         return StyleResult(
             fill=base_style.fill,
             stroke=base_style.stroke,
