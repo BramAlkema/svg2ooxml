@@ -865,8 +865,9 @@ class TestSVGParserWebFonts:
 [project.optional-dependencies]
 fonts = [
     "brotli>=1.0.0",
-    "fontTools>=4.38.0",
 ]
+
+# FontForge is installed via system package manager (not pip).
 
 # Update README installation instructions:
 # pip install svg2ooxml[fonts]
@@ -884,13 +885,13 @@ fonts = [
 
 **Acceptance Criteria**:
 - [ ] `brotli` added to `[fonts]` optional dependencies
-- [ ] `fontTools` version constraint >= 4.38.0
+- [ ] FontForge available on PATH / Python bindings
 - [ ] `pip install -e .[fonts]` succeeds locally
-- [ ] Can import: `import brotli`, `from fontTools.ttLib import woff2`
+- [ ] Can import: `import fontforge`
 - [ ] CI updated to install `[fonts]` extras
 
 **Tests**:
-- `python -c "import brotli; from fontTools.ttLib import woff2; print('OK')"`
+- `python -c "import fontforge; print('OK')"`
 
 **Outputs**:
 - Updated dependencies
@@ -913,8 +914,7 @@ import io
 import logging
 from enum import Enum
 
-from fontTools.ttLib import TTFont
-from fontTools.ttLib.woff2 import WOFF2FlavorError
+import fontforge
 
 logger = logging.getLogger(__name__)
 
@@ -995,7 +995,7 @@ class FontDecompressor:
         )
 
     def _decompress_woff(self, woff_bytes: bytes) -> bytes:
-        """Decompress WOFF to TTF/OTF using fontTools.
+        """Decompress WOFF to TTF/OTF using FontForge.
 
         Args:
             woff_bytes: WOFF font bytes
@@ -1010,7 +1010,7 @@ class FontDecompressor:
             # Load WOFF font
             font = TTFont(io.BytesIO(woff_bytes))
 
-            # Convert to TTF/OTF (fontTools automatically decompresses)
+            # Convert to TTF/OTF (FontForge handles decompression)
             output = io.BytesIO()
             font.save(output)
             font.close()
@@ -1025,7 +1025,7 @@ class FontDecompressor:
             raise FontDecompressionError(f"Failed to decompress WOFF: {e}") from e
 
     def _decompress_woff2(self, woff2_bytes: bytes) -> bytes:
-        """Decompress WOFF2 to TTF/OTF using fontTools + brotli.
+        """Decompress WOFF2 to TTF/OTF using FontForge.
 
         Args:
             woff2_bytes: WOFF2 font bytes
@@ -1037,7 +1037,7 @@ class FontDecompressor:
             FontDecompressionError: If decompression fails
         """
         try:
-            # Decompress WOFF2 using fontTools
+            # Decompress WOFF2 using FontForge
             # (requires brotli for decompression)
             font = TTFont(io.BytesIO(woff2_bytes))
 

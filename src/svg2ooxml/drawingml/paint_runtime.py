@@ -110,7 +110,7 @@ def stroke_to_xml(stroke, metadata: Mapping[str, Any] | None = None) -> str:
         StrokeCap.SQUARE: "sq",
         StrokeCap.BUTT: "flat",
     }
-    a_sub(ln, "cap", val=cap_map.get(stroke.cap, "flat"))
+    ln.set("cap", cap_map.get(stroke.cap, "flat"))
 
     # Add join style
     if stroke.join == StrokeJoin.ROUND:

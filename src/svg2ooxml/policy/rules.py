@@ -140,6 +140,7 @@ _BASE_FILTER: dict[str, Any] = {
     "max_glow_radius": 12.0,
     "max_glow_alpha": 0.85,
     "preferred_glow_strategy": "inherit",
+    "blur_strategy": "soft_edge",
     "max_filter_primitives": _BASE_THRESHOLDS["max_filter_primitives"],
     "max_filter_complexity": _BASE_THRESHOLDS["max_filter_complexity_score"],
     "native_blur": _BASE_THRESHOLDS["enable_native_blur"],

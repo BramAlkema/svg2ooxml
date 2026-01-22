@@ -73,7 +73,7 @@ def generate_baseline(name: str, renderer: LibreOfficeRenderer, builder: PptxBui
     else:
         svg_text = fixture_path.read_text(encoding="utf-8")
         pptx_path = work_dir / f"{name}.pptx"
-        builder.build_from_svg(svg_text, pptx_path)
+        builder.build_from_svg(svg_text, pptx_path, source_path=fixture_path)
 
     try:
         slide_set = renderer.render(pptx_path, render_dir)
@@ -110,7 +110,7 @@ def generate_resvg_baseline(
 
     svg_text = fixture_path.read_text(encoding="utf-8")
     pptx_path = work_dir / f"{name}.pptx"
-    builder.build_from_svg(svg_text, pptx_path)
+    builder.build_from_svg(svg_text, pptx_path, source_path=fixture_path)
 
     try:
         slide_set = renderer.render(pptx_path, render_dir)

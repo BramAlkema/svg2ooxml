@@ -47,7 +47,7 @@ This results in:
 
 ### 1.3 Non-Goals
 
-- ❌ Custom font shaping engines (use existing fontTools)
+- ❌ Custom font shaping engines (use existing FontForge tooling)
 - ❌ Font format conversion beyond WOFF→TTF
 - ❌ Dynamic font loading during PowerPoint playback
 - ❌ Font licensing validation (user responsibility)
@@ -95,7 +95,7 @@ This results in:
                             ↓
 ┌─────────────────────────────────────────────────────────────┐
 │         Existing Font Embedding Pipeline                    │
-│  - Subset font via fontTools                                │
+│  - Subset font via FontForge                                │
 │  - Embed in PPTX (ppt/fonts/*.odttf)                        │
 │  - Create relationships                                     │
 │  → Embedded font in PowerPoint                              │
@@ -194,11 +194,11 @@ class WebFontLoader:
 
     def _decompress_woff(self, woff_bytes: bytes) -> bytes:
         """Decompress WOFF to TTF."""
-        # Use fontTools.ttLib.woff to decompress
+        # Use FontForge to decompress
 
     def _decompress_woff2(self, woff2_bytes: bytes) -> bytes:
         """Decompress WOFF2 to TTF."""
-        # Use brotli + fontTools for WOFF2
+        # Use FontForge for WOFF2
 ```
 
 **Data Structures**:
@@ -215,8 +215,7 @@ class FontLoadResult:
 ```
 
 **Dependencies**:
-- `fontTools` - WOFF decompression (already used)
-- `brotli` - WOFF2 decompression (new dependency)
+- FontForge (with WOFF2 support) - WOFF/WOFF2 decompression
 - `requests` - HTTP downloads (already used in fetcher.py)
 
 #### 2.2.3 Font Registry
@@ -395,19 +394,18 @@ class FontService:
 
 **Tasks**:
 
-1. **Add Brotli Dependency**
-   - Update `pyproject.toml` with `brotli` package
-   - Add to optional dependencies `[fonts]` group
-   - Update CI to install `[fonts]` extras
+1. **Ensure FontForge WOFF2 Support**
+   - Install FontForge with brotli support enabled
+   - Update CI images to include FontForge bindings
 
 2. **Implement WOFF Decompression**
    - File: `src/svg2ooxml/services/fonts/decompressor.py` (new)
-   - Use `fontTools.ttLib.woff.decompress` for WOFF
+   - Use FontForge for WOFF
    - Handle decompression errors gracefully
 
 3. **Implement WOFF2 Decompression**
    - Same file as above
-   - Use `fontTools.ttLib.woff2` + `brotli`
+   - Use FontForge for WOFF2 (requires brotli support in the build)
    - Validate output is valid TTF/OTF
 
 4. **Unit Tests**
@@ -689,28 +687,17 @@ converter = Converter(font_registry=registry)
 ### 6.1 New Dependencies
 
 **Required**:
-- `brotli` >= 1.0.0 - WOFF2 decompression
+- FontForge (with WOFF2 support) - WOFF/WOFF2 decompression + subsetting
 
 **Optional** (already available):
 - `requests` - HTTP downloads (already used)
-- `fontTools` >= 4.0.0 - Font manipulation (already used)
 - `tinycss2` - CSS parsing (already used)
 
 ### 6.2 Package Changes
 
-**pyproject.toml**:
-```toml
-[project.optional-dependencies]
-fonts = [
-    "brotli>=1.0.0",
-    "fontTools>=4.0.0",
-]
-```
-
 **Installation**:
-```bash
-pip install svg2ooxml[fonts]
-```
+Install FontForge via your system package manager and ensure the Python
+bindings are available on the runtime path.
 
 ---
 
@@ -723,7 +710,7 @@ pip install svg2ooxml[fonts]
 | Invalid @font-face CSS | Skip rule, warn | "Skipping invalid @font-face rule: {reason}" |
 | Network timeout | Fallback to system font | "Failed to download font '{url}': timeout" |
 | Invalid WOFF file | Fallback to system font | "Failed to decompress font '{url}': invalid format" |
-| Missing brotli package | Disable WOFF2, warn | "WOFF2 support requires 'brotli' package" |
+| Missing FontForge | Disable WOFF2, warn | "WOFF2 support requires FontForge" |
 | Cache permission error | Disable cache, warn | "Cannot write to font cache: {path}" |
 | Font too large | Skip, warn | "Font '{url}' exceeds size limit (10MB)" |
 
@@ -765,7 +752,7 @@ converter = Converter(parser_config=config)
 
 **For Users**:
 1. Upgrade to new version: `pip install --upgrade svg2ooxml[fonts]`
-2. Install `brotli` if using WOFF2: `pip install brotli`
+2. Install FontForge with WOFF2 support (brotli-enabled build)
 3. (Optional) Configure cache directory
 4. Existing SVG conversions automatically use web fonts
 
@@ -782,7 +769,7 @@ converter = Converter(parser_config=config)
 
 | Threat | Mitigation |
 |--------|-----------|
-| Malicious font files | Validate format, use fontTools (trusted library) |
+| Malicious font files | Validate format, use FontForge (trusted tool) |
 | SSRF via remote URLs | Restrict to http/https, no file:// or internal IPs |
 | DoS via large fonts | Size limit (10MB default), timeout (10s default) |
 | XSS via CSS injection | Use tinycss2 (trusted parser), no eval() |
@@ -793,7 +780,7 @@ converter = Converter(parser_config=config)
 
 1. **Input Validation**: Validate all URLs, format hints, base64 data
 2. **Resource Limits**: Enforce size/timeout limits
-3. **Sandboxing**: Use fontTools/tinycss2 (no subprocess calls)
+3. **Sandboxing**: Use FontForge/tinycss2 (no subprocess calls)
 4. **Error Handling**: Never expose internal paths in errors
 5. **Logging**: Sanitize URLs before logging (no auth tokens)
 
@@ -1022,7 +1009,7 @@ converter = Converter(parser_config=config)
 - [CSS Fonts Module Level 4](https://www.w3.org/TR/css-fonts-4/)
 - [WOFF File Format 1.0](https://www.w3.org/TR/WOFF/)
 - [WOFF File Format 2.0](https://www.w3.org/TR/WOFF2/)
-- [fontTools Documentation](https://fonttools.readthedocs.io/)
+- [FontForge Documentation](https://fontforge.org/docs/scripting/python.html)
 - [Brotli Compression](https://github.com/google/brotli)
 
 ---

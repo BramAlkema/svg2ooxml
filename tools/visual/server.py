@@ -122,38 +122,166 @@ def create_app(
         token = uuid4().hex
         session_dir = output_root / token
         session_dir.mkdir(parents=True, exist_ok=False)
-        pptx_path = session_dir / "presentation.pptx"
-        render_dir = session_dir / "render"
-        render_dir.mkdir()
+        (session_dir / "source.svg").write_text(svg_text, encoding="utf-8")
 
+        engines = ["resvg", "legacy"]
+        renders: dict[str, list[Path]] = {}
         notes: list[str] = []
 
-        try:
-            build_result = pptx_builder.build_from_svg(svg_text, pptx_path)
-        except VisualBuildError as exc:
-            logger.exception("Failed to build PPTX", exc_info=exc)
-            raise HTTPException(status_code=500, detail=f"Failed to build PPTX: {exc}")
+        trace_reports: dict[str, dict[str, Any]] = {}
 
-        slide_count = build_result.slide_count
-        pptx_link = f"/artefacts/{token}/presentation.pptx"
+        for engine in engines:
+            engine_dir = session_dir / engine
+            engine_dir.mkdir()
+            pptx_path = engine_dir / "presentation.pptx"
+            render_dir = engine_dir / "render"
+            render_dir.mkdir()
 
-        png_tags = ""
-        try:
-            rendered = pptx_renderer.render(build_result.pptx_path, render_dir)
-        except VisualRendererError as exc:
-            notes.append(f"Rendering failed: {html.escape(str(exc))}")
-            rendered_images: list[Path] = []
-        else:
-            rendered_images = list(rendered.images)
-
-        if rendered_images:
-            png_tags = "".join(
-                f'<figure><img class="media" src="/artefacts/{token}/render/{img.name}" alt="Slide {index}" />'
-                f'<figcaption>Slide {index}</figcaption></figure>'
-                for index, img in enumerate(rendered_images, start=1)
+            builder = PptxBuilder(
+                filter_strategy=engine,
+                geometry_mode=engine,
+                slide_size_mode=pptx_builder._slide_size_mode,
+                allow_promotion=False if engine == "resvg" else True
             )
-        else:
-            png_tags = "<p>No rendered slides.</p>"
+
+            try:
+                from svg2ooxml.core.tracing import ConversionTracer
+                tracer = ConversionTracer()
+                
+                build_result = builder.build_from_svg(svg_text, pptx_path, source_path=svg_path, tracer=tracer)
+                trace_reports[engine] = tracer.report().to_dict()
+                
+                rendered = pptx_renderer.render(build_result.pptx_path, render_dir)
+                renders[engine] = list(rendered.images)
+            except (VisualBuildError, VisualRendererError) as exc:
+                notes.append(f"{engine.capitalize()} failed: {html.escape(str(exc))}")
+                renders[engine] = []
+
+        # Compute diff if both succeeded
+        diff_url = None
+        ssim_score = None
+        if len(renders.get("resvg", [])) == 1 and len(renders.get("legacy", [])) == 1:
+            try:
+                from PIL import Image
+                from tools.visual.diff import VisualDiffer
+                img_resvg = Image.open(renders["resvg"][0])
+                img_legacy = Image.open(renders["legacy"][0])
+                differ = VisualDiffer()
+                diff_result = differ.compare(img_legacy, img_resvg)
+                if diff_result.diff_image:
+                    diff_path = session_dir / "diff.png"
+                    diff_result.diff_image.save(diff_path)
+                    diff_url = f"/artefacts/{token}/diff.png"
+                    ssim_score = diff_result.ssim_score
+            except Exception as exc:
+                notes.append(f"Diff failed: {exc}")
+
+        def _get_tags(engine: str):
+            images = renders.get(engine, [])
+            if not images:
+                return f"<p>No {engine} slides.</p>"
+            return "".join(
+                f'<figure><img class="media" src="/artefacts/{token}/{engine}/render/{img.name}" alt="{engine} {index}" />'
+                f'<figcaption>{engine.capitalize()} Slide {index}</figcaption></figure>'
+                for index, img in enumerate(images, start=1)
+            )
+
+        resvg_tags = _get_tags("resvg")
+        legacy_tags = _get_tags("legacy")
+        diff_tag = ""
+        if diff_url:
+            diff_tag = f"""
+              <section class="pane">
+                <h2>Difference (Legacy vs Resvg)</h2>
+                <p>SSIM Score: <strong>{ssim_score:.4f}</strong></p>
+                <figure><img class="media diff-bg" src="{diff_url}" alt="Difference" />
+                <figcaption>Pixel diff (Red = divergence)</figcaption></figure>
+              </section>
+            """
+
+        def _format_trace(engine: str):
+            report = trace_reports.get(engine)
+            if not report:
+                return "<p>No trace available.</p>"
+            
+            rows = []
+            
+            # Stage Events
+            for event in report.get("stage_events", []):
+                stage = event.get("stage", "")
+                action = event.get("action", "")
+                subject = event.get("subject") or ""
+                metadata = event.get("metadata")
+                meta_str = html.escape(str(metadata)) if metadata else ""
+                rows.append(f"<tr><td>{stage}</td><td>{action}</td><td>{subject}</td><td><small>{meta_str}</small></td></tr>")
+            
+            # Geometry Decisions
+            for event in report.get("geometry_events", []):
+                tag = event.get("tag", "")
+                decision = event.get("decision", "")
+                element_id = event.get("element_id") or ""
+                metadata = event.get("metadata")
+                meta_str = html.escape(str(metadata)) if metadata else ""
+                rows.append(f"<tr><td>geometry</td><td>{decision} ({tag})</td><td>{element_id}</td><td><small>{meta_str}</small></td></tr>")
+
+            # Paint Decisions
+            for event in report.get("paint_events", []):
+                ptype = event.get("paint_type", "")
+                decision = event.get("decision", "")
+                paint_id = event.get("paint_id") or ""
+                metadata = event.get("metadata")
+                meta_str = html.escape(str(metadata)) if metadata else ""
+                rows.append(f"<tr><td>paint</td><td>{decision} ({ptype})</td><td>{paint_id}</td><td><small>{meta_str}</small></td></tr>")
+
+            totals = []
+            if report.get("resvg_metrics"):
+                metrics = ", ".join(f"{k}: {v}" for k, v in report["resvg_metrics"].items())
+                totals.append(f"<li><strong>Resvg Metrics:</strong> {metrics}</li>")
+            
+            geom_totals = report.get("geometry_totals", {})
+            if geom_totals:
+                totals.append(f"<li><strong>Geometry:</strong> {', '.join(f'{k}={v}' for k, v in geom_totals.items())}</li>")
+
+            paint_totals = report.get("paint_totals", {})
+            if paint_totals:
+                totals.append(f"<li><strong>Paint:</strong> {', '.join(f'{k}={v}' for k, v in paint_totals.items())}</li>")
+
+            totals_html = f"<ul>{''.join(totals)}</ul>" if totals else ""
+            
+            return f"""
+                <details>
+                  <summary>{engine.capitalize()} Conversion Trace ({len(rows)} events)</summary>
+                  {totals_html}
+                  <table style='font-size: 0.75rem; border-collapse: collapse; width: 100%;'>
+                    <thead><tr style='text-align: left; border-bottom: 1px solid #ccc;'><th>Stage</th><th>Action</th><th>Subject</th><th>Metadata</th></tr></thead>
+                    <tbody>{"".join(rows)}</tbody>
+                  </table>
+                </details>
+            """
+
+        resvg_trace = _format_trace("resvg")
+        legacy_trace = _format_trace("legacy")
+
+        # Update the columns section to include traces
+        columns_html = f"""
+            <div class="columns">
+              <section class="pane">
+                <h2>Source SVG</h2>
+                <img class="media" src="data:image/svg+xml;base64,{svg_b64}" alt="SVG source" />
+              </section>
+              <section class="pane">
+                <h2>Resvg Render</h2>
+                {resvg_tags}
+                {resvg_trace}
+              </section>
+              <section class="pane">
+                <h2>Legacy Render</h2>
+                {legacy_tags}
+                {legacy_trace}
+              </section>
+              {diff_tag}
+            </div>
+        """
 
         note_html = "".join(f"<li>{message}</li>" for message in notes)
         if note_html:
@@ -166,34 +294,29 @@ def create_app(
             <style>
               body {{ font-family: -apple-system, BlinkMacSystemFont, sans-serif; margin: 1.5rem; color: #1f2933; }}
               h1, h2 {{ margin-bottom: 0.5rem; }}
-              .columns {{ display: flex; gap: 2rem; flex-wrap: wrap; }}
-              .pane {{ flex: 1 1 420px; min-width: 360px; }}
+              .columns {{ display: flex; gap: 1rem; flex-wrap: wrap; }}
+              .pane {{ flex: 1 1 300px; min-width: 300px; }}
               .media {{ border: 1px solid #d2d6dc; border-radius: 6px; max-width: 100%; height: auto; }}
+              .diff-bg {{ background: #f8f9fa; }}
               figure {{ margin: 0 0 1rem 0; }}
               figcaption {{ margin-top: 0.25rem; font-size: 0.85rem; color: #52606d; }}
-              .meta {{ margin-top: 1rem; }}
+              .meta {{ margin-top: 1rem; display: flex; gap: 1rem; }}
               .notes {{ margin-top: 1rem; color: #c81e1e; }}
-              a.button {{ display: inline-block; padding: 0.5rem 0.75rem; background: #2563eb; color: white; border-radius: 4px; text-decoration: none; }}
+              a.button {{ display: inline-block; padding: 0.4rem 0.6rem; background: #2563eb; color: white; border-radius: 4px; text-decoration: none; font-size: 0.9rem; }}
+              table th, table td {{ padding: 0.25rem; border-bottom: 1px solid #eee; }}
+              details {{ margin-top: 1rem; padding: 0.5rem; background: #f1f5f9; border-radius: 4px; }}
+              summary {{ cursor: pointer; font-weight: bold; }}
             </style>
           </head>
           <body>
             <p><a href="/">⟵ Back to library</a></p>
             <h1>{html.escape(svg_path.name)}</h1>
             <div class="meta">
-              <p>Slides generated: <strong>{slide_count}</strong></p>
-              <p><a class="button" href="{pptx_link}">Download PPTX</a></p>
+              <a class="button" href="/artefacts/{token}/resvg/presentation.pptx">Download Resvg PPTX</a>
+              <a class="button" href="/artefacts/{token}/legacy/presentation.pptx">Download Legacy PPTX</a>
             </div>
             {note_html}
-            <div class="columns">
-              <section class="pane">
-                <h2>Source SVG</h2>
-                <img class="media" src="data:image/svg+xml;base64,{svg_b64}" alt="SVG source" />
-              </section>
-              <section class="pane">
-                <h2>PPTX Render</h2>
-                {png_tags}
-              </section>
-            </div>
+            {columns_html}
           </body>
         </html>
         """

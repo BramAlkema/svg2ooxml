@@ -142,8 +142,29 @@ class SafeSVGNormalizer:
         text_changes = 0
         tail_changes = 0
         impacted_ids: set[str] = set()
+        text_context_tags = {"text", "tspan", "textPath"}
 
         for element in walk(svg_root):
+            local_name = element.tag.split("}")[-1]
+            in_text_context = local_name in text_context_tags
+            preserve_space = (
+                element.get("{http://www.w3.org/XML/1998/namespace}space") == "preserve"
+            )
+            ancestor = element.getparent()
+            while ancestor is not None and not (in_text_context or preserve_space):
+                ancestor_name = ancestor.tag.split("}")[-1]
+                if ancestor_name in text_context_tags:
+                    in_text_context = True
+                    break
+                if (
+                    ancestor.get("{http://www.w3.org/XML/1998/namespace}space")
+                    == "preserve"
+                ):
+                    preserve_space = True
+                    break
+                ancestor = ancestor.getparent()
+            if in_text_context or preserve_space:
+                continue
             if element.text and element.text.strip() != element.text:
                 element.text = element.text.strip() or None
                 text_changes += 1

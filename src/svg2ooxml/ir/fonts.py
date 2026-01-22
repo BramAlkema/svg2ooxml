@@ -66,38 +66,59 @@ class FontFaceRule:
         Handles string weights like 'bold', numeric strings like '400',
         and normalizes whitespace/decimal inputs per CSS spec.
         """
-        # Normalize: strip whitespace, handle decimal
-        normalized = self.weight.strip()
-        if '.' in normalized:
-            normalized = normalized.split('.')[0]  # "400.0" → "400"
+        return normalize_font_weight(self.weight)
 
-        # Named weight keywords
-        weight_map = {
-            "thin": 100,
-            "extra-light": 200,
-            "ultra-light": 200,
-            "light": 300,
-            "normal": 400,
-            "regular": 400,
-            "medium": 500,
-            "semi-bold": 600,
-            "demi-bold": 600,
-            "bold": 700,
-            "extra-bold": 800,
-            "ultra-bold": 800,
-            "black": 900,
-            "heavy": 900,
-        }
 
-        lower = normalized.lower()
-        if lower in weight_map:
-            return weight_map[lower]
+@dataclass(frozen=True)
+class SvgFontDefinition:
+    """Inline SVG <font> definition extracted from the document."""
 
-        # Numeric weight
-        try:
-            numeric = int(normalized)
-            # Clamp to 100-900 range
-            return max(100, min(900, numeric))
-        except ValueError:
-            # Invalid weight, default to 400
-            return 400
+    family: str
+    svg_data: bytes
+    weight: str = "normal"
+    style: str = "normal"
+    source: str | None = None
+
+    @property
+    def normalized_family(self) -> str:
+        return self.family.strip('"').strip("'").lower()
+
+    @property
+    def weight_numeric(self) -> int:
+        return normalize_font_weight(self.weight)
+
+
+def normalize_font_weight(value: str | None) -> int:
+    if value is None:
+        return 400
+
+    normalized = value.strip()
+    if "." in normalized:
+        normalized = normalized.split(".", 1)[0]
+
+    weight_map = {
+        "thin": 100,
+        "extra-light": 200,
+        "ultra-light": 200,
+        "light": 300,
+        "normal": 400,
+        "regular": 400,
+        "medium": 500,
+        "semi-bold": 600,
+        "demi-bold": 600,
+        "bold": 700,
+        "extra-bold": 800,
+        "ultra-bold": 800,
+        "black": 900,
+        "heavy": 900,
+    }
+
+    lower = normalized.lower()
+    if lower in weight_map:
+        return weight_map[lower]
+
+    try:
+        numeric = int(normalized)
+        return max(100, min(900, numeric))
+    except ValueError:
+        return 400

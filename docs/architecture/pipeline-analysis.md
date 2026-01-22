@@ -369,7 +369,7 @@ Total SVG Elements Analyzed: 46
 
 **What DOES Work**:
 - ✅ System font resolution with fallbacks (sans-serif → Arial, etc.)
-- ✅ Font embedding with subsetting (fontTools-based)
+- ✅ Font embedding with subsetting (FontForge-based)
 - ✅ Font weight/style (bold, italic, 100-900 scale)
 - ✅ Font size (px, pt, em, %)
 - ✅ Platform font directories (macOS, Windows, Linux)

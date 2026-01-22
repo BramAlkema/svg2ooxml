@@ -11,8 +11,7 @@ from svg2ooxml.ir.fonts import FontFaceSrc
 from svg2ooxml.services.fonts.loader import (
     FontLoader,
     LoadedFont,
-    BROTLI_AVAILABLE,
-    FONTTOOLS_AVAILABLE,
+    FONTFORGE_AVAILABLE,
 )
 
 
@@ -281,13 +280,13 @@ class TestFontLoader:
         assert result is None
 
     @pytest.mark.skipif(
-        not (BROTLI_AVAILABLE and FONTTOOLS_AVAILABLE),
-        reason="brotli and fonttools required for WOFF2"
+        not FONTFORGE_AVAILABLE,
+        reason="FontForge required for WOFF2"
     )
     def test_decompress_woff2_integration(self):
         """WOFF2 decompression integration test (requires real font)."""
         # This test verifies that WOFF2 decompression works when
-        # fonttools and brotli are available.
+        # FontForge is available.
         # A comprehensive test would need a real WOFF2 font file.
 
         loader = FontLoader()
@@ -305,8 +304,7 @@ class TestFontLoader:
 
     def test_decompress_woff2_without_dependencies(self, monkeypatch):
         """WOFF2 decompression without dependencies returns None."""
-        monkeypatch.setattr("svg2ooxml.services.fonts.loader.BROTLI_AVAILABLE", False)
-        monkeypatch.setattr("svg2ooxml.services.fonts.loader.FONTTOOLS_AVAILABLE", False)
+        monkeypatch.setattr("svg2ooxml.services.fonts.loader.FONTFORGE_AVAILABLE", False)
 
         loader = FontLoader()
         result = loader._decompress_woff2(b"wOF2" + b"\x00" * 100)

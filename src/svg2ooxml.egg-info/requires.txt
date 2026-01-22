@@ -42,7 +42,6 @@ numpy>=1.24
 [slides]
 python-pptx>=0.6.23
 cryptography>=41.0
-fonttools>=4.59.2
 
 [visual-testing]
 scikit-image>=0.21.0

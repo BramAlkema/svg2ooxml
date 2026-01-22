@@ -79,7 +79,7 @@ def test_pptx_builder_embeds_filter_assets() -> None:
 
 
 def test_pptx_builder_embeds_fonts() -> None:
-    pytest.importorskip("fontTools.ttLib")
+    pytest.importorskip("fontforge")
     font_path = Path("tests/resources/ScheherazadeRegOT.ttf")
     font_bytes = font_path.read_bytes()
     test_guid = uuid.UUID("12345678-90ab-cdef-1234-567890abcdef")

@@ -40,14 +40,12 @@ class FileResolver:
         # Try relative to base dir
         try:
             target = (self._base_dir / href).resolve()
-            print(f"DEBUG FileResolver: href='{href}' base='{self._base_dir}' target='{target}' exists={target.is_file()}")
             if target.is_file() and str(target).startswith(str(self._base_dir)):
                 return ImageResource(
                     data=target.read_bytes(),
                     source="file",
                 )
-        except Exception as exc:
-            print(f"DEBUG FileResolver error: {exc}")
+        except Exception:
             return None
         return None
 

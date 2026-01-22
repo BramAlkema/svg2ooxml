@@ -1,0 +1,62 @@
+substitutions:
+  _REGION: europe-west1
+  _SERVICE: svg2ooxml-export-staging
+  _REPOSITORY: svg2ooxml
+  _IMAGE: svg2ooxml-service
+  _STRIPE_SECRET_KEY: sk_test_51C88PPFYNR8EjxcIXR7qVrGKQjbvZdIKLzSEH9KnKMI3s7F1qh4XDwpgXJX2KMGz8kgxkR9Z3vQZYn0rkR6jQZn00ZluRRSFR  # Stripe TEST mode key
+  _STRIPE_PRICE_ID_PRO: price_test_pro  # Use test price IDs
+  _STRIPE_PRICE_ID_ENTERPRISE: price_test_enterprise
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+
+steps:
+  # Build custom run image with OpenGL libraries for skia-python
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - -f
+      - infrastructure/run.Dockerfile
+      - -t
+      - $_REGION-docker.pkg.dev/$PROJECT_ID/$_REPOSITORY/run:staging
+      - .
+
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - push
+      - $_REGION-docker.pkg.dev/$PROJECT_ID/$_REPOSITORY/run:staging
+
+  # Build application using buildpacks with custom run image
+  - name: gcr.io/k8s-skaffold/pack
+    args:
+      - build
+      - $_REGION-docker.pkg.dev/$PROJECT_ID/$_REPOSITORY/$_IMAGE:staging
+      - --path=.
+      - --builder=gcr.io/buildpacks/builder:v1
+      - --run-image=$_REGION-docker.pkg.dev/$PROJECT_ID/$_REPOSITORY/run:staging
+      - --publish
+
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    args:
+      - gcloud
+      - run
+      - deploy
+      - $_SERVICE
+      - --image=$_REGION-docker.pkg.dev/$PROJECT_ID/$_REPOSITORY/$_IMAGE:staging
+      - --region=$_REGION
+      - --platform=managed
+      - --service-account=svg2ooxml-runner@$PROJECT_ID.iam.gserviceaccount.com
+      - --allow-unauthenticated
+      - --set-env-vars=PYTHONPATH=/workspace/src,GCP_PROJECT=$PROJECT_ID,CLOUD_TASKS_LOCATION=$_REGION,CLOUD_TASKS_QUEUE=svg2ooxml-jobs,FIREBASE_PROJECT_ID=$PROJECT_ID,FIREBASE_SERVICE_ACCOUNT_PATH=/secrets/firebase-service-account,ENVIRONMENT=staging,STRIPE_SECRET_KEY=${_STRIPE_SECRET_KEY},STRIPE_PRICE_ID_PRO=${_STRIPE_PRICE_ID_PRO},STRIPE_PRICE_ID_ENTERPRISE=${_STRIPE_PRICE_ID_ENTERPRISE}
+      - --update-secrets=/secrets/firebase-service-account=firebase-service-account:latest,TOKEN_ENCRYPTION_KEY=token-encryption-key:latest
+
+  # Update SERVICE_URL after deployment (get actual URL from Cloud Run)
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        SERVICE_URL=$$(gcloud run services describe $_SERVICE --region=$_REGION --format="value(status.url)")
+        gcloud run services update $_SERVICE \
+          --region=$_REGION \
+          --update-env-vars=SERVICE_URL=$$SERVICE_URL

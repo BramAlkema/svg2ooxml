@@ -9,6 +9,7 @@ from typing import Any, Dict, Iterable, Iterator, List, Optional, TYPE_CHECKING,
 from .parser.presentation import Presentation, collect_presentation, parse_transform
 from .parser.tree import SvgDocument, SvgNode
 from .parser.style import parse_inline_style
+from .parser.options import Options
 from .painting.gradients import GradientStop, LinearGradient, PatternPaint, RadialGradient
 from .painting.paint import (
     FillStyle,
@@ -116,6 +117,7 @@ class ImageNode(BaseNode):
     href: Optional[str] = None
     width: Optional[str] = None
     height: Optional[str] = None
+    data: Optional[bytes] = None
 
 
 @dataclass(slots=True)
@@ -537,7 +539,7 @@ def _resolve_pattern_reference(
     )
 
 
-def _convert_node(node: SvgNode, parent: Optional[BaseNode] = None) -> BaseNode:
+def _convert_node(node: SvgNode, parent: Optional[BaseNode] = None, options: Optional[Options] = None) -> BaseNode:
     presentation = collect_presentation(node)
     attributes = dict(node.attributes)
     styles = dict(node.styles)
@@ -545,14 +547,18 @@ def _convert_node(node: SvgNode, parent: Optional[BaseNode] = None) -> BaseNode:
     node_id = attributes.get("id")
 
     transform_matrix = matrix_from_commands(presentation.transform)
+    raw_fill = styles.get("fill") if "fill" in styles else attributes.get("fill")
+    explicit_no_fill = bool(raw_fill) and raw_fill.strip().lower() in {"none", "transparent"}
     fill_style = resolve_fill(
         presentation.fill,
         presentation.fill_opacity,
         presentation.opacity,
     )
-    if fill_style.color is None and fill_style.reference is None:
+    if fill_style.color is None and fill_style.reference is None and not explicit_no_fill:
         fill_style = None
 
+    raw_stroke = styles.get("stroke") if "stroke" in styles else attributes.get("stroke")
+    explicit_no_stroke = bool(raw_stroke) and raw_stroke.strip().lower() in {"none", "transparent"}
     stroke_style = resolve_stroke(
         presentation.stroke,
         presentation.stroke_width,
@@ -563,6 +569,7 @@ def _convert_node(node: SvgNode, parent: Optional[BaseNode] = None) -> BaseNode:
         stroke_style.color is None
         and stroke_style.reference is None
         and stroke_style.width is None
+        and not explicit_no_stroke
     ):
         stroke_style = None
     resolved_text_style = resolve_text_style(
@@ -599,11 +606,11 @@ def _convert_node(node: SvgNode, parent: Optional[BaseNode] = None) -> BaseNode:
 
     if tag_local in {"g", "svg"}:
         group = GroupNode(**base_kwargs)
-        group.children = [_convert_node(child, group) for child in node.children]
+        group.children = [_convert_node(child, group, options) for child in node.children]
         return group
     if tag_local == "path":
         path_node = PathNode(d=attributes.get("d"), **base_kwargs)
-        path_node.children = [_convert_node(child, path_node) for child in node.children]
+        path_node.children = [_convert_node(child, path_node, options) for child in node.children]
         from .geometry.path_normalizer import normalize_path  # local import to avoid cycle
 
         stroke_width = path_node.stroke.width if path_node.stroke else None
@@ -619,7 +626,7 @@ def _convert_node(node: SvgNode, parent: Optional[BaseNode] = None) -> BaseNode:
             ry=_parse_number(attributes.get("ry"), 0.0),
             **base_kwargs,
         )
-        rect.children = [_convert_node(child, rect) for child in node.children]
+        rect.children = [_convert_node(child, rect, options) for child in node.children]
         return rect
     if tag_local == "circle":
         circle = CircleNode(
@@ -628,7 +635,7 @@ def _convert_node(node: SvgNode, parent: Optional[BaseNode] = None) -> BaseNode:
             r=_parse_number(attributes.get("r"), 0.0),
             **base_kwargs,
         )
-        circle.children = [_convert_node(child, circle) for child in node.children]
+        circle.children = [_convert_node(child, circle, options) for child in node.children]
         return circle
     if tag_local == "ellipse":
         ellipse = EllipseNode(
@@ -638,7 +645,7 @@ def _convert_node(node: SvgNode, parent: Optional[BaseNode] = None) -> BaseNode:
             ry=_parse_number(attributes.get("ry"), 0.0),
             **base_kwargs,
         )
-        ellipse.children = [_convert_node(child, ellipse) for child in node.children]
+        ellipse.children = [_convert_node(child, ellipse, options) for child in node.children]
         return ellipse
     if tag_local == "line":
         line = LineNode(
@@ -648,12 +655,12 @@ def _convert_node(node: SvgNode, parent: Optional[BaseNode] = None) -> BaseNode:
             y2=_parse_number(attributes.get("y2"), 0.0),
             **base_kwargs,
         )
-        line.children = [_convert_node(child, line) for child in node.children]
+        line.children = [_convert_node(child, line, options) for child in node.children]
         return line
     if tag_local in {"polyline", "polygon"}:
         points = _parse_points(attributes.get("points", ""))
         poly = PolyNode(points=points, **base_kwargs)
-        poly.children = [_convert_node(child, poly) for child in node.children]
+        poly.children = [_convert_node(child, poly, options) for child in node.children]
         return poly
     if tag_local == "linearGradient":
         gradient = _parse_linear_gradient(node)
@@ -661,7 +668,7 @@ def _convert_node(node: SvgNode, parent: Optional[BaseNode] = None) -> BaseNode:
         base_kwargs["stroke"] = None
         base_kwargs["text_style"] = None
         node_obj = LinearGradientNode(gradient=gradient, **base_kwargs)
-        node_obj.children = [_convert_node(child, node_obj) for child in node.children]
+        node_obj.children = [_convert_node(child, node_obj, options) for child in node.children]
         return node_obj
     if tag_local == "radialGradient":
         gradient = _parse_radial_gradient(node)
@@ -669,7 +676,7 @@ def _convert_node(node: SvgNode, parent: Optional[BaseNode] = None) -> BaseNode:
         base_kwargs["stroke"] = None
         base_kwargs["text_style"] = None
         node_obj = RadialGradientNode(gradient=gradient, **base_kwargs)
-        node_obj.children = [_convert_node(child, node_obj) for child in node.children]
+        node_obj.children = [_convert_node(child, node_obj, options) for child in node.children]
         return node_obj
     if tag_local == "pattern":
         pattern = _parse_pattern(node)
@@ -677,20 +684,33 @@ def _convert_node(node: SvgNode, parent: Optional[BaseNode] = None) -> BaseNode:
         base_kwargs["stroke"] = None
         base_kwargs["text_style"] = None
         node_obj = PatternNode(pattern=pattern, **base_kwargs)
-        node_obj.children = [_convert_node(child, node_obj) for child in node.children]
+        node_obj.children = [_convert_node(child, node_obj, options) for child in node.children]
         return node_obj
     if tag_local == "image":
+        href = _extract_href(attributes)
+        image_data = None
+        if href and options:
+            image_data = options.image_href_resolver.resolve_data(href)
+            if image_data is None:
+                path = options.image_href_resolver.resolve_file(href)
+                if path:
+                    try:
+                        image_data = path.read_bytes()
+                    except Exception:
+                        pass
+
         image = ImageNode(
-            href=_extract_href(attributes),
+            href=href,
             width=attributes.get("width"),
             height=attributes.get("height"),
+            data=image_data,
             **base_kwargs,
         )
-        image.children = [_convert_node(child, image) for child in node.children]
+        image.children = [_convert_node(child, image, options) for child in node.children]
         return image
     if tag_local == "text":
         text_node = TextNode(text_content=_gather_text(node), **base_kwargs)
-        text_node.children = [_convert_node(child, text_node) for child in node.children]
+        text_node.children = [_convert_node(child, text_node, options) for child in node.children]
         return text_node
     if tag_local == "mask":
         mask = MaskNode(
@@ -698,14 +718,14 @@ def _convert_node(node: SvgNode, parent: Optional[BaseNode] = None) -> BaseNode:
             mask_content_units=attributes.get("maskContentUnits", "userSpaceOnUse"),
             **base_kwargs,
         )
-        mask.children = [_convert_node(child, mask) for child in node.children]
+        mask.children = [_convert_node(child, mask, options) for child in node.children]
         return mask
     if tag_local == "clipPath":
         clip = ClipPathNode(
             clip_path_units=attributes.get("clipPathUnits", "userSpaceOnUse"),
             **base_kwargs,
         )
-        clip.children = [_convert_node(child, clip) for child in node.children]
+        clip.children = [_convert_node(child, clip, options) for child in node.children]
         return clip
     if tag_local == "marker":
         marker = MarkerNode(
@@ -715,7 +735,7 @@ def _convert_node(node: SvgNode, parent: Optional[BaseNode] = None) -> BaseNode:
             orient=attributes.get("orient", "auto"),
             **base_kwargs,
         )
-        marker.children = [_convert_node(child, marker) for child in node.children]
+        marker.children = [_convert_node(child, marker, options) for child in node.children]
         return marker
     if tag_local == "filter":
         primitives_list = [_build_filter_primitive(child) for child in node.children]
@@ -734,11 +754,11 @@ def _convert_node(node: SvgNode, parent: Optional[BaseNode] = None) -> BaseNode:
             height=_optional_number(attributes.get("height")),
             **base_kwargs,
         )
-        use_node.children = [_convert_node(child, use_node) for child in node.children]
+        use_node.children = [_convert_node(child, use_node, options) for child in node.children]
         return use_node
 
     generic = GenericNode(**base_kwargs)
-    generic.children = [_convert_node(child, generic) for child in node.children]
+    generic.children = [_convert_node(child, generic, options) for child in node.children]
     return generic
 
 
@@ -831,8 +851,8 @@ def _expand_use_nodes(root: BaseNode, ids: Dict[str, BaseNode]) -> None:
                 stack.append(child)
 
 
-def build_tree(document: SvgDocument) -> Tree:
-    root = _convert_node(document.root, None)
+def build_tree(document: SvgDocument, options: Optional[Options] = None) -> Tree:
+    root = _convert_node(document.root, None, options)
     ids: Dict[str, BaseNode] = {}
     _collect_ids(root, ids)
     _expand_use_nodes(root, ids)
@@ -877,11 +897,17 @@ def _inherit_stroke(stroke: Optional[StrokeStyle], parent: Optional[BaseNode]) -
     return None
 
 def _inherit_text(text_style: Optional[TextStyle], parent: Optional[BaseNode]) -> Optional[TextStyle]:
-    if text_style is not None:
+    parent_style = parent.text_style if parent and parent.text_style is not None else None
+    if text_style is None:
+        return replace(parent_style) if parent_style is not None else None
+    if parent_style is None:
         return text_style
-    if parent and parent.text_style is not None:
-        return replace(parent.text_style)
-    return None
+    return TextStyle(
+        font_families=text_style.font_families or parent_style.font_families,
+        font_size=text_style.font_size if text_style.font_size is not None else parent_style.font_size,
+        font_style=text_style.font_style or parent_style.font_style,
+        font_weight=text_style.font_weight or parent_style.font_weight,
+    )
 
 
 def _inherit_fill(fill: Optional[FillStyle], parent: Optional[BaseNode]) -> Optional[FillStyle]:
@@ -901,11 +927,17 @@ def _inherit_stroke(stroke: Optional[StrokeStyle], parent: Optional[BaseNode]) -
 
 
 def _inherit_text(text_style: Optional[TextStyle], parent: Optional[BaseNode]) -> Optional[TextStyle]:
-    if text_style is not None:
+    parent_style = parent.text_style if parent and parent.text_style is not None else None
+    if text_style is None:
+        return replace(parent_style) if parent_style is not None else None
+    if parent_style is None:
         return text_style
-    if parent and parent.text_style is not None:
-        return replace(parent.text_style)
-    return None
+    return TextStyle(
+        font_families=text_style.font_families or parent_style.font_families,
+        font_size=text_style.font_size if text_style.font_size is not None else parent_style.font_size,
+        font_style=text_style.font_style or parent_style.font_style,
+        font_weight=text_style.font_weight or parent_style.font_weight,
+    )
 @dataclass(slots=True)
 class TextSpan:
     text: str

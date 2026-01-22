@@ -92,7 +92,7 @@ class RasterAdapter:
         passes = self._pass_count(descriptor, complexity)
         scale = self._scale_factor(descriptor, bounds, complexity)
 
-        surface = self._render_preview_with_resvg(filter_element, filter_id, width_px, height_px)
+        surface = self._render_preview_with_resvg(filter_element, filter_id, width_px, height_px, context=context)
         if surface is not None:
             self._counter += 1
             relationship_id = f"rIdRaster{self._counter}"
@@ -172,12 +172,14 @@ class RasterAdapter:
         filter_id: str,
         width_px: int,
         height_px: int,
+        context=None,
     ):
         if skia is None:
             return None
         try:
             from svg2ooxml.core.resvg.normalizer import normalize_svg_string
             from svg2ooxml.render.pipeline import render
+            from svg2ooxml.core.resvg.parser.options import Options
         except Exception:  # pragma: no cover - renderer dependencies missing
             return None
 
@@ -219,8 +221,20 @@ class RasterAdapter:
         rect.set("opacity", "1")
 
         svg_markup = etree.tostring(svg_root, encoding="unicode")
+
+        resources_dir = None
+        if context and context.services:
+            image_service = getattr(context.services, "image_service", None)
+            if image_service:
+                from svg2ooxml.services.image_service import FileResolver
+                for resolver in image_service.resolvers():
+                    if isinstance(resolver, FileResolver):
+                        resources_dir = resolver.base_dir
+                        break
+
         try:
-            normalized = normalize_svg_string(svg_markup)
+            options = Options(resources_dir=resources_dir) if resources_dir else None
+            normalized = normalize_svg_string(svg_markup, options=options)
             return render(normalized.tree)
         except Exception:  # pragma: no cover - renderer failure
             return None

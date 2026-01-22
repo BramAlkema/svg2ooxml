@@ -69,7 +69,11 @@ def test_simple_rect_scene(tmp_path, visual_tools) -> None:
         browser_threshold = float(os.getenv("SVG2OOXML_VISUAL_BROWSER_THRESHOLD", "0.90"))
         browser_path = tmp_path / "simple_rect_browser.png"
         try:
-            browser_renderer.render_svg(svg_text, browser_path)
+            browser_renderer.render_svg(
+                svg_text,
+                browser_path,
+                source_path=FIXTURE_SVG,
+            )
         except BrowserRenderError as exc:
             pytest.fail(f"Browser render failed: {exc}")
 

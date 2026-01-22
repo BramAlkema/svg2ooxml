@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import base64
-import gzip
 import logging
 import re
+from urllib.parse import urldefrag
 from dataclasses import dataclass
 from io import BytesIO
 from pathlib import Path
@@ -15,17 +15,12 @@ if TYPE_CHECKING:  # pragma: no cover - type checking only
     from svg2ooxml.ir.fonts import FontFaceSrc
     from svg2ooxml.services.fonts.fetcher import FontFetcher
 
-try:
-    import brotli  # type: ignore[import-untyped,import-not-found,unused-ignore]
-    BROTLI_AVAILABLE = True
-except ImportError:
-    BROTLI_AVAILABLE = False
-
-try:
-    from fontTools.ttLib import TTFont, woff2  # type: ignore[import-untyped]
-    FONTTOOLS_AVAILABLE = True
-except ImportError:
-    FONTTOOLS_AVAILABLE = False
+from svg2ooxml.services.fonts.fontforge_utils import (
+    FONTFORGE_AVAILABLE,
+    generate_font_bytes,
+    open_font,
+)
+from svg2ooxml.services.fonts.svg_font_converter import convert_svg_font
 
 logger = logging.getLogger(__name__)
 
@@ -73,8 +68,8 @@ class FontLoader:
     Supports:
     - Data URIs (base64-encoded fonts)
     - Remote HTTP(S) URLs (via FontFetcher)
-    - WOFF decompression (gzip)
-    - WOFF2 decompression (brotli)
+    - WOFF decompression (zlib)
+    - WOFF2 decompression (FontForge)
     """
 
     def __init__(
@@ -83,6 +78,8 @@ class FontLoader:
         *,
         allow_network: bool = True,
         max_size: int = MAX_FONT_SIZE,
+        base_dir: Path | None = None,
+        allow_svg_fonts: bool = True,
         logger: logging.Logger | None = None,
     ) -> None:
         """Initialize font loader.
@@ -96,6 +93,8 @@ class FontLoader:
         self.fetcher = fetcher
         self.allow_network = allow_network
         self.max_size = max_size
+        self.base_dir = base_dir
+        self.allow_svg_fonts = allow_svg_fonts
         self._logger = logger or globals()["logger"]
 
     def load_from_src(self, src: "FontFaceSrc") -> LoadedFont | None:
@@ -108,18 +107,25 @@ class FontLoader:
             LoadedFont if successful, None if loading failed
         """
         if src.is_data_uri:
-            return self.load_data_uri(src.url)
+            return self.load_data_uri(src.url, format_hint=src.format)
         elif src.is_remote and self.allow_network:
             return self.load_remote(src.url, src.format)
         elif src.is_local:
-            self._logger.debug("Skipping local() font reference: %s", src.url)
-            return None
+            if src.url.startswith("local("):
+                self._logger.debug("Skipping local() font reference: %s", src.url)
+                return None
+            url_no_frag, fragment = urldefrag(src.url)
+            resolved = self._resolve_local_path(url_no_frag)
+            if resolved is None:
+                self._logger.debug("Skipping unresolved local font reference: %s", src.url)
+                return None
+            return self.load_file(resolved, format_hint=src.format, font_id=fragment)
         else:
             # Relative URL or unsupported
             self._logger.debug("Unsupported font source: %s", src.url)
             return None
 
-    def load_data_uri(self, data_uri: str) -> LoadedFont | None:
+    def load_data_uri(self, data_uri: str, *, format_hint: str | None = None) -> LoadedFont | None:
         """Load font from base64 data URI.
 
         Args:
@@ -128,6 +134,7 @@ class FontLoader:
         Returns:
             LoadedFont if successful, None if parsing failed
         """
+        data_uri, fragment = urldefrag(data_uri)
         match = DATA_URI_PATTERN.match(data_uri)
         if not match:
             self._logger.warning("Invalid data URI format")
@@ -162,11 +169,17 @@ class FontLoader:
             return None
 
         # Detect format from MIME type or magic bytes
-        font_format = self._detect_format(raw_data, mime_type)
+        font_format = self._detect_format(raw_data, format_hint or mime_type)
 
         # Decompress if needed
         decompressed = False
-        if font_format == "woff2":
+        if font_format == "svg":
+            raw_data = self._convert_svg_font(raw_data, fragment)
+            if raw_data is None:
+                return None
+            decompressed = True
+            font_format = "ttf"
+        elif font_format == "woff2":
             decompressed_data = self._decompress_woff2(raw_data)
             if decompressed_data is None:
                 return None
@@ -206,9 +219,10 @@ class FontLoader:
             self._logger.warning("No FontFetcher available for remote font: %s", url)
             return None
 
+        url_no_frag, fragment = urldefrag(url)
         # Use fetcher to download
         from .fetcher import FontSource
-        source = FontSource(url=url, font_family="unknown")
+        source = FontSource(url=url_no_frag, font_family="unknown")
 
         try:
             path = self.fetcher.fetch(source)
@@ -224,7 +238,13 @@ class FontLoader:
 
             # Decompress if needed
             decompressed = False
-            if font_format == "woff2":
+            if font_format == "svg":
+                raw_data = self._convert_svg_font(raw_data, fragment)
+                if raw_data is None:
+                    return None
+                decompressed = True
+                font_format = "ttf"
+            elif font_format == "woff2":
                 decompressed_data = self._decompress_woff2(raw_data)
                 if decompressed_data is None:
                     return None
@@ -249,7 +269,13 @@ class FontLoader:
             self._logger.warning("Error loading remote font %s: %s", url, exc)
             return None
 
-    def load_file(self, path: Path) -> LoadedFont | None:
+    def load_file(
+        self,
+        path: Path,
+        *,
+        format_hint: str | None = None,
+        font_id: str | None = None,
+    ) -> LoadedFont | None:
         """Load font from local file path.
 
         Args:
@@ -269,11 +295,17 @@ class FontLoader:
                 self._logger.warning("Font file exceeds size limit: %s", path)
                 return None
 
-            font_format = self._detect_format(raw_data, path.suffix.lstrip("."))
+            font_format = self._detect_format(raw_data, format_hint or path.suffix.lstrip("."))
 
             # Decompress if needed
             decompressed = False
-            if font_format == "woff2":
+            if font_format == "svg":
+                raw_data = self._convert_svg_font(raw_data, font_id)
+                if raw_data is None:
+                    return None
+                decompressed = True
+                font_format = "ttf"
+            elif font_format == "woff2":
                 decompressed_data = self._decompress_woff2(raw_data)
                 if decompressed_data is None:
                     return None
@@ -339,6 +371,8 @@ class FontLoader:
         # Fall back to hint
         if hint:
             hint_lower = hint.lower()
+            if "svg" in hint_lower:
+                return "svg"
             if "woff2" in hint_lower:
                 return "woff2"
             if "woff" in hint_lower:
@@ -348,6 +382,10 @@ class FontLoader:
             if "opentype" in hint_lower or "otf" in hint_lower:
                 return "otf"
 
+        snippet = data[:256].lstrip().lower()
+        if snippet.startswith(b"<?xml") or snippet.startswith(b"<svg"):
+            return "svg"
+
         # Default to TTF
         return "ttf"
 
@@ -356,10 +394,9 @@ class FontLoader:
     # ------------------------------------------------------------------
 
     def _decompress_woff2(self, data: bytes) -> bytes | None:
-        """Decompress WOFF2 font to TTF/OTF using fonttools.
+        """Decompress WOFF2 font to TTF/OTF using FontForge.
 
-        WOFF2 uses brotli compression and complex table transformations.
-        This implementation uses fonttools library for robust decompression.
+        FontForge handles the WOFF2 decode pipeline when built with brotli.
 
         Args:
             data: WOFF2 compressed bytes
@@ -367,17 +404,9 @@ class FontLoader:
         Returns:
             Decompressed TTF/OTF bytes, or None if decompression failed
         """
-        if not FONTTOOLS_AVAILABLE:
+        if not FONTFORGE_AVAILABLE:
             self._logger.warning(
-                "fonttools not available, cannot decompress WOFF2. "
-                "Install with: pip install fonttools[woff]"
-            )
-            return None
-
-        if not BROTLI_AVAILABLE:
-            self._logger.warning(
-                "brotli not available, cannot decompress WOFF2. "
-                "Install with: pip install brotli"
+                "FontForge not available, cannot decompress WOFF2."
             )
             return None
 
@@ -391,26 +420,8 @@ class FontLoader:
                 self._logger.warning("Invalid WOFF2 signature")
                 return None
 
-            # Use fonttools to decompress WOFF2 to TTF/OTF
-            # fonttools handles all the complexity:
-            # - Brotli decompression
-            # - Table directory reconstruction
-            # - Transformed glyf/loca table handling
-            # - Collection font handling
-
-            # Save WOFF2 to temporary BytesIO
-            from io import BytesIO
-            woff2_stream = BytesIO(data)
-
-            # Load WOFF2 font
-            font = TTFont(woff2_stream)
-
-            # Save as TTF/OTF to BytesIO
-            output_stream = BytesIO()
-            font.save(output_stream)
-
-            # Get decompressed data
-            result = output_stream.getvalue()
+            with open_font(data, suffix=".woff2") as font:
+                result = generate_font_bytes(font, suffix=".ttf")
 
             self._logger.debug(
                 "Decompressed WOFF2: %d → %d bytes",
@@ -577,11 +588,29 @@ class FontLoader:
             self._logger.warning("WOFF decompression failed: %s", exc)
             return None
 
+    def _convert_svg_font(self, data: bytes, font_id: str | None) -> bytes | None:
+        if not self.allow_svg_fonts:
+            self._logger.warning("SVG font conversion disabled by policy.")
+            return None
+        converted = convert_svg_font(data, font_id=font_id)
+        if converted is None:
+            self._logger.warning("SVG font conversion failed.")
+        return converted
+
+    def _resolve_local_path(self, url: str) -> Path | None:
+        if not url:
+            return None
+        path = Path(url)
+        if path.is_absolute():
+            return path
+        if self.base_dir is None:
+            return None
+        return (self.base_dir / path).resolve()
+
 
 __all__ = [
     "FontLoader",
     "LoadedFont",
     "MAX_FONT_SIZE",
-    "BROTLI_AVAILABLE",
-    "FONTTOOLS_AVAILABLE",
+    "FONTFORGE_AVAILABLE",
 ]

@@ -9,5 +9,5 @@
             <a:off x="{X_EMU}" y="{Y_EMU}"/>
             <a:ext cx="{WIDTH_EMU}" cy="{HEIGHT_EMU}"/>
         </a:xfrm>
-{GEOMETRY_XML}{CLIP_PATH_XML}{MASK_XML}{EFFECTS_XML}{FILL_XML}{STROKE_XML}    </p:spPr>
+{GEOMETRY_XML}{CLIP_PATH_XML}{MASK_XML}{FILL_XML}{STROKE_XML}{EFFECTS_XML}    </p:spPr>
 </p:cxnSp>

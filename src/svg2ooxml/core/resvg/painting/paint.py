@@ -7,11 +7,21 @@ from dataclasses import dataclass
 from typing import Optional, Tuple
 
 from .colors import parse_rgb
+from svg2ooxml.color.parsers import parse_color as parse_global_color
 
 _HEX_SHORT_RE = re.compile(r"^#([0-9a-fA-F]{3})$")
 _HEX_FULL_RE = re.compile(r"^#([0-9a-fA-F]{6})$")
 _RGB_RE = re.compile(r"^rgb\(([^)]+)\)$")
 _URL_RE = re.compile(r"url\((#[^)]+)\)")
+
+_FONT_FAMILY_ALIASES = {
+    "sans-serif": "Arial",
+    "serif": "Times New Roman",
+    "monospace": "Courier New",
+    "cursive": "Comic Sans MS",
+    "fantasy": "Impact",
+    "svgfreesansascii": "Arial",
+}
 
 
 @dataclass(frozen=True)
@@ -106,11 +116,16 @@ def parse_color(value: Optional[str], opacity: Optional[float]) -> Optional[Colo
     else:
         rgb = _parse_rgb_function(value)
 
-    if rgb is None:
+    if rgb is not None:
+        a = _clamp(opacity if opacity is not None else 1.0)
+        return Color(r=rgb[0] / 255.0, g=rgb[1] / 255.0, b=rgb[2] / 255.0, a=a)
+
+    global_color = parse_global_color(value)
+    if global_color is None:
         return None
 
-    a = _clamp(opacity if opacity is not None else 1.0)
-    return Color(r=rgb[0] / 255.0, g=rgb[1] / 255.0, b=rgb[2] / 255.0, a=a)
+    a = _clamp(opacity if opacity is not None else 1.0) * float(getattr(global_color, "a", 1.0))
+    return Color(r=global_color.r, g=global_color.g, b=global_color.b, a=a)
 
 
 def resolve_fill(fill_value: Optional[str], fill_opacity: Optional[float], opacity: Optional[float]) -> FillStyle:
@@ -155,11 +170,14 @@ def resolve_stroke(
 def resolve_text_style(font_family: Optional[str], font_size: Optional[float], font_style: Optional[str], font_weight: Optional[str]) -> TextStyle:
     families: Tuple[str, ...]
     if font_family:
-        families = tuple(
-            part.strip().strip("'\"")
-            for part in font_family.split(",")
-            if part.strip().strip("'\"")
-        )
+        normalized: list[str] = []
+        for part in font_family.split(","):
+            token = part.strip().strip("'\"")
+            if not token:
+                continue
+            mapped = _FONT_FAMILY_ALIASES.get(token.lower(), token)
+            normalized.append(mapped)
+        families = tuple(normalized)
     else:
         families = ()
 

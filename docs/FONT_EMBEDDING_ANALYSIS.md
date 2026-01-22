@@ -22,7 +22,7 @@ Font embedding in PPTX follows a multi-stage pipeline where fonts are discovered
 - **FontEmbeddingEngine**: Main class handling subsetting and font optimization
   - `can_embed()`: Checks fsType flags for embedding permissions
   - `subset_font()`: Produces or reuses subsetted fonts for a glyph set
-  - `_subset_with_fonttools()`: Uses fontTools library for subsetting
+  - `_subset_with_fontforge()`: Uses FontForge for subsetting
   - `_subset_copy()`: Copies full font when subsetting not permitted
 
 - **FontEmbeddingRequest**: Parameters for embedding (frozen dataclass)
@@ -42,10 +42,9 @@ Font embedding in PPTX follows a multi-stage pipeline where fonts are discovered
   - `permission`: EmbeddingPermission (INSTALLABLE, RESTRICTED, etc.)
   - **`packaging_metadata`**: Contains `font_data` (bytes) + request metadata
 
-### Subsetting with fontTools
-Lines 249-305 show fontTools integration:
-- Uses `fontTools.subset.Subsetter`
-- Configurable options for hinting, table dropping, desubroutinization
+### Subsetting with FontForge
+Lines 249-305 show FontForge integration:
+- Selects glyphs by Unicode and prunes the rest
 - Writes to temp file, reads as bytes, cleans up
 - Returns bytes or None on failure
 
@@ -530,7 +529,7 @@ Prevents duplicate fonts from being written multiple times.
 ## 7. Critical Issue: Font Data from URLs
 
 ### Problem
-FontEmbeddingEngine._subset_copy() and _subset_with_fonttools() expect `request.font_path` to be a valid filesystem path (lines 173, 212):
+FontEmbeddingEngine._subset_copy() and _subset_with_fontforge() expect `request.font_path` to be a valid filesystem path (lines 173, 212):
 ```python
 data = Path(request.font_path).read_bytes()
 font = TTFont(request.font_path, lazy=False)

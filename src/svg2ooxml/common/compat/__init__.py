@@ -3,14 +3,11 @@
 from importlib import import_module as _im
 from typing import Any as _Any
 
-__all__ = [
-    'ensure_fonttools_harfbuzz_patch',
-    'fonttools'
-]
+__all__: list[str] = []
 
 # map symbol -> relative module
-_symbol_map = {'ensure_fonttools_harfbuzz_patch': 'fonttools'}
-_module_map = {'fonttools': 'fonttools'}
+_symbol_map: dict[str, str] = {}
+_module_map: dict[str, str] = {}
 
 
 def __getattr__(name: str) -> _Any:  # PEP 562

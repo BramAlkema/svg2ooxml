@@ -16,7 +16,7 @@ from svg2ooxml.services.fonts import FontEmbeddingEngine, FontEmbeddingRequest
 
 @pytest.mark.integration
 def test_embedded_fonts_emit_eot_parts(tmp_path):
-    pytest.importorskip("fontTools.ttLib")
+    pytest.importorskip("fontforge")
     font_path = Path("tests/resources/ScheherazadeRegOT.ttf")
 
     engine = FontEmbeddingEngine()

@@ -17,7 +17,7 @@ from svg2ooxml.core.resvg.geometry.primitives import ClosePath, LineTo, MoveTo
 from svg2ooxml.core.resvg.geometry.tessellation import TessellationResult, Tessellator
 from svg2ooxml.core.resvg.painting.gradients import GradientStop, LinearGradient, PatternPaint, RadialGradient
 from svg2ooxml.core.resvg.painting.paint import Color, FillStyle, StrokeStyle
-from svg2ooxml.core.resvg.usvg_tree import BaseNode, PathNode, PatternNode, Tree
+from svg2ooxml.core.resvg.usvg_tree import BaseNode, ImageNode, PathNode, PatternNode, Tree
 from svg2ooxml.render.filters import UnsupportedPrimitiveError, apply_filter, plan_filter
 from svg2ooxml.render.mask_clip import (
     ClipPathContext,
@@ -75,12 +75,120 @@ def _render_node(
     if node.tag in _DEFINITION_TAGS:
         return
 
-    geometry = node_geometry(node)
-    if geometry is not None:
-        _render_shape_node(node, geometry, tree, context, surface, viewport)
+    if isinstance(node, ImageNode):
+        _render_image(node, tree, context, surface, viewport)
+    else:
+        geometry = node_geometry(node)
+        if geometry is not None:
+            _render_shape_node(node, geometry, tree, context, surface, viewport)
 
     for child in node.children:
         _render_node(child, tree, context, surface, viewport)
+
+
+def _render_image(
+    node: ImageNode,
+    tree: Tree,
+    context: RenderContext,
+    surface: Surface,
+    viewport: Viewport,
+) -> None:
+    if not node.data:
+        return
+
+    try:
+        image = skia.Image.MakeFromEncoded(node.data)
+        if not image:
+            return
+    except Exception:
+        return
+
+    try:
+        x = float(node.attributes.get("x", "0"))
+        y = float(node.attributes.get("y", "0"))
+        width = float(node.attributes.get("width", "0"))
+        height = float(node.attributes.get("height", "0"))
+    except ValueError:
+        return
+
+    if width <= 0 or height <= 0:
+        return
+
+    layer_surface = skia.Surface(viewport.width, viewport.height)
+    canvas = layer_surface.getCanvas()
+    canvas.clear(skia.Color4f(0.0, 0.0, 0.0, 0.0))
+
+    device_matrix = skia.Matrix.MakeAll(
+        viewport.scale_x,
+        0.0,
+        -viewport.min_x * viewport.scale_x,
+        0.0,
+        viewport.scale_y,
+        -viewport.min_y * viewport.scale_y,
+        0.0,
+        0.0,
+        1.0,
+    )
+    node_matrix = _to_skia_matrix(node.transform)
+    total_matrix = skia.Matrix()
+    total_matrix.setConcat(device_matrix, node_matrix)
+    canvas.concat(total_matrix)
+
+    paint = skia.Paint(AntiAlias=True)
+    if node.presentation.opacity is not None:
+        paint.setAlphaf(max(0.0, min(1.0, node.presentation.opacity)))
+
+    src_rect = skia.Rect.MakeWH(image.width(), image.height())
+    dst_rect = skia.Rect.MakeXYWH(x, y, width, height)
+    canvas.drawImageRect(image, src_rect, dst_rect, paint)
+
+    snapshot = layer_surface.makeImageSnapshot()
+    rgba = snapshot.toarray().astype(np.float32) / 255.0
+    if snapshot.colorType() == skia.ColorType.kBGRA_8888_ColorType:
+        rgba[:, :, [0, 2]] = rgba[:, :, [2, 0]]
+    rgba[..., :3] *= rgba[..., 3:4]
+    
+    layer = Surface(width=viewport.width, height=viewport.height, data=rgba)
+
+    # Apply effects
+    mask_ctx = resolve_mask(tree, node.attributes.get("mask"))
+    clip_ctx = resolve_clip_path(tree, node.attributes.get("clip-path"))
+    filter_href = _clean_href(node.attributes.get("filter"))
+    
+    # Calculate bounds for filter
+    # We transform (x, y, w, h) by node_matrix to get user-space bounds
+    # Note: filter region calculation usually expects bounding box in user space.
+    # The 'bounds' argument to apply_filter expects (min_x, min_y, max_x, max_y).
+    # Since resvg filter logic handles units, we pass the untransformed bounds? 
+    # No, it expects the bounding box of the element in the current user coordinate system.
+    # But node.transform is ALREADY applied to the canvas.
+    # Wait, `apply_filter` logic uses `bounds` to determine `objectBoundingBox`.
+    # For objectBoundingBox, it needs the bounds *before* the filter effect is applied?
+    # SVG spec says: "The bounding box is the tightest fitting rectangle aligned with the axes of that element's user coordinate system that entirely encloses it and its descendants."
+    # So it's x, y, width, height.
+    bounds = (x, y, x + width, y + height)
+
+    if filter_href:
+        filter_node = tree.resolve_filter(filter_href)
+        if filter_node:
+            filter_plan = plan_filter(filter_node)
+            if filter_plan:
+                try:
+                    layer = apply_filter(layer, filter_plan, bounds, viewport)
+                except UnsupportedPrimitiveError:
+                    pass
+
+    if mask_ctx:
+        mask_alpha = _resolve_mask_alpha(mask_ctx, context, viewport)
+        if mask_alpha is not None:
+            layer = apply_mask(layer, mask_alpha)
+            
+    if clip_ctx:
+        clip_mask = _resolve_clip_mask(clip_ctx, context, viewport)
+        if clip_mask is not None:
+            layer = apply_clip(layer, clip_mask)
+
+    surface.blend(layer)
 
 
 def _render_shape_node(

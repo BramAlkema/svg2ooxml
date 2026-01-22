@@ -200,13 +200,15 @@ def _action_uri_for_spec(spec: NavigationSpec) -> str | None:
 
 def _build_navigation_xml(asset: NavigationAsset) -> str:
     # Build a:hlinkClick element with lxml
+    if not asset.relationship_id:
+        return ""
+
     hlinkClick = a_elem("hlinkClick")
 
     has_attributes = False
 
-    if asset.relationship_id:
-        hlinkClick.set("{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id", asset.relationship_id)
-        has_attributes = True
+    hlinkClick.set("{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id", asset.relationship_id)
+    has_attributes = True
 
     if asset.tooltip:
         hlinkClick.set("tooltip", html.escape(asset.tooltip, quote=False))

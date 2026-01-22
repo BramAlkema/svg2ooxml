@@ -12,5 +12,5 @@
         <a:prstGeom prst="{PRESET}">
             <a:avLst/>
         </a:prstGeom>
-{CLIP_PATH_XML}{MASK_XML}{EFFECTS_XML}{FILL_XML}{STROKE_XML}    </p:spPr>
+{CLIP_PATH_XML}{MASK_XML}{FILL_XML}{STROKE_XML}{EFFECTS_XML}    </p:spPr>
 </p:sp>

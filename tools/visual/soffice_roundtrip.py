@@ -134,7 +134,7 @@ def _build_or_copy(
         shutil.copy2(source, pptx_path)
         return pptx_path, None
     svg_text = source.read_text(encoding="utf-8")
-    build_result = builder.build_from_svg(svg_text, pptx_path)
+    build_result = builder.build_from_svg(svg_text, pptx_path, source_path=source)
     return build_result.pptx_path, build_result.slide_count
 
 

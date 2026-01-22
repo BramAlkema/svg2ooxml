@@ -24,6 +24,7 @@ class FontEmbeddingPolicy:
     subset_strategy: str  # e.g. "glyph", "character", "none"
     preserve_hinting: bool
     package_font_parts: bool
+    allow_svg_font_conversion: bool
 
 
 @dataclass(frozen=True)
@@ -97,6 +98,7 @@ def _build_high_quality_decision() -> TextPolicyDecision:
             subset_strategy="glyph",
             preserve_hinting=True,
             package_font_parts=True,
+            allow_svg_font_conversion=True,
         ),
         fallback=TextFallbackPolicy(
             missing_font_behavior="embedded",
@@ -132,6 +134,7 @@ def _build_balanced_decision() -> TextPolicyDecision:
             subset_strategy="character",
             preserve_hinting=False,
             package_font_parts=True,
+            allow_svg_font_conversion=True,
         ),
         fallback=TextFallbackPolicy(
             missing_font_behavior="outline",
@@ -167,6 +170,7 @@ def _build_low_quality_decision() -> TextPolicyDecision:
             subset_strategy="none",
             preserve_hinting=False,
             package_font_parts=False,
+            allow_svg_font_conversion=False,
         ),
         fallback=TextFallbackPolicy(
             missing_font_behavior="fallback_family",
@@ -233,6 +237,9 @@ def _apply_overrides(
                 decision = replace(decision, embedding=embedding)
             case "text.allow_effects":
                 decision = replace(decision, allow_effects=bool(value))
+            case "text.svg_font_conversion":
+                embedding = replace(decision.embedding, allow_svg_font_conversion=bool(value))
+                decision = replace(decision, embedding=embedding)
             case "text.wordart.enable":
                 wordart = replace(decision.wordart, enable_detection=bool(value))
                 decision = replace(decision, wordart=wordart)

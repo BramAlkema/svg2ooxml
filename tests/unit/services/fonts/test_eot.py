@@ -31,7 +31,7 @@ def _unpack_header(blob: bytes) -> dict[str, int | bytes]:
 
 
 def test_build_eot_structure():
-    pytest.importorskip("fontTools.ttLib")
+    pytest.importorskip("fontforge")
     font_path = Path("tests/resources/ScheherazadeRegOT.ttf")
     font_bytes = font_path.read_bytes()
 
@@ -81,7 +81,7 @@ def test_build_eot_structure():
 
 
 def test_build_eot_obfuscation():
-    pytest.importorskip("fontTools.ttLib")
+    pytest.importorskip("fontforge")
     font_path = Path("tests/resources/ScheherazadeRegOT.ttf")
     font_bytes = font_path.read_bytes()
     guid = uuid.UUID("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")
