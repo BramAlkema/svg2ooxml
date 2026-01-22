@@ -45,13 +45,26 @@ class DrawingMLTextRenderer:
         candidate = getattr(element, "wordart_candidate", None)
         metadata = element.metadata if isinstance(element.metadata, dict) else {}
         wordart_meta = metadata.get("wordart") if isinstance(metadata, dict) else {}
+        
+        # Determine confidence threshold from policy metadata
+        policy_text = self._policy_for(metadata, "text")
+        detection_meta = policy_text.get("wordart_detection")
+        if isinstance(detection_meta, dict):
+            threshold = float(detection_meta.get("confidence_threshold", 0.5))
+        else:
+            threshold = 0.5
+
         prefer_native = True
         if isinstance(wordart_meta, dict):
             prefer_native = bool(wordart_meta.get("prefer_native", True))
 
+        is_confident = False
+        if candidate is not None:
+            is_confident = candidate.confidence >= threshold
+
         if (
             candidate is not None
-            and getattr(candidate, "is_confident", False)
+            and is_confident
             and prefer_native
         ):
             xml = shapes_runtime.render_wordart(
