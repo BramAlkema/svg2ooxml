@@ -197,25 +197,55 @@ class CorpusRunner:
                 services.filter_service.set_strategy(filter_strategy)
             
             # Convert to IR
+            from svg2ooxml.core.tracing.conversion import ConversionTracer
+            tracer = ConversionTracer()
+            
             import time
             start_time = time.time()
-            scene = convert_parser_output(parse_result, services=services)
+            scene = convert_parser_output(parse_result, services=services, tracer=tracer)
             conversion_time_ms = (time.time() - start_time) * 1000
             metrics.conversion_time_ms = conversion_time_ms
             
             # Render to DrawingML
-            render_result = self._writer.render_scene_from_ir(scene)
+            render_result = self._writer.render_scene_from_ir(scene, tracer=tracer)
             
             # Build PPTX
             pptx_path = self.output_dir / f"{deck_name}_{self.mode}.pptx"
             self._builder.build_from_results([render_result], pptx_path)
             
-            # Collect telemetry metrics (if available in render_result)
-            # Note: This is a placeholder - actual telemetry extraction depends on implementation
-            metrics.total_elements = 100  # TODO: Extract from telemetry
-            metrics.native_count = 85  # TODO: Extract from telemetry
-            metrics.emf_count = 10  # TODO: Extract from telemetry
-            metrics.raster_count = 5  # TODO: Extract from telemetry
+            # Collect telemetry metrics from tracer
+            report = tracer.report()
+            geom_totals = report.geometry_totals
+            paint_totals = report.paint_totals
+            
+            # Basic counting logic:
+            # Native: 'native', 'resvg' (if resvg produced vector), 'wordart'
+            # EMF: 'emf', 'policy_emf'
+            # Raster: 'bitmap', 'raster', 'policy_raster'
+            
+            metrics.native_count = (
+                geom_totals.get("native", 0) + 
+                geom_totals.get("resvg", 0) + 
+                geom_totals.get("wordart", 0)
+            )
+            metrics.emf_count = (
+                geom_totals.get("emf", 0) + 
+                geom_totals.get("policy_emf", 0) +
+                paint_totals.get("emf", 0)
+            )
+            metrics.raster_count = (
+                geom_totals.get("bitmap", 0) + 
+                geom_totals.get("raster", 0) + 
+                geom_totals.get("policy_raster", 0) +
+                paint_totals.get("bitmap", 0)
+            )
+            metrics.total_elements = metrics.native_count + metrics.emf_count + metrics.raster_count
+            
+            # Handle text runs if they are recorded separately in paint decisions
+            # (In some modes, text runs might add to native count)
+            if metrics.total_elements == 0:
+                 # Fallback to total events if no decisions recorded (unlikely but safe)
+                 metrics.total_elements = len(report.geometry_events) or 1
             
             # Calculate rates
             if metrics.total_elements > 0:

@@ -485,7 +485,8 @@ def _serialize_source(node: BaseNode) -> str | None:
     if source is None:
         return None
     try:
-        return source.tostring()  # type: ignore[attr-defined]
+        from lxml import etree
+        return etree.tostring(source, encoding="unicode")
     except Exception:
         return None
 
