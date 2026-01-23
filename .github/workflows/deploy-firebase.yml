@@ -1,15 +1,15 @@
 name: Deploy Firebase
 
-on:
-  workflow_dispatch:
-  # push:
-  #   branches: ["main"]
-  #   paths:
-  #     - 'public/**'
-  #     - 'firestore.rules'
-  #     - 'firestore.indexes.json'
-  #     - 'firebase.json'
-  #     - '.github/workflows/deploy-firebase.yml'
+# on:
+#   workflow_dispatch:
+#   # push:
+#   #   branches: ["main"]
+#   #   paths:
+#   #     - 'public/**'
+#   #     - 'firestore.rules'
+#   #     - 'firestore.indexes.json'
+#   #     - 'firebase.json'
+#   #     - '.github/workflows/deploy-firebase.yml'
 
 jobs:
   deploy:

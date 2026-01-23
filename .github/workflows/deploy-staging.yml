@@ -1,16 +1,16 @@
 name: Deploy Staging
 
-on:
-  workflow_dispatch:
-  push:
-    branches: ["develop", "staging"]
-    paths:
-      - 'src/**'
-      - 'main.py'
-      - 'requirements.txt'
-      - 'Dockerfile'
-      - 'cloudbuild-staging.yaml'
-      - '.github/workflows/deploy-staging.yml'
+# on:
+#   workflow_dispatch:
+#   push:
+#     branches: ["develop", "staging"]
+#     paths:
+#       - 'src/**'
+#       - 'main.py'
+#       - 'requirements.txt'
+#       - 'Dockerfile'
+#       - 'cloudbuild-staging.yaml'
+#       - '.github/workflows/deploy-staging.yml'
 
 jobs:
   deploy:

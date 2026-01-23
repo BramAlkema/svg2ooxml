@@ -1,16 +1,16 @@
 name: Deploy Cloud Run
 
-on:
-  workflow_dispatch:
-  # push:
-  #   branches: ["main"]
-  #   paths:
-  #     - 'src/**'
-  #     - 'main.py'
-  #     - 'requirements.txt'
-  #     - 'Dockerfile'
-  #     - 'cloudbuild.yaml'
-  #     - '.github/workflows/deploy-cloud-run.yml'
+# on:
+#   workflow_dispatch:
+#   # push:
+#   #   branches: ["main"]
+#   #   paths:
+#   #     - 'src/**'
+#   #     - 'main.py'
+#   #     - 'requirements.txt'
+#   #     - 'Dockerfile'
+#   #     - 'cloudbuild.yaml'
+#   #     - '.github/workflows/deploy-cloud-run.yml'
 
 jobs:
   deploy:
