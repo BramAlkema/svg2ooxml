@@ -197,7 +197,7 @@ def scan_w3c_tests(
     svg_files = sorted(tests_dir.glob("*.svg"))
 
     # Filter out animation tests
-    svg_files = [f for f in svg_files if "animate" not in f.name.lower()]
+    # svg_files = [f for f in svg_files if "animate" not in f.name.lower()]
 
     # Apply category filter if specified
     if category_filter:

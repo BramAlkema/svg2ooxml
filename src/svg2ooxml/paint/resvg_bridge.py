@@ -224,6 +224,7 @@ def _color_to_solid(color: Color, opacity: float | None) -> SolidPaint | None:
     hex_value = _color_to_hex(color)
     if hex_value is None:
         return None
+    
     alpha = _coerce_float(getattr(color, "a", None), 1.0)
     effective_opacity = alpha if opacity is None else opacity
     return SolidPaint(rgb=hex_value, opacity=_clamp01(effective_opacity))
@@ -272,15 +273,15 @@ def _solid_paint_from_presentation(
         return None
 
     r, g, b, a = rgba
+    
     effective_opacity = _coerce_float(a, 1.0)
     if fill_opacity is not None:
         effective_opacity *= _coerce_float(fill_opacity, 1.0)
     if element_opacity is not None:
         effective_opacity *= _coerce_float(element_opacity, 1.0)
-    effective_opacity = _clamp01(effective_opacity)
     return SolidPaint(
         rgb=_tuple_to_hex(r, g, b),
-        opacity=effective_opacity,
+        opacity=_clamp01(effective_opacity),
     )
 
 

@@ -28,8 +28,12 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+# Add project root to path for imports (e.g., tools.visual)
+project_root = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(project_root))
+
 # Add src to path for imports
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
+sys.path.insert(0, str(project_root / "src"))
 
 from svg2ooxml.core.parser import ParserConfig, SVGParser
 from svg2ooxml.drawingml.writer import DrawingMLWriter
