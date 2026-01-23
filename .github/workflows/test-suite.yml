@@ -19,14 +19,14 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
-        with:
-          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
-          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+      # - name: Authenticate to Google Cloud
+      #   uses: google-github-actions/auth@v2
+      #   with:
+      #     workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+      #     service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
 
-      - name: Setup gcloud CLI
-        uses: google-github-actions/setup-gcloud@v2
+      # - name: Setup gcloud CLI
+      #   uses: google-github-actions/setup-gcloud@v2
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -52,14 +52,14 @@ jobs:
           pip install -e .[color,api,cloud,slides,render]
           if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
 
-      - name: Get Cloud Run ID token
-        id: id-token
-        run: |
-          TOKEN=$(gcloud auth print-identity-token \
-            --impersonate-service-account=svg2ooxml-runner@powerful-layout-467812-p1.iam.gserviceaccount.com \
-            --audiences=https://svg2ooxml-export-sghya3t5ya-ew.a.run.app)
-          echo "::add-mask::$TOKEN"
-          echo "token=$TOKEN" >> $GITHUB_OUTPUT
+      # - name: Get Cloud Run ID token
+      #   id: id-token
+      #   run: |
+      #     TOKEN=$(gcloud auth print-identity-token \
+      #       --impersonate-service-account=svg2ooxml-runner@powerful-layout-467812-p1.iam.gserviceaccount.com \
+      #       --audiences=https://svg2ooxml-export-sghya3t5ya-ew.a.run.app)
+      #     echo "::add-mask::$TOKEN"
+      #     echo "token=$TOKEN" >> $GITHUB_OUTPUT
 
       - name: Run test suite
         env:
@@ -68,7 +68,7 @@ jobs:
           # Test encryption key (base64-encoded 32-byte key for testing)
           TOKEN_ENCRYPTION_KEY: dGVzdC1lbmNyeXB0aW9uLWtleS0zMi1ieXRlcy10ZXN0LWtleQo=
           # Cloud Run ID token for smoke tests
-          FIREBASE_TOKEN: ${{ steps.id-token.outputs.token }}
+          # FIREBASE_TOKEN: ${{ steps.id-token.outputs.token }}
           SVG2OOXML_AUDIENCE: https://svg2ooxml-export-sghya3t5ya-ew.a.run.app
         run: |
           # Skip pre-existing failures unrelated to current features
