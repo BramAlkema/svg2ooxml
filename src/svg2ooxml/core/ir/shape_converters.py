@@ -34,6 +34,13 @@ from svg2ooxml.core.styling.style_extractor import StyleResult
 from svg2ooxml.core.masks.baker import try_bake_mask
 
 
+def _clamp01(value: float) -> float:
+    if value < 0.0:
+        return 0.0
+    if value > 1.0:
+        return 1.0
+    return value
+
 class ShapeConversionMixin:
     """Mixin that houses individual SVG element conversion helpers."""
 
@@ -1457,8 +1464,8 @@ class ShapeConversionMixin:
         metadata: dict[str, Any],
     ) -> Path:
         segments = _rect_segments_from_bbox(bbox)
-        fill = SolidPaint(rgb="F0F0F0", opacity=0.4)
-        stroke = Stroke(paint=SolidPaint(rgb="999999"), width=1.0)
+        fill = SolidPaint(rgb="F0F0F0", opacity=_clamp01(0.4))
+        stroke = Stroke(paint=SolidPaint(rgb="999999", opacity=_clamp01(1.0)), width=1.0)
         placeholder_metadata = dict(metadata)
         path = Path(
             segments=segments,
@@ -1467,7 +1474,7 @@ class ShapeConversionMixin:
             clip=clip_ref,
             mask=mask_ref,
             mask_instance=mask_instance,
-            opacity=1.0,
+            opacity=_clamp01(1.0),
             metadata=placeholder_metadata,
             effects=[],
         )
