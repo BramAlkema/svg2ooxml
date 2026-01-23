@@ -2,6 +2,7 @@
 """Generate or refresh visual regression baselines using LibreOffice."""
 
 from __future__ import annotations
+import traceback
 
 import argparse
 import logging
@@ -49,6 +50,57 @@ RESVG_FIXTURES = {
     "text_rendering": Path("tests/visual/fixtures/resvg/text_rendering.svg"),
 }
 RESVG_BASELINES_DIR = Path("tests/visual/baselines/resvg")
+
+
+def generate_w3c_baselines(
+    renderer: LibreOfficeRenderer,
+    builder: PptxBuilder,
+    golden_root: Path,
+    deck_name_filter: str | None = None, # Add this parameter
+) -> None:
+    w3c_svg_dir = Path("tests/svg")
+    if not w3c_svg_dir.exists():
+        logger.error("W3C SVG directory not found: %s", w3c_svg_dir)
+        return
+
+    svg_files = sorted(w3c_svg_dir.glob("*.svg"))
+    
+    if deck_name_filter: # Apply filter if provided
+        svg_files = [f for f in svg_files if f.stem == deck_name_filter]
+        if not svg_files:
+            logger.warning("No W3C SVG file found matching filter: %s", deck_name_filter)
+            return
+
+    logger.info("Generating baselines for %d W3C SVG files...", len(svg_files))
+
+    for svg_file in svg_files:
+        deck_name = svg_file.stem
+        work_dir = Path(".visual_tmp") / "w3c" / deck_name
+        work_dir.mkdir(parents=True, exist_ok=True)
+        render_dir = work_dir / "render"
+        render_dir.mkdir(exist_ok=True)
+
+        pptx_path = work_dir / f"{deck_name}.pptx"
+        
+        try:
+            svg_text = svg_file.read_text(encoding="utf-8")
+            builder.build_from_svg(svg_text, pptx_path, source_path=svg_file)
+
+            slide_set = renderer.render(pptx_path, render_dir)
+
+            if not slide_set.images:
+                logger.warning("Renderer produced no slides for %s; skipping baseline.", deck_name)
+                continue
+
+            target_dir = golden_root / deck_name
+            target_dir.mkdir(parents=True, exist_ok=True)
+            for image in slide_set.images:
+                target_path = target_dir / image.name
+                logger.info("Writing W3C baseline %s", target_path)
+                target_path.write_bytes(Path(image).read_bytes())
+        except Exception as exc:
+            logger.error("Failed to generate baseline for %s: %s", deck_name, exc)
+            traceback.print_exc() # Print full traceback here!
 
 
 def generate_baseline(name: str, renderer: LibreOfficeRenderer, builder: PptxBuilder, golden: GoldenRepository) -> None:
@@ -141,6 +193,16 @@ def main() -> None:
         help="Generate baselines for a named suite (e.g. resvg).",
     )
     parser.add_argument(
+        "--w3c-all",
+        action="store_true",
+        help="Generate baselines for all W3C corpus SVG files.",
+    )
+    parser.add_argument(
+        "--w3c-filter", # Add a new argument for filtering
+        type=str,
+        help="Generate baseline for a specific W3C deck by name (e.g., 'animate-dom-01-f'). Implies --w3c-all.",
+    )
+    parser.add_argument(
         "--soffice",
         help="Explicit path to the soffice binary (defaults to PATH lookup).",
     )
@@ -180,6 +242,11 @@ def main() -> None:
         for fixture in fixture_names:
             logger.info("Generating resvg baseline for %s", fixture)
             generate_resvg_baseline(fixture, renderer, builder, baseline_root)
+    elif args.w3c_all or args.w3c_filter: # Modify this condition
+        logger.info("Generating baselines for W3C corpus...")
+        w3c_baseline_root = Path("tests/svg/baselines") # This is where run_corpus.py expects them
+        w3c_baseline_root.mkdir(parents=True, exist_ok=True)
+        generate_w3c_baselines(renderer, builder, w3c_baseline_root, deck_name_filter=args.w3c_filter) # Pass the filter
     else:
         scenario_names = args.scenarios or sorted(SCENARIOS)
         for scenario in scenario_names:
