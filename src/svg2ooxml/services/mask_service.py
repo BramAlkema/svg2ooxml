@@ -77,7 +77,12 @@ class StructuredMaskService:
             metadata["strategy"] = "none"
             return MaskComputeResult(strategy="none", geometry=None, diagnostics=diagnostics, metadata=metadata)
 
-        if classification in {MaskClassification.UNSUPPORTED, MaskClassification.EMPTY}:
+        if classification == MaskClassification.EMPTY:
+            diagnostics.append("Mask definition contains no drawable primitives; hiding masked content.")
+            metadata["strategy"] = "hide"
+            return MaskComputeResult(strategy="hide", geometry=None, diagnostics=diagnostics, metadata=metadata)
+
+        if classification == MaskClassification.UNSUPPORTED:
             diagnostics.append("Mask cannot be emitted natively; falling back to vector/raster fallback path.")
             metadata["strategy"] = "unsupported"
             return MaskComputeResult(strategy="unsupported", geometry=None, diagnostics=diagnostics, metadata=metadata)

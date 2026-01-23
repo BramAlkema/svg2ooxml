@@ -80,6 +80,12 @@ class MaskWriter:
         classification = mask_meta.get("classification")
         diagnostics: list[str] = list(mask_meta.get("diagnostics", []))
 
+        if strategy == "hide":
+            return "<!-- HIDDEN -->", diagnostics
+            
+        if strategy == "none":
+            return "", diagnostics
+
         if strategy in {"emf", "policy_emf"}:
             # Continue through new fallback ladder below.
             pass

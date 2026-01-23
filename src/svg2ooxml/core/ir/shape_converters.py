@@ -31,6 +31,7 @@ from svg2ooxml.core.traversal.geometry_utils import (
 )
 from svg2ooxml.core.ir.rectangles import convert_rect as convert_rectangle
 from svg2ooxml.core.styling.style_extractor import StyleResult
+from svg2ooxml.core.masks.baker import try_bake_mask
 
 
 class ShapeConversionMixin:
@@ -1479,6 +1480,24 @@ class ShapeConversionMixin:
         mask_ref = getattr(ir_object, "mask", None)
         if mask_ref is None:
             return
+            
+        # Attempt to bake the mask into the fill (Wild Idea!)
+        if hasattr(ir_object, "fill") and isinstance(ir_object.fill, SolidPaint):
+            new_fill, new_mask_ref = try_bake_mask(
+                ir_object.fill, 
+                mask_ref, 
+                services=getattr(self, "_services", None),
+                doc_root=getattr(self, "_svg_root", None)
+            )
+            if new_fill is not ir_object.fill:
+                # We baked it! Update the object (bypassing frozen state)
+                object.__setattr__(ir_object, "fill", new_fill)
+                object.__setattr__(ir_object, "mask", new_mask_ref)
+                
+                # If we successfully updated and mask is now None, we are done!
+                if ir_object.mask is None:
+                    return
+
         processor = getattr(self, "_mask_processor", None)
         if processor is None:
             return

@@ -205,9 +205,9 @@ def _convert_pattern(definition_id: str, pattern: ResvgPatternPaint) -> PatternP
 def _convert_stops(stops: Iterable[ResvgGradientStop]) -> list[GradientStop]:
     parsed = [
         GradientStop(
-            offset=stop.offset,
+            offset=_clamp01(stop.offset),
             rgb=_color_to_hex(stop.color),
-            opacity=stop.color.a,
+            opacity=_clamp01(stop.color.a),
         )
         for stop in stops
     ]
@@ -226,7 +226,7 @@ def _color_to_solid(color: Color, opacity: float | None) -> SolidPaint | None:
         return None
     alpha = _coerce_float(getattr(color, "a", None), 1.0)
     effective_opacity = alpha if opacity is None else opacity
-    return SolidPaint(rgb=hex_value, opacity=_coerce_float(effective_opacity, 1.0))
+    return SolidPaint(rgb=hex_value, opacity=_clamp01(effective_opacity))
 
 
 def _matrix_to_array(matrix: ResvgMatrix | None):

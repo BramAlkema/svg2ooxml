@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, Iterable, Tuple, TYPE_CHECKING
 
@@ -442,6 +443,20 @@ class DrawingMLWriter:
 
         clip_xml, clip_diags = clip_xml_for(getattr(element, "clip", None))
         mask_xml, mask_diags = self._mask_pipeline.render(element)
+        
+        if mask_xml == "<!-- HIDDEN -->":
+            mask_xml = ""
+            if hasattr(element, "opacity"):
+                try:
+                    element = replace(element, opacity=0.0)
+                except TypeError:
+                    pass
+            # For TextFrame, we rely on mask_xml propagation or handling downstream, 
+            # but TextFrame doesn't support opacity override easily.
+            # However, ShapeRenderer handles other types.
+            # If element is Group, we might need to handle children?
+            # Group has opacity.
+            
         if mask_xml:
             self._trace_writer(
                 "mask_applied",

@@ -126,6 +126,7 @@ class IRConverter:
 
         self._resvg_bridge.build(result.svg_root)
         self._resvg_tree = self._resvg_bridge.tree
+        self._shape_pipeline._svg_root = result.svg_root # Store root for baking
         self._context.prepare_style_context(result)
         self._css_context = self._context.css_context
         self._conversion_context = self._context.conversion_context
