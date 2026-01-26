@@ -107,6 +107,13 @@ class MotionAnimationHandler(AnimationHandler):
 
         return False
 
+    def _format_coord(self, value: float) -> str:
+        """Format normalized coordinate as a string."""
+        if abs(value) < 1e-10:
+            return "0"
+        formatted = f"{value:.6g}"
+        return formatted
+
     def build(
         self,
         animation: AnimationDefinition,
@@ -115,21 +122,7 @@ class MotionAnimationHandler(AnimationHandler):
     ) -> str:
         """Build PowerPoint timing XML for motion animation.
 
-        Generates <p:par> container with <a:animMotion> element containing:
-        - <a:cBhvr> with target shape
-        - <a:ptLst> with motion path points in EMU
-
-        Args:
-            animation: Animation definition to convert
-            par_id: Unique ID for the <p:par> element
-            behavior_id: Unique ID for the behavior element
-
-        Returns:
-            PowerPoint timing XML as string
-
-        Example:
-            >>> xml = handler.build(animation, par_id=1, behavior_id=2)
-            >>> # Returns: '<p:par>...<a:animMotion>...<a:ptLst>...</a:ptLst>...</a:animMotion>...</p:par>'
+        Generates <p:par> container with <a:animMotion> element.
         """
         # Extract motion path from values
         if not animation.values:
@@ -142,32 +135,48 @@ class MotionAnimationHandler(AnimationHandler):
         if len(points) < 2:
             return ""
 
-        # Build point list entries
-        point_entries = []
-        for x_px, y_px in points:
-            x_emu = self._units.to_emu(x_px, axis="x")
-            y_emu = self._units.to_emu(y_px, axis="y")
-            point_entries.append(
-                f'                                        <a:pt x="{int(round(x_emu))}" y="{int(round(y_emu))}"/>'
-            )
-
-        pt_lst = "\n".join(point_entries)
-
         # Build behavior core
+        # Note: attr_name_list triggers the generation of <p:attrNameLst> with ppt_x, ppt_y
         behavior_core = self._xml.build_behavior_core(
             behavior_id=behavior_id,
             duration_ms=animation.duration_ms,
             target_shape=animation.element_id if hasattr(animation, "element_id") else "",
+            attr_name_list=["ppt_x", "ppt_y"]
         )
 
         # Build animMotion element
+        # Convert points to normalized slide coordinates (fractions of slide width/height)
+        # Default PowerPoint slide size: 9144000 x 6858000 EMU
+        SLIDE_WIDTH_EMU = 9144000
+        SLIDE_HEIGHT_EMU = 6858000
+
+        path_segments: list[str] = []
+        # Initial point (usually 0,0 in relative space)
+        start_x_px, start_y_px = points[0]
+        
+        for i, (x_px, y_px) in enumerate(points):
+            # Calculate delta relative to start point in pixels
+            dx_px = x_px - start_x_px
+            dy_px = y_px - start_y_px
+            
+            # Convert delta to EMU
+            dx_emu = self._units.to_emu(dx_px, axis="x")
+            dy_emu = self._units.to_emu(dy_px, axis="y")
+            
+            # Normalize to slide dimensions
+            nx = dx_emu / SLIDE_WIDTH_EMU
+            ny = dy_emu / SLIDE_HEIGHT_EMU
+            
+            cmd = "M" if i == 0 else "L"
+            path_segments.append(f"{cmd} {self._format_coord(nx)} {self._format_coord(ny)}")
+            
+        motion_path_attr = " ".join(path_segments) + " "
+
         anim_motion = (
-            f'                                    <a:animMotion>\n'
+            f'                                    <p:animMotion origin="layout" path="{motion_path_attr}" pathEditMode="relative" rAng="0" ptsTypes="AA">\n'
             f'{behavior_core}'
-            f'                                        <a:ptLst>\n'
-            f'{pt_lst}\n'
-            f'                                        </a:ptLst>\n'
-            f'                                    </a:animMotion>'
+            f'                                        <p:rCtr x="4306" y="0"/>\n'
+            f'                                    </p:animMotion>'
         )
 
         # Build par container
@@ -176,6 +185,10 @@ class MotionAnimationHandler(AnimationHandler):
             duration_ms=animation.duration_ms,
             delay_ms=animation.begin_ms,
             child_content=anim_motion,
+            preset_id=0,
+            preset_class="path",
+            preset_subtype=0,
+            node_type="withEffect",
         )
 
         return par

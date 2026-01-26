@@ -33,6 +33,7 @@ class ParseResult:
     normalization_applied: bool = False
     width_px: float | None = None
     height_px: float | None = None
+    animations: list[Any] | None = None
     viewbox_scale: tuple[float, float] | None = None
     root_color: tuple[float, float, float, float] | None = None
     services: "ConversionServices | None" = None
@@ -59,6 +60,7 @@ class ParseResult:
         root_style: dict[str, Any] | None = None,
         width_px: float | None = None,
         height_px: float | None = None,
+        animations: list[Any] | None = None,
         viewbox_scale: tuple[float, float] | None = None,
         root_color: tuple[float, float, float, float] | None = None,
         normalization_changes: dict[str, Any] | None = None,
@@ -86,6 +88,7 @@ class ParseResult:
             root_style=root_style,
             width_px=width_px,
             height_px=height_px,
+            animations=animations,
             viewbox_scale=viewbox_scale,
             root_color=root_color,
             normalization_changes=normalization_changes,

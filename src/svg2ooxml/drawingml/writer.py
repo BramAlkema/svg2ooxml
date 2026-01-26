@@ -98,6 +98,10 @@ class DrawingMLWriter:
 
         prev_tracer = self._tracer
         self._tracer = tracer
+        import logging
+        debug_logger = logging.getLogger("drawingml.writer")
+        debug_logger.info("render_scene: animation_payload keys: %s", list(animation_payload.keys()) if animation_payload else None)
+        
         self._asset_registry = AssetRegistry()
         self._next_media_index = 1
         self._next_navigation_index = 1
@@ -134,9 +138,18 @@ class DrawingMLWriter:
             placeholder = "<!-- SHAPES WILL BE INSERTED HERE -->"
             slide_width, slide_height = slide_size or DEFAULT_SLIDE_SIZE
 
-            slide_xml = self._slide_template.replace("cx=\"9144000\"", f'cx="{slide_width}"')
-            slide_xml = slide_xml.replace("cy=\"6858000\"", f'cy="{slide_height}"')
+            slide_xml = self._slide_template.replace("{SLIDE_WIDTH}", str(slide_width))
+            slide_xml = slide_xml.replace("{SLIDE_HEIGHT}", str(slide_height))
             shapes_xml = "\n            ".join(fragments)
+            
+            # Log all offsets for debugging
+            import re
+            import logging
+            debug_logger = logging.getLogger("drawingml.writer")
+            offsets = re.findall(r'<a:off x="(\d+)" y="(\d+)"', shapes_xml)
+            debug_logger.info("Slide offsets: %s", offsets)
+            
+            # 2. Inject shapes into template fragments
             slide_xml = slide_xml.replace(placeholder, shapes_xml)
             animation_xml = self._build_animation_xml()
             if animation_xml:
@@ -171,6 +184,7 @@ class DrawingMLWriter:
         default_slide_size: Tuple[int, int] = DEFAULT_SLIDE_SIZE,
         tracer: "ConversionTracer | None" = None,
         animation_payload: dict[str, Any] | None = None,
+        animations: list | None = None, # Add animations parameter
     ) -> DrawingMLRenderResult:
         """Convenience wrapper that derives slide size from an IRScene."""
 
@@ -180,11 +194,19 @@ class DrawingMLWriter:
             slide_size = default_slide_size
         else:
             slide_size = (px_to_emu(width_px), px_to_emu(height_px))
+        
+        payload = animation_payload or {}
+        if animations is not None:
+            # If animations are explicitly passed, use them
+            payload = {"definitions": animations}
+        elif scene.animations:
+            payload = {"definitions": scene.animations}
+
         return self.render_scene(
             scene.elements,
             slide_size=slide_size,
             tracer=tracer,
-            animation_payload=animation_payload,
+            animation_payload=payload,
         )
 
     # ------------------------------------------------------------------

@@ -32,27 +32,11 @@ __all__ = ["DrawingMLAnimationWriter"]
 
 
 class DrawingMLAnimationWriter:
-    """Render animation definitions as DrawingML timing XML.
-
-    This class orchestrates multiple specialized handlers to convert
-    SVG animation definitions into PowerPoint timing XML. Each handler
-    is responsible for a specific animation type (opacity, color, transforms, etc.).
-
-    The writer:
-    1. Checks if animations should be skipped (via policy)
-    2. Selects appropriate handler for each animation
-    3. Delegates XML generation to handlers
-    4. Wraps results in PowerPoint timing structure
-    5. Integrates with conversion tracer for diagnostics
-
-    Example:
-        >>> writer = DrawingMLAnimationWriter()
-        >>> xml = writer.build(animations, timeline, tracer=tracer)
-    """
+    """Render animation definitions as DrawingML timing XML."""
 
     def __init__(self) -> None:
         """Initialize the animation writer with all components and handlers."""
-        self._id_counter = 1000  # Offset to avoid collisions with shape IDs
+        self._id_counter = 1  # Reset to 1 to match professional templates
 
         # Initialize core components
         self._unit_converter = UnitConverter()
@@ -63,7 +47,6 @@ class DrawingMLAnimationWriter:
         self._policy: AnimationPolicy | None = None
 
         # Initialize all handlers in priority order
-        # Order matters: more specific handlers should come first
         self._handlers: list[AnimationHandler] = [
             OpacityAnimationHandler(
                 self._xml_builder,
@@ -95,7 +78,6 @@ class DrawingMLAnimationWriter:
                 self._tav_builder,
                 self._unit_converter,
             ),
-            # NumericAnimationHandler is the catch-all (must be last)
             NumericAnimationHandler(
                 self._xml_builder,
                 self._value_processor,
@@ -111,21 +93,9 @@ class DrawingMLAnimationWriter:
         *,
         tracer: "ConversionTracer | None" = None,
         options: Mapping[str, Any] | None = None,
+        animated_shape_ids: list[str] | None = None,
     ) -> str:
-        """Build PowerPoint timing XML for a sequence of animations.
-
-        Args:
-            animations: Animation definitions to convert
-            timeline: Animation timeline/scenes (currently unused in new architecture)
-            tracer: Optional conversion tracer for diagnostics
-            options: Optional configuration (e.g., max_spline_error, fallback_mode)
-
-        Returns:
-            PowerPoint <p:timing> XML fragment, or empty string if no animations
-
-        Example:
-            >>> xml = writer.build([animation1, animation2], timeline, tracer=tracer)
-        """
+        """Build PowerPoint timing XML for a sequence of animations."""
         options = dict(options or {})
 
         # Initialize policy with build options
@@ -134,9 +104,13 @@ class DrawingMLAnimationWriter:
         fragments: list[str] = []
         last_skip_reason: str | None = None
 
+        import logging
+        debug_logger = logging.getLogger("drawingml.animation_writer")
+        
         # Process each animation
         for animation in animations:
             fragment, fragment_meta = self._build_animation(animation, options)
+            debug_logger.debug("Animation fragment for %s (%s): %s", animation.element_id, animation.target_attribute, "SUCCESS" if fragment else f"SKIPPED ({fragment_meta.get('reason') if fragment_meta else 'unknown'})")
 
             if fragment:
                 # Animation was successfully converted
@@ -152,10 +126,6 @@ class DrawingMLAnimationWriter:
                         "attribute": animation.target_attribute,
                         "fallback_mode": options.get("fallback_mode", "native"),
                     }
-                    if fragment_meta and "max_spline_error" in fragment_meta:
-                        event_meta["max_spline_error"] = fragment_meta[
-                            "max_spline_error"
-                        ]
                     tracer.record_stage_event(
                         stage="animation",
                         action="fragment_emitted",
@@ -185,48 +155,13 @@ class DrawingMLAnimationWriter:
 
         # If no animations converted successfully, return empty
         if not fragments:
-            if tracer is not None and animations:
-                metadata = {
-                    "reason": "no_supported_animations",
-                    "animation_count": len(animations),
-                    "fallback_mode": options.get("fallback_mode", "native"),
-                }
-                if last_skip_reason:
-                    metadata["skip_reason"] = last_skip_reason
-                tracer.record_stage_event(
-                    stage="animation",
-                    action="fragment_bundle_skipped",
-                    metadata=metadata,
-                )
             return ""
 
-        # Build complete timing XML
-        child_nodes = "\n".join(fragments)
-        timing_id = self._next_id()
-
-        if tracer is not None:
-            tracer.record_stage_event(
-                stage="animation",
-                action="fragment_bundle_emitted",
-                metadata={
-                    "animation_count": len(fragments),
-                    "timeline_frames": len(timeline),
-                    "fallback_mode": options.get("fallback_mode", "native"),
-                },
-            )
-
-        return (
-            "    <p:timing>\n"
-            "        <p:tnLst>\n"
-            f'            <p:par>\n'
-            f'                <p:cTn id="{timing_id}" dur="indefinite" restart="always">\n'
-            "                    <p:childTnLst>\n"
-            f"{child_nodes}\n"
-            "                    </p:childTnLst>\n"
-            "                </p:cTn>\n"
-            "            </p:par>\n"
-            "        </p:tnLst>\n"
-            "    </p:timing>"
+        # Build complete timing XML using the builder to get mainSeq wrapping
+        return self._xml_builder.build_timing_container(
+            timing_id=self._next_id(),
+            fragments=fragments,
+            animated_shape_ids=animated_shape_ids or []
         )
 
     def _build_animation(
@@ -234,18 +169,7 @@ class DrawingMLAnimationWriter:
         animation: AnimationDefinition,
         options: Mapping[str, Any],
     ) -> tuple[str, dict[str, Any] | None]:
-        """Build XML for a single animation.
-
-        Args:
-            animation: Animation definition to convert
-            options: Build options (e.g., max_spline_error)
-
-        Returns:
-            Tuple of (xml_fragment, metadata)
-            - xml_fragment: PowerPoint XML string (empty if skipped)
-            - metadata: Optional dict with skip reason, error estimates, etc.
-        """
-        # Initialize policy if not already done (for direct calls)
+        """Build XML for a single animation."""
         if self._policy is None:
             self._policy = AnimationPolicy(options)
 
@@ -254,10 +178,7 @@ class DrawingMLAnimationWriter:
         should_skip, skip_reason = self._policy.should_skip(animation, max_error)
 
         if should_skip:
-            metadata: dict[str, Any] = {"reason": skip_reason}
-            if max_error > 0:
-                metadata["max_spline_error"] = round(max_error, 6)
-            return "", metadata
+            return "", {"reason": skip_reason}
 
         # Find appropriate handler
         handler = self._find_handler(animation)
@@ -272,50 +193,25 @@ class DrawingMLAnimationWriter:
             xml = handler.build(animation, par_id, behavior_id)
             if not xml:
                 return "", {"reason": "handler_returned_empty"}
-
-            # Include spline error metadata if applicable
-            metadata = None
-            if max_error > 0:
-                metadata = {"max_spline_error": round(max_error, 6)}
-
-            return xml, metadata
-
+            return xml, None
         except Exception as e:
-            # If handler fails, return empty with error reason
             return "", {"reason": f"handler_error: {str(e)}"}
 
     def _find_handler(self, animation: AnimationDefinition) -> AnimationHandler | None:
-        """Find the first handler that can process this animation.
-
-        Handlers are checked in priority order (specific to general).
-
-        Args:
-            animation: Animation definition to match
-
-        Returns:
-            First matching handler, or None if no handler matches
-        """
+        """Find the first handler that can process this animation."""
         for handler in self._handlers:
             if handler.can_handle(animation):
                 return handler
         return None
 
     def _next_id(self) -> int:
-        """Generate next unique ID for timing elements.
-
-        Returns:
-            Unique integer ID
-        """
+        """Generate next unique ID for timing elements."""
         current_id = self._id_counter
         self._id_counter += 1
         return current_id
 
     def _allocate_ids(self) -> tuple[int, int]:
-        """Allocate pair of IDs (par_id, behavior_id) for an animation.
-
-        Returns:
-            Tuple of (par_id, behavior_id)
-        """
+        """Allocate pair of IDs (par_id, behavior_id) for an animation."""
         par_id = self._next_id()
         behavior_id = self._next_id()
         return par_id, behavior_id

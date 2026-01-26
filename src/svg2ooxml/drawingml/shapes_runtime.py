@@ -179,9 +179,6 @@ def render_path(
     stroke_xml = _format_block(stroke_to_xml(path.stroke, metadata=path.metadata), "        ")
     policy_geom = policy_for(path.metadata, "geometry")
     shape_name = f"Path {shape_id}"
-    if policy_geom:
-        suffix = ", ".join(f"{key}={value}" for key, value in sorted(policy_geom.items()))
-        shape_name += f" ({suffix})"
     if policy_geom.get("suggest_fallback") == FALLBACK_BITMAP:
         logger.warning(
             "Path %s marked for bitmap fallback by policy; emitting native geometry until bitmap exporter is available.",
@@ -240,10 +237,6 @@ def render_line(
     mask_xml: str = "",
 ) -> str:
     shape_name = f"Line {shape_id}"
-    policy_geom = policy_for(line.metadata, "geometry")
-    if policy_geom:
-        suffix = ", ".join(f"{key}={value}" for key, value in sorted(policy_geom.items()))
-        shape_name += f" ({suffix})"
 
     segments = [LineSegment(line.start, line.end)]
     geometry = path_generator.generate_custom_geometry(
@@ -649,10 +642,6 @@ def _render_polygonal_shape(
     bounds = geometry.bounds
 
     shape_name = f"{'Polygon' if closed else 'Polyline'} {shape_id}"
-    policy_geom = policy_for(getattr(shape, "metadata", None), "geometry")
-    if policy_geom:
-        suffix = ", ".join(f"{key}={value}" for key, value in sorted(policy_geom.items()))
-        shape_name += f" ({suffix})"
 
     fill_xml = paint_to_fill(getattr(shape, "fill", None))
     stroke_xml = stroke_to_xml(getattr(shape, "stroke", None), metadata=getattr(shape, "metadata", None))

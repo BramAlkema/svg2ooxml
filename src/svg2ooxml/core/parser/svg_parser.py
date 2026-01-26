@@ -252,6 +252,10 @@ class SVGParser:
         if self._config.strip_whitespace:
             self._strip_whitespace(root)
 
+        # Parse SMIL animations
+        from svg2ooxml.core.animation.parser import SMILParser
+        animations = SMILParser().parse_svg_animations(root)
+
         elapsed_ms = (time.perf_counter() - start_time) * 1000
         self._trace(
             tracer,
@@ -279,6 +283,7 @@ class SVGParser:
                 root_style=root_style,
                 width_px=width_px,
                 height_px=height_px,
+                animations=animations,
                 viewbox_scale=viewbox_scale,
                 root_color=root_color,
                 normalization_changes=normalization_changes,
@@ -307,6 +312,7 @@ class SVGParser:
                 root_style=root_style,
                 width_px=width_px,
                 height_px=height_px,
+                animations=animations,
                 viewbox_scale=viewbox_scale,
                 root_color=root_color,
                 normalization_changes=normalization_changes,
@@ -583,11 +589,7 @@ def parse_svg(
     tracer: "ConversionTracer | None" = None,
     source_path: str | None = None,
 ) -> ParseResult:
-    """Convenience helper that parses ``svg_content`` into a :class:`ParseResult`.
-
-    This keeps import-time dependencies light and avoids circular imports when
-    higher-level modules need a quick parser entry point.
-    """
+    """Convenience helper that parses ``svg_content`` into a :class:`ParseResult`."""
 
     parser = SVGParser(config=config, services=services)
     return parser.parse(svg_content, tracer=tracer, source_path=source_path)

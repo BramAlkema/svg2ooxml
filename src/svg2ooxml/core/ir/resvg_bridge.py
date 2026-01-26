@@ -43,6 +43,7 @@ class ResvgBridge:
         self._context = context
         self.tree: ResvgTree | None = None
         self.element_lookup: dict[etree._Element, ResvgBaseNode] = {}
+        self.global_transform_lookup: dict[tuple[tuple[str, int], ...], Any] = {}
         self.filter_descriptors: dict[str, Any] = {}
         self.clip_definitions: dict[str, ClipDefinition] = {}
         self.mask_info: dict[str, MaskInfo] = {}
@@ -52,6 +53,7 @@ class ResvgBridge:
         self.clip_definitions.clear()
         self.mask_info.clear()
         self.element_lookup.clear()
+        self.global_transform_lookup.clear()
         self.tree = None
 
         if resvg_normalize_element is None:
@@ -59,9 +61,8 @@ class ResvgBridge:
             return
 
         try:
-            # Use original lxml tree to avoid signature divergence during re-parsing
             result = resvg_normalize_element(svg_root)
-        except Exception:  # pragma: no cover - resvg bridge not ready
+        except Exception as e:
             self._context.trace_stage(
                 "normalization_failed",
                 stage="resvg",
@@ -74,66 +75,98 @@ class ResvgBridge:
             self._context.trace_stage("empty_tree", stage="resvg")
             return
 
-        # 1. Primary mapping: use the 'source' and 'use_source' links established during normalization.
-        # This is 100% reliable because we normalized the original DOM element tree directly.
+        # 1. Signature Pre-computation
+        xml_signatures: dict[tuple[tuple[str, int], ...], etree._Element] = {}
+        ignored_tags = {"style", "metadata", "title", "desc", "animate", "animateTransform", "animateMotion", "animateColor", "set", "mpath"}
+        for element in svg_root.iter():
+            if not isinstance(element.tag, str):
+                continue
+            tag = self._local_name(element.tag).lower()
+            if tag in ignored_tags:
+                continue
+            sig = self._element_signature(element)
+            if sig:
+                xml_signatures[sig] = element
+
+        # 2. Recursive Tree Traversal
         resvg_root_node = getattr(self.tree, "root", None)
-        ignored_tags = {"style", "defs", "metadata", "title", "desc"}
+        resvg_signatures: dict[tuple[tuple[str, int], ...], ResvgBaseNode] = {}
+        from svg2ooxml.common.geometry import Matrix2D
+        
+        def _walk_resvg(node: ResvgBaseNode, current_path: list[tuple[str, int]], parent_transform: Matrix2D):
+            # Calculate global transform for this node
+            local_transform = getattr(node, "transform", None)
+            if local_transform is not None:
+                if not isinstance(local_transform, Matrix2D):
+                    local_transform = Matrix2D.from_values(
+                        getattr(local_transform, 'a', 1.0),
+                        getattr(local_transform, 'b', 0.0),
+                        getattr(local_transform, 'c', 0.0),
+                        getattr(local_transform, 'd', 1.0),
+                        getattr(local_transform, 'e', 0.0),
+                        getattr(local_transform, 'f', 0.0)
+                    )
+                global_transform = parent_transform.multiply(local_transform)
+            else:
+                global_transform = parent_transform
+
+            sig = tuple(current_path)
+            self.global_transform_lookup[sig] = global_transform
+
+            # A. Primary Link
+            source_elem = getattr(node, "source", None)
+            if isinstance(source_elem, etree._Element):
+                self.element_lookup[source_elem] = node
+
+            # B. Record signature
+            if sig not in resvg_signatures:
+                resvg_signatures[sig] = node
+            
+            # Recurse through children
+            counts = defaultdict(int)
+            for child in getattr(node, 'children', []):
+                child_tag = self._local_name(child.tag).lower()
+                child_index = counts[child_tag]
+                counts[child_tag] += 1
+                _walk_resvg(child, current_path + [(child_tag, child_index)], global_transform)
+
         if resvg_root_node is not None:
-            for resvg_node in resvg_root_node.iter():
-                # source: the lxml element that was converted into this resvg node
-                source_elem = getattr(resvg_node, "source", None)
-                if isinstance(source_elem, etree._Element):
-                    tag = self._local_name(source_elem.tag).lower()
-                    if tag in ignored_tags:
-                        continue
-                    self.element_lookup[source_elem] = resvg_node
+            root_tag = self._local_name(resvg_root_node.tag).lower()
+            _walk_resvg(resvg_root_node, [(root_tag, 0)], Matrix2D.identity())
 
-                # use_source: the original <use> element if this node was cloned from a symbol
-                use_elem = getattr(resvg_node, "use_source", None)
-                if isinstance(use_elem, etree._Element):
-                    # For <use> expansion, we map the <use> element to the root of its clone.
-                    # Note: if multiple nodes point to the same use_source, the last one in iteration wins.
-                    # Usually the iteration follows document order, so this is consistent.
-                    self.element_lookup[use_elem] = resvg_node
-
-        # 2. Fallback: ID-based mapping for any elements that might have been missed
-        # (e.g. if source links were somehow lost).
+        # 3. Fallback Pass: Match by ID
         id_map = getattr(self.tree, "ids", {})
         if id_map:
             for element in svg_root.iter():
-                if element in self.element_lookup:
+                if element in self.element_lookup or not isinstance(element.tag, str):
                     continue
                 tag = self._local_name(element.tag).lower()
                 if tag in ignored_tags:
                     continue
                 element_id = element.get("id")
-                if not element_id:
-                    continue
-                resvg_node = id_map.get(element_id)
-                if resvg_node is not None:
-                    self.element_lookup[element] = resvg_node
+                if element_id and element_id in id_map:
+                    self.element_lookup[element] = id_map[element_id]
+
+        # 4. Final Resort: Match by signature
+        for sig, element in xml_signatures.items():
+            if element in self.element_lookup:
+                continue
+            resvg_node = resvg_signatures.get(sig)
+            if resvg_node is not None:
+                self.element_lookup[element] = resvg_node
 
         self._context.trace_stage(
             "tree_built",
             stage="resvg",
             metadata={
                 "mapped_elements": len(self.element_lookup),
+                "xml_signatures": len(xml_signatures),
+                "resvg_signatures": len(resvg_signatures),
             },
         )
 
         self.clip_definitions.update(collect_resvg_clip_definitions(self.tree))
         self.mask_info.update(collect_resvg_mask_info(self.tree))
-        self._context.trace_stage(
-            "definitions_loaded",
-            stage="clip",
-            metadata={"count": len(self.clip_definitions)},
-        )
-        self._context.trace_stage(
-            "definitions_loaded",
-            stage="mask",
-            metadata={"count": len(self.mask_info)},
-        )
-
         self._register_filters()
         self._register_paints()
 
@@ -157,15 +190,8 @@ class ResvgBridge:
                 descriptor = resolve_filter_node(filter_node)
                 self.filter_descriptors[filter_id] = descriptor
                 filter_service.register_filter(filter_id, descriptor)
-            except Exception:  # pragma: no cover - bridge errors fall back to legacy path
+            except Exception:
                 self._context.logger.debug("Failed to register resvg filter %s", filter_id, exc_info=True)
-
-        if self.filter_descriptors:
-            self._context.trace_stage(
-                "filters_registered",
-                stage="filter",
-                metadata={"count": len(self.filter_descriptors)},
-            )
 
     def _register_paints(self) -> None:
         if self.tree is None or PaintReference is None:
@@ -183,7 +209,7 @@ class ResvgBridge:
                 continue
             try:
                 resolved = self.tree.resolve_paint(PaintReference(f"#{paint_id}"))
-            except Exception:  # pragma: no cover - defensive
+            except Exception:
                 continue
 
             if isinstance(resolved, LinearGradient):
@@ -200,20 +226,10 @@ class ResvgBridge:
         gradient_service = getattr(services, "gradient_service", None)
         if gradient_descriptors and gradient_service is not None and hasattr(gradient_service, "update_definitions"):
             gradient_service.update_definitions(gradient_descriptors)
-            self._context.trace_stage(
-                "gradients_registered",
-                stage="paint",
-                metadata={"count": len(gradient_descriptors)},
-            )
 
         pattern_service = getattr(services, "pattern_service", None)
         if pattern_descriptors and pattern_service is not None and hasattr(pattern_service, "update_definitions"):
             pattern_service.update_definitions(pattern_descriptors)
-            self._context.trace_stage(
-                "patterns_registered",
-                stage="paint",
-                metadata={"count": len(pattern_descriptors)},
-            )
 
     @staticmethod
     def _local_name(tag: Any) -> str:

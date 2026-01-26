@@ -127,13 +127,13 @@ class OpacityAnimationHandler(AnimationHandler):
 
         # Build animEffect element with fade filter
         anim_effect = (
-            f'                                    <a:animEffect>\n'
+            f'                                    <p:animEffect>\n'
             f'{behavior_core}'
-            f'                                        <a:transition in="1" out="0"/>\n'
-            f'                                        <a:filter>\n'
-            f'                                            <a:fade opacity="{target_opacity}"/>\n'
-            f'                                        </a:filter>\n'
-            f'                                    </a:animEffect>'
+            f'                                        <p:transition in="1" out="0"/>\n'
+            f'                                        <p:filter>\n'
+            f'                                            <p:fade opacity="{target_opacity}"/>\n'
+            f'                                        </p:filter>\n'
+            f'                                    </p:animEffect>'
         )
 
         # Build par container
@@ -142,6 +142,10 @@ class OpacityAnimationHandler(AnimationHandler):
             duration_ms=animation.duration_ms,
             delay_ms=animation.begin_ms,
             child_content=anim_effect,
+            preset_id=1,
+            preset_class="entr",
+            preset_subtype=0,
+            node_type="withEffect",
         )
 
         return par

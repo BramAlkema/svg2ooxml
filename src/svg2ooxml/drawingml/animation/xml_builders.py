@@ -2,9 +2,6 @@
 
 This module provides safe, composable builders for PowerPoint's timing XML
 structures (<p:timing>, <p:par>, <a:cBhvr>, <a:tav>, etc.).
-
-All animation XML generation should use these builders instead of string
-concatenation to ensure proper escaping, namespace handling, and structure.
 """
 
 from __future__ import annotations
@@ -25,25 +22,7 @@ __all__ = ["AnimationXMLBuilder"]
 
 
 class AnimationXMLBuilder:
-    """Build PowerPoint animation timing XML using lxml.
-
-    Provides methods for building timing structures:
-    - Timing containers (<p:timing>)
-    - Parallel containers (<p:par>)
-    - Common behavior (<a:cBhvr>)
-    - Time-animated values (<a:tav>)
-    - Attribute lists (<a:attrNameLst>)
-    - Start conditions (<p:cond>)
-
-    Example:
-        >>> builder = AnimationXMLBuilder()
-        >>> par = builder.build_par_container(
-        ...     par_id=1001,
-        ...     duration_ms=1000,
-        ...     delay_ms=0,
-        ...     child_content="<a:anim>...</a:anim>"
-        ... )
-    """
+    """Build PowerPoint animation timing XML using lxml."""
 
     # ------------------------------------------------------------------ #
     # Top-Level Containers                                               #
@@ -54,39 +33,53 @@ class AnimationXMLBuilder:
         *,
         timing_id: int,
         fragments: list[str],
+        animated_shape_ids: list[str],
     ) -> str:
-        """Build <p:timing> root container.
-
-        Args:
-            timing_id: Unique ID for timing element
-            fragments: List of XML fragment strings (animation sequences)
-
-        Returns:
-            Complete <p:timing> XML string
-
-        Example:
-            >>> xml = builder.build_timing_container(
-            ...     timing_id=1,
-            ...     fragments=["<p:par>...</p:par>"]
-            ... )
-        """
+        """Build <p:timing> root container with mainSeq hierarchy."""
         timing = p_elem("timing")
         tnlst = p_sub(timing, "tnLst")
-        par = p_sub(tnlst, "par")
+        
+        # 1. tmRoot container
+        root_par = p_sub(tnlst, "par")
+        root_ctn = p_sub(root_par, "cTn", id=str(timing_id), dur="indefinite", restart="never", nodeType="tmRoot")
+        root_child_tn_lst = p_sub(root_ctn, "childTnLst")
+        
+        # 2. mainSeq container
+        seq = p_sub(root_child_tn_lst, "seq", concurrent="1", nextAc="seek")
+        seq_ctn = p_sub(seq, "cTn", id=str(timing_id + 1), dur="indefinite", nodeType="mainSeq")
+        child_tn_lst = p_sub(seq_ctn, "childTnLst")
 
-        ctn = p_sub(par, "cTn", id=str(timing_id), dur="indefinite", restart="never", nodeType="tmRoot")
-
-        childTnLst = p_sub(ctn, "childTnLst")
-
-        # Append each fragment as raw XML
+        # 3. Append fragments directly to mainSeq
         for fragment in fragments:
-            # Parse fragment and append to childTnLst
             try:
-                frag_elem = etree.fromstring(fragment)
-                childTnLst.append(frag_elem)
+                from svg2ooxml.drawingml.xml_builder import NS_A, NS_P
+                wrapped = f'<root xmlns:a="{NS_A}" xmlns:p="{NS_P}">{fragment}</root>'
+                root = etree.fromstring(wrapped)
+                if len(root) > 0:
+                    child = root[0]
+                    # Strip duplicated namespaces
+                    for prefix in ("a", "p"):
+                        attr_name = f"{{http://www.w3.org/2000/xmlns/}}{prefix}"
+                        if attr_name in child.attrib:
+                            del child.attrib[attr_name]
+                    child_tn_lst.append(child)
             except etree.XMLSyntaxError:
-                # If fragment is malformed, skip it
                 continue
+
+        # Add navigation triggers to the sequence (Standard PowerPoint behavior)
+        prev_cond_lst = p_sub(seq, "prevCondLst")
+        prev_cond = p_sub(prev_cond_lst, "cond", evt="onPrev", delay="0")
+        p_sub(p_sub(prev_cond, "tgtEl"), "sldTgt")
+
+        next_cond_lst = p_sub(seq, "nextCondLst")
+        next_cond = p_sub(next_cond_lst, "cond", evt="onNext", delay="0")
+        p_sub(p_sub(next_cond, "tgtEl"), "sldTgt")
+
+        # 4. Build List (p:bldLst)
+        if animated_shape_ids:
+            bld_lst = p_sub(timing, "bldLst")
+            for shape_id in animated_shape_ids:
+                p_sub(bld_lst, "bldP", spid=shape_id, grpId="0", animBg="1")
 
         return to_string(timing)
 
@@ -97,67 +90,50 @@ class AnimationXMLBuilder:
         duration_ms: int,
         delay_ms: int,
         child_content: str,
+        preset_id: int = 0,
+        preset_class: str = "entr",
+        preset_subtype: int = 0,
+        node_type: str = "withEffect",
     ) -> str:
-        """Build <p:par> container with timing.
-
-        Args:
-            par_id: Unique ID for par element
-            duration_ms: Duration in milliseconds
-            delay_ms: Delay in milliseconds
-            child_content: Inner XML content (animation effects)
-
-        Returns:
-            Complete <p:par> XML string
-
-        Example:
-            >>> xml = builder.build_par_container(
-            ...     par_id=1001,
-            ...     duration_ms=1000,
-            ...     delay_ms=0,
-            ...     child_content="<a:animEffect>...</a:animEffect>"
-            ... )
-        """
+        """Build <p:par> container with timing and preset metadata."""
         par = p_elem("par")
-        ctn = p_sub(par, "cTn", id=str(par_id), dur=str(duration_ms), fill="hold")
+        ctn = p_sub(
+            par, "cTn", 
+            id=str(par_id), 
+            dur=str(duration_ms), 
+            fill="hold", 
+            nodeType=node_type,
+            presetID=str(preset_id),
+            presetClass=preset_class,
+            presetSubtype=str(preset_subtype),
+            grpId="0"
+        )
 
-        # Start condition (always add, even for delay=0)
-        start_elem = self.build_start_condition(delay_ms)
+        # Start condition
         stCondLst = p_sub(ctn, "stCondLst")
-        stCondLst.append(start_elem)
+        p_sub(stCondLst, "cond", delay=str(delay_ms)) # Revert to original delay, no evt
 
         # Child timing list
-        childTnLst = p_sub(ctn, "childTnLst")
+        child_tn_lst = p_sub(ctn, "childTnLst")
 
         # Parse and append child content
         if child_content and child_content.strip():
             try:
-                # Wrap content with namespace declarations for parsing
                 from svg2ooxml.drawingml.xml_builder import NS_A, NS_P
                 wrapped = f'<root xmlns:a="{NS_A}" xmlns:p="{NS_P}">{child_content}</root>'
                 root = etree.fromstring(wrapped)
-                # Extract and append the child element
                 if len(root) > 0:
                     child = root[0]
+                    # Strip duplicated namespaces
                     for prefix in ("a", "p"):
                         attr_name = f"{{http://www.w3.org/2000/xmlns/}}{prefix}"
                         if attr_name in child.attrib:
                             del child.attrib[attr_name]
-                    childTnLst.append(child)
+                    child_tn_lst.append(child)
             except etree.XMLSyntaxError:
-                pass  # Skip malformed content
+                pass
 
-        result = to_string(par)
-        from svg2ooxml.drawingml.xml_builder import NS_A
-        namespace_decl = f'xmlns:a="{NS_A}"'
-        for tag in ("<a:anim", "<a:animMotion", "<a:animScale"):
-            needle = f"{tag} {namespace_decl}"
-            if needle in result:
-                result = result.replace(needle, tag + "")
-        return result
-
-    # ------------------------------------------------------------------ #
-    # Common Behavior                                                    #
-    # ------------------------------------------------------------------ #
+        return to_string(par)
 
     def build_behavior_core(
         self,
@@ -168,36 +144,18 @@ class AnimationXMLBuilder:
         repeat_count: str | int | None = None,
         accel: int | None = None,
         decel: int | None = None,
-        attribute_list: etree._Element | None = None,
+        attr_name_list: list[str] | None = None,
     ) -> str:
-        """Build <a:cBhvr> common behavior element.
-
-        Args:
-            behavior_id: Unique ID for behavior
-            duration_ms: Duration in milliseconds
-            target_shape: Target shape ID/reference
-            repeat_count: Repeat count (number or "indefinite")
-            accel: Acceleration percentage (0-100000)
-            decel: Deceleration percentage (0-100000)
-            attribute_list: Optional attribute name list element (<a:attrNameLst>)
-
-        Returns:
-            XML string for <a:cBhvr>
-
-        Example:
-            >>> bhvr = builder.build_behavior_core(
-            ...     behavior_id=1002,
-            ...     duration_ms=1000,
-            ...     target_shape="shape1"
-            ... )
-        """
-        cBhvr = a_elem("cBhvr")
+        """Build <p:cBhvr> common behavior element."""
+        cBhvr = p_elem("cBhvr")
 
         # Common timing node
         ctn_attrs = {
             "id": str(behavior_id),
             "dur": str(duration_ms),
             "fill": "hold",
+            "repeatCount": "0",
+            "nodeType": "withEffect",
         }
 
         if repeat_count is not None:
@@ -207,48 +165,35 @@ class AnimationXMLBuilder:
         if decel is not None:
             ctn_attrs["decel"] = str(decel)
 
-        cTn = a_sub(cBhvr, "cTn", **ctn_attrs)
+        cTn = p_sub(cBhvr, "cTn", **ctn_attrs)
+
+        # Start condition list for the behavior's internal time node
+        stCondLst = p_sub(cTn, "stCondLst")
+        p_sub(stCondLst, "cond", delay="0")
 
         # Target element
-        tgtEl = a_sub(cBhvr, "tgtEl")
-        spTgt = a_sub(tgtEl, "spTgt", spid=target_shape)
+        tgtEl = p_sub(cBhvr, "tgtEl")
+        spTgt = p_sub(tgtEl, "spTgt", spid=target_shape)
 
-        # Optional attribute list (for color, numeric, set animations)
-        if attribute_list is not None:
-            cBhvr.append(attribute_list)
+        # Optional attribute list
+        if attr_name_list is not None:
+            attrNameLst = self.build_attribute_list(attr_name_list)
+            cBhvr.append(attrNameLst)
 
         return to_string(cBhvr)
-
-    # ------------------------------------------------------------------ #
-    # Attribute Lists                                                    #
-    # ------------------------------------------------------------------ #
 
     def build_attribute_list(
         self,
         attribute_names: list[str],
     ) -> etree._Element:
-        """Build <a:attrNameLst> attribute name list.
-
-        Args:
-            attribute_names: List of attribute names
-
-        Returns:
-            lxml Element for <a:attrNameLst>
-
-        Example:
-            >>> attr_list = builder.build_attribute_list(["ppt_x", "ppt_y"])
-        """
-        attrNameLst = a_elem("attrNameLst")
+        """Build <p:attrNameLst> attribute name list."""
+        attrNameLst = p_elem("attrNameLst")
 
         for name in attribute_names:
-            elem = a_sub(attrNameLst, "attrName")
-            elem.set("val", name)
+            elem = p_sub(attrNameLst, "attrName")
+            elem.text = name
 
         return attrNameLst
-
-    # ------------------------------------------------------------------ #
-    # Time-Animated Values (TAV)                                         #
-    # ------------------------------------------------------------------ #
 
     def build_tav_element(
         self,
@@ -259,37 +204,14 @@ class AnimationXMLBuilder:
         decel: int = 0,
         metadata: dict[str, str] | None = None,
     ) -> etree._Element:
-        """Build <a:tav> time-animated value element.
+        """Build <p:tav> time-animated value element."""
+        tav = p_elem("tav", tm=str(tm))
 
-        Args:
-            tm: Time percentage (0-100000)
-            value_elem: Value element (<a:val> or similar)
-            accel: Acceleration percentage (0-100000)
-            decel: Deceleration percentage (0-100000)
-            metadata: Optional metadata attributes (for custom svg2: namespace)
-
-        Returns:
-            lxml Element for <a:tav>
-
-        Example:
-            >>> val = a_elem("val", val="100")
-            >>> tav = builder.build_tav_element(
-            ...     tm=0,
-            ...     value_elem=val,
-            ...     accel=0,
-            ...     decel=0
-            ... )
-        """
-        tav = a_elem("tav", tm=str(tm))
-
-        svg2_attrs: dict[str, str] = {}
-
-        # Add metadata attributes (e.g., svg2:spline)
+        # Add metadata attributes
         if metadata:
             for key, value in metadata.items():
                 if key.startswith("svg2:"):
                     attr_name = key.split(":", 1)[1]
-                    svg2_attrs[attr_name] = value
                     tav.set(f"{{{SVG2_ANIMATION_NS}}}{attr_name}", value)
                 else:
                     tav.set(key, value)
@@ -297,109 +219,40 @@ class AnimationXMLBuilder:
         # Append value element
         tav.append(value_elem)
 
-        needs_tav_pr = accel > 0 or decel > 0
-
-        tav_pr = None
-        if needs_tav_pr:
-            tav_pr = a_sub(tav, "tavPr")
-
-        if tav_pr is not None:
+        if accel > 0 or decel > 0:
+            tav_pr = p_sub(tav, "tavPr")
             if accel > 0:
                 tav_pr.set("accel", str(accel))
             if decel > 0:
                 tav_pr.set("decel", str(decel))
-            # svg2 metadata already attached to <a:tav>; no need to mirror
 
         return tav
-
-    # ------------------------------------------------------------------ #
-    # Start Conditions                                                   #
-    # ------------------------------------------------------------------ #
-
-    def build_start_condition(
-        self,
-        delay_ms: int,
-    ) -> etree._Element:
-        """Build <p:cond> start condition element.
-
-        Args:
-            delay_ms: Delay in milliseconds
-
-        Returns:
-            lxml Element for <p:cond>
-
-        Example:
-            >>> cond = builder.build_start_condition(1000)
-        """
-        cond = p_elem("cond", delay=str(delay_ms))
-        return cond
-
-    # ------------------------------------------------------------------ #
-    # Helper: Build TAV List Container                                   #
-    # ------------------------------------------------------------------ #
 
     def build_tav_list_container(
         self,
         tav_elements: list[etree._Element],
     ) -> etree._Element:
-        """Build <a:tavLst> container with TAV elements.
-
-        Args:
-            tav_elements: List of <a:tav> elements
-
-        Returns:
-            lxml Element for <a:tavLst>
-
-        Example:
-            >>> tav1 = builder.build_tav_element(tm=0, value_elem=...)
-            >>> tav2 = builder.build_tav_element(tm=100000, value_elem=...)
-            >>> tavLst = builder.build_tav_list_container([tav1, tav2])
-        """
-        tavLst = a_elem("tavLst")
-
+        """Build <p:tavLst> container."""
+        tavLst = p_elem("tavLst")
         for tav in tav_elements:
             tavLst.append(tav)
-
         return tavLst
 
-    # ------------------------------------------------------------------ #
-    # Helper: Build Value Elements                                       #
-    # ------------------------------------------------------------------ #
-
     def build_numeric_value(self, value: str) -> etree._Element:
-        """Build <a:val val="..."/> for numeric values.
-
-        Args:
-            value: Numeric value as string
-
-        Returns:
-            lxml Element for <a:val>
-        """
-        return a_elem("val", val=value)
+        """Build <p:val><p:fltVal val="..."/></p:val> for numeric values."""
+        val = p_elem("val")
+        p_sub(val, "fltVal", val=value)
+        return val
 
     def build_color_value(self, hex_color: str) -> etree._Element:
-        """Build <a:val><a:srgbClr val="..."/></a:val> for colors.
-
-        Args:
-            hex_color: Color in hex format (without #)
-
-        Returns:
-            lxml Element for <a:val> containing <a:srgbClr>
-        """
-        val = a_elem("val")
-        a_sub(val, "srgbClr", val=hex_color)
+        """Build <p:val><p:clr><p:srgbClr val="..."/></p:clr></p:val>."""
+        val = p_elem("val")
+        clr = p_sub(val, "clr")
+        p_sub(clr, "srgbClr", val=hex_color)
         return val
 
     def build_point_value(self, x: str, y: str) -> etree._Element:
-        """Build <a:val><a:pt x="..." y="..."/></a:val> for points.
-
-        Args:
-            x: X coordinate as string
-            y: Y coordinate as string
-
-        Returns:
-            lxml Element for <a:val> containing <a:pt>
-        """
-        val = a_elem("val")
-        a_sub(val, "pt", x=x, y=y)
+        """Build <p:val><p:pt x="..." y="..."/></p:val>."""
+        val = p_elem("val")
+        p_sub(val, "pt", x=x, y=y)
         return val

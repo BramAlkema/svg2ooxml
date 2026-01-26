@@ -57,6 +57,9 @@ class SMILParser:
         animations: list[AnimationDefinition] = []
         animation_elements = self._find_animation_elements(svg_element)
 
+        # Pre-assign IDs to target elements if they don't have one
+        self._ensure_target_ids(animation_elements)
+
         for element in animation_elements:
             try:
                 definition = self._parse_animation_element(element)
@@ -156,17 +159,36 @@ class SMILParser:
         }
         return mapping.get(tag_name)
 
+    def _ensure_target_ids(self, elements: list[etree._Element]) -> None:
+        """Assign synthetic IDs to elements that are targets of animations but lack an ID."""
+        counter = 0
+        for element in elements:
+            # Check if it has a target via href
+            href = element.get("href") or element.get("{http://www.w3.org/1999/xlink}href")
+            if href and href.startswith("#"):
+                continue
+            
+            # Check parent
+            parent = element.getparent()
+            if parent is not None and not parent.get("id"):
+                synthetic_id = f"anim-target-{counter}"
+                parent.set("id", synthetic_id)
+                counter += 1
+
     def _get_target_element_id(self, element: etree._Element) -> str | None:
+        # 1. Standard href or xlink:href
         href = element.get("href") or element.get("{http://www.w3.org/1999/xlink}href")
         if href and href.startswith("#"):
             return href[1:]
 
+        # 2. Parent fallback (now guaranteed to have an ID if it's an anim parent)
         parent = element.getparent()
         if parent is not None:
             parent_id = parent.get("id")
             if parent_id:
                 return parent_id
 
+        # 3. Non-standard target attribute
         target = element.get("target")
         if target and target.startswith("#"):
             return target[1:]

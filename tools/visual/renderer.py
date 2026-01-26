@@ -101,8 +101,14 @@ class LibreOfficeRenderer:
         output_dir = Path(output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
 
+        # Create a unique temporary directory for this render pass to avoid locking issues
+        import tempfile
+        user_install_dir = Path(tempfile.mkdtemp(prefix="soffice_user_"))
+        user_install_uri = user_install_dir.resolve().as_uri()
+
         soffice_args = [
             *self.base_args(),
+            f"-env:UserInstallation={user_install_uri}",
             "--convert-to",
             "png:impress_png_Export",
             "--outdir",
@@ -127,33 +133,40 @@ class LibreOfficeRenderer:
                 raise VisualRendererError(f"LibreOffice timed out after {self._timeout} seconds.") from exc
 
         cmd = [self._command_path or "soffice", *soffice_args]  # guarded above
-        completed = _run(cmd)
-        tried_open = False
-        if completed.returncode != 0 and platform.system() == "Darwin":
-            open_cmd = self._macos_open_command(soffice_args)
-            if open_cmd:
-                tried_open = True
-                completed = _run(open_cmd)
+        try:
+            completed = _run(cmd)
+            tried_open = False
+            if completed.returncode != 0 and platform.system() == "Darwin":
+                open_cmd = self._macos_open_command(soffice_args)
+                if open_cmd:
+                    tried_open = True
+                    completed = _run(open_cmd)
 
-        if completed.returncode != 0:
-            message_lines = [
-                "LibreOffice failed to render PPTX.",
-                f"exit code: {completed.returncode}",
-            ]
-            if tried_open:
-                message_lines.append("LibreOffice failed when launched via open(1) as well.")
-            if completed.stdout:
-                message_lines.append(f"stdout:\n{completed.stdout}")
-            if completed.stderr:
-                message_lines.append(f"stderr:\n{completed.stderr}")
-            if completed.returncode == 134 and platform.system() == "Darwin":
-                mac_version = platform.mac_ver()[0]
-                if mac_version.startswith("26."):
-                    message_lines.append(
-                        "hint: LibreOffice headless appears to crash on macOS 26.x here. "
-                        "Try a different LibreOffice build or run visual tests on macOS 25.x."
-                    )
-            raise VisualRendererError("\n".join(message_lines))
+            if completed.returncode != 0:
+                message_lines = [
+                    "LibreOffice failed to render PPTX.",
+                    f"exit code: {completed.returncode}",
+                ]
+                if tried_open:
+                    message_lines.append("LibreOffice failed when launched via open(1) as well.")
+                if completed.stdout:
+                    message_lines.append(f"stdout:\n{completed.stdout}")
+                if completed.stderr:
+                    message_lines.append(f"stderr:\n{completed.stderr}")
+                if completed.returncode == 134 and platform.system() == "Darwin":
+                    mac_version = platform.mac_ver()[0]
+                    if mac_version.startswith("26."):
+                        message_lines.append(
+                            "hint: LibreOffice headless appears to crash on macOS 26.x here. "
+                            "Try a different LibreOffice build or run visual tests on macOS 25.x."
+                        )
+                raise VisualRendererError("\n".join(message_lines))
+        finally:
+            # Clean up the temporary user installation directory
+            try:
+                shutil.rmtree(user_install_dir)
+            except Exception:
+                pass
 
         generated = sorted(output_dir.glob("*.png"))
         if not generated:
@@ -212,19 +225,21 @@ class PowerPointRenderer:
         try:
             from tools.visual import powerpoint_capture
 
-            powerpoint_capture.capture_pptx_slideshow_all(
+            output_path = output_dir / "slide_1.png"
+            powerpoint_capture.capture_pptx_window(
                 pptx_path,
-                output_dir,
+                output_path,
                 self._delay,
-                self._slideshow_delay,
-                self._slide_delay,
-                self._open_timeout,
-                self._capture_timeout,
-                exit_after=True,
-                use_keys=self._use_keys,
-                allow_reopen=self._allow_reopen,
                 backend=self._backend,
+                capture_timeout=self._capture_timeout,
             )
+            
+            # Post-process: Trim window chrome and black borders
+            if output_path.exists():
+                subprocess.run(
+                    ["magick", str(output_path), "-fuzz", "15%", "-trim", "+repage", str(output_path)],
+                    check=False
+                )
         except Exception as exc:
             raise VisualRendererError(str(exc)) from exc
 

@@ -205,6 +205,8 @@ def _parse_path_data(path_data: Optional[str]) -> Iterable[PathCommand]:
                 commands.append(PathCommand(LINE_TO, (current[0], current[1])))
                 prev_ctrl = None
             elif command == CUBIC_TO:
+                if idx + 6 > len(numbers):
+                    break
                 x1, y1, x2, y2, x, y = numbers[idx : idx + 6]
                 idx += 6
                 if not absolute:
@@ -218,6 +220,8 @@ def _parse_path_data(path_data: Optional[str]) -> Iterable[PathCommand]:
                 prev_ctrl = (x2, y2)
                 current = (x, y)
             elif command == SMOOTH_CUBIC_TO:
+                if idx + 4 > len(numbers):
+                    break
                 x2, y2, x, y = numbers[idx : idx + 4]
                 idx += 4
                 if not absolute:
@@ -233,6 +237,8 @@ def _parse_path_data(path_data: Optional[str]) -> Iterable[PathCommand]:
                 prev_ctrl = (x2, y2)
                 current = (x, y)
             elif command == QUAD_TO:
+                if idx + 4 > len(numbers):
+                    break
                 x1, y1, x, y = numbers[idx : idx + 4]
                 idx += 4
                 if not absolute:
@@ -244,6 +250,8 @@ def _parse_path_data(path_data: Optional[str]) -> Iterable[PathCommand]:
                 prev_ctrl = (x1, y1)
                 current = (x, y)
             elif command == SMOOTH_QUAD_TO:
+                if idx + 2 > len(numbers):
+                    break
                 x, y = numbers[idx : idx + 2]
                 idx += 2
                 if not absolute:
@@ -257,6 +265,8 @@ def _parse_path_data(path_data: Optional[str]) -> Iterable[PathCommand]:
                 prev_ctrl = ctrl
                 current = (x, y)
             elif command == ARC_TO:
+                if idx + 7 > len(numbers):
+                    break
                 rx, ry, rot, large, sweep, x, y = numbers[idx : idx + 7]
                 idx += 7
                 if not absolute:

@@ -1,21 +1,21 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<p:sldLayout xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
-             xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+<p:sldLayout xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
              xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"
-             type="tx" preserve="1">
-    <p:cSld name="Content Only">
+             xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+             type="titleOnly" preserve="1">
+    <p:cSld name="Title Only">
         <p:spTree>
             <p:nvGrpSpPr>
-                <p:cNvPr id="1" name=""/>
+                <p:cNvPr id="1" name="Title Only Layout"/>
                 <p:cNvGrpSpPr/>
                 <p:nvPr/>
             </p:nvGrpSpPr>
             <p:grpSpPr>
                 <a:xfrm>
                     <a:off x="0" y="0"/>
-                    <a:ext cx="0" cy="0"/>
+                    <a:ext cx="{SLIDE_WIDTH}" cy="{SLIDE_HEIGHT}"/>
                     <a:chOff x="0" y="0"/>
-                    <a:chExt cx="0" cy="0"/>
+                    <a:chExt cx="{SLIDE_WIDTH}" cy="{SLIDE_HEIGHT}"/>
                 </a:xfrm>
             </p:grpSpPr>
         </p:spTree>
