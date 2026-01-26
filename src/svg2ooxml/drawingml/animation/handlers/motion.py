@@ -146,9 +146,8 @@ class MotionAnimationHandler(AnimationHandler):
 
         # Build animMotion element
         # Convert points to normalized slide coordinates (fractions of slide width/height)
-        # Default PowerPoint slide size: 9144000 x 6858000 EMU
-        SLIDE_WIDTH_EMU = 9144000
-        SLIDE_HEIGHT_EMU = 6858000
+        from svg2ooxml.drawingml.writer import DEFAULT_SLIDE_SIZE
+        SLIDE_WIDTH_EMU, SLIDE_HEIGHT_EMU = DEFAULT_SLIDE_SIZE
 
         path_segments: list[str] = []
         # Initial point (usually 0,0 in relative space)
@@ -172,8 +171,13 @@ class MotionAnimationHandler(AnimationHandler):
             
         motion_path_attr = " ".join(path_segments) + " "
 
+        # ptsTypes: one character per path point, "A" = auto/anchor point type
+        pts_types = "A" * len(points)
+
+        # rCtr: rotation center for the motion path animation
+        # x="4306" (~0.005 inches) is a small offset calibrated from golden master PPTX files
         anim_motion = (
-            f'                                    <p:animMotion origin="layout" path="{motion_path_attr}" pathEditMode="relative" rAng="0" ptsTypes="AA">\n'
+            f'                                    <p:animMotion origin="layout" path="{motion_path_attr}" pathEditMode="relative" rAng="0" ptsTypes="{pts_types}">\n'
             f'{behavior_core}'
             f'                                        <p:rCtr x="4306" y="0"/>\n'
             f'                                    </p:animMotion>'
