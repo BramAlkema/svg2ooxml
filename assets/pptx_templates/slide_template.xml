@@ -1,20 +1,20 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<p:sld
-      
-      >
+<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+       xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+       xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
     <p:cSld>
         <p:spTree>
             <p:nvGrpSpPr>
-                <p:cNvPr id="1" name=""/>
+                <p:cNvPr id="1" name="Slide Background"/>
                 <p:cNvGrpSpPr/>
                 <p:nvPr/>
             </p:nvGrpSpPr>
             <p:grpSpPr>
                 <a:xfrm>
                     <a:off x="0" y="0"/>
-                    <a:ext cx="9144000" cy="6858000"/>
+                    <a:ext cx="{SLIDE_WIDTH}" cy="{SLIDE_HEIGHT}"/>
                     <a:chOff x="0" y="0"/>
-                    <a:chExt cx="9144000" cy="6858000"/>
+                    <a:chExt cx="{SLIDE_WIDTH}" cy="{SLIDE_HEIGHT}"/>
                 </a:xfrm>
             </p:grpSpPr>
             <!-- SHAPES WILL BE INSERTED HERE -->

@@ -166,15 +166,26 @@ class NumericAnimationHandler(AnimationHandler):
             attribute_list=attr_list,
         )
 
-        # Build TAV list container if needed
-        tav_block = ""
-        if tav_elements:
+        # Build TAV list container
+        # For simple from/to animations, we create two TAV entries
+        if not tav_elements:
+            from_tav = self._xml.build_tav_element(
+                tm=0,
+                value_elem=self._xml.build_numeric_value(from_value)
+            )
+            to_tav = self._xml.build_tav_element(
+                tm=100000,
+                value_elem=self._xml.build_numeric_value(to_value)
+            )
+            tav_container = self._xml.build_tav_list_container([from_tav, to_tav])
+        else:
             tav_container = self._xml.build_tav_list_container(tav_elements)
-            tav_string = to_string(tav_container)
-            tav_block = "\n" + indent(tav_string, " " * 40) + "\n"
+            
+        tav_string = to_string(tav_container)
+        tav_block = "\n" + indent(tav_string, " " * 40) + "\n"
 
         # Build anim element
-        anim_tag = "<a:anim"
+        anim_tag = "<p:anim"
         if needs_custom_ns:
             from ..constants import SVG2_ANIMATION_NS
             anim_tag += f' xmlns:svg2="{SVG2_ANIMATION_NS}"'
@@ -183,14 +194,8 @@ class NumericAnimationHandler(AnimationHandler):
         anim_elem = (
             f'                                    {anim_tag}\n'
             f'{behavior_core}'
-            f'                                        <a:from>\n'
-            f'                                            <a:val val="{self._escape_value(from_value)}"/>\n'
-            f'                                        </a:from>\n'
-            f'                                        <a:to>\n'
-            f'                                            <a:val val="{self._escape_value(to_value)}"/>\n'
-            f'                                        </a:to>\n'
             f'{tav_block}'
-            f'                                    </a:anim>'
+            f'                                    </p:anim>'
         )
 
         # Build par container
@@ -199,6 +204,10 @@ class NumericAnimationHandler(AnimationHandler):
             duration_ms=animation.duration_ms,
             delay_ms=animation.begin_ms,
             child_content=anim_elem,
+            preset_id=0,
+            preset_class="entr",
+            preset_subtype=0,
+            node_type="withEffect",
         )
 
         return par

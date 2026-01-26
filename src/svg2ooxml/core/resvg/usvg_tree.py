@@ -29,10 +29,11 @@ if TYPE_CHECKING:  # pragma: no cover
 SVG_NAMESPACE = "http://www.w3.org/2000/svg"
 
 
-def _strip_namespace(tag: str) -> str:
-    if tag.startswith("{" + SVG_NAMESPACE + "}"):
-        return tag[len(SVG_NAMESPACE) + 2 :]
-    return tag
+def _strip_namespace(tag: Any) -> str:
+    tag_str = str(tag)
+    if tag_str.startswith("{" + SVG_NAMESPACE + "}"):
+        return tag_str[len(SVG_NAMESPACE) + 2 :]
+    return tag_str
 
 
 def _propagate_use_source(node: "BaseNode", source_elem: Any | None) -> None:

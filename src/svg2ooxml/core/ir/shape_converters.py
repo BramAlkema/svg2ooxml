@@ -394,21 +394,7 @@ class ShapeConversionMixin:
         )
 
     def _convert_via_resvg(self, element: etree._Element, coord_space: CoordinateSpace):
-        """Convert element using resvg adapters.
-
-        This method handles:
-        - Looking up the resvg node
-        - Routing to appropriate adapter based on node type
-        - Extracting style from element
-        - Creating IR objects with style and metadata
-
-        Args:
-            element: SVG element to convert
-            coord_space: Current coordinate space (used for style extraction)
-
-        Returns:
-            IR object (Path, Circle, etc.) or None if conversion fails
-        """
+        """Convert element using resvg adapters."""
         from svg2ooxml.drawingml.bridges.resvg_shape_adapter import ResvgShapeAdapter
 
         # Look up resvg node
@@ -416,6 +402,24 @@ class ShapeConversionMixin:
         resvg_node = resvg_lookup.get(element)
         if resvg_node is None:
             return None
+
+        # Retrieve the world-space global transform computed during ResvgBridge build.
+        # This includes all inherited group transforms (translate, scale, etc.)
+        # We use the structural signature path as a stable key.
+        from svg2ooxml.core.ir.resvg_bridge import ResvgBridge
+        sig = ResvgBridge._element_signature(element)
+        global_transform_lookup = getattr(self, "_resvg_global_transform_lookup", {})
+        global_transform = global_transform_lookup.get(sig)
+        
+        if global_transform is None:
+            self._logger.warning("No global transform found for signature: %s", sig)
+        
+        # We replace the node's local transform with the global one before passing it
+        # to the converters/adapters. This is safe because we're not modifying the 
+        # original tree, just how we interpret this specific node.
+        # Note: We must be careful not to actually 'set' it on the frozen dataclass
+        # if it's frozen, but we can pass it explicitly or use a proxy.
+        # For now, let's just use it in the specialized converters.
 
         # Extract style (same as legacy path)
         style = styles_runtime.extract_style(self, element)
@@ -439,7 +443,6 @@ class ShapeConversionMixin:
             metadata.update(source_style.metadata or {})
 
         # Override stroke/fill from resvg_node if available
-        # This preserves attributes from <use> elements that override referenced content
         if hasattr(resvg_node, 'stroke') and resvg_node.stroke is not None:
             from svg2ooxml.paint.resvg_bridge import resolve_stroke_style
             tree = getattr(self, "_resvg_tree", None)
@@ -456,14 +459,25 @@ class ShapeConversionMixin:
                     style = replace(style, fill=resvg_fill)
 
         node_type = type(resvg_node).__name__
-        # Get clip/mask refs (shared across shape types)
+        # Get clip/mask refs
         clip_ref = self._resolve_clip_ref(element)
         mask_ref, mask_instance = self._resolve_mask_ref(element)
+
+        # Create a modified proxy of the node that carries the GLOBAL transform
+        # for the native converters and adapters.
+        class GlobalTransformProxy:
+            def __init__(self, target, g_transform):
+                self._target = target
+                self.transform = g_transform
+            def __getattr__(self, name):
+                return getattr(self._target, name)
+
+        proxy_node = GlobalTransformProxy(resvg_node, global_transform)
 
         if node_type == "RectNode":
             rectangle = self._resvg_rect_to_rectangle(
                 element=element,
-                resvg_node=resvg_node,
+                resvg_node=proxy_node,
                 style=style,
                 metadata=metadata,
                 clip_ref=clip_ref,
@@ -477,7 +491,7 @@ class ShapeConversionMixin:
         if node_type == "CircleNode":
             circle = self._resvg_circle_to_circle(
                 element=element,
-                resvg_node=resvg_node,
+                resvg_node=proxy_node,
                 style=style,
                 metadata=metadata,
                 clip_ref=clip_ref,
@@ -491,7 +505,7 @@ class ShapeConversionMixin:
         if node_type == "EllipseNode":
             ellipse = self._resvg_ellipse_to_ellipse(
                 element=element,
-                resvg_node=resvg_node,
+                resvg_node=proxy_node,
                 style=style,
                 metadata=metadata,
                 clip_ref=clip_ref,
@@ -509,15 +523,14 @@ class ShapeConversionMixin:
         # Route to appropriate adapter method based on node type
         try:
             if node_type == "PathNode":
-                segments = adapter.from_path_node(resvg_node)
+                segments = adapter.from_path_node(proxy_node)
             elif node_type == "RectNode":
-                segments = adapter.from_rect_node(resvg_node)
+                segments = adapter.from_rect_node(proxy_node)
             elif node_type == "CircleNode":
-                segments = adapter.from_circle_node(resvg_node)
+                segments = adapter.from_circle_node(proxy_node)
             elif node_type == "EllipseNode":
-                segments = adapter.from_ellipse_node(resvg_node)
+                segments = adapter.from_ellipse_node(proxy_node)
             else:
-                # Unsupported node type, return None to trigger fallback
                 return None
         except Exception as exc:
             self._logger.debug(

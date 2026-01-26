@@ -1,4 +1,4 @@
-"""Capture a PowerPoint window screenshot via osascript + screencapture."""
+"Capture a PowerPoint window screenshot via osascript + screencapture."
 
 from __future__ import annotations
 
@@ -812,20 +812,81 @@ def capture_pptx_slideshow(
             _exit_slideshow()
 
 
+def capture_live_animation(
+    pptx_path: Path,
+    output_dir: Path,
+    duration: float,
+    *,
+    fps: float = 10.0,
+    delay: float = 1.5,
+    slideshow_delay: float = 1.0,
+    open_timeout: float = 120.0,
+    capture_timeout: float = 5.0,
+    use_keys: bool = True,
+    allow_reopen: bool = True,
+    backend: str = "auto",
+) -> list[Path]:
+    """Record a single slide's playback by taking fast screenshots."""
+    pptx_path = pptx_path.resolve()
+    output_dir.mkdir(parents=True, exist_ok=True)
+    
+    _start_slideshow(
+        pptx_path,
+        delay,
+        slideshow_delay,
+        open_timeout,
+        use_keys=use_keys,
+        allow_reopen=allow_reopen,
+    )
+    
+    captured_files = []
+    try:
+        win_id = _get_slideshow_window_id(timeout=slideshow_delay + 2.0)
+        start_time = time.time()
+        frame_idx = 0
+        interval = 1.0 / fps
+        
+        while (time.time() - start_time) < duration:
+            frame_path = output_dir / f"frame_{frame_idx:04d}.png"
+            _capture_window(
+                frame_path,
+                win_id or None,
+                backend=backend,
+                timeout=capture_timeout,
+            )
+            captured_files.append(frame_path)
+            frame_idx += 1
+            
+            # Simple pacing
+            elapsed = time.time() - start_time
+            next_shot = (frame_idx * interval)
+            wait = next_shot - elapsed
+            if wait > 0:
+                time.sleep(wait)
+                
+    finally:
+        _exit_slideshow()
+        _close_active_presentation()
+        
+    return captured_files
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Capture PowerPoint window screenshot.")
     parser.add_argument("pptx", type=Path, help="Path to the PPTX file to open.")
     parser.add_argument(
         "output",
         type=Path,
-        help="Output PNG path (window/slideshow) or output directory (slideshow-all).",
+        help="Output PNG path (window/slideshow) or output directory (slideshow-all/live).",
     )
     parser.add_argument(
         "--mode",
-        choices=("window", "slideshow", "slideshow-all"),
+        choices=("window", "slideshow", "slideshow-all", "live"),
         default="window",
-        help="Capture the window chrome or a full-screen slideshow.",
+        help="Capture mode: live records a single slide's animation.",
     )
+    parser.add_argument("--duration", type=float, default=5.0, help="Duration for live recording.")
+    parser.add_argument("--fps", type=float, default=10.0, help="FPS for live recording.")
     parser.add_argument("--delay", type=float, default=1.5, help="Delay after opening (seconds).")
     parser.add_argument(
         "--slideshow-delay",
@@ -875,7 +936,21 @@ def main() -> int:
     args = parser.parse_args()
 
     try:
-        if args.mode == "slideshow":
+        if args.mode == "live":
+            capture_live_animation(
+                args.pptx,
+                args.output,
+                args.duration,
+                fps=args.fps,
+                delay=args.delay,
+                slideshow_delay=args.slideshow_delay,
+                open_timeout=args.open_timeout,
+                capture_timeout=args.capture_timeout,
+                use_keys=not args.no_keys,
+                allow_reopen=not args.no_reopen,
+                backend=args.backend,
+            )
+        elif args.mode == "slideshow":
             capture_pptx_slideshow(
                 args.pptx,
                 args.output,

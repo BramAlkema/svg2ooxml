@@ -141,10 +141,10 @@ class SetAnimationHandler(AnimationHandler):
 
         # Build set element
         anim_set = (
-            f'                                    <a:set>\n'
+            f'                                    <p:set>\n'
             f'{behavior_core}'
             f'{value_block}'
-            f'                                    </a:set>'
+            f'                                    </p:set>'
         )
 
         # Build par container
@@ -153,6 +153,10 @@ class SetAnimationHandler(AnimationHandler):
             duration_ms=animation.duration_ms,
             delay_ms=animation.begin_ms,
             child_content=anim_set,
+            preset_id=1,
+            preset_class="entr",
+            preset_subtype=0,
+            node_type="withEffect",
         )
 
         return par

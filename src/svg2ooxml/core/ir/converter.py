@@ -33,6 +33,7 @@ class IRScene:
     elements: SceneGraph
     width_px: float | None = None
     height_px: float | None = None
+    animations: list[AnimationDefinition] | None = None
     metadata: dict[str, Any] | None = None
 
 
@@ -159,6 +160,7 @@ class IRConverter:
             elements=elements,
             width_px=result.width_px,
             height_px=result.height_px,
+            animations=result.animations,
             metadata=scene_metadata,
         )
 

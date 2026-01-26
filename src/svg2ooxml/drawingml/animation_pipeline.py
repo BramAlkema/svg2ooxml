@@ -64,6 +64,7 @@ class AnimationPipeline:
             return ""
 
         remapped: list[AnimationDefinition] = []
+        animated_shape_ids: set[str] = set()
         for definition in definitions:
             element_id = getattr(definition, "element_id", None)
             if not isinstance(element_id, str):
@@ -83,6 +84,7 @@ class AnimationPipeline:
                 )
                 continue
             remapped.append(replace(definition, element_id=shape_id))
+            animated_shape_ids.add(shape_id)
             self._trace(
                 "mapped_animation",
                 metadata={
@@ -100,7 +102,19 @@ class AnimationPipeline:
                 )
             return ""
 
-        animation_xml = self._writer.build(remapped, timeline, tracer=self._tracer, options=self._policy)
+        # Build complete timing XML, including bldLst
+        import logging
+        debug_logger = logging.getLogger("drawingml.animation_pipeline")
+        debug_logger.info("Animation map: %s", self._shape_map)
+        debug_logger.info("Animated shape IDs: %s", animated_shape_ids)
+        
+        animation_xml = self._writer.build(
+            remapped, 
+            timeline, 
+            tracer=self._tracer, 
+            options=self._policy,
+            animated_shape_ids=sorted(list(animated_shape_ids), key=int)
+        )
         if animation_xml:
             self._trace(
                 "timing_emitted",

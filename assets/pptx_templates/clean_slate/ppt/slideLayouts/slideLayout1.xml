@@ -6,16 +6,16 @@
     <p:cSld name="Blank">
         <p:spTree>
             <p:nvGrpSpPr>
-                <p:cNvPr id="1" name=""/>
+                <p:cNvPr id="1" name="Blank Layout"/>
                 <p:cNvGrpSpPr/>
                 <p:nvPr/>
             </p:nvGrpSpPr>
             <p:grpSpPr>
                 <a:xfrm>
                     <a:off x="0" y="0"/>
-                    <a:ext cx="9144000" cy="6858000"/>
+                    <a:ext cx="{SLIDE_WIDTH}" cy="{SLIDE_HEIGHT}"/>
                     <a:chOff x="0" y="0"/>
-                    <a:chExt cx="9144000" cy="6858000"/>
+                    <a:chExt cx="{SLIDE_WIDTH}" cy="{SLIDE_HEIGHT}"/>
                 </a:xfrm>
             </p:grpSpPr>
         </p:spTree>

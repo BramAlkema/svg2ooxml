@@ -64,6 +64,7 @@ class ShapePipeline(ShapeConversionMixin, TraversalHooksMixin):
         resvg = self._resvg_bridge
         self._resvg_tree = resvg.tree
         self._resvg_element_lookup = resvg.element_lookup
+        self._resvg_global_transform_lookup = resvg.global_transform_lookup
         self._resvg_filter_descriptors = resvg.filter_descriptors
         self._resvg_clip_definitions = resvg.clip_definitions
         self._resvg_mask_info = resvg.mask_info

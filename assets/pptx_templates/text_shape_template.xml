@@ -2,7 +2,9 @@
      >
     <p:nvSpPr>
         <p:cNvPr id="{SHAPE_ID}" name="{SHAPE_NAME}">{HYPERLINK_XML}</p:cNvPr>
-        <p:cNvSpPr/>
+        <p:cNvSpPr>
+            <a:spLocks noGrp="1"/>
+        </p:cNvSpPr>
         <p:nvPr/>
     </p:nvSpPr>
     <p:spPr>
@@ -18,7 +20,8 @@
     </p:spPr>
     <p:txBody>
         <a:bodyPr wrap="none" lIns="0" tIns="0" rIns="0" bIns="0" anchor="t">
-{BODY_EXTRA}        </a:bodyPr>
+            {BODY_EXTRA}
+        </a:bodyPr>
         <a:lstStyle/>
         <a:p>
             <a:pPr algn="{TEXT_ALIGN}"/>

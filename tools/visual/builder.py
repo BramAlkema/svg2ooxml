@@ -48,6 +48,7 @@ class PptxBuilder:
         *,
         source_path: Path | None = None,
         tracer: Any | None = None,
+        animations: list | None = None, # Add animations parameter
     ) -> PptxBuildResult:
         """Parse *svg_text*, convert to IR, and materialise a PPTX file."""
 
@@ -97,7 +98,7 @@ class PptxBuilder:
             setattr(services, "viewport_height", parse_result.height_px)
 
         scene = convert_parser_output(parse_result, services=services, tracer=tracer)
-        render_result = self._writer.render_scene_from_ir(scene)
+        render_result = self._writer.render_scene_from_ir(scene, animations=animations) # Pass animations here
 
         pptx_path = self._builder.build_from_results(
             [render_result],

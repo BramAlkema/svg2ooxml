@@ -27,10 +27,11 @@ def _normalize_attributes(elem: etree._Element) -> tuple[dict[str, str], dict[st
     return attributes, inline_style
 
 
-def _local_name(tag: str) -> str:
-    if tag.startswith("{") and "}" in tag:
-        return tag.split("}", 1)[1]
-    return tag
+def _local_name(tag: Any) -> str:
+    tag_str = str(tag)
+    if tag_str.startswith("{") and "}" in tag_str:
+        return tag_str.split("}", 1)[1]
+    return tag_str
 
 
 def _convert_element(

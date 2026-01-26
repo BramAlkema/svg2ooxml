@@ -413,6 +413,15 @@ class PackageWriter:
 
                 self._update_presentation_parts(temp_path, slides, packaged_fonts, presentation_slide_size)
                 self._write_required_presentation_parts(temp_path)
+                
+                # Inject dimensions into slide layouts
+                if presentation_slide_size:
+                    for layout_path in (temp_path / "ppt" / "slideLayouts").glob("slideLayout*.xml"):
+                        content = layout_path.read_text(encoding="utf-8")
+                        content = content.replace("{SLIDE_WIDTH}", str(presentation_slide_size[0]))
+                        content = content.replace("{SLIDE_HEIGHT}", str(presentation_slide_size[1]))
+                        layout_path.write_text(content, encoding="utf-8")
+
                 self._write_content_types(temp_path, slides, all_media, packaged_fonts, all_masks)
                 self._trace_packaging(
                     "content_types_updated",
@@ -864,7 +873,9 @@ class PackageWriter:
 
         # presProps.xml - Minimal presentation properties
         pres_props_content = '''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<p:presentationPr xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"/>'''
+<p:presentationPr xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+                  xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+                  xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"/>'''
 
         pres_props_path = ppt_dir / "presProps.xml"
         pres_props_path.write_text(pres_props_content, encoding="utf-8")
@@ -875,7 +886,9 @@ class PackageWriter:
 
         # viewProps.xml - View properties with default normal view settings
         view_props_content = '''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<p:viewPr xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
+<p:viewPr xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+          xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+          xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
     <p:normalViewPr>
         <p:restoredLeft sz="15620"/>
         <p:restoredTop sz="94660"/>
@@ -891,7 +904,8 @@ class PackageWriter:
 
         # tableStyles.xml - Table styles with default style reference
         table_styles_content = '''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<a:tblStyleLst xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" def="{5C22544A-7EE6-4342-B048-85BDC9FD1C3A}"/>'''
+<a:tblStyleLst xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" 
+               def="{5C22544A-7EE6-4342-B048-85BDC9FD1C3A}"/>'''
 
         table_styles_path = ppt_dir / "tableStyles.xml"
         table_styles_path.write_text(table_styles_content, encoding="utf-8")
@@ -911,12 +925,11 @@ class PackageWriter:
 
             # Add presProps relationship if not present
             if "presProps.xml" not in existing_targets:
-                pres_props_rel_id = "rIdPresProps"
-                # Ensure unique ID
-                counter = 1
-                while pres_props_rel_id in existing_rel_ids:
-                    pres_props_rel_id = f"rIdPresProps{counter}"
-                    counter += 1
+                # Find next available numeric ID
+                next_id = 1
+                while f"rId{next_id}" in existing_rel_ids:
+                    next_id += 1
+                pres_props_rel_id = f"rId{next_id}"
 
                 ET.SubElement(
                     rels_root,
@@ -927,14 +940,15 @@ class PackageWriter:
                         "Target": "presProps.xml",
                     },
                 )
+                existing_rel_ids.add(pres_props_rel_id)
+                existing_targets.add("presProps.xml")
 
             # Add viewProps relationship if not present
             if "viewProps.xml" not in existing_targets:
-                view_props_rel_id = "rIdViewProps"
-                counter = 1
-                while view_props_rel_id in existing_rel_ids:
-                    view_props_rel_id = f"rIdViewProps{counter}"
-                    counter += 1
+                next_id = 1
+                while f"rId{next_id}" in existing_rel_ids:
+                    next_id += 1
+                view_props_rel_id = f"rId{next_id}"
 
                 ET.SubElement(
                     rels_root,
@@ -945,14 +959,15 @@ class PackageWriter:
                         "Target": "viewProps.xml",
                     },
                 )
+                existing_rel_ids.add(view_props_rel_id)
+                existing_targets.add("viewProps.xml")
 
             # Add tableStyles relationship if not present
             if "tableStyles.xml" not in existing_targets:
-                table_styles_rel_id = "rIdTableStyles"
-                counter = 1
-                while table_styles_rel_id in existing_rel_ids:
-                    table_styles_rel_id = f"rIdTableStyles{counter}"
-                    counter += 1
+                next_id = 1
+                while f"rId{next_id}" in existing_rel_ids:
+                    next_id += 1
+                table_styles_rel_id = f"rId{next_id}"
 
                 ET.SubElement(
                     rels_root,
@@ -961,6 +976,25 @@ class PackageWriter:
                         "Id": table_styles_rel_id,
                         "Type": "http://schemas.openxmlformats.org/officeDocument/2006/relationships/tableStyles",
                         "Target": "tableStyles.xml",
+                    },
+                )
+                existing_rel_ids.add(table_styles_rel_id)
+                existing_targets.add("tableStyles.xml")
+
+            # Add theme relationship if not present (CRITICAL for PowerPoint)
+            if "theme/theme1.xml" not in existing_targets:
+                next_id = 1
+                while f"rId{next_id}" in existing_rel_ids:
+                    next_id += 1
+                theme_rel_id = f"rId{next_id}"
+
+                ET.SubElement(
+                    rels_root,
+                    f"{{{REL_NS}}}Relationship",
+                    {
+                        "Id": theme_rel_id,
+                        "Type": "http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme",
+                        "Target": "theme/theme1.xml",
                     },
                 )
 

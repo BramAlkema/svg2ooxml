@@ -154,7 +154,7 @@ class ColorAnimationHandler(AnimationHandler):
             tav_block = "\n" + indent(tav_string, " " * 40) + "\n"
 
         # Build animClr element
-        anim_tag = "<a:animClr"
+        anim_tag = "<p:animClr"
         if needs_custom_ns:
             from ..constants import SVG2_ANIMATION_NS
             anim_tag += f' xmlns:svg2="{SVG2_ANIMATION_NS}"'
@@ -163,14 +163,22 @@ class ColorAnimationHandler(AnimationHandler):
         anim_clr = (
             f'                                    {anim_tag}\n'
             f'{behavior_core}'
-            f'                                        <a:from>\n'
-            f'                                            <a:srgbClr val="{from_color}"/>\n'
-            f'                                        </a:from>\n'
-            f'                                        <a:to>\n'
-            f'                                            <a:srgbClr val="{to_color}"/>\n'
-            f'                                        </a:to>\n'
+            f'                                        <p:from>\n'
+            f'                                            <p:val>\n'
+            f'                                                <p:clr>\n'
+            f'                                                    <p:srgbClr val="{from_color}"/>\n'
+            f'                                                </p:clr>\n'
+            f'                                            </p:val>\n'
+            f'                                        </p:from>\n'
+            f'                                        <p:to>\n'
+            f'                                            <p:val>\n'
+            f'                                                <p:clr>\n'
+            f'                                                    <p:srgbClr val="{to_color}"/>\n'
+            f'                                                </p:clr>\n'
+            f'                                            </p:val>\n'
+            f'                                        </p:to>\n'
             f'{tav_block}'
-            f'                                    </a:animClr>'
+            f'                                    </p:animClr>'
         )
 
         # Build par container
@@ -179,6 +187,10 @@ class ColorAnimationHandler(AnimationHandler):
             duration_ms=animation.duration_ms,
             delay_ms=animation.begin_ms,
             child_content=anim_clr,
+            preset_id=0,
+            preset_class="entr",
+            preset_subtype=0,
+            node_type="withEffect",
         )
 
         return par

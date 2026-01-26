@@ -92,6 +92,12 @@ class DrawingMLShapeRenderer:
             )
             if rasterized is not None:
                 return rasterized
+            
+            # Register for animations
+            element_ids = metadata.get("element_ids")
+            if isinstance(element_ids, list):
+                self._animation_pipeline.register_element_ids(element_ids, shape_id)
+
             xml = shapes_runtime.render_rectangle(
                 element,
                 shape_id,
@@ -114,6 +120,12 @@ class DrawingMLShapeRenderer:
             )
             if rasterized is not None:
                 return rasterized
+            
+            # Register for animations
+            element_ids = metadata.get("element_ids")
+            if isinstance(element_ids, list):
+                self._animation_pipeline.register_element_ids(element_ids, shape_id)
+
             xml = shapes_runtime.render_circle(
                 element,
                 shape_id,
@@ -136,6 +148,12 @@ class DrawingMLShapeRenderer:
             )
             if rasterized is not None:
                 return rasterized
+            
+            # Register for animations
+            element_ids = metadata.get("element_ids")
+            if isinstance(element_ids, list):
+                self._animation_pipeline.register_element_ids(element_ids, shape_id)
+
             xml = shapes_runtime.render_ellipse(
                 element,
                 shape_id,
@@ -148,10 +166,15 @@ class DrawingMLShapeRenderer:
             )
             return xml, shape_id + 1
         if isinstance(element, Line):
+            # Register for animations
+            element_ids = metadata.get("element_ids")
+            if isinstance(element_ids, list):
+                self._animation_pipeline.register_element_ids(element_ids, shape_id)
+
             xml = shapes_runtime.render_line(
                 element,
                 shape_id,
-                template=self._line_template,
+                template=self._path_template,
                 path_generator=self._path_generator,
                 stroke_to_xml=paint_runtime.stroke_to_xml,
                 paint_to_fill=paint_runtime.paint_to_fill,
@@ -162,6 +185,11 @@ class DrawingMLShapeRenderer:
             )
             return xml, shape_id + 1
         if isinstance(element, Polyline):
+            # Register for animations
+            element_ids = metadata.get("element_ids")
+            if isinstance(element_ids, list):
+                self._animation_pipeline.register_element_ids(element_ids, shape_id)
+
             xml = shapes_runtime.render_polyline(
                 element,
                 shape_id,
@@ -176,6 +204,11 @@ class DrawingMLShapeRenderer:
             )
             return xml, shape_id + 1
         if isinstance(element, Polygon):
+            # Register for animations
+            element_ids = metadata.get("element_ids")
+            if isinstance(element_ids, list):
+                self._animation_pipeline.register_element_ids(element_ids, shape_id)
+
             xml = shapes_runtime.render_polygon(
                 element,
                 shape_id,
@@ -200,6 +233,12 @@ class DrawingMLShapeRenderer:
             )
             if rasterized is not None:
                 return rasterized
+            
+            # Register for animations
+            element_ids = metadata.get("element_ids")
+            if isinstance(element_ids, list):
+                self._animation_pipeline.register_element_ids(element_ids, shape_id)
+
             xml = shapes_runtime.render_path(
                 element,
                 shape_id,

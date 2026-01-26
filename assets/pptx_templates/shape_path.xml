@@ -1,7 +1,9 @@
 <p:sp>
     <p:nvSpPr>
         <p:cNvPr id="{SHAPE_ID}" name="{SHAPE_NAME}">{HYPERLINK_XML}</p:cNvPr>
-        <p:cNvSpPr/>
+        <p:cNvSpPr>
+            <a:spLocks noGrp="1"/>
+        </p:cNvSpPr>
         <p:nvPr/>
     </p:nvSpPr>
     <p:spPr>
@@ -10,4 +12,11 @@
             <a:ext cx="{WIDTH_EMU}" cy="{HEIGHT_EMU}"/>
         </a:xfrm>
 {GEOMETRY_XML}{CLIP_PATH_XML}{MASK_XML}{FILL_XML}{STROKE_XML}{EFFECTS_XML}    </p:spPr>
+    <p:txBody>
+        <a:bodyPr/>
+        <a:lstStyle/>
+        <a:p>
+            <a:endParaRPr/>
+        </a:p>
+    </p:txBody>
 </p:sp>
