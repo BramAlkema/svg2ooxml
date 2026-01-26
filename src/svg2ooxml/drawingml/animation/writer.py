@@ -6,6 +6,7 @@ into PowerPoint timing XML.
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Any, Mapping, Sequence
 
 from svg2ooxml.common.units import UnitConverter
@@ -29,6 +30,8 @@ if TYPE_CHECKING:
     from svg2ooxml.core.tracing import ConversionTracer
 
 __all__ = ["DrawingMLAnimationWriter"]
+
+_logger = logging.getLogger(__name__)
 
 
 class DrawingMLAnimationWriter:
@@ -104,13 +107,10 @@ class DrawingMLAnimationWriter:
         fragments: list[str] = []
         last_skip_reason: str | None = None
 
-        import logging
-        debug_logger = logging.getLogger("drawingml.animation_writer")
-        
         # Process each animation
         for animation in animations:
             fragment, fragment_meta = self._build_animation(animation, options)
-            debug_logger.debug("Animation fragment for %s (%s): %s", animation.element_id, animation.target_attribute, "SUCCESS" if fragment else f"SKIPPED ({fragment_meta.get('reason') if fragment_meta else 'unknown'})")
+            _logger.debug("Animation fragment for %s (%s): %s", animation.element_id, animation.target_attribute, "SUCCESS" if fragment else f"SKIPPED ({fragment_meta.get('reason') if fragment_meta else 'unknown'})")
 
             if fragment:
                 # Animation was successfully converted

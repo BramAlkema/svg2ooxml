@@ -268,6 +268,12 @@ class TransformAnimationHandler(AnimationHandler):
         delta_x = int(round(self._units.to_emu(end_dx - start_dx, axis="x")))
         delta_y = int(round(self._units.to_emu(end_dy - start_dy, axis="y")))
 
+        behavior_core = self._xml.build_behavior_core(
+            behavior_id=behavior_id,
+            duration_ms=animation.duration_ms,
+            target_shape=animation.element_id if hasattr(animation, "element_id") else "",
+        )
+
         return (
             f'                                    <p:animMotion>\n'
             f'{behavior_core}'
