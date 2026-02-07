@@ -3,13 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Dict, List
 
 from lxml import etree
 
 from svg2ooxml.filters.base import Filter, FilterContext, FilterResult
 from svg2ooxml.filters.utils import parse_number
-
 
 CHANNELS = {"r", "g", "b", "a"}
 
@@ -18,7 +16,7 @@ CHANNELS = {"r", "g", "b", "a"}
 class ComponentFunction:
     channel: str
     func_type: str
-    params: Dict[str, object] = field(default_factory=dict)
+    params: dict[str, object] = field(default_factory=dict)
 
 
 class ComponentTransferFilter(Filter):
@@ -51,8 +49,8 @@ class ComponentTransferFilter(Filter):
             warnings=warnings,
         )
 
-    def _parse_functions(self, primitive: etree._Element) -> List[ComponentFunction]:
-        functions: List[ComponentFunction] = []
+    def _parse_functions(self, primitive: etree._Element) -> list[ComponentFunction]:
+        functions: list[ComponentFunction] = []
         for node in primitive:
             if not hasattr(node, "tag"):
                 continue
@@ -60,7 +58,7 @@ class ComponentTransferFilter(Filter):
             if channel is None:
                 continue
             func_type = (node.get("type") or "identity").strip().lower()
-            params: Dict[str, object] = {}
+            params: dict[str, object] = {}
             if func_type in {"table", "discrete"}:
                 params["values"] = self._parse_float_list(node.get("tableValues"))
             elif func_type == "linear":
@@ -83,10 +81,10 @@ class ComponentTransferFilter(Filter):
             return None
         return suffix
 
-    def _parse_float_list(self, payload: str | None) -> List[float]:
+    def _parse_float_list(self, payload: str | None) -> list[float]:
         if not payload:
             return []
-        values: List[float] = []
+        values: list[float] = []
         for token in payload.replace(",", " ").split():
             try:
                 values.append(float(token))

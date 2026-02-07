@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from lxml import etree
 
@@ -38,10 +38,10 @@ class ResourceTracker:
 
     def prepare(
         self,
-        result: "ParseResult",
+        result: ParseResult,
         *,
-        resvg_bridge: "ResvgBridge | None",
-        context: "IRConverterContext",
+        resvg_bridge: ResvgBridge | None,
+        context: IRConverterContext,
     ) -> None:
         self.clip_definitions.clear()
         self.mask_info.clear()
@@ -74,7 +74,7 @@ class ResourceTracker:
 
         self.use_expansion_stack.clear()
 
-    def trace_unused_resources(self, context: "IRConverterContext") -> None:
+    def trace_unused_resources(self, context: IRConverterContext) -> None:
         if self.clip_definitions:
             unused_clips = sorted(set(self.clip_definitions.keys()) - self.clip_usage)
             for clip_id in unused_clips:

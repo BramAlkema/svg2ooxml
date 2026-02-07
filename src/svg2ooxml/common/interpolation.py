@@ -1,10 +1,10 @@
-from __future__ import annotations
-
 """Interpolation helpers used by the animation sampler."""
 
+from __future__ import annotations
+
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Iterable
 
 from svg2ooxml.color import Color, parse_color
 from svg2ooxml.ir.animation import TransformType
@@ -103,7 +103,7 @@ class TransformInterpolator:
         if not start or not end or len(start) != len(end):
             return from_transform if progress < 0.5 else to_transform
 
-        values = [_lerp(a, b, progress) for a, b in zip(start, end)]
+        values = [_lerp(a, b, progress) for a, b in zip(start, end, strict=True)]
         return self._format(values, transform_type)
 
     def _parse(self, transform: str | None) -> list[float] | None:
@@ -115,7 +115,7 @@ class TransformInterpolator:
         try:
             return [float(value) for value in numbers]
         except ValueError:
-            raise ValueError("invalid transform values")
+            raise ValueError("invalid transform values") from None
 
     def _format(self, values: Iterable[float], transform_type: TransformType) -> str:
         values = list(values)

@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+from svg2ooxml.core.pipeline.mappers import OutputFormat, PathMapper
 from svg2ooxml.ir.geometry import LineSegment, Point
 from svg2ooxml.ir.scene import Path
-from svg2ooxml.core.pipeline.mappers import PathMapper, OutputFormat
 
 
 def _path() -> Path:
@@ -24,7 +24,7 @@ def test_path_mapper_native_output() -> None:
     result = mapper.map(path)
 
     assert result.output_format == OutputFormat.NATIVE_DML
-    assert "<p:sp>" in result.xml_content
+    assert "<a:sp>" in result.xml_content
 
 
 def test_path_mapper_emf_fallback() -> None:

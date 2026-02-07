@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 import hashlib
-from dataclasses import dataclass
-from typing import Any, Callable, Mapping
 import math
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass
+from typing import Any
 
-from svg2ooxml.io.emf import EMFBlob
 from svg2ooxml.common.units import px_to_emu
-
+from svg2ooxml.io.emf import EMFBlob
 
 PaletteResolver = Callable[[str, str, Mapping[str, Any]], str | None]
 
@@ -278,7 +278,6 @@ class EMFAdapter:
 
         header_pen = blob.get_pen(_colorref(self._color("color_matrix", "header", "#90A3DC", metadata)), max(1, width_emu // 360))
         width_total = columns * (cell_w + gap) - gap
-        height_total = rows * (cell_h + gap) - gap
         blob.stroke_polyline(
             _polyline([(left_px - 2.0, top_px - 4.0), (left_px + width_total + 4.0, top_px - 1.0)]),
             pen_handle=header_pen,
@@ -669,7 +668,6 @@ def _function_curve(func: dict[str, Any], left: float, top: float, width: float,
         values = params.get("values") or []
         if not values:
             values = [0.0, 1.0]
-        step_count = max(1, len(values) - 1)
         for idx, value in enumerate(values):
             x = clamp(idx / max(1, len(values) - (0 if func_type == "table" else 1)))
             y = clamp(float(value))
@@ -710,7 +708,7 @@ def _adjust_lightness(hex_color: str, factor: float, *, brighten: bool) -> str:
         r = int(r * (1.0 - factor))
         g = int(g * (1.0 - factor))
         b = int(b * (1.0 - factor))
-    return "#{:02X}{:02X}{:02X}".format(_clamp(r), _clamp(g), _clamp(b))
+    return f"#{_clamp(r):02X}{_clamp(g):02X}{_clamp(b):02X}"
 
 
 def _hex_to_rgb(value: str) -> tuple[int, int, int]:
@@ -735,18 +733,18 @@ def _matrix_value_color(value: float) -> str:
     clamped = max(-1.0, min(1.0, value))
     if clamped >= 0:
         blue = int(190 + clamped * 65)
-        return "#{:02X}{:02X}{:02X}".format(120, 150, blue)
+        return f"#{120:02X}{150:02X}{blue:02X}"
     red = int(190 + abs(clamped) * 65)
-    return "#{:02X}{:02X}{:02X}".format(red, 140, 120)
+    return f"#{red:02X}{140:02X}{120:02X}"
 
 
 def _kernel_value_color(value: float) -> str:
     clamped = max(-5.0, min(5.0, value))
     if clamped >= 0:
         channel = int(170 + clamped / 5.0 * 70)
-        return "#{:02X}{:02X}{:02X}".format(130, channel, 245)
+        return f"#{130:02X}{channel:02X}{245:02X}"
     channel = int(170 + abs(clamped) / 5.0 * 70)
-    return "#{:02X}{:02X}{:02X}".format(245, channel, 130)
+    return f"#{245:02X}{channel:02X}{130:02X}"
 
 
 def _safe_float(token: str) -> float:

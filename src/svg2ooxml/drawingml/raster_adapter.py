@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-import math
 import struct
 import zlib
+from collections.abc import Iterable
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import Any, Iterable, Tuple
+from typing import Any
 
 import numpy as np
 from lxml import etree
@@ -64,7 +64,7 @@ class RasterAdapter:
         filter_id: str,
         filter_element,
         context,
-        default_size: Tuple[int, int] = (192, 128),
+        default_size: tuple[int, int] = (192, 128),
     ) -> RasterResult:
         """Render a PNG fallback for ``filter_id`` using skia when available."""
 
@@ -178,8 +178,8 @@ class RasterAdapter:
             return None
         try:
             from svg2ooxml.core.resvg.normalizer import normalize_svg_string
-            from svg2ooxml.render.pipeline import render
             from svg2ooxml.core.resvg.parser.options import Options
+            from svg2ooxml.render.pipeline import render
         except Exception:  # pragma: no cover - renderer dependencies missing
             return None
 
@@ -244,7 +244,7 @@ class RasterAdapter:
         *,
         filter_id: str,
         filter_element,
-        primitive_tags: Tuple[str, ...],
+        primitive_tags: tuple[str, ...],
         filter_units,
         primitive_units,
         complexity: int,
@@ -254,7 +254,7 @@ class RasterAdapter:
         scale: float,
         descriptor: dict[str, Any] | None,
         bounds: dict[str, float | Any] | None,
-        default_size: Tuple[int, int],
+        default_size: tuple[int, int],
     ) -> RasterResult:
         if skia is None:
             return self.generate_placeholder(
@@ -372,10 +372,10 @@ class RasterAdapter:
     def _derive_dimensions(
         self,
         context,
-        defaults: Tuple[int, int],
+        defaults: tuple[int, int],
         descriptor: dict[str, Any] | None,
         bounds: dict[str, float | Any] | None,
-    ) -> Tuple[int, int]:
+    ) -> tuple[int, int]:
         width, height = defaults
         if context is not None:
             options = getattr(context, "options", None)
@@ -646,7 +646,7 @@ class RasterAdapter:
         return skia.Color4f(r, g, b, 1.0)
 
     @staticmethod
-    def _hsv_to_rgb(h: float, s: float, v: float) -> Tuple[float, float, float]:
+    def _hsv_to_rgb(h: float, s: float, v: float) -> tuple[float, float, float]:
         h = h % 1.0
         i = int(h * 6.0)
         f = h * 6.0 - i

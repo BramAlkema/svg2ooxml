@@ -4,9 +4,15 @@ from __future__ import annotations
 import logging
 from typing import Any, cast
 
-from lxml import etree  # type: ignore[import-untyped]
 import tinycss2  # type: ignore[import-untyped]
-from tinycss2.ast import AtRule, Declaration, FunctionBlock, URLToken, StringToken  # type: ignore[import-untyped]
+from lxml import etree  # type: ignore[import-untyped]
+from tinycss2.ast import (  # type: ignore[import-untyped]
+    AtRule,
+    Declaration,
+    FunctionBlock,
+    StringToken,
+    URLToken,
+)
 
 from svg2ooxml.ir.fonts import FontFaceRule, FontFaceSrc
 

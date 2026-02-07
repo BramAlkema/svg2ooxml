@@ -7,7 +7,6 @@ import os
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
 try:
     from cryptography.fernet import Fernet
@@ -39,7 +38,7 @@ class TokenStore:
         "https://www.googleapis.com/auth/presentations"
     )
 
-    def __init__(self, env_path: Path, encryption_key: Optional[str] = None) -> None:
+    def __init__(self, env_path: Path, encryption_key: str | None = None) -> None:
         self.env_path = env_path
         self.encryption_key = encryption_key or self._get_or_create_encryption_key()
         self.cipher = Fernet(self.encryption_key.encode())
@@ -90,7 +89,7 @@ class TokenStore:
         refresh_token: str,
         google_sub: str,
         email: str,
-        scopes: Optional[str] = None,
+        scopes: str | None = None,
     ) -> None:
         if not user_id or not user_id.strip():
             raise ValueError("user_id cannot be empty")
@@ -110,7 +109,7 @@ class TokenStore:
 
         self._write_env(env_vars)
 
-    def get_refresh_token(self, user_id: str) -> Optional[str]:
+    def get_refresh_token(self, user_id: str) -> str | None:
         env_vars = self._read_env()
         prefix = self._prefix_for_user(user_id)
         encrypted = env_vars.get(f"{prefix}_REFRESH_TOKEN")
@@ -134,7 +133,7 @@ class TokenStore:
             del env_vars[key]
         self._write_env(env_vars)
 
-    def get_token_info(self, user_id: str) -> Optional[TokenInfo]:
+    def get_token_info(self, user_id: str) -> TokenInfo | None:
         env_vars = self._read_env()
         prefix = self._prefix_for_user(user_id)
         if f"{prefix}_REFRESH_TOKEN" not in env_vars:

@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import math
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Iterable, List, Optional, Tuple
 
 from .matrix import Matrix
 from .path_commands import (
@@ -19,34 +19,33 @@ from .path_commands import (
     SMOOTH_QUAD_TO,
     V_LINE_TO,
 )
-from .primitives import Arc, ClosePath, CubicCurve, LineTo, MoveTo, QuadraticCurve
-
+from .primitives import ClosePath, LineTo, MoveTo
 
 Number = float
-Point = Tuple[float, float]
+Point = tuple[float, float]
 
 
 @dataclass(frozen=True)
 class PathCommand:
     command: str
-    points: Tuple[float, ...]
+    points: tuple[float, ...]
 
 
 @dataclass(frozen=True)
 class NormalizedPath:
-    commands: Tuple[PathCommand, ...]
+    commands: tuple[PathCommand, ...]
     transform: Matrix
-    stroke_width: Optional[float]
+    stroke_width: float | None
 
-    def as_fill_only(self) -> "NormalizedPath":
+    def as_fill_only(self) -> NormalizedPath:
         raise NotImplementedError("Stroke to fill conversion not yet implemented.")
 
-    def to_primitives(self, tolerance: float = 0.25) -> Tuple[object, ...]:
-        primitives: List[object] = []
+    def to_primitives(self, tolerance: float = 0.25) -> tuple[object, ...]:
+        primitives: list[object] = []
         current = (0.0, 0.0)
         start = (0.0, 0.0)
-        prev_cubic_ctrl: Optional[Point] = None
-        prev_quad_ctrl: Optional[Point] = None
+        prev_cubic_ctrl: Point | None = None
+        prev_quad_ctrl: Point | None = None
 
         for cmd in self.commands:
             op = cmd.command
@@ -134,23 +133,23 @@ class NormalizedPath:
         return tuple(primitives)
 
 
-def normalize_path(path_data: Optional[str], transform: Matrix, stroke_width: Optional[float]) -> NormalizedPath:
+def normalize_path(path_data: str | None, transform: Matrix, stroke_width: float | None) -> NormalizedPath:
     commands = tuple(_parse_path_data(path_data))
     return NormalizedPath(commands=commands, transform=transform, stroke_width=stroke_width)
 
 
 # Parsing helpers -----------------------------------------------------------------
 
-def _parse_path_data(path_data: Optional[str]) -> Iterable[PathCommand]:
+def _parse_path_data(path_data: str | None) -> Iterable[PathCommand]:
     if not path_data:
         return []
 
     tokens = _tokenize_path(path_data)
-    commands: List[PathCommand] = []
+    commands: list[PathCommand] = []
     current = (0.0, 0.0)
     start = (0.0, 0.0)
-    prev_command: Optional[str] = None
-    prev_ctrl: Optional[Point] = None
+    prev_command: str | None = None
+    prev_ctrl: Point | None = None
 
     iterator = iter(tokens)
     for token in iterator:
@@ -283,8 +282,8 @@ def _parse_path_data(path_data: Optional[str]) -> Iterable[PathCommand]:
     return commands
 
 
-def _tokenize_path(data: str) -> List[str]:
-    tokens: List[str] = []
+def _tokenize_path(data: str) -> list[str]:
+    tokens: list[str] = []
     buffer = ""
     for char in data:
         if char in "MmZzLlHhVvCcSsQqTtAa":
@@ -299,13 +298,13 @@ def _tokenize_path(data: str) -> List[str]:
     return tokens
 
 
-def _read_numbers(chunk: str) -> List[float]:
+def _read_numbers(chunk: str) -> list[float]:
     if not chunk:
         return []
     normalized = chunk.replace("e-", "E-").replace("e+", "E+")
-    parts: List[str] = []
+    parts: list[str] = []
     current = ""
-    for idx, char in enumerate(normalized):
+    for _idx, char in enumerate(normalized):
         if char in ", ":
             if current:
                 parts.append(current)
@@ -317,7 +316,7 @@ def _read_numbers(chunk: str) -> List[float]:
             current += char
     if current:
         parts.append(current)
-    result: List[float] = []
+    result: list[float] = []
     for part in parts:
         if part in {"+", "-"}:
             continue
@@ -340,8 +339,8 @@ def _transform_point(primitive: object, matrix: Matrix) -> object:
 
 # Geometry helpers ----------------------------------------------------------------
 
-def _flatten_cubic(p0: Point, p1: Point, p2: Point, p3: Point, tolerance: float) -> List[Point]:
-    def recursive(a: Point, b: Point, c: Point, d: Point) -> List[Point]:
+def _flatten_cubic(p0: Point, p1: Point, p2: Point, p3: Point, tolerance: float) -> list[Point]:
+    def recursive(a: Point, b: Point, c: Point, d: Point) -> list[Point]:
         max_dist = max(
             _distance_point_to_line(b, a, d),
             _distance_point_to_line(c, a, d),
@@ -361,13 +360,13 @@ def _flatten_cubic(p0: Point, p1: Point, p2: Point, p3: Point, tolerance: float)
     return recursive(p0, p1, p2, p3)
 
 
-def _flatten_quadratic(p0: Point, p1: Point, p2: Point, tolerance: float) -> List[Point]:
+def _flatten_quadratic(p0: Point, p1: Point, p2: Point, tolerance: float) -> list[Point]:
     c1 = (p0[0] + 2.0 / 3.0 * (p1[0] - p0[0]), p0[1] + 2.0 / 3.0 * (p1[1] - p0[1]))
     c2 = (p2[0] + 2.0 / 3.0 * (p1[0] - p2[0]), p2[1] + 2.0 / 3.0 * (p1[1] - p2[1]))
     return _flatten_cubic(p0, c1, c2, p2, tolerance)
 
 
-def _arc_to_cubic_segments(current: Point, arc: Tuple[float, float, float, bool, bool, float, float]) -> List[Tuple[Point, Point, Point, Point]]:
+def _arc_to_cubic_segments(current: Point, arc: tuple[float, float, float, bool, bool, float, float]) -> list[tuple[Point, Point, Point, Point]]:
     rx, ry, rotation, large, sweep, x, y = arc
     if rx == 0 or ry == 0:
         return [(current, current, (x, y), (x, y))]
@@ -399,7 +398,7 @@ def _arc_to_cubic_segments(current: Point, arc: Tuple[float, float, float, bool,
     segments = max(int(math.ceil(abs(delta_angle) / (math.pi / 2))), 1)
     delta = delta_angle / segments
     t = 8.0 / 3.0 * math.sin(delta / 4.0) ** 2 / math.sin(delta / 2.0)
-    result: List[Tuple[Point, Point, Point, Point]] = []
+    result: list[tuple[Point, Point, Point, Point]] = []
     angle = start_angle
     for _ in range(segments):
         start = angle

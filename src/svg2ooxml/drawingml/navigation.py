@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import html
-from typing import Callable
+from collections.abc import Callable
 
-from svg2ooxml.drawingml.assets import NavigationAsset
+from lxml import etree
+
 from svg2ooxml.core.pipeline.navigation import (
     BookmarkTarget,
     CustomShowTarget,
@@ -14,9 +15,8 @@ from svg2ooxml.core.pipeline.navigation import (
     NavigationSpec,
     SlideTarget,
 )
-
-# Import centralized XML builders for safe DrawingML generation
-from svg2ooxml.drawingml.xml_builder import a_elem, to_string
+from svg2ooxml.drawingml.assets import NavigationAsset
+from svg2ooxml.drawingml.xml_builder import a_elem
 
 __all__ = [
     "normalize_navigation",
@@ -43,14 +43,14 @@ def register_navigation(
     text: str | None,
     allocate_rel_id: Callable[[], str],
     add_asset: Callable[[NavigationAsset], None],
-) -> str:
-    """Normalize navigation metadata, register the asset, and return XML."""
+) -> etree._Element | None:
+    """Normalize navigation metadata, register the asset, return element."""
 
     spec = normalize_navigation(navigation)
     if spec is None:
-        return ""
+        return None
 
-    asset_data, xml_fragment = _build_navigation_asset(
+    asset_data, nav_elem = _build_navigation_asset(
         spec,
         allocate_rel_id=allocate_rel_id,
         scope=scope,
@@ -59,7 +59,7 @@ def register_navigation(
 
     if asset_data is not None:
         add_asset(asset_data)
-    return xml_fragment
+    return nav_elem
 
 
 def _build_navigation_asset(
@@ -68,8 +68,8 @@ def _build_navigation_asset(
     allocate_rel_id: Callable[[], str],
     scope: str,
     text: str | None = None,
-) -> tuple[NavigationAsset | None, str]:
-    """Create a NavigationAsset plus the corresponding hyperlink XML fragment."""
+) -> tuple[NavigationAsset | None, etree._Element | None]:
+    """Create a NavigationAsset plus the corresponding hyperlink element."""
 
     relationship_id: str | None = None
     relationship_type: str | None = None
@@ -105,10 +105,10 @@ def _build_navigation_asset(
         text=text_snippet,
     )
 
-    xml_fragment = _build_navigation_xml(asset)
-    if not xml_fragment and not asset.requires_relationship() and action_uri is None:
-        return None, ""
-    return asset, xml_fragment
+    nav_elem = _build_navigation_elem(asset)
+    if nav_elem is None and not asset.requires_relationship() and action_uri is None:
+        return None, None
+    return asset, nav_elem
 
 
 def _spec_from_dict(data: dict[str, object]) -> NavigationSpec | None:
@@ -198,31 +198,22 @@ def _action_uri_for_spec(spec: NavigationSpec) -> str | None:
     return None
 
 
-def _build_navigation_xml(asset: NavigationAsset) -> str:
-    # Build a:hlinkClick element with lxml
-    if not asset.relationship_id:
-        return ""
+def _build_navigation_elem(asset: NavigationAsset) -> etree._Element | None:
+    """Build an ``a:hlinkClick`` element, or *None* if not applicable."""
+    if not asset.relationship_id and not asset.action:
+        return None
 
     hlinkClick = a_elem("hlinkClick")
 
-    has_attributes = False
-
-    hlinkClick.set("{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id", asset.relationship_id)
-    has_attributes = True
+    if asset.relationship_id:
+        hlinkClick.set("{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id", asset.relationship_id)
 
     if asset.tooltip:
         hlinkClick.set("tooltip", html.escape(asset.tooltip, quote=False))
-        has_attributes = True
 
-    history_attr = "1" if asset.history else "0"
-    hlinkClick.set("history", history_attr)
-    has_attributes = True
+    hlinkClick.set("history", "1" if asset.history else "0")
 
     if asset.action:
         hlinkClick.set("action", html.escape(asset.action, quote=False))
-        has_attributes = True
 
-    if not has_attributes:
-        return ""
-
-    return to_string(hlinkClick)
+    return hlinkClick

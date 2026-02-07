@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from lxml import etree
 
+from svg2ooxml.common.units import px_to_emu
 from svg2ooxml.services.filter_service import FilterService
 from svg2ooxml.services.filter_types import FilterEffectResult
-from svg2ooxml.common.units import px_to_emu
 
 
 def _resolve_with_policy(markup: str, policy: dict[str, object]) -> list[FilterEffectResult]:

@@ -22,11 +22,11 @@ from svg2ooxml.policy import PolicyContext, PolicyEngine
 class ParserServices:
     """Container exposing the service registry used by the parser."""
 
-    services: "ConversionServices"
+    services: ConversionServices
     policy_engine: PolicyEngine
     policy_context: PolicyContext
-    unit_converter: "UnitConverter | None" = None
-    style_resolver: "StyleResolver | None" = None
+    unit_converter: UnitConverter | None = None
+    style_resolver: StyleResolver | None = None
 
 
 def build_parser_services(

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, Tuple
 
 from lxml import etree
 
@@ -14,7 +13,7 @@ from svg2ooxml.filters.utils import parse_number
 @dataclass
 class LightSource:
     kind: str
-    params: Dict[str, float]
+    params: dict[str, float]
 
 
 def _parse_light_source(primitive: etree._Element) -> LightSource | None:
@@ -118,7 +117,7 @@ class SpecularLightingFilter(Filter):
         )
 
 
-def _parse_kernel_unit(value: str | None) -> Tuple[float | None, float | None]:
+def _parse_kernel_unit(value: str | None) -> tuple[float | None, float | None]:
     if not value:
         return (None, None)
     if " " in value:

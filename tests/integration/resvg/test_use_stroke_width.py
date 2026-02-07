@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Iterable, List
 
 import pytest
 
@@ -13,7 +13,7 @@ from svg2ooxml.core.tracing import ConversionTracer
 
 def _iter_shapes(elements: Iterable) -> Iterable:
     """Yield shapes recursively from a list of IR elements."""
-    stack: List = list(elements)
+    stack: list = list(elements)
     while stack:
         shape = stack.pop()
         yield shape

@@ -2,17 +2,17 @@
 
 from __future__ import annotations
 
-from typing import Iterable, List, Tuple
+from collections.abc import Iterable
 
+from svg2ooxml.common.geometry import Matrix2D
 from svg2ooxml.drawingml.generator import px_to_emu
 from svg2ooxml.drawingml.mask_generator import compute_mask_geometry
 from svg2ooxml.drawingml.paint_runtime import clip_rect_to_xml
-from svg2ooxml.ir.geometry import BezierSegment, LineSegment, Point, Rect, SegmentType
-from svg2ooxml.ir.scene import ClipRef, MaskRef
-from svg2ooxml.common.geometry import Matrix2D
 
 # Import centralized XML builders for safe DrawingML generation
 from svg2ooxml.drawingml.xml_builder import a_elem, a_sub, to_string
+from svg2ooxml.ir.geometry import BezierSegment, LineSegment, Point, Rect, SegmentType
+from svg2ooxml.ir.scene import ClipRef, MaskRef
 
 POINT_EPSILON = 1e-6
 
@@ -22,10 +22,10 @@ __all__ = [
 ]
 
 
-def clip_xml_for(clip_ref: ClipRef | None) -> Tuple[str, List[str]]:
+def clip_xml_for(clip_ref: ClipRef | None) -> tuple[str, list[str]]:
     """Return clip-path XML plus diagnostics."""
 
-    diagnostics: List[str] = []
+    diagnostics: list[str] = []
     if clip_ref is None:
         return "", diagnostics
 
@@ -52,10 +52,10 @@ def clip_xml_for(clip_ref: ClipRef | None) -> Tuple[str, List[str]]:
     return "", diagnostics
 
 
-def mask_xml_for(mask_ref: MaskRef | None) -> Tuple[str, List[str]]:
+def mask_xml_for(mask_ref: MaskRef | None) -> tuple[str, list[str]]:
     """Return mask approximation XML plus diagnostics."""
 
-    diagnostics: List[str] = []
+    diagnostics: list[str] = []
     if mask_ref is None or mask_ref.definition is None:
         return "", diagnostics
 
@@ -100,7 +100,7 @@ def _clip_path_from_segments(
         return ""
 
     matrix = _coerce_matrix(transform)
-    parts: List[str] = ["<a:clipPath>", "<a:path clipFill=\"1\">"]
+    parts: list[str] = ["<a:clipPath>", "<a:path clipFill=\"1\">"]
     current_point: Point | None = None
 
     for segment in segment_list:

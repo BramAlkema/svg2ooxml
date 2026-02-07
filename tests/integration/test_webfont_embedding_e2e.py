@@ -5,7 +5,6 @@ Tests the complete pipeline: SVG with @font-face -> Parser -> FontLoader -> PPTX
 from __future__ import annotations
 
 import base64
-import tempfile
 import zipfile
 from pathlib import Path
 

@@ -6,12 +6,13 @@ from dataclasses import dataclass
 
 from lxml import etree
 
-from svg2ooxml.filters.base import Filter, FilterContext, FilterResult
-from svg2ooxml.filters.utils import parse_number
-from svg2ooxml.units.conversion import px_to_emu
+from svg2ooxml.common.conversions.opacity import opacity_to_ppt
 
 # Import centralized XML builders for safe DrawingML generation
 from svg2ooxml.drawingml.xml_builder import a_elem, a_sub, to_string
+from svg2ooxml.filters.base import Filter, FilterContext, FilterResult
+from svg2ooxml.filters.utils import parse_number
+from svg2ooxml.units.conversion import px_to_emu
 
 
 @dataclass
@@ -175,7 +176,7 @@ class GaussianBlurFilter(Filter):
                         color = token.upper()
                 opacity = paint.get("opacity")
                 if isinstance(opacity, (int, float)):
-                    alpha = int(max(0.0, min(float(opacity), 1.0)) * 100000)
+                    alpha = opacity_to_ppt(float(opacity))
         return color, alpha
 
 

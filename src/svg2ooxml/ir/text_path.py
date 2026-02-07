@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Sequence
 
 from .geometry import Point, Rect
 from .text import EnhancedRun, Run, TextAnchor

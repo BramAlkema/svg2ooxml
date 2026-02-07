@@ -3,13 +3,13 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+
 pptx = pytest.importorskip("pptx")
 
 from pptx import Presentation  # noqa: E402
 from pptx.enum.dml import MSO_FILL  # noqa: E402
 from pptx.enum.shapes import MSO_SHAPE_TYPE  # noqa: E402
-
-from tools.visual.builder import PptxBuilder
+from tools.visual.builder import PptxBuilder  # noqa: E402
 
 W3C_FIXTURE = Path("tests/svg/struct-use-10-f.svg")
 

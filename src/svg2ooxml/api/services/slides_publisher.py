@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 import hashlib
+import json
+import logging
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-
-import logging
-import os
-
 
 logger = logging.getLogger(__name__)
 
@@ -224,8 +223,8 @@ def _get_stored_oauth_token(user_uid: str) -> str | None:
         Decrypted OAuth refresh token, or None if not found
     """
     try:
-        from ..auth.firebase import get_firestore_client
         from ..auth.encryption import decrypt_token
+        from ..auth.firebase import get_firestore_client
 
         db = get_firestore_client()
         user_doc = db.collection("users").document(user_uid).get()

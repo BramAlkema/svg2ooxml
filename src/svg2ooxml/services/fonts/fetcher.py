@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import hashlib
-from dataclasses import dataclass
-from pathlib import Path
-from typing import Iterable
-from urllib.parse import urlparse
 import os
 import urllib.request
+from collections.abc import Iterable
+from dataclasses import dataclass
+from pathlib import Path
+from urllib.parse import urlparse
 
 MAX_FONT_SIZE = 10 * 1024 * 1024  # 10 MiB safety limit
 

@@ -2,17 +2,18 @@
 
 from __future__ import annotations
 
-import logging
 import locale
+import logging
 import os
-from typing import Any, Iterable, Mapping, TYPE_CHECKING
+from collections.abc import Iterable, Mapping
+from typing import TYPE_CHECKING, Any
 
-from svg2ooxml.css import StyleResolver
 from svg2ooxml.common.style.resolver import StyleContext as CSSStyleContext
 from svg2ooxml.core.masks import MaskProcessor
 from svg2ooxml.core.parser.units import UnitConverter
 from svg2ooxml.core.styling import StyleExtractor
 from svg2ooxml.core.traversal.viewbox import ViewportEngine
+from svg2ooxml.css import StyleResolver
 from svg2ooxml.policy import PolicyContext, PolicyEngine
 from svg2ooxml.services import ConversionServices
 
@@ -33,7 +34,7 @@ class IRConverterContext:
         logger: logging.Logger | None = None,
         policy_engine: PolicyEngine | None = None,
         policy_context: PolicyContext | None = None,
-        tracer: "ConversionTracer | None" = None,
+        tracer: ConversionTracer | None = None,
     ) -> None:
         self.services = services
         self.unit_converter = unit_converter or UnitConverter()
@@ -100,7 +101,7 @@ class IRConverterContext:
             for stage, action, subject, metadata in events
         ]
 
-    def prepare_style_context(self, result: "ParseResult") -> None:
+    def prepare_style_context(self, result: ParseResult) -> None:
         style_context = result.style_context
         if style_context is not None:
             conversion = style_context.conversion

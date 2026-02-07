@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import replace
-from typing import Any, Callable, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from svg2ooxml.ir.animation import AnimationDefinition
 
@@ -27,9 +28,9 @@ class AnimationPipeline:
         self._payload: dict[str, Any] | None = None
         self._shape_map: dict[str, str] = {}
         self._policy: dict[str, object] = {}
-        self._tracer: "ConversionTracer | None" = None
+        self._tracer: ConversionTracer | None = None
 
-    def reset(self, payload: dict[str, Any] | None, *, tracer: "ConversionTracer | None" = None) -> None:
+    def reset(self, payload: dict[str, Any] | None, *, tracer: ConversionTracer | None = None) -> None:
         self._payload = payload
         self._shape_map = {}
         self._policy = {}
@@ -103,11 +104,6 @@ class AnimationPipeline:
             return ""
 
         # Build complete timing XML, including bldLst
-        import logging
-        debug_logger = logging.getLogger("drawingml.animation_pipeline")
-        debug_logger.info("Animation map: %s", self._shape_map)
-        debug_logger.info("Animated shape IDs: %s", animated_shape_ids)
-        
         animation_xml = self._writer.build(
             remapped, 
             timeline, 

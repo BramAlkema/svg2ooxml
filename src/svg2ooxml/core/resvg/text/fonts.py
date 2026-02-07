@@ -5,11 +5,11 @@ from __future__ import annotations
 import mmap
 import os
 import platform
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Iterable, Optional
 
-from ..config import Config, DEFAULT_CONFIG
+from ..config import DEFAULT_CONFIG, Config
 
 _DEFAULT_FALLBACKS = ("DejaVuSans", "NotoSans", "Arial", "LiberationSans")
 _FONT_EXTENSIONS = (".ttf", ".otf", ".ttc")
@@ -62,9 +62,9 @@ class FontResolver:
     config: Config
     font_dirs: tuple[Path, ...] = field(default_factory=_default_font_dirs)
     fallback_families: tuple[str, ...] = _DEFAULT_FALLBACKS
-    _cache: dict[str, Optional[Path]] = field(default_factory=dict, init=False)
+    _cache: dict[str, Path | None] = field(default_factory=dict, init=False)
 
-    def resolve_primary(self, family: str) -> Optional[Path]:
+    def resolve_primary(self, family: str) -> Path | None:
         if not self.config.feature_enabled("text"):
             raise RuntimeError("Text rendering is disabled by configuration.")
         if not self.config.feature_enabled("system-fonts"):
@@ -74,7 +74,7 @@ class FontResolver:
             self._cache[key] = self._find_font(family)
         return self._cache[key]
 
-    def resolve_fallback(self, char: str) -> Optional[Path]:
+    def resolve_fallback(self, char: str) -> Path | None:
         if not self.config.feature_enabled("text"):
             raise RuntimeError("Text rendering is disabled by configuration.")
         if not self.config.feature_enabled("system-fonts"):
@@ -94,7 +94,7 @@ class FontResolver:
                     return mm[:]
         return path.read_bytes()
 
-    def _find_font(self, family: str) -> Optional[Path]:
+    def _find_font(self, family: str) -> Path | None:
         normalized = _normalize_family(family)
         if not normalized:
             return None

@@ -24,10 +24,9 @@ import json
 import os
 import sys
 import time
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import List, Dict, Optional
 
 import requests
 
@@ -42,35 +41,35 @@ SVG_DIR = Path(__file__).parent.parent / "tests" / "svg"
 class JobResult:
     """Result of a single export job."""
     svg_file: str
-    job_id: Optional[str] = None
+    job_id: str | None = None
     status: str = "pending"
     message: str = ""
-    slides_url: Optional[str] = None
-    slides_presentation_id: Optional[str] = None
-    error: Optional[str] = None
-    created_at: Optional[str] = None
-    completed_at: Optional[str] = None
-    duration_seconds: Optional[float] = None
+    slides_url: str | None = None
+    slides_presentation_id: str | None = None
+    error: str | None = None
+    created_at: str | None = None
+    completed_at: str | None = None
+    duration_seconds: float | None = None
 
 
 @dataclass
 class BatchReport:
     """Overall batch export report."""
     started_at: str
-    completed_at: Optional[str] = None
+    completed_at: str | None = None
     total_files: int = 0
     submitted: int = 0
     completed: int = 0
     failed: int = 0
     skipped: int = 0
-    results: List[Dict] = None
+    results: list[dict] = None
 
     def __post_init__(self):
         if self.results is None:
             self.results = []
 
 
-def get_auth_headers() -> Dict[str, str]:
+def get_auth_headers() -> dict[str, str]:
     """Get authentication headers from environment."""
     token = os.environ.get("FIREBASE_TOKEN")
     if not token:
@@ -85,7 +84,7 @@ def get_auth_headers() -> Dict[str, str]:
     }
 
 
-def submit_export_job(svg_path: Path, headers: Dict[str, str], parent_folder_id: Optional[str] = None) -> JobResult:
+def submit_export_job(svg_path: Path, headers: dict[str, str], parent_folder_id: str | None = None) -> JobResult:
     """Submit a single SVG file for export."""
     result = JobResult(svg_file=svg_path.name)
 
@@ -138,7 +137,7 @@ def submit_export_job(svg_path: Path, headers: Dict[str, str], parent_folder_id:
     return result
 
 
-def poll_job_status(job_id: str, headers: Dict[str, str], timeout: int = TIMEOUT_SECONDS) -> Dict:
+def poll_job_status(job_id: str, headers: dict[str, str], timeout: int = TIMEOUT_SECONDS) -> dict:
     """Poll job status until completion or timeout."""
     deadline = time.time() + timeout
 
@@ -170,11 +169,11 @@ def poll_job_status(job_id: str, headers: Dict[str, str], timeout: int = TIMEOUT
 
 
 def process_batch(
-    svg_files: List[Path],
-    headers: Dict[str, str],
+    svg_files: list[Path],
+    headers: dict[str, str],
     batch_size: int = 5,
     delay_between_batches: float = 10.0,
-    parent_folder_id: Optional[str] = None
+    parent_folder_id: str | None = None
 ) -> BatchReport:
     """Process SVG files in batches."""
     report = BatchReport(
@@ -204,7 +203,7 @@ def process_batch(
             report.submitted += 1
 
         # Wait for batch completion
-        print(f"   ⏳ Waiting for batch to complete...")
+        print("   ⏳ Waiting for batch to complete...")
         for result in batch_results:
             if result.job_id:
                 status_data = poll_job_status(result.job_id, headers)

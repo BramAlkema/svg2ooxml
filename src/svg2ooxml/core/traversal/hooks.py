@@ -3,22 +3,22 @@
 from __future__ import annotations
 
 import copy
-from typing import Any, Iterable
+from collections.abc import Iterable
+from typing import Any
 
 from lxml import etree
 
+from svg2ooxml.common.geometry import Matrix2D
 from svg2ooxml.common.style.resolver import StyleContext as CSSStyleContext
+from svg2ooxml.core.parser.switch_evaluator import SwitchEvaluator
+from svg2ooxml.core.styling import style_runtime, use_expander
+from svg2ooxml.core.traversal import clipping
+from svg2ooxml.core.traversal.constants import DEFAULT_TOLERANCE
+from svg2ooxml.core.traversal.coordinate_space import CoordinateSpace
+from svg2ooxml.core.traversal.geometry_utils import is_axis_aligned
 from svg2ooxml.ir.effects import CustomEffect
-from svg2ooxml.ir.scene import ClipRef, Group, MaskInstance, MaskRef, Path as IRShapePath
-from svg2ooxml.ir.shapes import (
-    Circle as IRShapeCircle,
-    Ellipse as IRShapeEllipse,
-    Line as IRShapeLine,
-    Polygon as IRShapePolygon,
-    Polyline as IRShapePolyline,
-    Rectangle as IRShapeRectangle,
-)
-from svg2ooxml.ir.geometry import Rect as IRRect, LineSegment, BezierSegment, SegmentType
+from svg2ooxml.ir.geometry import BezierSegment, LineSegment, SegmentType
+from svg2ooxml.ir.geometry import Rect as IRRect
 from svg2ooxml.ir.paint import (
     GradientPaintRef,
     LinearGradientPaint,
@@ -27,14 +27,27 @@ from svg2ooxml.ir.paint import (
     SolidPaint,
     Stroke,
 )
+from svg2ooxml.ir.scene import ClipRef, Group, MaskInstance, MaskRef
+from svg2ooxml.ir.scene import Path as IRShapePath
+from svg2ooxml.ir.shapes import (
+    Circle as IRShapeCircle,
+)
+from svg2ooxml.ir.shapes import (
+    Ellipse as IRShapeEllipse,
+)
+from svg2ooxml.ir.shapes import (
+    Line as IRShapeLine,
+)
+from svg2ooxml.ir.shapes import (
+    Polygon as IRShapePolygon,
+)
+from svg2ooxml.ir.shapes import (
+    Polyline as IRShapePolyline,
+)
+from svg2ooxml.ir.shapes import (
+    Rectangle as IRShapeRectangle,
+)
 from svg2ooxml.services.filter_types import FilterEffectResult
-from svg2ooxml.common.geometry import Matrix2D
-from svg2ooxml.core.parser.switch_evaluator import SwitchEvaluator
-from svg2ooxml.core.styling import style_runtime, use_expander
-from svg2ooxml.core.traversal import clipping
-from svg2ooxml.core.traversal.constants import DEFAULT_TOLERANCE
-from svg2ooxml.core.traversal.coordinate_space import CoordinateSpace
-from svg2ooxml.core.traversal.geometry_utils import is_axis_aligned
 
 
 class TraversalHooksMixin:

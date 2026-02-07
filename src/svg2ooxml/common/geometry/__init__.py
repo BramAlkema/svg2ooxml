@@ -15,7 +15,7 @@ __all__ = [
 ]
 
 # map symbol -> relative module
-_symbol_map = {'Matrix2D': 'matrix', 'parse_transform_list': 'matrix'}
+_symbol_map = {'parse_transform_list': 'matrix', 'Matrix2D': 'matrix'}
 _module_map = {'algorithms': 'algorithms', 'clip': 'clip', 'fractional': 'fractional', 'matrix': 'matrix', 'paths': 'paths', 'transforms': 'transforms'}
 
 

@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from svg2ooxml.common.conversions.angles import degrees_to_ppt
+from svg2ooxml.common.conversions.opacity import opacity_to_ppt
+
 EMU_PER_POINT = 12700  # 1pt == 12700 EMU
 
 
@@ -35,10 +38,10 @@ class ShadowEffect(Effect):
         )
 
     def to_direction_emu(self) -> int:
-        return int(self.angle * 60000) % 21600000
+        return degrees_to_ppt(self.angle % 360)
 
     def to_alpha_val(self) -> int:
-        return int(self.alpha * 100000)
+        return opacity_to_ppt(self.alpha)
 
 
 @dataclass(frozen=True)
@@ -73,8 +76,8 @@ class ReflectionEffect(Effect):
 
     def to_alpha_vals(self) -> tuple[int, int]:
         return (
-            int(self.start_alpha * 100000),
-            int(self.end_alpha * 100000),
+            opacity_to_ppt(self.start_alpha),
+            opacity_to_ppt(self.end_alpha),
         )
 
 

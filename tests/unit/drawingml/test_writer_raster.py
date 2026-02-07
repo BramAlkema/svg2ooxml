@@ -2,12 +2,11 @@ from __future__ import annotations
 
 import pytest
 
-from svg2ooxml.drawingml.writer import DrawingMLWriter
 from svg2ooxml.drawingml.rasterizer import SKIA_AVAILABLE
+from svg2ooxml.drawingml.writer import DrawingMLWriter
 from svg2ooxml.ir.geometry import Rect
 from svg2ooxml.ir.paint import SolidPaint, Stroke
 from svg2ooxml.ir.shapes import Rectangle
-
 
 pytestmark = pytest.mark.skipif(not SKIA_AVAILABLE, reason="skia-python not available")
 

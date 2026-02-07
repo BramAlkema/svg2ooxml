@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Iterable
 
 from svg2ooxml.ir.fonts import SvgFontDefinition
 from svg2ooxml.services.fonts.service import FontMatch, FontProvider, FontQuery

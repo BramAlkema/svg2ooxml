@@ -2,7 +2,7 @@
 
 import pytest
 
-from svg2ooxml.color import Color, TRANSPARENT, parse_color
+from svg2ooxml.color import TRANSPARENT, Color, parse_color
 
 
 def test_parse_named_color() -> None:

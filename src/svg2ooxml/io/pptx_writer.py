@@ -8,17 +8,18 @@ import shutil
 import uuid
 import zipfile
 from collections import OrderedDict
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Sequence, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
 from lxml import etree as ET
 
 from svg2ooxml.common.tempfiles import temporary_directory
+from svg2ooxml.core.ir import IRScene
 from svg2ooxml.drawingml.assets import FontAsset, MediaAsset, NavigationAsset
 from svg2ooxml.drawingml.result import DrawingMLRenderResult
-from svg2ooxml.drawingml.writer import DrawingMLWriter, DEFAULT_SLIDE_SIZE
-from svg2ooxml.core.ir import IRScene
+from svg2ooxml.drawingml.writer import DEFAULT_SLIDE_SIZE, DrawingMLWriter
 from svg2ooxml.ir.text import EmbeddedFontPlan
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
@@ -242,7 +243,7 @@ class PPTXPackageBuilder:
         scene: IRScene,
         output_path: str | Path,
         *,
-        tracer: "ConversionTracer | None" = None,
+        tracer: ConversionTracer | None = None,
         persist_trace: bool | None = None,
     ) -> Path:
         """Materialise a PPTX file for the supplied IR scene."""
@@ -253,7 +254,7 @@ class PPTXPackageBuilder:
         scenes: Sequence[IRScene],
         output_path: str | Path,
         *,
-        tracer: "ConversionTracer | None" = None,
+        tracer: ConversionTracer | None = None,
         persist_trace: bool | None = None,
     ) -> Path:
         """Materialise a PPTX file for a sequence of IR scenes."""
@@ -276,7 +277,7 @@ class PPTXPackageBuilder:
         render_results: Sequence[DrawingMLRenderResult],
         output_path: str | Path,
         *,
-        tracer: "ConversionTracer | None" = None,
+        tracer: ConversionTracer | None = None,
         persist_trace: bool | None = None,
         slide_size_mode: str | None = None,
     ) -> Path:
@@ -315,14 +316,14 @@ class PackageWriter:
         self._content_types_template = content_types_template
         self._slide_rels_template = slide_rels_template
         self._slide_size_mode = slide_size_mode
-        self._tracer: "ConversionTracer | None" = None
+        self._tracer: ConversionTracer | None = None
 
     def write_package(
         self,
         slides: Sequence[SlideAssembly],
         output_path: str | Path,
         *,
-        tracer: "ConversionTracer | None" = None,
+        tracer: ConversionTracer | None = None,
         persist_trace: bool | None = None,
         slide_size_mode: str | None = None,
     ) -> Path:
@@ -749,7 +750,7 @@ class PackageWriter:
                 for child in list(font_list):
                     font_list.remove(child)
 
-            font_groups: "OrderedDict[str, dict[str, _PackagedFont]]" = OrderedDict()
+            font_groups: OrderedDict[str, dict[str, _PackagedFont]] = OrderedDict()
             for font in fonts:
                 slot = font_groups.setdefault(font.font_family, {})
                 slot[font.style_kind] = font

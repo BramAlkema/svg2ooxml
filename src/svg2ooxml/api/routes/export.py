@@ -144,7 +144,7 @@ async def create_export_job(
         elif user_has_unlimited:
             logger.info(f"Export quota checking bypassed for user {firebase_uid} (user has unlimited_exports flag)")
         else:
-            logger.info(f"Export quota checking disabled globally (DISABLE_EXPORT_QUOTA=true)")
+            logger.info("Export quota checking disabled globally (DISABLE_EXPORT_QUOTA=true)")
 
         # Check for OAuth token if Slides format is requested
         if request.output_format.lower() == "slides":
@@ -244,7 +244,7 @@ async def create_export_job(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to create export job: {str(e)}",
-        )
+        ) from e
 
 
 @router.get("/export/{job_id}", response_model=JobStatusResponse)
@@ -281,13 +281,13 @@ async def get_job_status(job_id: str) -> JobStatusResponse:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Job {job_id} not found",
-        )
+        ) from None
     except Exception as e:
         logger.error(f"Failed to get job status for {job_id}: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to retrieve job status: {str(e)}",
-        )
+        ) from e
 
 
 @router.delete("/export/{job_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -307,13 +307,13 @@ async def delete_job(job_id: str):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Job {job_id} not found",
-        )
+        ) from None
     except Exception as e:
         logger.error(f"Failed to delete job {job_id}: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to delete job: {str(e)}",
-        )
+        ) from e
 
 
 __all__ = ["router"]

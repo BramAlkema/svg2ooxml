@@ -6,12 +6,12 @@ from dataclasses import dataclass
 
 from lxml import etree
 
-from svg2ooxml.filters.base import Filter, FilterContext, FilterResult
-from svg2ooxml.filters.utils.dml import merge_effect_fragments
+from svg2ooxml.common.conversions.opacity import opacity_to_ppt
 
 # Import centralized XML builders for safe DrawingML generation
 from svg2ooxml.drawingml.xml_builder import a_elem, a_sub, to_string
-
+from svg2ooxml.filters.base import Filter, FilterContext, FilterResult
+from svg2ooxml.filters.utils.dml import merge_effect_fragments
 
 SUPPORTED_MODES = {
     "normal",
@@ -196,7 +196,7 @@ class BlendFilter(Filter):
         if blend is None:
             return None
         color, opacity = color_info
-        alpha = int(round(max(0.0, min(opacity, 1.0)) * 100000))
+        alpha = opacity_to_ppt(opacity)
 
         fillOverlay = a_elem("fillOverlay", blend=blend)
         solidFill = a_sub(fillOverlay, "solidFill")

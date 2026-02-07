@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any, Mapping, Optional
+from typing import Any
 
 from svg2ooxml.ir.scene import MaskDefinition, MaskInstance, MaskMode, MaskRef
 from svg2ooxml.services.mask_service import StructuredMaskService
@@ -24,7 +25,7 @@ class MaskProcessingResult:
     media_files: list[dict[str, Any]] = field(default_factory=list)
     metadata: dict[str, Any] = field(default_factory=dict)
 
-    def with_metadata(self, **extra: Any) -> "MaskProcessingResult":
+    def with_metadata(self, **extra: Any) -> MaskProcessingResult:
         combined = dict(self.metadata)
         combined.update(extra)
         return MaskProcessingResult(
@@ -53,9 +54,9 @@ class MaskProcessor:
                 mask_assets = services.resolve("mask_asset_store")
         self._mask_service: StructuredMaskService = mask_service or StructuredMaskService(services)
         self._mask_asset_store = mask_assets
-        self._tracer: "ConversionTracer | None" = None
+        self._tracer: ConversionTracer | None = None
 
-    def set_tracer(self, tracer: "ConversionTracer | None") -> None:
+    def set_tracer(self, tracer: ConversionTracer | None) -> None:
         self._tracer = tracer
 
     def process(
@@ -152,7 +153,7 @@ class MaskProcessor:
             "mask_id": mask_ref.mask_id,
         }
 
-        definition: Optional[MaskDefinition] = getattr(mask_ref, "definition", None)
+        definition: MaskDefinition | None = getattr(mask_ref, "definition", None)
         if definition is not None:
             metadata.update(
                 {
@@ -201,17 +202,17 @@ class MaskProcessor:
 
         if hasattr(ir_element, "segments"):
             try:
-                metadata.setdefault("segment_count", len(getattr(ir_element, "segments")))
+                metadata.setdefault("segment_count", len(ir_element.segments))
             except TypeError:
                 pass
         if hasattr(ir_element, "opacity"):
             try:
-                metadata.setdefault("element_opacity", float(getattr(ir_element, "opacity")))
+                metadata.setdefault("element_opacity", float(ir_element.opacity))
             except (TypeError, ValueError):
                 pass
         if hasattr(ir_element, "bbox"):
             try:
-                metadata.setdefault("element_bbox", getattr(ir_element, "bbox"))
+                metadata.setdefault("element_bbox", ir_element.bbox)
             except Exception:  # pragma: no cover - defensive
                 pass
 

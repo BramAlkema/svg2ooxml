@@ -6,11 +6,11 @@ utilities into a single convenient interface.
 
 from __future__ import annotations
 
-from .units import UnitConverter, px_to_emu as _px_to_emu, DEFAULT_DPI
-from .colors import color_to_hex
 from .angles import degrees_to_ppt, radians_to_ppt
+from .colors import color_to_hex
 from .opacity import opacity_to_ppt
-from .transforms import parse_scale_pair, parse_translation_pair, parse_angle
+from .transforms import parse_angle, parse_scale_pair, parse_translation_pair
+from .units import DEFAULT_DPI, UnitConverter
 
 __all__ = ["PPTConverter"]
 

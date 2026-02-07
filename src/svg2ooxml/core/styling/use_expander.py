@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from copy import deepcopy
-from typing import Iterable
 
 from lxml import etree
 
@@ -269,14 +269,7 @@ def prepend_transform(element: etree._Element, matrix: Matrix2D) -> None:
 
 
 def matrix_to_string(matrix: Matrix2D) -> str:
-    return "matrix({:.6g} {:.6g} {:.6g} {:.6g} {:.6g} {:.6g})".format(
-        matrix.a,
-        matrix.b,
-        matrix.c,
-        matrix.d,
-        matrix.e,
-        matrix.f,
-    )
+    return f"matrix({matrix.a:.6g} {matrix.b:.6g} {matrix.c:.6g} {matrix.d:.6g} {matrix.e:.6g} {matrix.f:.6g})"
 
 
 __all__ = [

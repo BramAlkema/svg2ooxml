@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Iterable, List, Sequence, Tuple
 
 from svg2ooxml.ir.geometry import BezierSegment, LineSegment, Point, SegmentType
 
@@ -12,7 +12,7 @@ from svg2ooxml.ir.geometry import BezierSegment, LineSegment, Point, SegmentType
 class DashPattern:
     """Normalised dash pattern expressed in EMUs."""
 
-    pattern: Tuple[float, ...]
+    pattern: tuple[float, ...]
     offset: float = 0.0
 
     def is_solid(self) -> bool:
@@ -23,12 +23,12 @@ def flatten_segments(
     segments: Sequence[SegmentType],
     *,
     tolerance: float = 0.5,
-) -> List[Tuple[float, float]]:
+) -> list[tuple[float, float]]:
     """Return a polyline approximation of the supplied segments."""
 
     if not segments:
         return []
-    points: List[Tuple[float, float]] = []
+    points: list[tuple[float, float]] = []
     for segment in segments:
         if isinstance(segment, LineSegment):
             if not points:
@@ -50,9 +50,9 @@ def flatten_segments(
 
 
 def apply_dash_pattern(
-    points: Sequence[Tuple[float, float]],
+    points: Sequence[tuple[float, float]],
     pattern: DashPattern | None,
-) -> List[List[Tuple[float, float]]]:
+) -> list[list[tuple[float, float]]]:
     """Break a polyline into dash segments."""
 
     if not points or len(points) < 2:
@@ -60,7 +60,7 @@ def apply_dash_pattern(
     if pattern is None or pattern.is_solid():
         return [list(points)]
 
-    segments: List[List[Tuple[float, float]]] = []
+    segments: list[list[tuple[float, float]]] = []
     pattern_values = [abs(value) for value in pattern.pattern if value > 0]
     if not pattern_values:
         return [list(points)]
@@ -79,9 +79,9 @@ def apply_dash_pattern(
             dash_remaining = pattern_values[dash_index]
 
     drawing = bool(dash_index % 2 == 0)
-    current_segment: List[Tuple[float, float]] = []
+    current_segment: list[tuple[float, float]] = []
 
-    for start, end in zip(points[:-1], points[1:]):
+    for start, end in zip(points[:-1], points[1:], strict=True):
         sx, sy = start
         ex, ey = end
         dx = ex - sx
@@ -93,7 +93,6 @@ def apply_dash_pattern(
         consumed = 0.0
         while consumed < segment_length:
             step = min(dash_remaining, segment_length - consumed)
-            t = step / segment_length
             ix = sx + dx * ((consumed + step) / segment_length)
             iy = sy + dy * ((consumed + step) / segment_length)
 
@@ -122,8 +121,8 @@ def apply_dash_pattern(
     return [segment for segment in segments if len(segment) > 1]
 
 
-def _flatten_bezier(segment: BezierSegment, tolerance: float, points: List[Tuple[float, float]]) -> None:
-    stack: List[Tuple[BezierSegment, int]] = [(segment, 0)]
+def _flatten_bezier(segment: BezierSegment, tolerance: float, points: list[tuple[float, float]]) -> None:
+    stack: list[tuple[BezierSegment, int]] = [(segment, 0)]
     while stack:
         current, depth = stack.pop()
         if _bezier_is_flat(current, tolerance) or depth > 12:
@@ -148,7 +147,7 @@ def _bezier_is_flat(segment: BezierSegment, tolerance: float) -> bool:
     return max(d1, d2) <= tolerance
 
 
-def _split_bezier(segment: BezierSegment) -> Tuple[BezierSegment, BezierSegment]:
+def _split_bezier(segment: BezierSegment) -> tuple[BezierSegment, BezierSegment]:
     p0 = segment.start
     p1 = segment.control1
     p2 = segment.control2

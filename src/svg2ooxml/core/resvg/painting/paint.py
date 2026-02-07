@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Optional, Tuple
+
+from svg2ooxml.color.parsers import parse_color as parse_global_color
 
 from .colors import parse_rgb
-from svg2ooxml.color.parsers import parse_color as parse_global_color
 
 _HEX_SHORT_RE = re.compile(r"^#([0-9a-fA-F]{3})$")
 _HEX_FULL_RE = re.compile(r"^#([0-9a-fA-F]{6})$")
@@ -39,32 +39,32 @@ class PaintReference:
 
 @dataclass(frozen=True)
 class FillStyle:
-    color: Optional[Color]
+    color: Color | None
     opacity: float
-    reference: Optional[PaintReference]
+    reference: PaintReference | None
 
 
 @dataclass(frozen=True)
 class StrokeStyle:
-    color: Optional[Color]
-    width: Optional[float]
+    color: Color | None
+    width: float | None
     opacity: float
-    reference: Optional[PaintReference]
+    reference: PaintReference | None
 
 
 @dataclass(frozen=True)
 class TextStyle:
-    font_families: Tuple[str, ...]
-    font_size: Optional[float]
-    font_style: Optional[str]
-    font_weight: Optional[str]
+    font_families: tuple[str, ...]
+    font_size: float | None
+    font_style: str | None
+    font_weight: str | None
 
 
 def _clamp(value: float, minimum: float = 0.0, maximum: float = 1.0) -> float:
     return max(minimum, min(maximum, value))
 
 
-def _parse_component(value: str) -> Optional[int]:
+def _parse_component(value: str) -> int | None:
     """Parse an RGB color component from a string value.
 
     Supports both absolute values (0-255) and percentages (0%-100%).
@@ -90,7 +90,7 @@ def _parse_component(value: str) -> Optional[int]:
         return None
 
 
-def _parse_rgb_function(value: str) -> Optional[tuple[int, int, int]]:
+def _parse_rgb_function(value: str) -> tuple[int, int, int] | None:
     match = _RGB_RE.match(value)
     if not match:
         return None
@@ -103,11 +103,11 @@ def _parse_rgb_function(value: str) -> Optional[tuple[int, int, int]]:
     return tuple(int(comp) for comp in comps)
 
 
-def parse_color(value: Optional[str], opacity: Optional[float]) -> Optional[Color]:
+def parse_color(value: str | None, opacity: float | None) -> Color | None:
     if value is None:
         return None
     value = value.strip()
-    rgb: Optional[tuple[int, int, int]] = None
+    rgb: tuple[int, int, int] | None = None
     if match := _HEX_SHORT_RE.match(value):
         hex_value = match.group(1)
         rgb = tuple(int(ch * 2, 16) for ch in hex_value)
@@ -120,7 +120,10 @@ def parse_color(value: Optional[str], opacity: Optional[float]) -> Optional[Colo
         a = _clamp(opacity if opacity is not None else 1.0)
         return Color(r=rgb[0] / 255.0, g=rgb[1] / 255.0, b=rgb[2] / 255.0, a=a)
 
-    global_color = parse_global_color(value)
+    try:
+        global_color = parse_global_color(value)
+    except ValueError:
+        return None
     if global_color is None:
         return None
 
@@ -128,7 +131,7 @@ def parse_color(value: Optional[str], opacity: Optional[float]) -> Optional[Colo
     return Color(r=global_color.r, g=global_color.g, b=global_color.b, a=a)
 
 
-def resolve_fill(fill_value: Optional[str], fill_opacity: Optional[float], opacity: Optional[float]) -> FillStyle:
+def resolve_fill(fill_value: str | None, fill_opacity: float | None, opacity: float | None) -> FillStyle:
     effective_opacity = (fill_opacity if fill_opacity is not None else 1.0) * (
         opacity if opacity is not None else 1.0
     )
@@ -146,10 +149,10 @@ def resolve_fill(fill_value: Optional[str], fill_opacity: Optional[float], opaci
 
 
 def resolve_stroke(
-    stroke_value: Optional[str],
-    stroke_width: Optional[float],
-    stroke_opacity: Optional[float],
-    opacity: Optional[float],
+    stroke_value: str | None,
+    stroke_width: float | None,
+    stroke_opacity: float | None,
+    opacity: float | None,
 ) -> StrokeStyle:
     effective_opacity = (stroke_opacity if stroke_opacity is not None else 1.0) * (
         opacity if opacity is not None else 1.0
@@ -167,8 +170,8 @@ def resolve_stroke(
     return StrokeStyle(color=color, width=stroke_width, opacity=effective_opacity, reference=reference)
 
 
-def resolve_text_style(font_family: Optional[str], font_size: Optional[float], font_style: Optional[str], font_weight: Optional[str]) -> TextStyle:
-    families: Tuple[str, ...]
+def resolve_text_style(font_family: str | None, font_size: float | None, font_style: str | None, font_weight: str | None) -> TextStyle:
+    families: tuple[str, ...]
     if font_family:
         normalized: list[str] = []
         for part in font_family.split(","):

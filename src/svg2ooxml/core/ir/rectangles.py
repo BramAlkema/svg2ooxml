@@ -17,14 +17,14 @@ from svg2ooxml.ir.scene import Path
 from svg2ooxml.ir.shapes import Rectangle
 
 if TYPE_CHECKING:  # pragma: no cover - import guard
-    from svg2ooxml.core.traversal.coordinate_space import CoordinateSpace
     from svg2ooxml.core.ir.converter import IRConverter
+    from svg2ooxml.core.traversal.coordinate_space import CoordinateSpace
 
 
 def convert_rect(
-    converter: "IRConverter",
+    converter: IRConverter,
     element: etree._Element,
-    coord_space: "CoordinateSpace",
+    coord_space: CoordinateSpace,
     *,
     tolerance: float,
 ):

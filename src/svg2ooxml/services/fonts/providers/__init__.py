@@ -14,12 +14,7 @@ __all__ = [
 ]
 
 # map symbol -> relative module
-_symbol_map = {
-    'FONT_EXTENSIONS': 'directory',
-    'DirectoryFontProvider': 'directory',
-    'SvgFontProvider': 'svgfont',
-    'WebFontProvider': 'webfont',
-}
+_symbol_map = {'FONT_EXTENSIONS': 'directory', 'DirectoryFontProvider': 'directory', 'SvgFontProvider': 'svgfont', 'WebFontProvider': 'webfont'}
 _module_map = {'directory': 'directory', 'svgfont': 'svgfont', 'webfont': 'webfont'}
 
 

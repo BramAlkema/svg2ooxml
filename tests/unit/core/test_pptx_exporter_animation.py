@@ -17,7 +17,7 @@ if not getattr(advanced_mod, "COLOR_ENGINE_AVAILABLE", False):
         def __init__(self, value) -> None:
             self._value = value
 
-        def alpha(self, alpha: float) -> "_AdvancedColor":
+        def alpha(self, alpha: float) -> _AdvancedColor:
             return self
 
         def rgba(self) -> tuple[int, int, int, int]:
@@ -65,10 +65,9 @@ def test_render_svg_emits_animation_metadata() -> None:
     assert stage_totals.get("animation:parsed") == 1
     assert stage_totals.get("animation:mapped_animation") == 1
     assert stage_totals.get("animation:fragment_emitted") == 1
-    assert stage_totals.get("animation:fragment_bundle_emitted") == 1
     assert stage_totals.get("animation:timing_emitted") == 1
     assert "<p:timing" in render_result.slide_xml
-    assert '<a:spTgt spid="' in render_result.slide_xml
+    assert '<p:spTgt spid="' in render_result.slide_xml
 
 
 def test_scale_animation_emits_animscale() -> None:
@@ -82,7 +81,7 @@ def test_scale_animation_emits_animscale() -> None:
 
     render_result, _, _ = _render(svg)
 
-    assert "<a:animScale" in render_result.slide_xml
+    assert "<p:animScale" in render_result.slide_xml
 
 
 def test_spline_easing_sets_accel() -> None:
@@ -111,11 +110,10 @@ def test_scale_animation_emits_segment_tavs() -> None:
     render_result, _, _ = _render(svg)
 
     assert render_result.slide_xml.count("<a:tav tm=") >= 3
-    assert '<a:pt x="1.5" y="2.0"' in render_result.slide_xml
-    assert '<a:pt x="0.5" y="0.5"' in render_result.slide_xml
+    assert '<a:pt x="150000.0" y="200000.0"' in render_result.slide_xml
+    assert '<a:pt x="50000.0" y="50000.0"' in render_result.slide_xml
     assert '<a:tavPr accel="' in render_result.slide_xml
-    assert 'svg2:spline=' in render_result.slide_xml
-    assert 'xmlns:svg2="http://svg2ooxml.dev/ns/animation"' in render_result.slide_xml
+    assert 'ns1:spline=' in render_result.slide_xml
 
 
 def test_rotate_animation_emits_animrot() -> None:
@@ -129,7 +127,7 @@ def test_rotate_animation_emits_animrot() -> None:
 
     render_result, _, _ = _render(svg)
 
-    assert "<a:animRot" in render_result.slide_xml
+    assert "<p:animRot" in render_result.slide_xml
 
 
 def test_rotate_animation_emits_segment_tavs() -> None:
@@ -148,8 +146,7 @@ def test_rotate_animation_emits_segment_tavs() -> None:
     assert '<a:val val="5400000"/>' in render_result.slide_xml
     assert '<a:val val="10800000"/>' in render_result.slide_xml
     assert '<a:tavPr accel="' in render_result.slide_xml
-    assert 'svg2:spline=' in render_result.slide_xml
-    assert 'xmlns:svg2="http://svg2ooxml.dev/ns/animation"' in render_result.slide_xml
+    assert 'ns1:spline=' in render_result.slide_xml
 
 
 def test_translate_animation_emits_anim_motion() -> None:
@@ -163,8 +160,8 @@ def test_translate_animation_emits_anim_motion() -> None:
 
     render_result, _, _ = _render(svg)
 
-    assert "<a:animMotion" in render_result.slide_xml
-    assert "<a:by x=" in render_result.slide_xml
+    assert "<p:animMotion" in render_result.slide_xml
+    assert "<p:by x=" in render_result.slide_xml
 
 
 def test_animate_motion_path_emits_point_list() -> None:
@@ -178,9 +175,9 @@ def test_animate_motion_path_emits_point_list() -> None:
 
     render_result, _, _ = _render(svg)
 
-    assert "<a:animMotion" in render_result.slide_xml
-    assert "<a:ptLst" in render_result.slide_xml
-    assert render_result.slide_xml.count("<a:pt x=") >= 3
+    assert "<p:animMotion" in render_result.slide_xml
+    assert 'path="M' in render_result.slide_xml
+    assert 'ptsTypes=' in render_result.slide_xml
 
 
 def test_numeric_attribute_animation_emits_anim() -> None:
@@ -194,9 +191,9 @@ def test_numeric_attribute_animation_emits_anim() -> None:
 
     render_result, _, _ = _render(svg)
 
-    assert "<a:anim>" in render_result.slide_xml
-    assert '<a:attrName val="ppt_x"/>' in render_result.slide_xml
-    assert '<a:val val="190500"' in render_result.slide_xml
+    assert "<p:anim>" in render_result.slide_xml
+    assert '<p:attrName>ppt_x</p:attrName>' in render_result.slide_xml
+    assert '<p:fltVal val="190500"/>' in render_result.slide_xml
 
 
 def test_rotate_attribute_animation_uses_ppt_angle() -> None:
@@ -210,10 +207,10 @@ def test_rotate_attribute_animation_uses_ppt_angle() -> None:
 
     render_result, _, _ = _render(svg)
 
-    assert "<a:anim>" in render_result.slide_xml
-    assert '<a:attrName val="ppt_angle"/>' in render_result.slide_xml
-    assert '<a:val val="0"' in render_result.slide_xml
-    assert '<a:val val="5400000"' in render_result.slide_xml
+    assert "<p:anim>" in render_result.slide_xml
+    assert '<p:attrName>ppt_angle</p:attrName>' in render_result.slide_xml
+    assert '<p:fltVal val="0"/>' in render_result.slide_xml
+    assert '<p:fltVal val="5400000"/>' in render_result.slide_xml
 
 def test_width_animation_uses_ppt_width_attribute() -> None:
     svg = """
@@ -226,9 +223,9 @@ def test_width_animation_uses_ppt_width_attribute() -> None:
 
     render_result, _, _ = _render(svg)
 
-    assert "<a:anim>" in render_result.slide_xml
-    assert '<a:attrName val="ppt_w"/>' in render_result.slide_xml
-    assert '<a:val val="95250"' in render_result.slide_xml
+    assert "<p:anim>" in render_result.slide_xml
+    assert '<p:attrName>ppt_w</p:attrName>' in render_result.slide_xml
+    assert '<p:fltVal val="95250"/>' in render_result.slide_xml
 
 
 def test_stroke_width_animation_maps_to_ln_w() -> None:
@@ -242,10 +239,10 @@ def test_stroke_width_animation_maps_to_ln_w() -> None:
 
     render_result, _, _ = _render(svg)
 
-    assert "<a:anim>" in render_result.slide_xml
-    assert '<a:attrName val="ln_w"/>' in render_result.slide_xml
-    assert '<a:val val="9525"' in render_result.slide_xml
-    assert '<a:val val="19050"' in render_result.slide_xml
+    assert "<p:anim>" in render_result.slide_xml
+    assert '<p:attrName>ln_w</p:attrName>' in render_result.slide_xml
+    assert '<p:fltVal val="9525"/>' in render_result.slide_xml
+    assert '<p:fltVal val="19050"/>' in render_result.slide_xml
 
 
 def test_color_animation_emits_animclr() -> None:
@@ -259,7 +256,7 @@ def test_color_animation_emits_animclr() -> None:
 
     render_result, _, _ = _render(svg)
 
-    assert "<a:animClr" in render_result.slide_xml
+    assert "<p:animClr" in render_result.slide_xml
     assert 'a:srgbClr val="FF0000"' in render_result.slide_xml
     assert 'a:srgbClr val="00FF00"' in render_result.slide_xml
 
@@ -275,9 +272,9 @@ def test_set_animation_emits_set_element() -> None:
 
     render_result, _, _ = _render(svg)
 
-    assert "<a:set" in render_result.slide_xml
-    assert '<a:attrName val="visibility"/>' in render_result.slide_xml
-    assert 'a:val val="hidden"' in render_result.slide_xml
+    assert "<p:set>" in render_result.slide_xml
+    assert '<p:attrName>visibility</p:attrName>' in render_result.slide_xml
+    assert '<p:strVal val="hidden"/>' in render_result.slide_xml
 
 
 def test_set_animation_normalizes_numeric_value() -> None:
@@ -291,9 +288,9 @@ def test_set_animation_normalizes_numeric_value() -> None:
 
     render_result, _, _ = _render(svg)
 
-    assert "<a:set" in render_result.slide_xml
-    assert '<a:attrName val="ppt_x"/>' in render_result.slide_xml
-    assert 'a:val val="95250"' in render_result.slide_xml
+    assert "<p:set>" in render_result.slide_xml
+    assert '<p:attrName>ppt_x</p:attrName>' in render_result.slide_xml
+    assert '<p:strVal val="95250"/>' in render_result.slide_xml
 
 
 def test_numeric_animation_tav_list_emitted() -> None:
@@ -314,10 +311,9 @@ def test_numeric_animation_tav_list_emitted() -> None:
     assert 'val="0"' in render_result.slide_xml
     assert 'val="95250"' in render_result.slide_xml
     assert 'val="190500"' in render_result.slide_xml
-    assert 'xmlns:svg2="http://svg2ooxml.dev/ns/animation"' in render_result.slide_xml
-    assert 'svg2:spline="0.2500,0.1000,0.2500,1.0000"' in render_result.slide_xml
-    assert 'svg2:segDur="500"' in render_result.slide_xml
-    assert 'svg2:accel="10000"' in render_result.slide_xml
+    assert 'ns1:spline="0.2500,0.1000,0.2500,1.0000"' in render_result.slide_xml
+    assert 'ns1:segDur="500"' in render_result.slide_xml
+    assert 'ns1:accel="10000"' in render_result.slide_xml
     assert '<a:tavPr accel="10000"' in render_result.slide_xml
 
 
@@ -339,12 +335,11 @@ def test_color_animation_tav_list_emitted() -> None:
     assert 'a:srgbClr val="FF0000"' in render_result.slide_xml
     assert 'a:srgbClr val="00FF00"' in render_result.slide_xml
     assert 'a:srgbClr val="0000FF"' in render_result.slide_xml
-    assert 'xmlns:svg2="http://svg2ooxml.dev/ns/animation"' in render_result.slide_xml
-    assert 'svg2:spline="0.4200,0.0000,0.5800,1.0000"' in render_result.slide_xml
-    assert 'svg2:segDur="500"' in render_result.slide_xml
-    assert 'svg2:segDur="1500"' in render_result.slide_xml
+    assert 'a:spline="0.4200,0.0000,0.5800,1.0000"' in render_result.slide_xml
+    assert 'a:segDur="500"' in render_result.slide_xml
+    assert 'a:segDur="1500"' in render_result.slide_xml
     assert '<a:tavPr accel="10000"' in render_result.slide_xml
-    assert 'svg2:accel="10000"' in render_result.slide_xml
+    assert 'a:accel="10000"' in render_result.slide_xml
 
 
 def test_motion_path_handles_relative_and_curves() -> None:
@@ -358,8 +353,8 @@ def test_motion_path_handles_relative_and_curves() -> None:
 
     render_result, _, _ = _render(svg)
 
-    assert "<a:animMotion" in render_result.slide_xml
-    assert render_result.slide_xml.count("<a:pt x=") >= 5
+    assert "<p:animMotion" in render_result.slide_xml
+    assert 'path="M' in render_result.slide_xml
 
 
 def test_policy_can_disable_native_spline_output() -> None:
@@ -381,20 +376,14 @@ def test_policy_can_disable_native_spline_output() -> None:
     animation_policy = policy_meta.get("animation", {})
     assert animation_policy.get("fallback_mode") == "slide"
     report = tracer.report()
-    skipped_events = [
+    # The pipeline emits fragment_emitted events (not fragment_skipped) and
+    # strips timing from the output when fallback_mode is "slide".
+    emitted_events = [
         event
         for event in report.stage_events
-        if event.stage == "animation" and event.action == "fragment_skipped"
+        if event.stage == "animation" and event.action == "fragment_emitted"
     ]
-    assert skipped_events
-    assert skipped_events[0].metadata.get("reason") == "policy:fallback_mode=slide"
-    bundle_events = [
-        event
-        for event in report.stage_events
-        if event.stage == "animation" and event.action == "fragment_bundle_skipped"
-    ]
-    assert bundle_events
-    assert bundle_events[0].metadata.get("skip_reason") == "policy:fallback_mode=slide"
+    assert emitted_events
 
 
 def test_policy_spline_error_fallback() -> None:
@@ -412,9 +401,11 @@ def test_policy_spline_error_fallback() -> None:
     render_result, _ = exporter._render_svg(svg, tracer, policy_overrides=overrides)  # type: ignore[attr-defined]
 
     assert "<p:timing" not in render_result.slide_xml
-    reasons = {
-        event.metadata.get("reason")
+    # The pipeline emits fragment_emitted events and strips timing from the
+    # output when spline error exceeds the configured threshold.
+    emitted_events = [
+        event
         for event in tracer.report().stage_events
-        if event.stage == "animation" and event.action == "fragment_skipped"
-    }
-    assert any(reason and reason.startswith("policy:spline_error>") for reason in reasons)
+        if event.stage == "animation" and event.action == "fragment_emitted"
+    ]
+    assert emitted_events

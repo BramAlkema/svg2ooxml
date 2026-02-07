@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from svg2ooxml.services.fonts.embedding import FontEmbeddingEngine, FontEmbeddingRequest
+from svg2ooxml.services.fonts.fontforge_utils import FONTFORGE_AVAILABLE
 
 
 def _resource_font_path() -> Path:
@@ -25,11 +26,12 @@ def _make_request(tmp_path: Path) -> FontEmbeddingRequest:
     )
 
 
+@pytest.mark.skipif(not FONTFORGE_AVAILABLE, reason="FontForge required for glyph subsetting")
 def test_subset_font_uses_cache(monkeypatch, tmp_path) -> None:
     engine = FontEmbeddingEngine()
     request = _make_request(tmp_path)
 
-    monkeypatch.setattr(engine, "_read_embedding_permission", lambda _path: "installable")
+    monkeypatch.setattr(engine, "_read_embedding_permission", lambda _path, _data=None: "installable")
 
     result_a = engine.subset_font(request)
     result_b = engine.subset_font(request)
@@ -45,7 +47,7 @@ def test_subset_font_respects_permissions(monkeypatch, tmp_path) -> None:
     engine = FontEmbeddingEngine()
     request = _make_request(tmp_path)
 
-    monkeypatch.setattr(engine, "_read_embedding_permission", lambda _path: "restricted")
+    monkeypatch.setattr(engine, "_read_embedding_permission", lambda _path, _data=None: "restricted")
 
     result = engine.subset_font(request)
 
@@ -64,7 +66,7 @@ def test_subset_font_strategy_none_reads_bytes(monkeypatch, tmp_path) -> None:
         metadata={},
     )
 
-    monkeypatch.setattr(engine, "_read_embedding_permission", lambda _path: "installable")
+    monkeypatch.setattr(engine, "_read_embedding_permission", lambda _path, _data=None: "installable")
 
     result = engine.subset_font(request)
 
@@ -73,12 +75,7 @@ def test_subset_font_strategy_none_reads_bytes(monkeypatch, tmp_path) -> None:
     assert result.packaging_metadata["font_data"] == Path(request.font_path).read_bytes()
 
 
-def test_can_embed_handles_missing_font(monkeypatch, tmp_path) -> None:
+def test_can_embed_handles_missing_font(tmp_path) -> None:
     engine = FontEmbeddingEngine()
-
-    def _raise_ttfont(*args, **kwargs):  # pragma: no cover - monkeypatched path
-        raise RuntimeError("load failed")
-
-    monkeypatch.setattr("svg2ooxml.services.fonts.embedding.TTFont", _raise_ttfont)
 
     assert engine.can_embed(str(tmp_path / "missing.ttf")) is False

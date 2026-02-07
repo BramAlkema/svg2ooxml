@@ -11,21 +11,21 @@ class PrecisionMetrics:
     total_segments: int = 0
     rounding_operations: int = 0
 
-    def record_point(self, count: int = 1) -> "PrecisionMetrics":
+    def record_point(self, count: int = 1) -> PrecisionMetrics:
         return PrecisionMetrics(
             total_points=self.total_points + count,
             total_segments=self.total_segments,
             rounding_operations=self.rounding_operations,
         )
 
-    def record_segment(self, count: int = 1) -> "PrecisionMetrics":
+    def record_segment(self, count: int = 1) -> PrecisionMetrics:
         return PrecisionMetrics(
             total_points=self.total_points,
             total_segments=self.total_segments + count,
             rounding_operations=self.rounding_operations,
         )
 
-    def record_rounding(self) -> "PrecisionMetrics":
+    def record_rounding(self) -> PrecisionMetrics:
         return PrecisionMetrics(
             total_points=self.total_points,
             total_segments=self.total_segments,

@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field, replace
-from typing import TYPE_CHECKING, Any, Dict, Union
+from typing import TYPE_CHECKING, Any
 
 from lxml import etree
 
@@ -29,12 +29,12 @@ class PatternService:
     """Provides access to pattern definitions and basic inheritance."""
 
     _patterns: dict[str, PatternDescriptor] = field(default_factory=dict)
-    _services: "ConversionServices | None" = None
+    _services: ConversionServices | None = None
     _processor: Any | None = None
     _conversion_cache: dict[str, str] = field(default_factory=dict)
     _materialized_elements: dict[str, etree._Element] = field(default_factory=dict)
 
-    def bind_services(self, services: "ConversionServices") -> None:
+    def bind_services(self, services: ConversionServices) -> None:
         self._services = services
         existing = services.resolve("patterns")
         if existing:
@@ -42,7 +42,7 @@ class PatternService:
 
     def update_definitions(
         self,
-        patterns: Mapping[str, Union[PatternDescriptor, etree._Element]] | None,
+        patterns: Mapping[str, PatternDescriptor | etree._Element] | None,
     ) -> None:
         self._patterns.clear()
         self._materialized_elements.clear()
@@ -88,7 +88,7 @@ class PatternService:
             current = href.strip()[1:]
         return chain
 
-    def clone(self) -> "PatternService":
+    def clone(self) -> PatternService:
         clone = PatternService()
         clone._patterns = dict(self._patterns)
         clone._processor = self._processor
@@ -110,7 +110,7 @@ class PatternService:
     def register_pattern(
         self,
         pattern_id: str,
-        definition: Union[PatternDescriptor, etree._Element],
+        definition: PatternDescriptor | etree._Element,
     ) -> None:
         descriptor = self._coerce_descriptor(pattern_id, definition)
         if descriptor is None:
@@ -143,7 +143,7 @@ class PatternService:
         self._conversion_cache[clean_id] = content
         return content
 
-    def process_svg_patterns(self, svg_root: "etree._Element") -> None:
+    def process_svg_patterns(self, svg_root: etree._Element) -> None:
         if svg_root is None:
             return
         xpath = ".//svg:defs//svg:pattern"
@@ -160,7 +160,7 @@ class PatternService:
     # Helpers                                                            #
     # ------------------------------------------------------------------ #
 
-    def _convert_pattern(self, pattern_element: "etree._Element") -> str:
+    def _convert_pattern(self, pattern_element: etree._Element) -> str:
         pattern_type = self._detect_pattern_type(pattern_element)
         fg_color = self._resolve_style_color(pattern_element, default="#000000")
         bg_color = self._resolve_style_color(pattern_element, attribute="patternBackground", default="#FFFFFF")
@@ -191,7 +191,7 @@ class PatternService:
     def _coerce_descriptor(
         self,
         pattern_id: str,
-        definition: Union[PatternDescriptor, etree._Element],
+        definition: PatternDescriptor | etree._Element,
     ) -> PatternDescriptor | None:
         if isinstance(definition, PatternDescriptor):
             descriptor = definition
@@ -225,7 +225,7 @@ class PatternService:
         key = descriptor.pattern_id or "__anon__"
         return self._materialize_pattern(key, descriptor)
 
-    def _detect_pattern_type(self, pattern_element: "etree._Element") -> str:
+    def _detect_pattern_type(self, pattern_element: etree._Element) -> str:
         children = list(pattern_element)
         if not children:
             return "solid"
@@ -235,7 +235,7 @@ class PatternService:
             return "dots"
         if any(tag == "line" for tag in tags):
             return "lines"
-        for child, tag in zip(children, tags):
+        for child, tag in zip(children, tags, strict=True):
             if tag == "rect":
                 try:
                     width = float(child.get("width", "0") or 0)
@@ -255,7 +255,7 @@ class PatternService:
 
     def _resolve_style_color(
         self,
-        element: "etree._Element",
+        element: etree._Element,
         *,
         attribute: str = "patternTransform",
         default: str,

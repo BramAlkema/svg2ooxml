@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import List
 
 from lxml import etree
 
@@ -15,7 +14,7 @@ from svg2ooxml.filters.utils import parse_number
 class ConvolveMatrixParams:
     order_x: int
     order_y: int
-    kernel: List[float]
+    kernel: list[float]
     divisor: float
     bias: float
     target_x: int
@@ -89,10 +88,10 @@ class ConvolveMatrixFilter(Filter):
             kernel_unit_length=kernel_unit_length,
         )
 
-    def _parse_float_list(self, payload: str | None) -> List[float]:
+    def _parse_float_list(self, payload: str | None) -> list[float]:
         if not payload:
             return []
-        values: List[float] = []
+        values: list[float] = []
         for token in payload.replace(",", " ").split():
             try:
                 values.append(float(token))

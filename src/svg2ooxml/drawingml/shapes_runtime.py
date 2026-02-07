@@ -4,28 +4,24 @@ from __future__ import annotations
 
 import html
 import logging
-from typing import Iterable, Mapping
+from collections.abc import Iterable
 
+from svg2ooxml.common.conversions.opacity import opacity_to_ppt
 from svg2ooxml.drawingml.generator import DrawingMLPathGenerator, px_to_emu
 from svg2ooxml.drawingml.paint_runtime import clip_rect_to_xml
-from svg2ooxml.ir.geometry import LineSegment, Rect
-from svg2ooxml.ir.scene import Image, Path as IRPath
-from svg2ooxml.ir.shapes import Circle, Ellipse, Rectangle, Line, Polyline, Polygon
-from svg2ooxml.ir.text import Run, TextAnchor, TextFrame, WordArtCandidate
-from svg2ooxml.policy.constants import FALLBACK_BITMAP
 
 # Import centralized XML builders for safe DrawingML generation
 from svg2ooxml.drawingml.xml_builder import (
     a_elem,
     a_sub,
-    to_string,
     blur,
-    soft_edge,
+    effect_list,
     glow,
     outer_shadow,
     reflection,
-    effect_list,
+    soft_edge,
     srgb_color,
+    to_string,
 )
 from svg2ooxml.ir.effects import (
     BlurEffect,
@@ -36,6 +32,11 @@ from svg2ooxml.ir.effects import (
     ShadowEffect,
     SoftEdgeEffect,
 )
+from svg2ooxml.ir.geometry import LineSegment, Rect
+from svg2ooxml.ir.scene import Path as IRPath
+from svg2ooxml.ir.shapes import Circle, Ellipse, Line, Polygon, Polyline, Rectangle
+from svg2ooxml.ir.text import Run, TextAnchor, TextFrame, WordArtCandidate
+from svg2ooxml.policy.constants import FALLBACK_BITMAP
 
 
 def render_rectangle(
@@ -179,6 +180,9 @@ def render_path(
     stroke_xml = _format_block(stroke_to_xml(path.stroke, metadata=path.metadata), "        ")
     policy_geom = policy_for(path.metadata, "geometry")
     shape_name = f"Path {shape_id}"
+    if policy_geom:
+        annotations = " ".join(f"{k}={v}" for k, v in sorted(policy_geom.items()))
+        shape_name = f"{shape_name} [{annotations}]"
     if policy_geom.get("suggest_fallback") == FALLBACK_BITMAP:
         logger.warning(
             "Path %s marked for bitmap fallback by policy; emitting native geometry until bitmap exporter is available.",
@@ -450,12 +454,12 @@ def build_runs_xml(runs: Iterable[Run], register_navigation=None) -> str:
         if register_navigation is not None and getattr(run, "navigation", None) is not None:
             navigation_registered = False
 
-            def _navigation_factory(segment_text: str) -> str:
+            def _navigation_factory(segment_text: str, _run=run):
                 nonlocal navigation_registered
                 if navigation_registered:
-                    return ""
+                    return None
                 navigation_registered = True
-                return register_navigation(run.navigation, segment_text)
+                return register_navigation(_run.navigation, segment_text)
 
             navigation_handler = _navigation_factory
         for index, segment in enumerate(parts):
@@ -541,7 +545,7 @@ def run_fragment(run: Run, text_segment: str, navigation_factory) -> str:
         ln_elem = a_sub(rPr, "ln", w=str(px_to_emu(run.stroke_width_px or 1.0)))
         strokeFill = a_sub(ln_elem, "solidFill")
         stroke_rgb = (run.stroke_rgb or "000000").upper()
-        stroke_alpha = int(round((run.stroke_opacity or 1.0) * 100000))
+        stroke_alpha = opacity_to_ppt(run.stroke_opacity or 1.0)
         if stroke_alpha < 100000:
             srgbClr = a_sub(strokeFill, "srgbClr", val=stroke_rgb)
             a_sub(srgbClr, "alpha", val=str(stroke_alpha))
@@ -550,7 +554,7 @@ def run_fragment(run: Run, text_segment: str, navigation_factory) -> str:
 
     # 2. Add solidFill
     solidFill = a_sub(rPr, "solidFill")
-    fill_alpha = int(round(run.fill_opacity * 100000))
+    fill_alpha = opacity_to_ppt(run.fill_opacity)
     if fill_alpha < 100000:
         srgbClr = a_sub(solidFill, "srgbClr", val=rgb)
         a_sub(srgbClr, "alpha", val=str(fill_alpha))
@@ -564,13 +568,9 @@ def run_fragment(run: Run, text_segment: str, navigation_factory) -> str:
 
     # Add navigation if present
     if navigation_factory is not None:
-        nav_xml = navigation_factory(text_segment)
-        if nav_xml:
-            from lxml import etree
-            wrapped = f'<root xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">{nav_xml}</root>'
-            temp = etree.fromstring(wrapped.encode('utf-8'))
-            for child in temp:
-                rPr.append(child)
+        nav_elem = navigation_factory(text_segment)
+        if nav_elem is not None:
+            rPr.append(nav_elem)
 
     r.append(rPr)
 

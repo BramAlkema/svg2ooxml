@@ -6,7 +6,6 @@ import json
 import logging
 import secrets
 from base64 import urlsafe_b64decode
-from typing import Optional
 
 try:
     from google.auth.transport.requests import Request
@@ -44,7 +43,7 @@ class GoogleOAuthService:
         token_store: TokenStore,
         client_id: str,
         client_secret: str,
-        redirect_uri: Optional[str] = None,
+        redirect_uri: str | None = None,
     ) -> None:
         if not client_id or not client_secret:
             raise ValueError("client_id and client_secret are required")

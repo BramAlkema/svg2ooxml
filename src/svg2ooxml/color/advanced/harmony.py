@@ -9,8 +9,6 @@ color space operations.
 
 from __future__ import annotations
 
-from typing import List, Tuple
-
 import colorspacious
 import numpy as np
 

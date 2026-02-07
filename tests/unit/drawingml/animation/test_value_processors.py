@@ -4,7 +4,6 @@ Most core parsing is tested in common.conversions (137 tests).
 These tests focus on animation-specific logic and delegation.
 """
 
-import pytest
 
 from svg2ooxml.common.units import UnitConverter
 from svg2ooxml.drawingml.animation.value_processors import ValueProcessor
@@ -156,7 +155,7 @@ class TestIntegration:
 
     def test_parse_and_normalize_workflow(self):
         """Test typical workflow: parse → normalize."""
-        uc = UnitConverter()
+        _uc = UnitConverter()
 
         # Parse angle string, then normalize
         angle_str = "45"

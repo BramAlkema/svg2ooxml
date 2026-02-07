@@ -4,10 +4,8 @@ These tests verify that the resvg text pipeline correctly integrates with
 the FontService and FontEmbeddingEngine for web font resolution and embedding.
 """
 
-import pytest
 from dataclasses import dataclass
-from typing import Optional
-from unittest.mock import Mock, MagicMock
+from unittest.mock import MagicMock, Mock
 
 
 # Mock structures for integration testing
@@ -23,27 +21,27 @@ class MockColor:
 @dataclass
 class MockFillStyle:
     """Mock fill style for testing."""
-    color: Optional[MockColor] = None
+    color: MockColor | None = None
     opacity: float = 1.0
-    reference: Optional[object] = None
+    reference: object | None = None
 
 
 @dataclass
 class MockTextStyle:
     """Mock text style for testing."""
     font_families: tuple[str, ...] = ("Arial",)
-    font_size: Optional[float] = 12.0
-    font_style: Optional[str] = None
-    font_weight: Optional[str] = None
+    font_size: float | None = 12.0
+    font_style: str | None = None
+    font_weight: str | None = None
 
 
 @dataclass
 class MockTextNode:
     """Mock TextNode for testing."""
-    text_content: Optional[str] = "Test"
-    text_style: Optional[MockTextStyle] = None
-    fill: Optional[MockFillStyle] = None
-    transform: Optional[object] = None
+    text_content: str | None = "Test"
+    text_style: MockTextStyle | None = None
+    fill: MockFillStyle | None = None
+    transform: object | None = None
     attributes: dict = None
     children: list = None
     tag: str = "text"
@@ -74,7 +72,7 @@ class MockFontMatch:
 class MockEmbeddingResult:
     """Mock FontEmbeddingResult for testing."""
     relationship_id: str
-    subset_path: Optional[str]
+    subset_path: str | None
     glyph_count: int
     bytes_written: int
     permission: str = "installable"
@@ -256,7 +254,7 @@ class TestWebFontResvgIntegration:
         )
 
         # Resolve with explicit fallback chain
-        match = generator.resolve_font(node, fallback_chain=("sans-serif",))
+        _match = generator.resolve_font(node, fallback_chain=("sans-serif",))
 
         # Verify font service was called
         font_service.find_font.assert_called_once()

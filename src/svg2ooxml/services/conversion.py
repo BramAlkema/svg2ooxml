@@ -24,7 +24,7 @@ class ConversionServices:
     def resolve(self, name: str, default: Any = None) -> Any:
         return self.services.get(name, default)
 
-    def clone(self) -> "ConversionServices":
+    def clone(self) -> ConversionServices:
         """Return a shallow clone with cloned services when supported."""
         cloned = ConversionServices()
         for name, value in self.services.items():

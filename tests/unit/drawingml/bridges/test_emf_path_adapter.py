@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import struct
 
+from svg2ooxml.common.units import ConversionContext, UnitConverter
 from svg2ooxml.drawingml.bridges import EMFPathAdapter, PathStyle
 from svg2ooxml.io.emf import EMFRecordType
 from svg2ooxml.ir.geometry import LineSegment, Point
 from svg2ooxml.ir.paint import SolidPaint, Stroke, StrokeCap, StrokeJoin
-from svg2ooxml.common.units import ConversionContext, UnitConverter
 
 
 def _records(data: bytes) -> list[tuple[int, bytes]]:

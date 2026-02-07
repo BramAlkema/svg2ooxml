@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any, Iterable, Optional
+from collections.abc import Iterable
+from typing import Any
 
 from svg2ooxml.ir.scene import ClipRef
 
@@ -10,7 +11,7 @@ from svg2ooxml.ir.scene import ClipRef
 def clip_result_to_xml(
     result: Any | None,
     clip_ref: ClipRef | None = None,
-) -> tuple[str, Optional[dict[str, Any]], Optional[list[dict[str, Any]]]]:
+) -> tuple[str, dict[str, Any] | None, list[dict[str, Any]] | None]:
     """Translate a clip computation result into XML and metadata."""
 
     clip_id = getattr(clip_ref, "clip_id", None)

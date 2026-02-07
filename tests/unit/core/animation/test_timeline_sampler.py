@@ -1,7 +1,12 @@
 from __future__ import annotations
 
 from svg2ooxml.core.animation.sampler import TimelineSampler, TimelineSamplingConfig
-from svg2ooxml.ir.animation import AnimationDefinition, AnimationTiming, AnimationType, CalcMode
+from svg2ooxml.ir.animation import (
+    AnimationDefinition,
+    AnimationTiming,
+    AnimationType,
+    CalcMode,
+)
 
 
 def _animation(

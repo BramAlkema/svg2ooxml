@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Tuple
 
 from .assets import AssetRegistrySnapshot
 
@@ -13,7 +12,7 @@ class DrawingMLRenderResult:
     """Slide XML plus the assets required to package it."""
 
     slide_xml: str
-    slide_size: Tuple[int, int]
+    slide_size: tuple[int, int]
     assets: AssetRegistrySnapshot
 
     @property

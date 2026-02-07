@@ -45,7 +45,7 @@ def test_normalize_builds_tree_with_transforms():
     assert rect_node.world_transform.f == 5
     rect_geometry = rect_node.geometry
     assert rect_geometry is not None
-    assert getattr(rect_geometry, "bounds").width == 20
+    assert rect_geometry.bounds.width == 20
 
     fill = rect_node.fill
     assert fill is None

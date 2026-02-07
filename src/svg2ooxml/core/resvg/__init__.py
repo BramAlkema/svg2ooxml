@@ -36,6 +36,7 @@ __all__ = [
     'build_tree',
     'load_config',
     'normalize_svg_bytes',
+    'normalize_svg_element',
     'normalize_svg_file',
     'normalize_svg_string',
     'config',
@@ -50,7 +51,7 @@ __all__ = [
 ]
 
 # map symbol -> relative module
-_symbol_map = {'DEFAULT_CONFIG': 'config', 'Config': 'config', 'load_config': 'config', 'FeatureFlag': 'constants', 'NormalizationError': 'normalizer', 'normalize_svg_file': 'normalizer', 'normalize_svg_bytes': 'normalizer', 'normalize_svg_string': 'normalizer', 'NormalizationResult': 'normalizer', 'LineNode': 'usvg_tree', 'FilterNode': 'usvg_tree', 'ImageNode': 'usvg_tree', 'GroupNode': 'usvg_tree', 'PolyNode': 'usvg_tree', 'TextSpan': 'usvg_tree', 'PatternNode': 'usvg_tree', 'BaseNode': 'usvg_tree', 'MarkerNode': 'usvg_tree', 'LinearGradientNode': 'usvg_tree', 'SVG_NAMESPACE': 'usvg_tree', 'MaskNode': 'usvg_tree', 'FilterPrimitive': 'usvg_tree', 'TextNode': 'usvg_tree', 'PathNode': 'usvg_tree', 'ClipPathNode': 'usvg_tree', 'RadialGradientNode': 'usvg_tree', 'PaintServerNode': 'usvg_tree', 'GenericNode': 'usvg_tree', 'Tree': 'usvg_tree', 'EllipseNode': 'usvg_tree', 'UseNode': 'usvg_tree', 'RectNode': 'usvg_tree', 'CircleNode': 'usvg_tree', 'build_tree': 'usvg_tree'}
+_symbol_map = {'Config': 'config', 'load_config': 'config', 'DEFAULT_CONFIG': 'config', 'FeatureFlag': 'constants', 'normalize_svg_bytes': 'normalizer', 'normalize_svg_file': 'normalizer', 'NormalizationError': 'normalizer', 'NormalizationResult': 'normalizer', 'normalize_svg_string': 'normalizer', 'normalize_svg_element': 'normalizer', 'PathNode': 'usvg_tree', 'CircleNode': 'usvg_tree', 'BaseNode': 'usvg_tree', 'LineNode': 'usvg_tree', 'GenericNode': 'usvg_tree', 'MarkerNode': 'usvg_tree', 'FilterNode': 'usvg_tree', 'Tree': 'usvg_tree', 'ImageNode': 'usvg_tree', 'ClipPathNode': 'usvg_tree', 'UseNode': 'usvg_tree', 'PatternNode': 'usvg_tree', 'FilterPrimitive': 'usvg_tree', 'GroupNode': 'usvg_tree', 'TextSpan': 'usvg_tree', 'SVG_NAMESPACE': 'usvg_tree', 'PaintServerNode': 'usvg_tree', 'LinearGradientNode': 'usvg_tree', 'build_tree': 'usvg_tree', 'EllipseNode': 'usvg_tree', 'PolyNode': 'usvg_tree', 'TextNode': 'usvg_tree', 'RectNode': 'usvg_tree', 'MaskNode': 'usvg_tree', 'RadialGradientNode': 'usvg_tree'}
 _module_map = {'config': 'config', 'constants': 'constants', 'geometry': 'geometry', 'normalizer': 'normalizer', 'painting': 'painting', 'parser': 'parser', 'text': 'text', 'usvg_tree': 'usvg_tree', 'utils': 'utils'}
 
 

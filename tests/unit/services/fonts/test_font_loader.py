@@ -2,16 +2,15 @@
 from __future__ import annotations
 
 import base64
-import zlib
-import tempfile
 from pathlib import Path
 
 import pytest
+
 from svg2ooxml.ir.fonts import FontFaceSrc
 from svg2ooxml.services.fonts.loader import (
+    FONTFORGE_AVAILABLE,
     FontLoader,
     LoadedFont,
-    FONTFORGE_AVAILABLE,
 )
 
 
@@ -54,7 +53,7 @@ class TestFontLoader:
         # Create minimal WOFF header (without full decompression)
         woff_data = b"wOFF" + b"\x00" * 100
         b64_data = base64.b64encode(woff_data).decode("ascii")
-        data_uri = f"data:font/woff;base64,{b64_data}"
+        _data_uri = f"data:font/woff;base64,{b64_data}"
 
         loader = FontLoader()
         # This will fail decompression but should detect format

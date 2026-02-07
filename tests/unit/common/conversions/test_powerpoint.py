@@ -1,7 +1,6 @@
 """Tests for unified PPTConverter class."""
 
 import math
-import pytest
 
 from svg2ooxml.common.conversions.powerpoint import PPTConverter
 from svg2ooxml.common.conversions.units import DEFAULT_DPI

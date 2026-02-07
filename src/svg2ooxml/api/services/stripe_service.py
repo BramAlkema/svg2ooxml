@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from typing import Any
 
 import stripe
 
@@ -28,7 +28,7 @@ class StripeService:
         self,
         email: str,
         firebase_uid: str,
-        name: Optional[str] = None,
+        name: str | None = None,
     ) -> str:
         """Create a new Stripe customer.
 
@@ -62,7 +62,7 @@ class StripeService:
         price_id: str,
         success_url: str,
         cancel_url: str,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Create a Stripe checkout session for subscription.
 
         Args:
@@ -111,7 +111,7 @@ class StripeService:
         self,
         customer_id: str,
         return_url: str,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Create a Stripe customer portal session.
 
         Args:
@@ -143,7 +143,7 @@ class StripeService:
     async def get_subscription(
         self,
         subscription_id: str,
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """Get subscription details from Stripe.
 
         Args:
@@ -211,7 +211,7 @@ class StripeService:
         self,
         subscription_id: str,
         immediately: bool = False,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Cancel a subscription.
 
         Args:

@@ -12,9 +12,9 @@ import requests
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from ..auth.middleware import verify_firebase_token
-from ..auth.encryption import decrypt_token, encrypt_token
+from ..auth.encryption import encrypt_token
 from ..auth.firebase import get_firestore_client
+from ..auth.middleware import verify_firebase_token
 
 logger = logging.getLogger(__name__)
 
@@ -120,7 +120,7 @@ async def exchange_tokens(payload: ExchangePayload) -> dict[str, bool]:
         )
     except Exception as e:
         logger.error(f"OAuth token exchange request failed: {e}")
-        raise HTTPException(status_code=500, detail=f"Token exchange request failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Token exchange request failed: {e}") from e
 
     if token_resp.status_code != 200:
         error_text = token_resp.text
@@ -148,7 +148,7 @@ async def exchange_tokens(payload: ExchangePayload) -> dict[str, bool]:
         encrypted = encrypt_token(refresh_token)
     except Exception as e:
         logger.error(f"Failed to encrypt refresh token: {e}")
-        raise HTTPException(status_code=500, detail="Failed to encrypt token")
+        raise HTTPException(status_code=500, detail="Failed to encrypt token") from e
 
     user_ref = db.collection("users").document(uid)
     user_ref.set(

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from lxml import etree
 
 from .css import StyleRule, parse_stylesheet
@@ -84,7 +86,7 @@ def _matches_rule(node: SvgNode, rule: StyleRule) -> bool:
     return False
 
 
-def _resolve_inherit(value: str, inherited: dict[str, str]) -> Optional[str]:
+def _resolve_inherit(value: str, inherited: dict[str, str]) -> str | None:
     if value == "inherit":
         return inherited.get(value)
     return value

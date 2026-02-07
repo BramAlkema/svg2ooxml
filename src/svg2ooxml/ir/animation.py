@@ -1,6 +1,6 @@
-from __future__ import annotations
-
 """Intermediate animation data structures used across the svg2ooxml pipeline."""
+
+from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
@@ -162,7 +162,7 @@ class AnimationDefinition:
         """Expand the animation into keyframes."""
         if self.key_times:
             keyframes: list[AnimationKeyframe] = []
-            for index, (time, value) in enumerate(zip(self.key_times, self.values)):
+            for index, (time, value) in enumerate(zip(self.key_times, self.values, strict=True)):
                 easing = None
                 if self.key_splines and index < len(self.key_splines):
                     spline = self.key_splines[index]

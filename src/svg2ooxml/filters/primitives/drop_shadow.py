@@ -6,12 +6,14 @@ from dataclasses import dataclass
 
 from lxml import etree
 
-from svg2ooxml.filters.base import Filter, FilterContext, FilterResult
-from svg2ooxml.filters.utils import parse_number
-from svg2ooxml.units.conversion import px_to_emu
+from svg2ooxml.common.conversions.angles import degrees_to_ppt
+from svg2ooxml.common.conversions.opacity import opacity_to_ppt
 
 # Import centralized XML builders for safe DrawingML generation
 from svg2ooxml.drawingml.xml_builder import a_elem, a_sub, to_string
+from svg2ooxml.filters.base import Filter, FilterContext, FilterResult
+from svg2ooxml.filters.utils import parse_number
+from svg2ooxml.units.conversion import px_to_emu
 
 
 @dataclass
@@ -58,7 +60,7 @@ class DropShadowFilter(Filter):
         blur_radius = int(px_to_emu(max(0.0, params.std_dev * 2.0)))
         offset_x = int(px_to_emu(params.dx))
         offset_y = int(px_to_emu(params.dy))
-        alpha = int(params.flood_opacity * 100000)
+        alpha = opacity_to_ppt(params.flood_opacity)
         dist = int((offset_x ** 2 + offset_y ** 2) ** 0.5)
         direction = self._compute_direction(params.dx, params.dy)
 
@@ -75,7 +77,7 @@ class DropShadowFilter(Filter):
         if dx == 0 and dy == 0:
             return 0
         angle = math.degrees(math.atan2(-dy, dx))  # SVG y-positive downward, PPT angle measured counter-clockwise from +x
-        return int((angle % 360) * 60000)
+        return degrees_to_ppt(angle % 360)
 
 
 class GlowFilter(Filter):
@@ -89,7 +91,7 @@ class GlowFilter(Filter):
             color = "".join(ch * 2 for ch in color)
         opacity = parse_number(primitive.get("flood-opacity"), default=1.0)
         blur_radius = int(px_to_emu(max(0.0, radius)))
-        alpha = int(max(0.0, min(opacity, 1.0)) * 100000)
+        alpha = opacity_to_ppt(opacity)
 
         effectLst = a_elem("effectLst")
         glow_elem = a_sub(effectLst, "glow", rad=blur_radius)

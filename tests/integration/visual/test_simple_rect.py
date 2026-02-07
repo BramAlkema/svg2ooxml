@@ -10,8 +10,7 @@ from pptx import Presentation  # noqa: E402
 from pptx.enum.dml import MSO_FILL  # noqa: E402
 from pptx.enum.shapes import MSO_SHAPE_TYPE  # noqa: E402
 from pptx.enum.text import PP_ALIGN  # noqa: E402
-
-from tools.visual.builder import PptxBuilder
+from tools.visual.builder import PptxBuilder  # noqa: E402
 
 FIXTURE = Path("tests/visual/fixtures/simple_rect.svg")
 

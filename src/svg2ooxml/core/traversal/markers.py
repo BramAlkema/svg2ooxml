@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Iterable
 
 from lxml import etree
 
@@ -32,7 +32,7 @@ class MarkerDefinition:
     viewbox: ViewBox | None
     preserve_aspect_ratio: str | None
 
-    def clone(self) -> "MarkerDefinition":
+    def clone(self) -> MarkerDefinition:
         # ``element`` is shared intentionally to avoid deep copies of the DOM.
         return MarkerDefinition(
             marker_id=self.marker_id,
@@ -59,7 +59,7 @@ class MarkerInstance:
     angle: float
     stroke_width: float
 
-    def clone(self) -> "MarkerInstance":
+    def clone(self) -> MarkerInstance:
         return MarkerInstance(
             definition=self.definition.clone(),
             position=self.position,
@@ -74,7 +74,7 @@ class MarkerTransform:
     matrix: Matrix2D
     clip_rect: tuple[float, float, float, float] | None
 
-    def clone(self) -> "MarkerTransform":
+    def clone(self) -> MarkerTransform:
         clip = None if self.clip_rect is None else tuple(self.clip_rect)
         return MarkerTransform(
             matrix=Matrix2D(

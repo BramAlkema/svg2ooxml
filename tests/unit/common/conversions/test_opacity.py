@@ -1,15 +1,14 @@
 """Tests for opacity/alpha conversion utilities."""
 
-import pytest
 
 from svg2ooxml.common.conversions.opacity import (
-    opacity_to_ppt,
-    ppt_to_opacity,
-    alpha_to_ppt,
-    ppt_to_alpha,
-    percentage_to_ppt,
-    ppt_to_percentage,
     PPT_OPACITY_SCALE,
+    alpha_to_ppt,
+    opacity_to_ppt,
+    percentage_to_ppt,
+    ppt_to_alpha,
+    ppt_to_opacity,
+    ppt_to_percentage,
 )
 
 

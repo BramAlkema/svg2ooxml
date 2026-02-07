@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Final, Tuple
+from typing import Final
 
 from lxml import etree
 
@@ -43,7 +43,7 @@ class ViewBox:
     height: float
 
     @classmethod
-    def from_tuple(cls, value: tuple[float, float, float, float]) -> "ViewBox":
+    def from_tuple(cls, value: tuple[float, float, float, float]) -> ViewBox:
         return cls(*value)
 
 
@@ -275,7 +275,7 @@ def resolve_viewbox(
     *,
     default_width: float = 800.0,
     default_height: float = 600.0,
-) -> tuple[Tuple[float, float], ViewBox | None, PreserveAspectRatio]:
+) -> tuple[tuple[float, float], ViewBox | None, PreserveAspectRatio]:
     """Return viewport dimensions and metadata for ``svg_root``."""
 
     width_px, height_px, viewbox, preserve = resolve_viewbox_dimensions(

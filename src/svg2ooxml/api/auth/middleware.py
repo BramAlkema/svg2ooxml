@@ -1,7 +1,6 @@
 """FastAPI authentication middleware using Firebase tokens."""
 import hashlib
 import logging
-from typing import Dict
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -16,7 +15,7 @@ security = HTTPBearer()
 
 async def verify_firebase_token(
     credentials: HTTPAuthorizationCredentials = Depends(security)
-) -> Dict[str, any]:
+) -> dict[str, any]:
     """FastAPI dependency to verify Firebase ID token.
 
     Extracts token from Authorization header, verifies it,
@@ -82,14 +81,14 @@ async def verify_firebase_token(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=f"Invalid or expired authentication token: {type(e).__name__}",
             headers={"WWW-Authenticate": "Bearer"},
-        )
+        ) from e
 
 
 # Optional: Require specific scopes
 async def verify_firebase_token_with_scopes(
     required_scopes: list[str] = None,
     credentials: HTTPAuthorizationCredentials = Depends(security)
-) -> Dict[str, any]:
+) -> dict[str, any]:
     """Verify token and check for required OAuth scopes.
 
     Note: Firebase ID tokens don't include OAuth scopes.

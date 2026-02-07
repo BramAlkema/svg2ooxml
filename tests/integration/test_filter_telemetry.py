@@ -47,7 +47,7 @@ class TestBlendFilterTelemetry:
 
         # Apply blend filter
         blend_filter = BlendFilter()
-        result = blend_filter.apply(blend_elem, context)
+        _result = blend_filter.apply(blend_elem, context)
 
         # Verify telemetry was recorded
         decisions = tracer.get_decisions()
@@ -78,7 +78,7 @@ class TestBlendFilterTelemetry:
         )
 
         blend_filter = BlendFilter()
-        result = blend_filter.apply(blend_elem, context)
+        _result = blend_filter.apply(blend_elem, context)
 
         # Verify decision was recorded (normalized to "normal" by parser)
         decisions = tracer.get_decisions()
@@ -133,7 +133,7 @@ class TestCompositeFilterTelemetry:
         )
 
         composite_filter = CompositeFilter()
-        result = composite_filter.apply(composite_elem, context)
+        _result = composite_filter.apply(composite_elem, context)
 
         # Verify telemetry recorded
         decisions = tracer.get_decisions()
@@ -162,7 +162,7 @@ class TestCompositeFilterTelemetry:
         )
 
         composite_filter = CompositeFilter()
-        result = composite_filter.apply(composite_elem, context)
+        _result = composite_filter.apply(composite_elem, context)
 
         # Verify telemetry recorded
         decisions = tracer.get_decisions()
@@ -193,7 +193,7 @@ class TestCompositeFilterTelemetry:
         )
 
         composite_filter = CompositeFilter()
-        result = composite_filter.apply(composite_elem, context)
+        _result = composite_filter.apply(composite_elem, context)
 
         # Verify EMF fallback recorded
         decisions = tracer.get_decisions()

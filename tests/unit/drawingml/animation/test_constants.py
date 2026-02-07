@@ -1,14 +1,13 @@
 """Tests for animation constants module."""
 
-import pytest
 
 from svg2ooxml.drawingml.animation.constants import (
-    FADE_ATTRIBUTES,
-    COLOR_ATTRIBUTES,
     ANGLE_ATTRIBUTES,
     ATTRIBUTE_NAME_MAP,
-    COLOR_ATTRIBUTE_NAME_MAP,
     AXIS_MAP,
+    COLOR_ATTRIBUTE_NAME_MAP,
+    COLOR_ATTRIBUTES,
+    FADE_ATTRIBUTES,
     SVG2_ANIMATION_NS,
 )
 

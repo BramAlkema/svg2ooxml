@@ -5,12 +5,18 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+# Import centralized XML builders for safe DrawingML generation
+from svg2ooxml.drawingml.xml_builder import (
+    NS_A,
+    NS_P,
+    graft_xml_fragment,
+    p_elem,
+    p_sub,
+    to_string,
+)
 from svg2ooxml.ir.scene import Group
 
 from .base import Mapper, MapperResult, OutputFormat
-
-# Import centralized XML builders for safe DrawingML generation
-from svg2ooxml.drawingml.xml_builder import p_elem, p_sub, to_string
 
 
 class GroupMapper(Mapper):
@@ -25,8 +31,6 @@ class GroupMapper(Mapper):
         return isinstance(element, Group)
 
     def map(self, group: Group) -> MapperResult:
-        from lxml import etree
-
         child_xml = "".join(
             getattr(child, "metadata", {}).get("generated_xml", "") for child in group.children
         )
@@ -43,15 +47,7 @@ class GroupMapper(Mapper):
         # Build p:grpSpPr and append child_xml
         grpSpPr = p_sub(grpSp, "grpSpPr")
         if child_xml:
-            wrapped = (
-                '<root xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" '
-                'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">'
-                f"{child_xml}"
-                "</root>"
-            )
-            temp = etree.fromstring(wrapped.encode('utf-8'))
-            for child in temp:
-                grpSpPr.append(child)
+            graft_xml_fragment(grpSpPr, child_xml, namespaces={"p": NS_P, "a": NS_A})
 
         xml = to_string(grpSp)
 

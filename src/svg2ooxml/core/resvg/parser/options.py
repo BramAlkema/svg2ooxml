@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import base64
 import binascii
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Callable, Iterable, Optional
 from urllib.parse import unquote_to_bytes
 
-from ..config import Config, DEFAULT_CONFIG
+from ..config import DEFAULT_CONFIG, Config
 from ..constants import DEFAULT_DPI
 from ..text.fonts import FontResolver, default_font_resolver
 from ..utils.mimesniff import sniff_image_mime
@@ -46,19 +46,19 @@ class Size:
             raise ValueError("Size dimensions must be > 0")
 
     @classmethod
-    def from_wh(cls, width: float, height: float) -> "Size":
+    def from_wh(cls, width: float, height: float) -> Size:
         return cls(width=width, height=height)
 
 
-DataHrefResolver = Callable[[str], Optional[bytes]]
-FileHrefResolver = Callable[[str], Optional[Path]]
+DataHrefResolver = Callable[[str], bytes | None]
+FileHrefResolver = Callable[[str], Path | None]
 
 
-def _default_data_resolver(_: str) -> Optional[bytes]:
+def _default_data_resolver(_: str) -> bytes | None:
     return None
 
 
-def _default_file_resolver(_: str) -> Optional[Path]:
+def _default_file_resolver(_: str) -> Path | None:
     return None
 
 
@@ -74,7 +74,7 @@ class ImageHrefResolver:
 class Options:
     """Configuration object roughly equivalent to `usvg::Options`."""
 
-    resources_dir: Optional[Path] = None
+    resources_dir: Path | None = None
     dpi: float = DEFAULT_DPI
     font_family: str = "Times New Roman"
     font_size: float = 12.0
@@ -84,8 +84,8 @@ class Options:
     image_rendering: ImageRendering = ImageRendering.OPTIMIZE_QUALITY
     default_size: Size = field(default_factory=lambda: Size.from_wh(100.0, 100.0))
     image_href_resolver: ImageHrefResolver = field(default_factory=ImageHrefResolver)
-    style_sheet: Optional[str] = None
-    font_resolver: Optional[FontResolver] = None
+    style_sheet: str | None = None
+    font_resolver: FontResolver | None = None
 
     def __post_init__(self) -> None:
         if self.dpi <= 0:
@@ -95,7 +95,7 @@ class Options:
         if not self.languages:
             raise ValueError("languages must contain at least one locale tag")
 
-    def with_languages(self, languages: Iterable[str]) -> "Options":
+    def with_languages(self, languages: Iterable[str]) -> Options:
         langs = [lang.strip() for lang in languages if lang.strip()]
         if not langs:
             raise ValueError("languages iterable produced no valid entries")
@@ -113,7 +113,7 @@ class Options:
             path = (self.resources_dir / path).resolve()
         return path
 
-    def clone(self, **updates: object) -> "Options":
+    def clone(self, **updates: object) -> Options:
         data = {
             "resources_dir": self.resources_dir,
             "dpi": self.dpi,
@@ -139,11 +139,11 @@ def _noop_image_resolver() -> ImageHrefResolver:
     )
 
 
-def _build_image_resolver(config: Config, resources_dir: Optional[Path]) -> ImageHrefResolver:
+def _build_image_resolver(config: Config, resources_dir: Path | None) -> ImageHrefResolver:
     if not config.feature_enabled("raster-images"):
         return _noop_image_resolver()
 
-    def resolve_file(href: str) -> Optional[Path]:
+    def resolve_file(href: str) -> Path | None:
         path = Path(href)
         if not path.is_absolute() and resources_dir is not None:
             path = (resources_dir / path).resolve()
@@ -156,7 +156,7 @@ def _build_image_resolver(config: Config, resources_dir: Optional[Path]) -> Imag
         mime = sniff_image_mime(path)
         return path if mime else None
 
-    def resolve_data(href: str) -> Optional[bytes]:
+    def resolve_data(href: str) -> bytes | None:
         if href.startswith("data:"):
             payload = href[5:]
             try:
@@ -177,7 +177,7 @@ def _build_image_resolver(config: Config, resources_dir: Optional[Path]) -> Imag
 def build_default_options(
     config: Config | None = None,
     *,
-    resources_dir: Optional[Path] = None,
+    resources_dir: Path | None = None,
     **overrides: object,
 ) -> Options:
     cfg = config or DEFAULT_CONFIG

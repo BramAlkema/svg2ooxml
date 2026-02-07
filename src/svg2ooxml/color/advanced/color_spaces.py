@@ -12,7 +12,6 @@ Key Features:
 - Optimized for performance with NumPy operations
 """
 
-from typing import Tuple
 
 import numpy as np
 
@@ -56,7 +55,7 @@ class ColorSpaceConverter:
 
         # Linear RGB to OKLab transformation matrix
         # Based on Björn Ottosson's OKLab specification
-        l = 0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b
+        l = 0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b  # noqa: E741 -- OKLab spec notation for lightness
         m = 0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b
         s = 0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b
 
@@ -73,7 +72,7 @@ class ColorSpaceConverter:
         return (ok_l, ok_a, ok_b)
 
     @staticmethod
-    def oklab_to_rgb(l: float, a: float, b: float) -> tuple[int, int, int]:
+    def oklab_to_rgb(l: float, a: float, b: float) -> tuple[int, int, int]:  # noqa: E741 -- OKLab spec notation for lightness
         """
         Convert OKLab to sRGB color space.
 
@@ -118,7 +117,7 @@ class ColorSpaceConverter:
         return (r, g, b)
 
     @staticmethod
-    def oklab_to_oklch(l: float, a: float, b: float) -> tuple[float, float, float]:
+    def oklab_to_oklch(l: float, a: float, b: float) -> tuple[float, float, float]:  # noqa: E741 -- OKLab spec notation for lightness
         """
         Convert OKLab to OKLCh (cylindrical coordinates).
 
@@ -139,7 +138,7 @@ class ColorSpaceConverter:
         return (l, c, h)
 
     @staticmethod
-    def oklch_to_oklab(l: float, c: float, h: float) -> tuple[float, float, float]:
+    def oklch_to_oklab(l: float, c: float, h: float) -> tuple[float, float, float]:  # noqa: E741 -- OKLCh spec notation for lightness
         """
         Convert OKLCh to OKLab.
 
@@ -171,7 +170,7 @@ class ColorSpaceConverter:
         return cls.oklab_to_oklch(*oklab)
 
     @classmethod
-    def oklch_to_rgb(cls, l: float, c: float, h: float) -> tuple[int, int, int]:
+    def oklch_to_rgb(cls, l: float, c: float, h: float) -> tuple[int, int, int]:  # noqa: E741 -- OKLCh spec notation for lightness
         """
         Direct conversion from OKLCh to RGB.
 
@@ -193,7 +192,7 @@ def rgb_to_oklab(r: int, g: int, b: int) -> tuple[float, float, float]:
     return ColorSpaceConverter.rgb_to_oklab(r, g, b)
 
 
-def oklab_to_rgb(l: float, a: float, b: float) -> tuple[int, int, int]:
+def oklab_to_rgb(l: float, a: float, b: float) -> tuple[int, int, int]:  # noqa: E741 -- OKLab spec notation for lightness
     """Convert OKLab to RGB."""
     return ColorSpaceConverter.oklab_to_rgb(l, a, b)
 
@@ -203,16 +202,16 @@ def rgb_to_oklch(r: int, g: int, b: int) -> tuple[float, float, float]:
     return ColorSpaceConverter.rgb_to_oklch(r, g, b)
 
 
-def oklch_to_rgb(l: float, c: float, h: float) -> tuple[int, int, int]:
+def oklch_to_rgb(l: float, c: float, h: float) -> tuple[int, int, int]:  # noqa: E741 -- OKLCh spec notation for lightness
     """Convert OKLCh to RGB."""
     return ColorSpaceConverter.oklch_to_rgb(l, c, h)
 
 
-def oklab_to_oklch(l: float, a: float, b: float) -> tuple[float, float, float]:
+def oklab_to_oklch(l: float, a: float, b: float) -> tuple[float, float, float]:  # noqa: E741 -- OKLab spec notation for lightness
     """Convert OKLab to OKLCh."""
     return ColorSpaceConverter.oklab_to_oklch(l, a, b)
 
 
-def oklch_to_oklab(l: float, c: float, h: float) -> tuple[float, float, float]:
+def oklch_to_oklab(l: float, c: float, h: float) -> tuple[float, float, float]:  # noqa: E741 -- OKLCh spec notation for lightness
     """Convert OKLCh to OKLab."""
     return ColorSpaceConverter.oklch_to_oklab(l, c, h)

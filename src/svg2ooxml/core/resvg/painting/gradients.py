@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional, Tuple
 
 from ..geometry.matrix import Matrix
 from .paint import Color
@@ -24,9 +23,9 @@ class LinearGradient:
     units: str
     spread_method: str
     transform: Matrix
-    stops: Tuple[GradientStop, ...]
-    href: Optional[str] = None
-    specified: Tuple[str, ...] = ()
+    stops: tuple[GradientStop, ...]
+    href: str | None = None
+    specified: tuple[str, ...] = ()
 
 
 @dataclass(slots=True)
@@ -39,9 +38,9 @@ class RadialGradient:
     units: str
     spread_method: str
     transform: Matrix
-    stops: Tuple[GradientStop, ...]
-    href: Optional[str] = None
-    specified: Tuple[str, ...] = ()
+    stops: tuple[GradientStop, ...]
+    href: str | None = None
+    specified: tuple[str, ...] = ()
 
 
 @dataclass(slots=True)
@@ -53,5 +52,5 @@ class PatternPaint:
     units: str
     content_units: str
     transform: Matrix
-    href: Optional[str] = None
-    specified: Tuple[str, ...] = ()
+    href: str | None = None
+    specified: tuple[str, ...] = ()

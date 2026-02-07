@@ -128,7 +128,7 @@ async def get_subscription_status(
 
     except Exception as e:
         logger.error(f"Failed to get subscription status: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.post("/checkout", response_model=CheckoutResponse)
@@ -188,7 +188,7 @@ async def create_checkout(
 
     except Exception as e:
         logger.error(f"Failed to create checkout: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.post("/portal", response_model=PortalResponse)
@@ -227,4 +227,4 @@ async def create_portal(
         raise
     except Exception as e:
         logger.error(f"Failed to create portal: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e

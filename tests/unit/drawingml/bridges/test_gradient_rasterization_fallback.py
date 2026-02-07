@@ -11,9 +11,9 @@ import pytest
 # Skip if resvg not available
 pytest.importorskip("svg2ooxml.core.resvg.painting.gradients")
 
-from svg2ooxml.core.resvg.painting.gradients import RadialGradient, GradientStop
-from svg2ooxml.core.resvg.painting.paint import Color
 from svg2ooxml.core.resvg.geometry.matrix import Matrix
+from svg2ooxml.core.resvg.painting.gradients import GradientStop, RadialGradient
+from svg2ooxml.core.resvg.painting.paint import Color
 from svg2ooxml.drawingml.bridges.resvg_gradient_adapter import (
     _calculate_raster_size,
     radial_gradient_to_paint,

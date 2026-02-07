@@ -6,7 +6,6 @@ import os
 from pathlib import Path
 
 import pytest
-
 from tools.visual.browser_renderer import BrowserRenderError
 from tools.visual.diff import VisualDiffer
 from tools.visual.renderer import LibreOfficeRenderer, VisualRendererError

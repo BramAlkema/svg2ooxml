@@ -2,16 +2,19 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
-from typing import Iterable, Literal, Sequence
 
 from lxml import etree
 
 from svg2ooxml.core.resvg.geometry.matrix import Matrix
-from svg2ooxml.core.resvg.painting.gradients import GradientStop, LinearGradient, RadialGradient
+from svg2ooxml.core.resvg.painting.gradients import (
+    GradientStop,
+    LinearGradient,
+    RadialGradient,
+)
 from svg2ooxml.core.resvg.painting.paint import Color
 from svg2ooxml.core.resvg.usvg_tree import PatternNode, UseNode
-
 
 # ---------------------------------------------------------------------------
 # Descriptor dataclasses

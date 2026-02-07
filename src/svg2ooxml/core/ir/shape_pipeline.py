@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any, Mapping, TYPE_CHECKING
+from collections.abc import Mapping
+from typing import TYPE_CHECKING, Any
 
 from svg2ooxml.core.ir.shape_converters import ShapeConversionMixin
 from svg2ooxml.core.traversal.hooks import TraversalHooksMixin
@@ -20,10 +21,10 @@ class ShapePipeline(ShapeConversionMixin, TraversalHooksMixin):
     def __init__(
         self,
         *,
-        context: "IRConverterContext",
-        resources: "ResourceTracker",
-        resvg_bridge: "ResvgBridge",
-        text_pipeline: "TextPipeline",
+        context: IRConverterContext,
+        resources: ResourceTracker,
+        resvg_bridge: ResvgBridge,
+        text_pipeline: TextPipeline,
     ) -> None:
         self._context = context
         self._resources = resources

@@ -5,8 +5,9 @@ from __future__ import annotations
 import json
 import logging
 from collections import Counter
+from collections.abc import Iterable
 from dataclasses import dataclass, field
-from typing import Any, Dict, Iterable, List
+from typing import Any
 
 
 def _stringify(value: Any) -> str:
@@ -71,7 +72,7 @@ def _derive_resvg_metrics(stage_totals: Iterable[tuple[str, int]]) -> dict[str, 
 class GeometryTrace:
     tag: str
     decision: str
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
     element_id: str | None = None
 
 
@@ -79,18 +80,18 @@ class GeometryTrace:
 class PaintTrace:
     paint_type: str
     decision: str
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
     paint_id: str | None = None
 
 
 @dataclass(slots=True)
 class TraceReport:
-    geometry_totals: Dict[str, int]
-    paint_totals: Dict[str, int]
-    geometry_events: List[GeometryTrace]
-    paint_events: List[PaintTrace]
-    stage_totals: Dict[str, int]
-    stage_events: List["StageTrace"]
+    geometry_totals: dict[str, int]
+    paint_totals: dict[str, int]
+    geometry_events: list[GeometryTrace]
+    paint_events: list[PaintTrace]
+    stage_totals: dict[str, int]
+    stage_events: list[StageTrace]
 
     def to_dict(self) -> dict[str, Any]:
         resvg_metrics = _derive_resvg_metrics(self.stage_totals.items())
@@ -133,7 +134,7 @@ class TraceReport:
 class StageTrace:
     stage: str
     action: str
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
     subject: str | None = None
 
 

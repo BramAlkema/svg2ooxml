@@ -47,7 +47,7 @@ def encrypt_token(token: str) -> str:
 
     except Exception as e:
         logger.error(f"Token encryption failed: {e}")
-        raise ValueError(f"Failed to encrypt token: {e}")
+        raise ValueError(f"Failed to encrypt token: {e}") from e
 
 
 def decrypt_token(encrypted_token: str) -> str:
@@ -76,7 +76,7 @@ def decrypt_token(encrypted_token: str) -> str:
         raise
     except Exception as e:
         logger.error(f"Token decryption failed: {e}")
-        raise ValueError(f"Failed to decrypt token: {e}")
+        raise ValueError(f"Failed to decrypt token: {e}") from e
 
 
 def generate_encryption_key() -> str:

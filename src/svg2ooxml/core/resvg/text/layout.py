@@ -2,15 +2,13 @@
 
 from __future__ import annotations
 
-from typing import List
-
 from ..usvg_tree import TextNode, TextSpan, Tree
 
 
-def _parse_number_list(value: str | None) -> List[float]:
+def _parse_number_list(value: str | None) -> list[float]:
     if not value:
         return []
-    values: List[float] = []
+    values: list[float] = []
     for part in value.replace(",", " ").split():
         try:
             values.append(float(part))

@@ -1,11 +1,11 @@
 """Tests for required PPTX parts (presProps, viewProps, tableStyles)."""
 
 import tempfile
+import xml.etree.ElementTree as ET
 import zipfile
 from pathlib import Path
-import xml.etree.ElementTree as ET
 
-from svg2ooxml.core.pptx_exporter import SvgToPptxExporter, SvgPageSource
+from svg2ooxml.core.pptx_exporter import SvgPageSource, SvgToPptxExporter
 from svg2ooxml.drawingml.generator import px_to_emu
 from svg2ooxml.drawingml.writer import DEFAULT_SLIDE_SIZE
 

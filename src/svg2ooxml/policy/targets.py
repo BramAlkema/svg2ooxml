@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from dataclasses import dataclass
-from typing import Dict, Iterable, Iterator
 
 
 @dataclass(frozen=True)
@@ -18,7 +18,7 @@ class TargetRegistry:
     """Registry that keeps track of known policy targets."""
 
     def __init__(self) -> None:
-        self._targets: Dict[str, PolicyTarget] = {}
+        self._targets: dict[str, PolicyTarget] = {}
 
     def register(self, target: PolicyTarget) -> None:
         self._targets[target.name] = target
@@ -30,7 +30,7 @@ class TargetRegistry:
         return self._targets.get(name)
 
     @classmethod
-    def default(cls) -> "TargetRegistry":
+    def default(cls) -> TargetRegistry:
         registry = cls()
         registry.register(PolicyTarget("image", "Image optimisation and conversion"))
         registry.register(PolicyTarget("text", "Text shaping and font embedding"))

@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-from typing import Iterable, Mapping
+from collections.abc import Iterable, Mapping
 
 # Import centralized XML builders for safe DrawingML generation
-from svg2ooxml.drawingml.xml_builder import a_elem, to_string
-from lxml import etree
+from svg2ooxml.drawingml.xml_builder import a_elem, graft_xml_fragment, to_string
 
 
 def build_exporter_hook(
@@ -72,15 +71,9 @@ def merge_effect_fragments(*fragments: str | None) -> str:
 
     # Parse and append child XML fragments
     for child_xml in children:
-        # Parse each child fragment and append to effectLst
         try:
-            # Wrap in temporary root for parsing
-            wrapped = f"<root xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\">{child_xml}</root>"
-            temp_root = etree.fromstring(wrapped.encode('utf-8'))
-            for child_elem in temp_root:
-                effectLst.append(child_elem)
+            graft_xml_fragment(effectLst, child_xml)
         except Exception:
-            # If parsing fails, skip this fragment
             continue
 
     return to_string(effectLst)

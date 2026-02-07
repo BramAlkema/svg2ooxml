@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
 
 
-def sniff_image_mime(path: Path) -> Optional[str]:
+def sniff_image_mime(path: Path) -> str | None:
     with path.open("rb") as handle:
         header = handle.read(16)
 

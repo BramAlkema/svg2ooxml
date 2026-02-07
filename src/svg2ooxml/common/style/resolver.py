@@ -2,18 +2,17 @@
 
 from __future__ import annotations
 
+import os
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from enum import IntEnum
-import os
 from typing import TYPE_CHECKING, Any
 
+import tinycss2
 from lxml import etree
 
-import tinycss2
-
-from svg2ooxml.core.parser.colors import parse_color
 from svg2ooxml.common.units.scalars import PX_PER_INCH
+from svg2ooxml.core.parser.colors import parse_color
 
 if TYPE_CHECKING:
     from svg2ooxml.core.parser.units import ConversionContext, UnitConverter
@@ -96,11 +95,7 @@ def _hex_to_rgba(color: str) -> tuple[float, float, float, float]:
 
 def _rgba_to_hex(value: tuple[float, float, float, float]) -> str:
     r, g, b, _ = value
-    return "#{:02X}{:02X}{:02X}".format(
-        max(0, min(255, int(round(r * 255)))),
-        max(0, min(255, int(round(g * 255)))),
-        max(0, min(255, int(round(b * 255)))),
-    )
+    return f"#{max(0, min(255, int(round(r * 255)))):02X}{max(0, min(255, int(round(g * 255)))):02X}{max(0, min(255, int(round(b * 255)))):02X}"
 
 
 @dataclass(frozen=True)

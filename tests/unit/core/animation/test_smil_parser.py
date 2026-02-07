@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from lxml import etree
 
-from svg2ooxml.core.animation import SMILParser, SMILParsingError
+from svg2ooxml.core.animation import SMILParser
 from svg2ooxml.ir.animation import AnimationType, TransformType
 
 

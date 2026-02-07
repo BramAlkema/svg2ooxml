@@ -8,8 +8,6 @@ using NumPy vectorization for performance improvements.
 
 from __future__ import annotations
 
-from typing import List, Union
-
 import colorspacious
 import numpy as np
 

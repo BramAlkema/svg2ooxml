@@ -1,13 +1,12 @@
 """Tests for animation value formatters."""
 
-import pytest
 from lxml import etree
 
 from svg2ooxml.drawingml.animation.value_formatters import (
-    format_numeric_value,
-    format_color_value,
-    format_point_value,
     format_angle_value,
+    format_color_value,
+    format_numeric_value,
+    format_point_value,
 )
 
 

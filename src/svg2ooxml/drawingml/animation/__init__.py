@@ -4,20 +4,29 @@ from importlib import import_module as _im
 from typing import Any as _Any
 
 __all__ = [
+    'AnimationIDs',
     'AnimationPolicy',
+    'AnimationUnitConverter',
     'AnimationXMLBuilder',
     'DrawingMLAnimationWriter',
     'TAVBuilder',
+    'TimingIDAllocator',
+    'TimingIDs',
     'ValueFormatter',
     'ValueProcessor',
+    'compute_paced_key_times',
+    'compute_paced_key_times_2d',
     'format_angle_value',
     'format_color_value',
     'format_numeric_value',
     'format_point_value',
     'constants',
     'handlers',
+    'id_allocator',
     'policy',
     'tav_builder',
+    'timing_utils',
+    'unit_conversion',
     'value_formatters',
     'value_processors',
     'writer',
@@ -25,8 +34,8 @@ __all__ = [
 ]
 
 # map symbol -> relative module
-_symbol_map = {'AnimationPolicy': 'policy', 'ValueFormatter': 'tav_builder', 'TAVBuilder': 'tav_builder', 'format_angle_value': 'value_formatters', 'format_color_value': 'value_formatters', 'format_numeric_value': 'value_formatters', 'format_point_value': 'value_formatters', 'ValueProcessor': 'value_processors', 'DrawingMLAnimationWriter': 'writer', 'AnimationXMLBuilder': 'xml_builders'}
-_module_map = {'constants': 'constants', 'handlers': 'handlers', 'policy': 'policy', 'tav_builder': 'tav_builder', 'value_formatters': 'value_formatters', 'value_processors': 'value_processors', 'writer': 'writer', 'xml_builders': 'xml_builders'}
+_symbol_map = {'AnimationIDs': 'id_allocator', 'TimingIDAllocator': 'id_allocator', 'TimingIDs': 'id_allocator', 'AnimationPolicy': 'policy', 'TAVBuilder': 'tav_builder', 'ValueFormatter': 'tav_builder', 'compute_paced_key_times_2d': 'timing_utils', 'compute_paced_key_times': 'timing_utils', 'AnimationUnitConverter': 'unit_conversion', 'format_numeric_value': 'value_formatters', 'format_color_value': 'value_formatters', 'format_point_value': 'value_formatters', 'format_angle_value': 'value_formatters', 'ValueProcessor': 'value_processors', 'DrawingMLAnimationWriter': 'writer', 'AnimationXMLBuilder': 'xml_builders'}
+_module_map = {'constants': 'constants', 'handlers': 'handlers', 'id_allocator': 'id_allocator', 'policy': 'policy', 'tav_builder': 'tav_builder', 'timing_utils': 'timing_utils', 'unit_conversion': 'unit_conversion', 'value_formatters': 'value_formatters', 'value_processors': 'value_processors', 'writer': 'writer', 'xml_builders': 'xml_builders'}
 
 
 def __getattr__(name: str) -> _Any:  # PEP 562

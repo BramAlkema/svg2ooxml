@@ -4,9 +4,13 @@ from __future__ import annotations
 
 import base64
 import re
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Sequence
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from svg2ooxml.services import ConversionServices
 
 DATA_URI_RE = re.compile(r"^data:(?P<mime>[^;]+)?(;base64)?,(?P<payload>.+)$")
 
@@ -56,7 +60,7 @@ class ImageService:
     def __init__(self) -> None:
         self._resolvers: list[Resolver] = [self._data_uri_resolver]
 
-    def bind_services(self, _services: "ConversionServices") -> None:  # pragma: no cover - signature used by container
+    def bind_services(self, _services: ConversionServices) -> None:  # pragma: no cover - signature used by container
         # Image service currently does not depend on other services, but we keep
         # the hook for parity with other services.
         return
@@ -83,7 +87,7 @@ class ImageService:
                 return result
         return None
 
-    def clone(self) -> "ImageService":
+    def clone(self) -> ImageService:
         clone = ImageService()
         clone._resolvers = list(self._resolvers)
         return clone

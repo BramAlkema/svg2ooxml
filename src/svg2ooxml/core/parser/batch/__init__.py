@@ -11,7 +11,7 @@ __all__ = [
 ]
 
 # map symbol -> relative module
-_symbol_map = {'process_svg_batch': 'tasks', 'convert_single_svg': 'tasks', 'enqueue_svg_conversion': 'tasks'}
+_symbol_map = {'process_svg_batch': 'tasks', 'enqueue_svg_conversion': 'tasks', 'convert_single_svg': 'tasks'}
 _module_map = {'tasks': 'tasks'}
 
 

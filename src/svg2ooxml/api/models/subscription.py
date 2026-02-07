@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Optional
 
 from pydantic import BaseModel, Field
 
@@ -33,7 +32,7 @@ class UsageInfo(BaseModel):
     """Current usage information."""
 
     exports_this_month: int = Field(..., description="Number of exports this month")
-    limit: Optional[int] = Field(None, description="Monthly export limit (null if unlimited)")
+    limit: int | None = Field(None, description="Monthly export limit (null if unlimited)")
     unlimited: bool = Field(..., description="Whether user has unlimited exports")
 
 
@@ -50,4 +49,4 @@ class SubscriptionStatusResponse(BaseModel):
     tier: str = Field(..., description="Subscription tier: free, pro, or enterprise")
     status: str = Field(..., description="Subscription status: active, canceled, past_due, or none")
     usage: UsageInfo = Field(..., description="Current month usage")
-    subscription: Optional[SubscriptionInfo] = Field(None, description="Subscription details (null for free tier)")
+    subscription: SubscriptionInfo | None = Field(None, description="Subscription details (null for free tier)")

@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 from collections import ChainMap
-from collections.abc import Mapping
-from typing import MutableMapping
+from collections.abc import Mapping, MutableMapping
 
-from svg2ooxml.color import Color, parse_color as _parse_global_color
+from svg2ooxml.color import Color
+from svg2ooxml.color import parse_color as _parse_global_color
 
 _REGISTERED_COLORS: MutableMapping[str, Color] = {}
 

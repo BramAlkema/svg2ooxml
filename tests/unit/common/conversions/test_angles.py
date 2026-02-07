@@ -1,14 +1,13 @@
 """Tests for angle conversion utilities."""
 
 import math
-import pytest
 
 from svg2ooxml.common.conversions.angles import (
+    PPT_ANGLE_SCALE,
     degrees_to_ppt,
-    radians_to_ppt,
     ppt_to_degrees,
     ppt_to_radians,
-    PPT_ANGLE_SCALE,
+    radians_to_ppt,
 )
 
 

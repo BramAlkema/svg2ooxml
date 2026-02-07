@@ -5,7 +5,7 @@ from __future__ import annotations
 import importlib
 import logging
 from dataclasses import replace
-from typing import Any, Iterable
+from typing import Any
 
 from svg2ooxml.ir.text import TextFrame
 from svg2ooxml.services.fonts.service import FontMatch, FontQuery

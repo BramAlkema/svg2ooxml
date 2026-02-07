@@ -3,20 +3,21 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import List, Tuple, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
+from svg2ooxml.common.conversions.scale import position_to_ppt
+from svg2ooxml.common.units import UnitConverter
+from svg2ooxml.drawingml.bridges import EMFPathAdapter, PathStyle
 from svg2ooxml.drawingml.mask_generator import compute_mask_geometry
 from svg2ooxml.drawingml.raster_adapter import RasterAdapter
+
+# Import centralized XML builders for safe DrawingML generation
+from svg2ooxml.drawingml.xml_builder import a_elem, a_sub, graft_xml_fragment, to_string
 from svg2ooxml.ir.geometry import Rect
 from svg2ooxml.ir.paint import SolidPaint
 from svg2ooxml.ir.scene import MaskInstance, MaskRef
-from svg2ooxml.drawingml.bridges import EMFPathAdapter, PathStyle
-from svg2ooxml.common.units import UnitConverter
 
 from .mask_store import MaskAssetStore
-
-# Import centralized XML builders for safe DrawingML generation
-from svg2ooxml.drawingml.xml_builder import a_elem, a_sub, to_string
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from svg2ooxml.core.tracing import ConversionTracer
@@ -25,20 +26,20 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
 @dataclass
 class MaskRenderResult:
     xml: str
-    diagnostics: List[str]
+    diagnostics: list[str]
 
 
 @dataclass
 class _MaskAttemptResult:
     success: bool
     xml: str = ""
-    diagnostics: List[str] = field(default_factory=list)
+    diagnostics: list[str] = field(default_factory=list)
 
 
 class MaskWriter:
     """Render mask definitions for DrawingML shapes."""
 
-    def __init__(self, *, mask_store: MaskAssetStore | None = None, tracer: "ConversionTracer | None" = None) -> None:
+    def __init__(self, *, mask_store: MaskAssetStore | None = None, tracer: ConversionTracer | None = None) -> None:
         # Stored for future use when native mask assets become supported.
         self._mask_store = mask_store or MaskAssetStore()
         self._assets = None
@@ -64,7 +65,7 @@ class MaskWriter:
             return
         tracer.record_stage_event(stage="mask", action=action, metadata=metadata, subject=subject)
 
-    def render(self, element) -> Tuple[str, List[str]]:
+    def render(self, element) -> tuple[str, list[str]]:
         """Return mask XML and diagnostics for the supplied IR element."""
 
         mask_ref = getattr(element, "mask", None)
@@ -147,8 +148,6 @@ class MaskWriter:
         mask_meta: dict,
         mask_instance: MaskInstance | None,
     ) -> str:
-        from lxml import etree
-
         # Build a:mask element with lxml
         mask = a_elem("mask")
 
@@ -165,17 +164,14 @@ class MaskWriter:
         if src_rect is not None:
             a_sub(mask, "srcRect", l=src_rect[0], t=src_rect[1], r=src_rect[2], b=src_rect[3])
 
-        # Parse and append geometry_xml
+        # Append geometry
         if geometry_xml:
-            wrapped = f'<root xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">{geometry_xml}</root>'
-            temp = etree.fromstring(wrapped.encode('utf-8'))
-            for child in temp:
-                mask.append(child)
+            graft_xml_fragment(mask, geometry_xml)
 
         return to_string(mask)
 
     @staticmethod
-    def _src_rect(mask_meta: dict, mask_instance: MaskInstance | None) -> Tuple[int, int, int, int] | None:
+    def _src_rect(mask_meta: dict, mask_instance: MaskInstance | None) -> tuple[int, int, int, int] | None:
         """Return srcRect tuple in thousandth percentages if available."""
 
         bounds = _extract_rect(mask_meta.get("instance_bounds")) or _extract_rect(
@@ -424,11 +420,10 @@ def _extract_rect(value) -> Rect | None:
 
 
 def _to_thousandth_percent(value: float) -> int:
-    scaled = max(0.0, min(1.0, value))
-    return int(round(scaled * 100000))
+    return position_to_ppt(value)
 
 
-def _fallback_sequence(mask_meta: dict) -> Tuple[str, ...]:
+def _fallback_sequence(mask_meta: dict) -> tuple[str, ...]:
     order = mask_meta.get("fallback_order")
     if not order and isinstance(mask_meta.get("policy"), dict):
         order = mask_meta["policy"].get("fallback_order")
@@ -467,7 +462,7 @@ def _format_message(mask_ref: MaskRef, message: str) -> str:
     return prefix + message
 
 
-def _tuple_from_rect(value) -> Tuple[float, float, float, float] | None:
+def _tuple_from_rect(value) -> tuple[float, float, float, float] | None:
     if value is None:
         return None
     if isinstance(value, Rect):

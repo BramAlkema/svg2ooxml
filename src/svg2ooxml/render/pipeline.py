@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
-from typing import Optional
 
 import numpy as np
 
@@ -15,10 +14,26 @@ except ImportError as exc:  # pragma: no cover
 
 from svg2ooxml.core.resvg.geometry.primitives import ClosePath, LineTo, MoveTo
 from svg2ooxml.core.resvg.geometry.tessellation import TessellationResult, Tessellator
-from svg2ooxml.core.resvg.painting.gradients import GradientStop, LinearGradient, PatternPaint, RadialGradient
+from svg2ooxml.core.resvg.painting.gradients import (
+    GradientStop,
+    LinearGradient,
+    PatternPaint,
+    RadialGradient,
+)
 from svg2ooxml.core.resvg.painting.paint import Color, FillStyle, StrokeStyle
-from svg2ooxml.core.resvg.usvg_tree import BaseNode, ImageNode, PathNode, PatternNode, Tree
-from svg2ooxml.render.filters import UnsupportedPrimitiveError, apply_filter, plan_filter
+from svg2ooxml.core.resvg.usvg_tree import (
+    BaseNode,
+    ImageNode,
+    PathNode,
+    PatternNode,
+    Tree,
+)
+from svg2ooxml.render.filters import (
+    UnsupportedPrimitiveError,
+    apply_filter,
+    plan_filter,
+)
+from svg2ooxml.render.markers import compute_marker_positions, resolve_marker
 from svg2ooxml.render.mask_clip import (
     ClipPathContext,
     MaskContext,
@@ -29,7 +44,6 @@ from svg2ooxml.render.mask_clip import (
     resolve_clip_path,
     resolve_mask,
 )
-from svg2ooxml.render.markers import compute_marker_positions, resolve_marker
 from svg2ooxml.render.rasterizer import Rasterizer, Viewport
 from svg2ooxml.render.shapes import node_geometry
 from svg2ooxml.render.surface import Surface
@@ -54,7 +68,7 @@ class RenderContext:
     clip_cache: dict[str, np.ndarray] = field(default_factory=dict)
 
 
-def render(tree: Tree, context: Optional[RenderContext] = None) -> Surface:
+def render(tree: Tree, context: RenderContext | None = None) -> Surface:
     viewport = Viewport.from_tree(tree)
     surface = Surface.make(viewport.width, viewport.height)
     context = context or RenderContext(
@@ -253,8 +267,8 @@ def _render_fill(
     context: RenderContext,
     surface: Surface,
     viewport: Viewport,
-    mask_alpha: Optional[np.ndarray],
-    clip_mask: Optional[np.ndarray],
+    mask_alpha: np.ndarray | None,
+    clip_mask: np.ndarray | None,
     filter_plan,
 ) -> None:
     tessellation = context.tessellator.tessellate_fill(geometry)
@@ -293,8 +307,8 @@ def _render_stroke(
     context: RenderContext,
     surface: Surface,
     viewport: Viewport,
-    mask_alpha: Optional[np.ndarray],
-    clip_mask: Optional[np.ndarray],
+    mask_alpha: np.ndarray | None,
+    clip_mask: np.ndarray | None,
     filter_plan,
 ) -> None:
     if stroke.width is None or stroke.width <= 0:
@@ -328,7 +342,7 @@ def _render_stroke(
     surface.blend(layer)
 
 
-def _build_skia_path(geometry, winding_rule: str) -> Optional[skia.Path]:
+def _build_skia_path(geometry, winding_rule: str) -> skia.Path | None:
     path = skia.Path()
     if winding_rule == "evenodd":
         path.setFillType(skia.PathFillType.kEvenOdd)
@@ -380,7 +394,7 @@ def _draw_path_with_skia(path: skia.Path, paint: skia.Paint, viewport: Viewport)
     return Surface(width=viewport.width, height=viewport.height, data=rgba)
 
 
-def _make_fill_paint(fill: FillStyle, tree: Tree, bounds: Optional[tuple[float, float, float, float]]) -> Optional[skia.Paint]:
+def _make_fill_paint(fill: FillStyle, tree: Tree, bounds: tuple[float, float, float, float] | None) -> skia.Paint | None:
     paint = skia.Paint(AntiAlias=True)
     paint.setStyle(skia.Paint.kFill_Style)
 
@@ -410,7 +424,7 @@ def _make_fill_paint(fill: FillStyle, tree: Tree, bounds: Optional[tuple[float, 
     return paint
 
 
-def _make_stroke_paint(stroke: StrokeStyle, tree: Tree, bounds: Optional[tuple[float, float, float, float]]) -> Optional[skia.Paint]:
+def _make_stroke_paint(stroke: StrokeStyle, tree: Tree, bounds: tuple[float, float, float, float] | None) -> skia.Paint | None:
     paint = skia.Paint(AntiAlias=True)
     paint.setStyle(skia.Paint.kStroke_Style)
     paint.setStrokeWidth(stroke.width or 0.0)
@@ -444,7 +458,7 @@ def _make_stroke_paint(stroke: StrokeStyle, tree: Tree, bounds: Optional[tuple[f
 def _prepare_gradient_stops(
     stops: tuple[GradientStop, ...],
     opacity: float,
-) -> Optional[tuple[list[float], list[skia.Color4f]]]:
+) -> tuple[list[float], list[skia.Color4f]] | None:
     if not stops:
         return None
     positions: list[float] = []
@@ -460,9 +474,9 @@ def _prepare_gradient_stops(
 
 def _make_linear_gradient_shader(
     gradient: LinearGradient,
-    bounds: Optional[tuple[float, float, float, float]],
+    bounds: tuple[float, float, float, float] | None,
     opacity: float,
-) -> Optional[skia.Shader]:
+) -> skia.Shader | None:
     if bounds is None:
         return None
     prepared = _prepare_gradient_stops(gradient.stops, opacity)
@@ -486,9 +500,9 @@ def _make_linear_gradient_shader(
 
 def _make_radial_gradient_shader(
     gradient: RadialGradient,
-    bounds: Optional[tuple[float, float, float, float]],
+    bounds: tuple[float, float, float, float] | None,
     opacity: float,
-) -> Optional[skia.Shader]:
+) -> skia.Shader | None:
     if bounds is None:
         return None
     prepared = _prepare_gradient_stops(gradient.stops, opacity)
@@ -528,7 +542,7 @@ def _make_radial_gradient_shader(
     )
 
 
-def _make_pattern_shader(fill: FillStyle, tree: Tree) -> Optional[skia.Shader]:
+def _make_pattern_shader(fill: FillStyle, tree: Tree) -> skia.Shader | None:
     reference = fill.reference
     if reference is None or not reference.href.startswith("#"):
         return None
@@ -620,7 +634,7 @@ def _to_skia_matrix(matrix) -> skia.Matrix:
     )
 
 
-def _tessellation_bounds(tessellation: TessellationResult) -> Optional[tuple[float, float, float, float]]:
+def _tessellation_bounds(tessellation: TessellationResult) -> tuple[float, float, float, float] | None:
     min_x = math.inf
     min_y = math.inf
     max_x = -math.inf
@@ -639,7 +653,7 @@ def _tessellation_bounds(tessellation: TessellationResult) -> Optional[tuple[flo
     return min_x, min_y, max_x, max_y
 
 
-def _resolve_mask_alpha(context: Optional[MaskContext], render_context: RenderContext, viewport: Viewport) -> Optional[np.ndarray]:
+def _resolve_mask_alpha(context: MaskContext | None, render_context: RenderContext, viewport: Viewport) -> np.ndarray | None:
     if context is None:
         return None
     mask_id = context.node.id
@@ -651,7 +665,7 @@ def _resolve_mask_alpha(context: Optional[MaskContext], render_context: RenderCo
     return alpha
 
 
-def _resolve_clip_mask(context: Optional[ClipPathContext], render_context: RenderContext, viewport: Viewport) -> Optional[np.ndarray]:
+def _resolve_clip_mask(context: ClipPathContext | None, render_context: RenderContext, viewport: Viewport) -> np.ndarray | None:
     if context is None:
         return None
     clip_id = context.node.id
@@ -667,7 +681,7 @@ def _color_to_skia(color: Color) -> skia.Color4f:
     return skia.Color4f(color.r, color.g, color.b, color.a)
 
 
-def _clean_href(raw: Optional[str]) -> Optional[str]:
+def _clean_href(raw: str | None) -> str | None:
     if raw is None:
         return None
     value = raw.strip()

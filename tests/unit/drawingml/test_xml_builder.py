@@ -1,25 +1,23 @@
 """Unit tests for drawingml.xml_builder module."""
 
-import pytest
-from lxml import etree
 
 from svg2ooxml.drawingml.xml_builder import (
-    a_elem,
-    p_elem,
-    a_sub,
-    p_sub,
-    to_string,
-    solid_fill,
-    srgb_color,
-    no_fill,
-    effect_list,
-    ln,
-    blur,
-    glow,
-    outer_shadow,
-    soft_edge,
     NS_A,
     NS_P,
+    a_elem,
+    a_sub,
+    blur,
+    effect_list,
+    glow,
+    ln,
+    no_fill,
+    outer_shadow,
+    p_elem,
+    p_sub,
+    soft_edge,
+    solid_fill,
+    srgb_color,
+    to_string,
 )
 
 

@@ -3,25 +3,26 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterable
 from dataclasses import replace
 from pathlib import Path
-from typing import Any, Iterable, Tuple, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
+from svg2ooxml.core.ir import IRScene
 from svg2ooxml.io.emf import EMFRelationshipManager
 from svg2ooxml.ir.scene import Group, Image, SceneGraph
 from svg2ooxml.ir.text import TextFrame
-from svg2ooxml.core.ir import IRScene
 
 from .animation_pipeline import AnimationPipeline
 from .assets import AssetRegistry
 from .clipmask import clip_xml_for
-from .generator import DrawingMLPathGenerator, EMU_PER_PX, px_to_emu
+from .generator import EMU_PER_PX, DrawingMLPathGenerator, px_to_emu
 from .mask_pipeline import MaskPipeline
 from .navigation import register_navigation
+from .rasterizer import SKIA_AVAILABLE, Rasterizer
 from .result import DrawingMLRenderResult
 from .shape_renderer import DrawingMLShapeRenderer
 from .text_renderer import DrawingMLTextRenderer
-from .rasterizer import Rasterizer, SKIA_AVAILABLE
 
 if TYPE_CHECKING:  # pragma: no cover - type checking only
     from svg2ooxml.core.tracing import ConversionTracer
@@ -43,7 +44,7 @@ def _assets_root() -> Path:
 class DrawingMLWriter:
     """Render IR scene graphs into DrawingML shape fragments."""
 
-    def __init__(self, *, template_dir: Path | None = None, image_service: "ImageService | None" = None) -> None:
+    def __init__(self, *, template_dir: Path | None = None, image_service: ImageService | None = None) -> None:
         self._template_dir = template_dir or _assets_root()
         self._image_service = image_service
         self._slide_template = (self._template_dir / "slide_template.xml").read_text(encoding="utf-8")
@@ -70,7 +71,7 @@ class DrawingMLWriter:
                 self._rasterizer = Rasterizer()
             except Exception:  # pragma: no cover - defensive
                 self._rasterizer = None
-        self._tracer: "ConversionTracer | None" = None
+        self._tracer: ConversionTracer | None = None
 
     @property
     def _assets(self) -> AssetRegistry:
@@ -78,7 +79,7 @@ class DrawingMLWriter:
             raise RuntimeError("Asset registry not initialised for current rendering run.")
         return self._asset_registry
 
-    def set_image_service(self, image_service: "ImageService | None") -> None:
+    def set_image_service(self, image_service: ImageService | None) -> None:
         """Update the image service used for on-the-fly media resolution."""
         self._image_service = image_service
 
@@ -90,18 +91,14 @@ class DrawingMLWriter:
         self,
         scene: SceneGraph,
         *,
-        slide_size: Tuple[int, int] | None = None,
-        tracer: "ConversionTracer | None" = None,
+        slide_size: tuple[int, int] | None = None,
+        tracer: ConversionTracer | None = None,
         animation_payload: dict[str, Any] | None = None,
     ) -> DrawingMLRenderResult:
         """Return slide XML and collected assets for the supplied scene graph."""
 
         prev_tracer = self._tracer
         self._tracer = tracer
-        import logging
-        debug_logger = logging.getLogger("drawingml.writer")
-        debug_logger.info("render_scene: animation_payload keys: %s", list(animation_payload.keys()) if animation_payload else None)
-        
         self._asset_registry = AssetRegistry()
         self._next_media_index = 1
         self._next_navigation_index = 1
@@ -141,14 +138,7 @@ class DrawingMLWriter:
             slide_xml = self._slide_template.replace("{SLIDE_WIDTH}", str(slide_width))
             slide_xml = slide_xml.replace("{SLIDE_HEIGHT}", str(slide_height))
             shapes_xml = "\n            ".join(fragments)
-            
-            # Log all offsets for debugging
-            import re
-            import logging
-            debug_logger = logging.getLogger("drawingml.writer")
-            offsets = re.findall(r'<a:off x="(\d+)" y="(\d+)"', shapes_xml)
-            debug_logger.info("Slide offsets: %s", offsets)
-            
+
             # 2. Inject shapes into template fragments
             slide_xml = slide_xml.replace(placeholder, shapes_xml)
             animation_xml = self._build_animation_xml()
@@ -181,8 +171,8 @@ class DrawingMLWriter:
         self,
         scene: IRScene,
         *,
-        default_slide_size: Tuple[int, int] = DEFAULT_SLIDE_SIZE,
-        tracer: "ConversionTracer | None" = None,
+        default_slide_size: tuple[int, int] = DEFAULT_SLIDE_SIZE,
+        tracer: ConversionTracer | None = None,
         animation_payload: dict[str, Any] | None = None,
         animations: list | None = None, # Add animations parameter
     ) -> DrawingMLRenderResult:
@@ -535,7 +525,7 @@ class DrawingMLWriter:
         logger.debug("Skipping unsupported IR element type: %s", type(element).__name__)
         return None
 
-    def _register_run_navigation(self, navigation, text_segment: str) -> str:
+    def _register_run_navigation(self, navigation, text_segment: str):
         return self._register_navigation_asset(navigation, scope="text_run", text=text_segment)
 
     def _navigation_from_metadata(self, metadata: dict[str, object], *, scope: str) -> str:
@@ -544,14 +534,15 @@ class DrawingMLWriter:
             return ""
         entries = nav_data if isinstance(nav_data, list) else [nav_data]
         for entry in entries:
-            xml = self._register_navigation_asset(entry, scope=scope)
-            if xml:
-                return xml
+            elem = self._register_navigation_asset(entry, scope=scope)
+            if elem is not None:
+                from .xml_builder import to_string as _ts
+                return _ts(elem)
         return ""
 
-    def _register_navigation_asset(self, navigation, *, scope: str, text: str | None = None) -> str:
+    def _register_navigation_asset(self, navigation, *, scope: str, text: str | None = None):
         if navigation is None or self._asset_registry is None:
-            return ""
+            return None
 
         return register_navigation(
             navigation,

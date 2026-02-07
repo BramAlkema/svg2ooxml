@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
-from svg2ooxml.common.geometry.paths.drawingml import build_path_commands, compute_path_bounds
+from svg2ooxml.common.geometry.paths.drawingml import (
+    build_path_commands,
+    compute_path_bounds,
+)
 from svg2ooxml.ir.geometry import BezierSegment, LineSegment, Point
 
 

@@ -21,13 +21,12 @@ To regenerate baselines:
 
 from __future__ import annotations
 
-from pathlib import Path
 import os
+from pathlib import Path
 
 import pytest
-
-from tools.visual.diff import VisualDiffer
 from tools.visual.browser_renderer import BrowserRenderError
+from tools.visual.diff import VisualDiffer
 from tools.visual.renderer import LibreOfficeRenderer, VisualRendererError
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures" / "resvg"

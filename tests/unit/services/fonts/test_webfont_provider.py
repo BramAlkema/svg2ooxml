@@ -2,9 +2,10 @@
 from __future__ import annotations
 
 import pytest
+
 from svg2ooxml.ir.fonts import FontFaceRule, FontFaceSrc
-from svg2ooxml.services.fonts.service import FontQuery
 from svg2ooxml.services.fonts.providers.webfont import WebFontProvider
+from svg2ooxml.services.fonts.service import FontQuery
 
 
 class TestWebFontProvider:

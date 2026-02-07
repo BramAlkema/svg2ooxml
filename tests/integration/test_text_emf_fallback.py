@@ -4,16 +4,13 @@ These tests verify that the TextRenderCoordinator correctly identifies
 complex text layouts and triggers EMF fallback in end-to-end scenarios.
 """
 
-import pytest
-from dataclasses import dataclass
-from typing import Optional
 import math
+from dataclasses import dataclass
 
+from svg2ooxml.core.resvg.text.layout_analyzer import TextLayoutComplexity
 from svg2ooxml.core.resvg.text.text_coordinator import (
     TextRenderCoordinator,
-    TextRenderResult,
 )
-from svg2ooxml.core.resvg.text.layout_analyzer import TextLayoutComplexity
 from svg2ooxml.telemetry.render_decisions import RenderTracer
 
 
@@ -44,9 +41,9 @@ class MockColor:
 class MockFillStyle:
     """Mock fill style for testing."""
 
-    color: Optional[MockColor] = None
+    color: MockColor | None = None
     opacity: float = 1.0
-    reference: Optional[object] = None
+    reference: object | None = None
 
 
 @dataclass
@@ -54,19 +51,19 @@ class MockTextStyle:
     """Mock text style for testing."""
 
     font_families: tuple[str, ...] = ("Arial",)
-    font_size: Optional[float] = 12.0
-    font_style: Optional[str] = None
-    font_weight: Optional[str] = None
+    font_size: float | None = 12.0
+    font_style: str | None = None
+    font_weight: str | None = None
 
 
 @dataclass
 class MockTextNode:
     """Mock TextNode for testing."""
 
-    text_content: Optional[str] = "Test"
-    text_style: Optional[MockTextStyle] = None
-    fill: Optional[MockFillStyle] = None
-    transform: Optional[MockTransform] = None
+    text_content: str | None = "Test"
+    text_style: MockTextStyle | None = None
+    fill: MockFillStyle | None = None
+    transform: MockTransform | None = None
     attributes: dict = None
     children: list = None
     tag: str = "text"

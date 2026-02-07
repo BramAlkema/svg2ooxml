@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
 
 import numpy as np
 
@@ -23,7 +22,7 @@ class ClipPathContext:
     node: ClipPathNode
 
 
-def resolve_mask(tree: Tree, href: Optional[str]) -> Optional[MaskContext]:
+def resolve_mask(tree: Tree, href: str | None) -> MaskContext | None:
     href = _clean_href(href)
     if not href:
         return None
@@ -33,7 +32,7 @@ def resolve_mask(tree: Tree, href: Optional[str]) -> Optional[MaskContext]:
     return MaskContext(node=mask_node)
 
 
-def resolve_clip_path(tree: Tree, href: Optional[str]) -> Optional[ClipPathContext]:
+def resolve_clip_path(tree: Tree, href: str | None) -> ClipPathContext | None:
     href = _clean_href(href)
     if not href:
         return None
@@ -88,7 +87,7 @@ def _coverage_for_node(
     viewport: Viewport,
     *,
     combine_children: bool,
-) -> Optional[np.ndarray]:
+) -> np.ndarray | None:
     geometry = node_geometry(node)
     if geometry is not None:
         tessellation = tessellator.tessellate_fill(geometry)
@@ -102,7 +101,7 @@ def _coverage_for_node(
     if not combine_children:
         return None
 
-    combined: Optional[np.ndarray] = None
+    combined: np.ndarray | None = None
     for child in node.children:
         child_cov = _coverage_for_node(
             child,
@@ -154,7 +153,7 @@ def _node_opacity(node: BaseNode) -> float:
     return 1.0
 
 
-def _clean_href(raw: Optional[str]) -> Optional[str]:
+def _clean_href(raw: str | None) -> str | None:
     if raw is None:
         return None
     value = raw.strip()

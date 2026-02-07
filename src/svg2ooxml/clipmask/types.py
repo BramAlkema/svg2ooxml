@@ -5,8 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from svg2ooxml.ir.geometry import Rect, SegmentType
 from svg2ooxml.common.geometry import Matrix2D
+from svg2ooxml.ir.geometry import Rect, SegmentType
 
 
 @dataclass(slots=True)

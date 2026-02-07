@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from collections import OrderedDict
-from typing import Any, Hashable
+from collections.abc import Hashable
+from typing import Any
 
 
 class ConverterCache:

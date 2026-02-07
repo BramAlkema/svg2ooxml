@@ -2,16 +2,8 @@
 
 from __future__ import annotations
 
-import pytest
-
 from dataclasses import dataclass
 
-from svg2ooxml.core.traversal.clip_geometry import (
-    ClipComputeResult,
-    ClipCustGeom,
-    ClipFallback,
-    compute_clip_geometry,
-)
 from svg2ooxml.core.pipeline.mappers import (
     Mapper,
     MapperError,
@@ -20,9 +12,14 @@ from svg2ooxml.core.pipeline.mappers import (
     clip_result_to_xml,
     validate_mapper_result,
 )
-from svg2ooxml.ir.geometry import LineSegment, Point
+from svg2ooxml.core.traversal.clip_geometry import (
+    ClipComputeResult,
+    ClipCustGeom,
+    ClipFallback,
+    compute_clip_geometry,
+)
+from svg2ooxml.ir.geometry import LineSegment, Point, Rect
 from svg2ooxml.ir.scene import ClipRef, MaskDefinition, MaskRef
-from svg2ooxml.ir.geometry import Rect
 
 
 class DummyMapper(Mapper):

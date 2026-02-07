@@ -1,11 +1,9 @@
 """Unit tests for paint module color parsing."""
 
-import pytest
 
 from svg2ooxml.core.resvg.painting.paint import (
     _parse_component,
     parse_color,
-    Color,
 )
 
 

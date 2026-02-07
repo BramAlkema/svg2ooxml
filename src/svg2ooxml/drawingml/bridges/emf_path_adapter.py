@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
-from typing import Iterator, List, Sequence, Tuple
 
+from svg2ooxml.common.units import ConversionContext, UnitConverter
 from svg2ooxml.io.emf import DashPattern, EMFBlob
 from svg2ooxml.io.emf.path import flatten_segments
 from svg2ooxml.ir.geometry import BezierSegment, LineSegment, SegmentType
 from svg2ooxml.ir.paint import SolidPaint, Stroke, StrokeCap, StrokeJoin
-from svg2ooxml.common.units import ConversionContext, UnitConverter
 
 _EPSILON = 1e-6
 _FILL_MODE_ALTERNATE = 1  # even-odd
@@ -44,8 +44,8 @@ class EMFPathResult:
     emf_bytes: bytes
     width_emu: int
     height_emu: int
-    origin: Tuple[float, float]
-    size: Tuple[float, float]
+    origin: tuple[float, float]
+    size: tuple[float, float]
 
 
 class EMFPathAdapter:
@@ -117,8 +117,8 @@ class EMFPathAdapter:
         else:
             stroke_handle = None
 
-        polygons: list[list[Tuple[int, int]]] = []
-        polylines: list[list[Tuple[int, int]]] = []
+        polygons: list[list[tuple[int, int]]] = []
+        polylines: list[list[tuple[int, int]]] = []
         origin = (min_x, min_y)
 
         for points in flattened:
@@ -159,7 +159,7 @@ class EMFPathAdapter:
     # Internal helpers
     # ------------------------------------------------------------------
 
-    def _group_segments(self, segments: Sequence[SegmentType]) -> Iterator[List[SegmentType]]:
+    def _group_segments(self, segments: Sequence[SegmentType]) -> Iterator[list[SegmentType]]:
         current: list[SegmentType] = []
         last_end = None
         for segment in segments:
@@ -173,18 +173,18 @@ class EMFPathAdapter:
             yield current
 
 
-def _extents(paths: Sequence[Sequence[Tuple[float, float]]]) -> tuple[float, float, float, float]:
+def _extents(paths: Sequence[Sequence[tuple[float, float]]]) -> tuple[float, float, float, float]:
     xs = [pt[0] for path in paths for pt in path]
     ys = [pt[1] for path in paths for pt in path]
     return min(xs), max(xs), min(ys), max(ys)
 
 
 def _convert_points(
-    points: Sequence[Tuple[float, float]],
-    origin: Tuple[float, float],
+    points: Sequence[tuple[float, float]],
+    origin: tuple[float, float],
     unit_converter: UnitConverter,
     conversion_context: ConversionContext | None,
-) -> Iterator[Tuple[int, int]]:
+) -> Iterator[tuple[int, int]]:
     ox, oy = origin
     for x, y in points:
         emu_x = unit_converter.to_emu(x - ox, conversion_context, axis="x")
@@ -192,7 +192,7 @@ def _convert_points(
         yield int(round(emu_x)), int(round(emu_y))
 
 
-def _segment_start(segment: SegmentType) -> Tuple[float, float]:
+def _segment_start(segment: SegmentType) -> tuple[float, float]:
     if isinstance(segment, LineSegment):
         return segment.start.x, segment.start.y
     if isinstance(segment, BezierSegment):
@@ -200,7 +200,7 @@ def _segment_start(segment: SegmentType) -> Tuple[float, float]:
     return getattr(segment, "start", (0.0, 0.0))
 
 
-def _segment_end(segment: SegmentType) -> Tuple[float, float]:
+def _segment_end(segment: SegmentType) -> tuple[float, float]:
     if isinstance(segment, LineSegment):
         return segment.end.x, segment.end.y
     if isinstance(segment, BezierSegment):
@@ -208,7 +208,7 @@ def _segment_end(segment: SegmentType) -> Tuple[float, float]:
     return getattr(segment, "end", (0.0, 0.0))
 
 
-def _points_close(a: Tuple[float, float], b: Tuple[float, float]) -> bool:
+def _points_close(a: tuple[float, float], b: tuple[float, float]) -> bool:
     return abs(a[0] - b[0]) < _EPSILON and abs(a[1] - b[1]) < _EPSILON
 
 
@@ -227,7 +227,7 @@ def _fill_mode(rule: str) -> int:
     return _FILL_MODE_ALTERNATE if token in {"evenodd", "even-odd"} else _FILL_MODE_WINDING
 
 
-def _is_closed(points: Sequence[Tuple[float, float]]) -> bool:
+def _is_closed(points: Sequence[tuple[float, float]]) -> bool:
     return len(points) >= 3 and _points_close(points[0], points[-1])
 
 

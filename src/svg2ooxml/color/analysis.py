@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import math
+from collections.abc import Iterable, Sequence
 from statistics import mean
-from typing import Iterable, Sequence
 
 from .bridge import (
     ADVANCED_COLOR_ENGINE_AVAILABLE,
@@ -67,7 +67,7 @@ def summarize_palette(values: Iterable[str | Color]) -> dict[str, object]:
     oklab_values: list[tuple[float, float, float]] = []
 
     for colour in colours:
-        l, a, b = colour.to_oklab()
+        l, a, b = colour.to_oklab()  # noqa: E741 -- OKLab spec notation for lightness
         oklab_values.append((l, a, b))
         l_values.append(l)
         a_values.append(a)
@@ -120,7 +120,6 @@ def _advanced_palette_statistics(colours: Sequence[Color], base_stats: dict[str,
     if not advanced_colours:
         return {"advanced_available": False}
 
-    oklab_values = [colour.oklab() for colour in advanced_colours]
     oklch_values = [colour.oklch() for colour in advanced_colours]
     hue_values = [value[2] for value in oklch_values]
     chroma_values = [value[1] for value in oklch_values]

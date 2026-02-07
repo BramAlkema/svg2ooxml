@@ -20,7 +20,7 @@ __all__ = [
 ]
 
 # map symbol -> relative module
-_symbol_map = {'ExportResponse': 'export', 'ExportRequest': 'export', 'RequestedFont': 'export', 'JobStatusResponse': 'export', 'SVGFrame': 'export', 'CheckoutResponse': 'subscription', 'PortalResponse': 'subscription', 'SubscriptionInfo': 'subscription', 'CheckoutRequest': 'subscription', 'UsageInfo': 'subscription', 'SubscriptionStatusResponse': 'subscription'}
+_symbol_map = {'SVGFrame': 'export', 'RequestedFont': 'export', 'ExportResponse': 'export', 'JobStatusResponse': 'export', 'ExportRequest': 'export', 'CheckoutRequest': 'subscription', 'PortalResponse': 'subscription', 'SubscriptionInfo': 'subscription', 'UsageInfo': 'subscription', 'CheckoutResponse': 'subscription', 'SubscriptionStatusResponse': 'subscription'}
 _module_map = {'export': 'export', 'subscription': 'subscription'}
 
 

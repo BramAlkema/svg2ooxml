@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from lxml import etree
-
 from svg2ooxml.services.image_service import ImageService
 from svg2ooxml.services.providers import registry as provider_registry
 from svg2ooxml.services.setup import configure_services
@@ -78,4 +76,4 @@ def test_configure_services_applies_filter_strategy() -> None:
     filter_service = services.filter_service
     assert filter_service is not None
 
-    assert getattr(filter_service, "_strategy") == "raster"
+    assert filter_service._strategy == "raster"

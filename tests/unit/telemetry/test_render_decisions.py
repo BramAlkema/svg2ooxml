@@ -7,8 +7,6 @@ import tempfile
 import time
 from pathlib import Path
 
-import pytest
-
 from svg2ooxml.telemetry import RenderDecision, RenderTracer
 
 

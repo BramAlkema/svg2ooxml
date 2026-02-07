@@ -1,12 +1,11 @@
 """Tests for base animation handler."""
 
-import pytest
 from unittest.mock import Mock
 
-from svg2ooxml.drawingml.animation.handlers.base import (
-    AnimationHandler,
-    AnimationDefinition,
-)
+import pytest
+
+from svg2ooxml.drawingml.animation.handlers.base import AnimationHandler
+from svg2ooxml.ir.animation import AnimationDefinition
 
 
 class ConcreteHandler(AnimationHandler):

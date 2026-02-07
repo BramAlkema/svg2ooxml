@@ -2,18 +2,20 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Iterable, Tuple
+
+from lxml import etree
 
 from svg2ooxml.common.geometry.paths.drawingml import (
     PathCommand,
     build_path_commands,
     compute_path_bounds,
 )
-from svg2ooxml.ir.geometry import Point, Rect, SegmentType
 
 # Import centralized XML builders for safe DrawingML generation
 from svg2ooxml.drawingml.xml_builder import a_elem, a_sub, to_string
+from svg2ooxml.ir.geometry import Point, Rect, SegmentType
 
 EMU_PER_PX = 9525
 
@@ -27,6 +29,7 @@ def px_to_emu(value: float | None) -> int:
 @dataclass
 class CustomGeometry:
     xml: str
+    element: etree._Element
     width_emu: int
     height_emu: int
     bounds: Rect
@@ -75,6 +78,7 @@ class DrawingMLPathGenerator:
 
         return CustomGeometry(
             xml=geometry_xml,
+            element=custGeom,
             width_emu=width_emu,
             height_emu=height_emu,
             bounds=bounds_px,
@@ -107,7 +111,7 @@ class DrawingMLPathGenerator:
             return a_elem("close")
         raise ValueError(f"Unsupported path command: {command.name}")
 
-    def _point_to_emu(self, point: Point, bounds: Rect) -> Tuple[int, int]:
+    def _point_to_emu(self, point: Point, bounds: Rect) -> tuple[int, int]:
         return px_to_emu(point.x - bounds.x), px_to_emu(point.y - bounds.y)
 
 __all__ = ["DrawingMLPathGenerator", "CustomGeometry", "EMU_PER_PX", "px_to_emu"]

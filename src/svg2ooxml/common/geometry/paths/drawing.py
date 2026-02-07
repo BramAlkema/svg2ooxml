@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Iterable
+from collections.abc import Iterable
 
 from svg2ooxml.ir.geometry import BezierSegment, LineSegment, Point, SegmentType
 
@@ -18,8 +18,6 @@ def approximate_ellipse(cx: float, cy: float, rx: float, ry: float) -> list[Segm
         return []
 
     segments: list[SegmentType] = []
-    steps = 8
-    theta = (2.0 * 3.141592653589793) / steps
     kappa = 0.5522847498307936
 
     points = [

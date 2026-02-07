@@ -2,17 +2,18 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import math
+from dataclasses import dataclass
 
 from lxml import etree
 
-from svg2ooxml.filters.base import Filter, FilterContext, FilterResult
-from svg2ooxml.filters.utils import parse_number
-from svg2ooxml.units.conversion import px_to_emu
+from svg2ooxml.common.conversions.angles import radians_to_ppt
 
 # Import centralized XML builders for safe DrawingML generation
 from svg2ooxml.drawingml.xml_builder import a_elem, a_sub, to_string
+from svg2ooxml.filters.base import Filter, FilterContext, FilterResult
+from svg2ooxml.filters.utils import parse_number
+from svg2ooxml.units.conversion import px_to_emu
 
 
 @dataclass
@@ -54,7 +55,7 @@ class OffsetFilter(Filter):
 
         # PowerPoint angle (0 = right, counter-clockwise positive, units 60000 per degree)
         angle_rad = math.atan2(dy_emu, dx_emu)
-        ppt_angle = int((math.degrees(angle_rad) * 60000) % 21600000)
+        ppt_angle = radians_to_ppt(angle_rad % (2 * math.pi))
         distance = min(distance, 914400)
 
         # Create outer shadow with zero blur to simulate offset

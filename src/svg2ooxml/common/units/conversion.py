@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import math
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass, replace
-from typing import Final, Mapping
+from typing import Final
 
 from .scalars import (
     DEFAULT_DPI,
@@ -86,7 +87,7 @@ class ConversionContext:
         viewport_width: float | None = None,
         viewport_height: float | None = None,
         font_x_height: float | None = None,
-    ) -> "ConversionContext":
+    ) -> ConversionContext:
         """Create a child context, inheriting the current viewport as parents."""
 
         return ConversionContext(
@@ -102,7 +103,7 @@ class ConversionContext:
             font_x_height=font_x_height if font_x_height is not None else self.font_x_height,
         )
 
-    def with_root(self, font_size: float | None = None) -> "ConversionContext":
+    def with_root(self, font_size: float | None = None) -> ConversionContext:
         """Return a context with an explicit root font size for rem units."""
 
         if font_size is None:

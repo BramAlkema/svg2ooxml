@@ -62,6 +62,7 @@ __all__ = [
     'Stroke',
     'StrokeCap',
     'StrokeJoin',
+    'SvgFontDefinition',
     'TextAnchor',
     'TextFrame',
     'TextPathFrame',
@@ -72,6 +73,7 @@ __all__ = [
     'WordArtCandidate',
     'convert_parser_output',
     'format_transform_string',
+    'normalize_font_weight',
     'animation',
     'effects',
     'entrypoints',
@@ -87,7 +89,7 @@ __all__ = [
 ]
 
 # map symbol -> relative module
-_symbol_map = {'FillMode': 'animation', 'AnimationDefinition': 'animation', 'TransformType': 'animation', 'AnimationType': 'animation', 'AnimationScene': 'animation', 'AnimationSummary': 'animation', 'AnimationTiming': 'animation', 'format_transform_string': 'animation', 'CalcMode': 'animation', 'AnimationComplexity': 'animation', 'AnimationKeyframe': 'animation', 'EMU_PER_POINT': 'effects', 'ReflectionEffect': 'effects', 'CustomEffect': 'effects', 'GlowEffect': 'effects', 'ShadowEffect': 'effects', 'Effect': 'effects', 'BlurEffect': 'effects', 'SoftEdgeEffect': 'effects', 'convert_parser_output': 'entrypoints', 'FontMetadata': 'font_metadata', 'FontAvailability': 'font_metadata', 'FontMetrics': 'font_metadata', 'FontStrategy': 'font_metadata', 'FontFaceRule': 'fonts', 'FontFaceSrc': 'fonts', 'LineSegment': 'geometry', 'BezierSegment': 'geometry', 'Segment': 'geometry', 'Point': 'geometry', 'Rect': 'geometry', 'StrokeCap': 'paint', 'LinearGradientPaint': 'paint', 'GradientPaintRef': 'paint', 'SolidPaint': 'paint', 'StrokeJoin': 'paint', 'Stroke': 'paint', 'GradientStop': 'paint', 'PatternPaint': 'paint', 'RadialGradientPaint': 'paint', 'MaskRef': 'scene', 'Group': 'scene', 'MaskInstance': 'scene', 'Image': 'scene', 'MaskDefinition': 'scene', 'Scene': 'scene', 'ClipRef': 'scene', 'MaskMode': 'scene', 'ClipStrategy': 'scene', 'Path': 'scene', 'Rectangle': 'shapes', 'Line': 'shapes', 'Polygon': 'shapes', 'Ellipse': 'shapes', 'Circle': 'shapes', 'Polyline': 'shapes', 'EmbeddedFontPlan': 'text', 'TextAnchor': 'text', 'Run': 'text', 'WordArtCandidate': 'text', 'EnhancedRun': 'text', 'TextFrame': 'text', 'CharacterPlacement': 'text_path', 'TextPathSide': 'text_path', 'TextPathSpacing': 'text_path', 'TextPathFrame': 'text_path', 'PathPoint': 'text_path', 'TextPathMethod': 'text_path'}
+_symbol_map = {'FillMode': 'animation', 'AnimationComplexity': 'animation', 'TransformType': 'animation', 'format_transform_string': 'animation', 'AnimationSummary': 'animation', 'AnimationKeyframe': 'animation', 'AnimationDefinition': 'animation', 'AnimationScene': 'animation', 'CalcMode': 'animation', 'AnimationType': 'animation', 'AnimationTiming': 'animation', 'BlurEffect': 'effects', 'CustomEffect': 'effects', 'Effect': 'effects', 'ShadowEffect': 'effects', 'GlowEffect': 'effects', 'SoftEdgeEffect': 'effects', 'ReflectionEffect': 'effects', 'EMU_PER_POINT': 'effects', 'convert_parser_output': 'entrypoints', 'FontMetrics': 'font_metadata', 'FontAvailability': 'font_metadata', 'FontStrategy': 'font_metadata', 'FontMetadata': 'font_metadata', 'SvgFontDefinition': 'fonts', 'FontFaceSrc': 'fonts', 'normalize_font_weight': 'fonts', 'FontFaceRule': 'fonts', 'LineSegment': 'geometry', 'Segment': 'geometry', 'Point': 'geometry', 'Rect': 'geometry', 'BezierSegment': 'geometry', 'LinearGradientPaint': 'paint', 'Stroke': 'paint', 'GradientStop': 'paint', 'StrokeCap': 'paint', 'SolidPaint': 'paint', 'GradientPaintRef': 'paint', 'StrokeJoin': 'paint', 'RadialGradientPaint': 'paint', 'PatternPaint': 'paint', 'ClipRef': 'scene', 'MaskRef': 'scene', 'Group': 'scene', 'MaskMode': 'scene', 'Scene': 'scene', 'ClipStrategy': 'scene', 'Image': 'scene', 'MaskInstance': 'scene', 'Path': 'scene', 'MaskDefinition': 'scene', 'Circle': 'shapes', 'Rectangle': 'shapes', 'Polygon': 'shapes', 'Line': 'shapes', 'Polyline': 'shapes', 'Ellipse': 'shapes', 'Run': 'text', 'TextFrame': 'text', 'EmbeddedFontPlan': 'text', 'TextAnchor': 'text', 'WordArtCandidate': 'text', 'EnhancedRun': 'text', 'PathPoint': 'text_path', 'TextPathMethod': 'text_path', 'TextPathSpacing': 'text_path', 'TextPathFrame': 'text_path', 'TextPathSide': 'text_path', 'CharacterPlacement': 'text_path'}
 _module_map = {'animation': 'animation', 'effects': 'effects', 'entrypoints': 'entrypoints', 'font_metadata': 'font_metadata', 'fonts': 'fonts', 'geometry': 'geometry', 'numpy_compat': 'numpy_compat', 'paint': 'paint', 'scene': 'scene', 'shapes': 'shapes', 'text': 'text', 'text_path': 'text_path'}
 
 

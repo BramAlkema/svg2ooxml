@@ -2,15 +2,19 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, Iterable, List, Tuple
+from collections.abc import Iterable
+from typing import Any
 
 from svg2ooxml.clipmask.types import ClipDefinition, MaskInfo
+from svg2ooxml.common.geometry import Matrix2D
+from svg2ooxml.common.geometry.paths import (
+    compute_segments_bbox,
+    normalize_path_to_segments,
+)
 from svg2ooxml.core.resvg.geometry.matrix import Matrix as ResvgMatrix
 from svg2ooxml.core.resvg.usvg_tree import BaseNode, Tree
-from svg2ooxml.common.geometry.paths import compute_segments_bbox, normalize_path_to_segments
-from svg2ooxml.ir.geometry import BezierSegment, LineSegment, Point, Rect, SegmentType
 from svg2ooxml.core.traversal.constants import DEFAULT_TOLERANCE
-from svg2ooxml.common.geometry import Matrix2D
+from svg2ooxml.ir.geometry import BezierSegment, LineSegment, Point, Rect, SegmentType
 
 
 def collect_resvg_clip_definitions(tree: Tree | None) -> dict[str, ClipDefinition]:
@@ -118,8 +122,8 @@ def _gather_segments(
     parent_transform: ResvgMatrix | None,
     tree: Tree,
     *,
-    segments_out: List[SegmentType],
-    primitives_out: List[dict[str, Any]],
+    segments_out: list[SegmentType],
+    primitives_out: list[dict[str, Any]],
     visited: set[str],
     hints: dict[str, Any] | None = None,
 ) -> None:
@@ -243,7 +247,7 @@ def _parse_number(value: Any, default: float = 0.0) -> float:
         return default
 
 
-def _shape_segments(node: BaseNode, transform: ResvgMatrix) -> List[SegmentType]:
+def _shape_segments(node: BaseNode, transform: ResvgMatrix) -> list[SegmentType]:
     from svg2ooxml.core.resvg.usvg_tree import (
         CircleNode,
         EllipseNode,
@@ -350,7 +354,7 @@ def _shape_segments(node: BaseNode, transform: ResvgMatrix) -> List[SegmentType]
     return []
 
 
-def _apply_transform_to_segments(segments: Iterable[SegmentType], transform: ResvgMatrix) -> List[SegmentType]:
+def _apply_transform_to_segments(segments: Iterable[SegmentType], transform: ResvgMatrix) -> list[SegmentType]:
     tuple_transform = _matrix_to_tuple(transform)
     if tuple_transform == (1.0, 0.0, 0.0, 1.0, 0.0, 0.0):
         return list(segments)
@@ -377,7 +381,7 @@ def _apply_transform_to_segments(segments: Iterable[SegmentType], transform: Res
     return transformed
 
 
-def _transform_points(points: Iterable[Point], transform: ResvgMatrix) -> List[SegmentType]:
+def _transform_points(points: Iterable[Point], transform: ResvgMatrix) -> list[SegmentType]:
     tuple_transform = _matrix_to_tuple(transform)
     transformed: list[SegmentType] = []
     previous_point: Point | None = None
@@ -389,14 +393,14 @@ def _transform_points(points: Iterable[Point], transform: ResvgMatrix) -> List[S
     return transformed
 
 
-def _transform_point(point: Point, transform: Tuple[float, float, float, float, float, float]) -> Point:
+def _transform_point(point: Point, transform: tuple[float, float, float, float, float, float]) -> Point:
     a, b, c, d, e, f = transform
     x = a * point.x + c * point.y + e
     y = b * point.x + d * point.y + f
     return Point(x, y)
 
 
-def _normalize_transform_tuple(value: Any) -> Tuple[float, float, float, float, float, float]:
+def _normalize_transform_tuple(value: Any) -> tuple[float, float, float, float, float, float]:
     if isinstance(value, tuple) and len(value) == 6:
         return tuple(float(component) for component in value)
     if isinstance(value, list) and len(value) == 6:
@@ -436,7 +440,7 @@ def _compute_primitives_bbox(primitives: Iterable[dict[str, Any]]) -> Rect | Non
     )
 
 
-def _matrix_to_tuple(matrix: ResvgMatrix | None) -> Tuple[float, float, float, float, float, float]:
+def _matrix_to_tuple(matrix: ResvgMatrix | None) -> tuple[float, float, float, float, float, float]:
     if matrix is None:
         return (1.0, 0.0, 0.0, 1.0, 0.0, 0.0)
     return (matrix.a, matrix.b, matrix.c, matrix.d, matrix.e, matrix.f)
@@ -463,7 +467,7 @@ def _combine_transform(
     return parent.multiply(child)
 
 
-def _parse_region(attributes: Dict[str, Any]) -> Rect | None:
+def _parse_region(attributes: dict[str, Any]) -> Rect | None:
     x = _parse_number(attributes.get("x"), 0.0)
     y = _parse_number(attributes.get("y"), 0.0)
     width = _parse_number(attributes.get("width"), 0.0)

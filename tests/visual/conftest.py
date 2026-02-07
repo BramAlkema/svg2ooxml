@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import pytest
-
 from tools.visual.stack import default_visual_stack
 
 

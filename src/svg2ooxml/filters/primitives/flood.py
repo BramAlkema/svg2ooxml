@@ -6,11 +6,12 @@ from dataclasses import dataclass
 
 from lxml import etree
 
-from svg2ooxml.filters.base import Filter, FilterContext, FilterResult
-from svg2ooxml.filters.utils import parse_number
+from svg2ooxml.common.conversions.opacity import opacity_to_ppt
 
 # Import centralized XML builders for safe DrawingML generation
 from svg2ooxml.drawingml.xml_builder import a_elem, a_sub, to_string
+from svg2ooxml.filters.base import Filter, FilterContext, FilterResult
+from svg2ooxml.filters.utils import parse_number
 
 
 def _normalise_color(value: str | None) -> str:
@@ -41,7 +42,7 @@ class FloodFilter(Filter):
             "flood_color": params.color,
             "flood_opacity": params.opacity,
         }
-        alpha = _alpha_value(params.opacity)
+        alpha = opacity_to_ppt(params.opacity)
 
         # Build effectLst with solidFill
         effectLst = a_elem("effectLst")
@@ -56,10 +57,6 @@ class FloodFilter(Filter):
         color = _normalise_color(primitive.get("flood-color"))
         opacity = max(0.0, min(parse_number(primitive.get("flood-opacity"), default=1.0), 1.0))
         return FloodParams(color=color, opacity=opacity)
-
-
-def _alpha_value(opacity: float) -> int:
-    return int(round(max(0.0, min(opacity, 1.0)) * 100000))
 
 
 __all__ = ["FloodFilter"]

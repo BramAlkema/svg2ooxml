@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from typing import Iterable, Sequence
+from collections.abc import Iterable, Sequence
 
 from .engine import PolicyEngine, PolicyProvider
 from .providers.animation import AnimationPolicyProvider
 from .providers.filter import FilterPolicyProvider
 from .providers.image import ImagePolicyProvider
-from .providers.path import PathPolicyProvider
 from .providers.mask import MaskPolicyProvider
+from .providers.path import PathPolicyProvider
 from .providers.text import TextPolicyProvider
 from .targets import TargetRegistry
 

@@ -25,7 +25,6 @@ import pytest
 from svg2ooxml.core.pptx_exporter import SvgToPptxExporter
 from svg2ooxml.policy import PolicyContext
 
-
 # Simple test SVG with a basic path
 TEST_SVG = """<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100">
@@ -70,7 +69,7 @@ class TestGeometryModePropagation:
 
         # Parse a simple SVG
         svg_bytes = TEST_SVG.encode("utf-8")
-        svg_file = io.BytesIO(svg_bytes)
+        _svg_file = io.BytesIO(svg_bytes)
 
         # Mock the _render_svg method to capture the policy_context
         captured_policy_context = None
@@ -191,7 +190,6 @@ class TestGeometryModePropagation:
         4. IRConverter can access geometry_mode via _policy_options("geometry")
         """
         from svg2ooxml.core.ir.policy_hooks import PolicyHooksMixin
-        from svg2ooxml.policy import PolicyEngine
         from svg2ooxml.policy.setup import build_policy_engine
 
         # Step 1: Create exporter with default geometry_mode (should be "resvg")

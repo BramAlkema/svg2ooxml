@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import os
-from typing import Any, Dict
+from typing import Any
 
 try:  # pragma: no cover - optional dependency
     from google.cloud import tasks_v2
@@ -93,7 +93,7 @@ class CloudTasksQueue:
             logger.debug(f"Including encrypted auth token in Cloud Task for job {job_id}")
 
         # Construct the task
-        task: Dict[str, Any] = {
+        task: dict[str, Any] = {
             "http_request": {
                 "http_method": tasks_v2.HttpMethod.POST,
                 "url": f"{self.service_url}{task_path}",

@@ -2,16 +2,20 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Iterable
 
 from svg2ooxml.core.parser.colors import parse_color as parse_svg_color
 from svg2ooxml.core.resvg.geometry.matrix import Matrix as ResvgMatrix
 from svg2ooxml.core.resvg.painting.gradients import (
     GradientStop as ResvgGradientStop,
+)
+from svg2ooxml.core.resvg.painting.gradients import (
     LinearGradient,
-    PatternPaint as ResvgPatternPaint,
     RadialGradient,
+)
+from svg2ooxml.core.resvg.painting.gradients import (
+    PatternPaint as ResvgPatternPaint,
 )
 from svg2ooxml.core.resvg.painting.paint import (
     Color,
@@ -242,9 +246,9 @@ def _matrix_to_array(matrix: ResvgMatrix | None):
 
 def _color_to_hex(color: Color) -> str | None:
     try:
-        r = float(getattr(color, "r"))
-        g = float(getattr(color, "g"))
-        b = float(getattr(color, "b"))
+        r = float(color.r)
+        g = float(color.g)
+        b = float(color.b)
     except (TypeError, ValueError, AttributeError):
         return None
     try:

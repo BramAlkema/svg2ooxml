@@ -6,12 +6,14 @@ from typing import Any as _Any
 __all__ = [
     'MaskProcessingResult',
     'MaskProcessor',
+    'try_bake_mask',
+    'baker',
     'processor'
 ]
 
 # map symbol -> relative module
-_symbol_map = {'MaskProcessingResult': 'processor', 'MaskProcessor': 'processor'}
-_module_map = {'processor': 'processor'}
+_symbol_map = {'try_bake_mask': 'baker', 'MaskProcessor': 'processor', 'MaskProcessingResult': 'processor'}
+_module_map = {'baker': 'baker', 'processor': 'processor'}
 
 
 def __getattr__(name: str) -> _Any:  # PEP 562

@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Optional
 
 from lxml import etree
 
@@ -19,7 +19,7 @@ class FilterPrimitiveDescriptor:
     attributes: dict[str, str]
     styles: dict[str, str]
     extras: dict[str, str] = field(default_factory=dict)
-    children: tuple["FilterPrimitiveDescriptor", ...] = ()
+    children: tuple[FilterPrimitiveDescriptor, ...] = ()
 
 
 @dataclass(slots=True)
@@ -47,7 +47,7 @@ def resolve_filter_node(filter_node: FilterNode) -> ResolvedFilter:
     )
 
 
-def resolve_filter_reference(filter_value: str | None, tree: Tree) -> Optional[ResolvedFilter]:
+def resolve_filter_reference(filter_value: str | None, tree: Tree) -> ResolvedFilter | None:
     """Resolve a filter attribute value (e.g., url(#shadow)) against the tree."""
 
     filter_id = _extract_reference_id(filter_value)

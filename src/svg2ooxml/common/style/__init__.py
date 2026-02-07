@@ -16,7 +16,7 @@ __all__ = [
 ]
 
 # map symbol -> relative module
-_symbol_map = {'PropertyDescriptor': 'resolver', 'StyleContext': 'resolver', 'CSSRule': 'resolver', 'CSSDeclaration': 'resolver', 'CSSOrigin': 'resolver', 'CompiledSelector': 'resolver', 'SelectorPart': 'resolver', 'StyleResolver': 'resolver'}
+_symbol_map = {'SelectorPart': 'resolver', 'CSSRule': 'resolver', 'StyleResolver': 'resolver', 'PropertyDescriptor': 'resolver', 'StyleContext': 'resolver', 'CompiledSelector': 'resolver', 'CSSDeclaration': 'resolver', 'CSSOrigin': 'resolver'}
 _module_map = {'resolver': 'resolver'}
 
 

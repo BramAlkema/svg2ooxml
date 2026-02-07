@@ -7,13 +7,17 @@ import pytest
 # Skip entire module if resvg is not available
 pytest.importorskip("svg2ooxml.core.resvg.painting.gradients")
 
+from svg2ooxml.core.resvg.geometry.matrix import Matrix
+from svg2ooxml.core.resvg.painting.gradients import (
+    GradientStop,
+    LinearGradient,
+    RadialGradient,
+)
+from svg2ooxml.core.resvg.painting.paint import Color
 from svg2ooxml.drawingml.bridges.resvg_gradient_adapter import (
     linear_gradient_to_paint,
     radial_gradient_to_paint,
 )
-from svg2ooxml.core.resvg.painting.gradients import LinearGradient, RadialGradient, GradientStop
-from svg2ooxml.core.resvg.painting.paint import Color
-from svg2ooxml.core.resvg.geometry.matrix import Matrix
 from svg2ooxml.ir.paint import LinearGradientPaint, RadialGradientPaint
 
 
@@ -505,7 +509,6 @@ class TestGradientTransformApplication:
 
     def test_linear_gradient_with_translation(self):
         """Test linear gradient with translation transform."""
-        import math
 
         # Translation: move gradient by (100, 200)
         transform = Matrix(a=1.0, b=0.0, c=0.0, d=1.0, e=100.0, f=200.0)
@@ -533,7 +536,6 @@ class TestGradientTransformApplication:
 
     def test_linear_gradient_with_rotation(self):
         """Test linear gradient with 90-degree rotation."""
-        import math
 
         # 90-degree rotation: cos(90°)=0, sin(90°)=1
         transform = Matrix(a=0.0, b=1.0, c=-1.0, d=0.0, e=0.0, f=0.0)

@@ -3,27 +3,31 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass, field, replace
-from typing import TYPE_CHECKING, Any, Dict, Iterator, Optional, Union
+from typing import TYPE_CHECKING, Any
 
 from lxml import etree
 
 from svg2ooxml.color.models import Color
 from svg2ooxml.color.parsers import parse_color
-
-# Import centralized XML builders for safe DrawingML generation
-from svg2ooxml.drawingml.xml_builder import a_elem, a_sub, to_string
+from svg2ooxml.common.conversions.angles import degrees_to_ppt
+from svg2ooxml.common.conversions.opacity import opacity_to_ppt
+from svg2ooxml.common.conversions.scale import position_to_ppt
 from svg2ooxml.drawingml.bridges.resvg_paint_bridge import (
     GradientDescriptor,
     LinearGradientDescriptor,
-    RadialGradientDescriptor,
     MeshGradientDescriptor,
+    RadialGradientDescriptor,
     build_linear_gradient_element,
-    build_radial_gradient_element,
     build_mesh_gradient_element,
+    build_radial_gradient_element,
     describe_gradient_element,
 )
+
+# Import centralized XML builders for safe DrawingML generation
+from svg2ooxml.drawingml.xml_builder import a_elem, a_sub, to_string
+
 from .gradient_processor import GradientAnalysis, GradientProcessor
 
 if TYPE_CHECKING:  # pragma: no cover - import guarded for mypy
@@ -38,7 +42,7 @@ class GradientService:
     """Lookup helper for gradients with simple inheritance resolution."""
 
     _descriptors: dict[str, GradientDescriptor] = field(default_factory=dict)
-    _services: "ConversionServices | None" = None
+    _services: ConversionServices | None = None
     _processor: GradientProcessor | Any | None = None
     _conversion_cache: dict[str, str] = field(default_factory=dict)
     _policy_engine: Any | None = None
@@ -46,7 +50,7 @@ class GradientService:
     _analysis_cache: dict[str, GradientAnalysis] = field(default_factory=dict)
     _materialized_elements: dict[str, etree._Element] = field(default_factory=dict)
 
-    def bind_services(self, services: "ConversionServices") -> None:
+    def bind_services(self, services: ConversionServices) -> None:
         self._services = services
         if self._policy_engine is None:
             self._policy_engine = services.resolve("policy_engine")
@@ -58,7 +62,7 @@ class GradientService:
 
     def update_definitions(
         self,
-        gradients: Mapping[str, Union[GradientDescriptor, etree._Element]] | None,
+        gradients: Mapping[str, GradientDescriptor | etree._Element] | None,
     ) -> None:
         self._descriptors.clear()
         self._materialized_elements.clear()
@@ -108,7 +112,7 @@ class GradientService:
             current_id = href.strip()[1:]
         return chain
 
-    def clone(self) -> "GradientService":
+    def clone(self) -> GradientService:
         clone = GradientService()
         clone._descriptors = dict(self._descriptors)
         clone._processor = self._processor
@@ -144,7 +148,7 @@ class GradientService:
     def register_gradient(
         self,
         gradient_id: str,
-        definition: Union[GradientDescriptor, etree._Element],
+        definition: GradientDescriptor | etree._Element,
     ) -> None:
         descriptor = self._coerce_descriptor(gradient_id, definition)
         if descriptor is None:
@@ -219,14 +223,13 @@ class GradientService:
             simplified.append(stops[min(source, len(stops) - 1)])
         return simplified
 
-    def _serialise_stop(self, position: int, color: Color) -> str:
+    def _serialise_stop(self, position: int, color: Color) -> etree._Element:
         srgb = self._color_to_hex(color)
         gs = a_elem("gs", pos=position)
         srgbClr = a_sub(gs, "srgbClr", val=srgb)
         if color.a < 0.999:
-            alpha_val = int(self._clamp(color.a) * 100000)
-            a_sub(srgbClr, "alpha", val=alpha_val)
-        return to_string(gs)
+            a_sub(srgbClr, "alpha", val=opacity_to_ppt(color.a))
+        return gs
 
     def _color_to_hex(self, color: Color) -> str:
         r = int(self._clamp(color.r) * 255 + 0.5)
@@ -247,7 +250,7 @@ class GradientService:
     def _coerce_descriptor(
         self,
         gradient_id: str,
-        definition: Union[GradientDescriptor, etree._Element],
+        definition: GradientDescriptor | etree._Element,
     ) -> GradientDescriptor | None:
         descriptor: GradientDescriptor
         if isinstance(definition, (LinearGradientDescriptor, RadialGradientDescriptor, MeshGradientDescriptor)):
@@ -293,7 +296,7 @@ class GradientService:
 
     def _convert_linear_gradient(
         self,
-        element: "etree._Element",
+        element: etree._Element,
         analysis: GradientAnalysis | None,
     ) -> str:
         plan = analysis.plan if analysis else None
@@ -304,12 +307,8 @@ class GradientService:
 
         gradFill = a_elem("gradFill")
         gsLst = a_sub(gradFill, "gsLst")
-        # Parse gs_list XML and append children
-        if gs_list:
-            wrapped = f'<root xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">{gs_list}</root>'
-            temp = etree.fromstring(wrapped.encode('utf-8'))
-            for child in temp:
-                gsLst.append(child)
+        for gs_elem in gs_list:
+            gsLst.append(gs_elem)
         a_sub(gradFill, "lin", ang=angle, scaled="0")
 
         result = to_string(gradFill)
@@ -317,7 +316,7 @@ class GradientService:
 
     def _convert_radial_gradient(
         self,
-        element: "etree._Element",
+        element: etree._Element,
         analysis: GradientAnalysis | None,
     ) -> str:
         plan = analysis.plan if analysis else None
@@ -327,12 +326,8 @@ class GradientService:
 
         gradFill = a_elem("gradFill")
         gsLst = a_sub(gradFill, "gsLst")
-        # Parse gs_list XML and append children
-        if gs_list:
-            wrapped = f'<root xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">{gs_list}</root>'
-            temp = etree.fromstring(wrapped.encode('utf-8'))
-            for child in temp:
-                gsLst.append(child)
+        for gs_elem in gs_list:
+            gsLst.append(gs_elem)
         a_sub(gradFill, "path", path="circle")
 
         result = to_string(gradFill)
@@ -340,7 +335,7 @@ class GradientService:
 
     def _convert_mesh_gradient(
         self,
-        element: "etree._Element",
+        element: etree._Element,
         analysis: GradientAnalysis | None,
     ) -> str:
         # Mesh gradients require dedicated tessellation; surface a hint so the caller can choose a fallback.
@@ -354,10 +349,10 @@ class GradientService:
 
     def _extract_gradient_stops(
         self,
-        element: "etree._Element",
+        element: etree._Element,
         *,
         max_stops: int | None = None,
-    ) -> str:
+    ) -> list[etree._Element]:
         stops = []
         for stop in self._iter_stops(element):
             pos = self._parse_offset(stop.get("offset"))
@@ -373,7 +368,7 @@ class GradientService:
         if max_stops is not None and max_stops >= 2 and len(stops) > max_stops:
             stops = self._simplify_stops(stops, max_stops)
 
-        return "".join(self._serialise_stop(pos, color) for pos, color in stops)
+        return [self._serialise_stop(pos, color) for pos, color in stops]
 
     # ------------------------------------------------------------------ #
     # Support functions                                                  #
@@ -387,7 +382,7 @@ class GradientService:
             token = token[1:]
         return token
 
-    def _iter_stops(self, element: "etree._Element") -> Iterator["etree._Element"]:
+    def _iter_stops(self, element: etree._Element) -> Iterator[etree._Element]:
         for node in element.iter():
             if not hasattr(node, "tag"):
                 continue
@@ -400,15 +395,15 @@ class GradientService:
         token = value.strip()
         try:
             if token.endswith("%"):
-                return int(self._clamp(float(token[:-1]) / 100.0) * 100000)
+                return position_to_ppt(float(token[:-1]) / 100.0)
             numeric = float(token)
             if 0.0 <= numeric <= 1.0:
-                return int(self._clamp(numeric) * 100000)
-            return int(self._clamp(numeric / 100.0) * 100000)
+                return position_to_ppt(numeric)
+            return position_to_ppt(numeric / 100.0)
         except (TypeError, ValueError):
             return 0
 
-    def _resolve_stop_color(self, stop: "etree._Element") -> Color:
+    def _resolve_stop_color(self, stop: etree._Element) -> Color:
         style_map = self._parse_style(stop.get("style"))
         color_value = style_map.get("stop-color", stop.get("stop-color"))
         opacity_value = style_map.get("stop-opacity", stop.get("stop-opacity"))
@@ -422,10 +417,10 @@ class GradientService:
                 pass
         return color
 
-    def _parse_style(self, payload: str | None) -> Dict[str, str]:
+    def _parse_style(self, payload: str | None) -> dict[str, str]:
         if not payload:
             return {}
-        entries: Dict[str, str] = {}
+        entries: dict[str, str] = {}
         for declaration in payload.split(";"):
             if ":" not in declaration:
                 continue
@@ -433,7 +428,7 @@ class GradientService:
             entries[key.strip()] = value.strip()
         return entries
 
-    def _resolve_linear_angle(self, element: "etree._Element") -> int:
+    def _resolve_linear_angle(self, element: etree._Element) -> int:
         # Map SVG x1/y1/x2/y2 into DrawingML degrees; fall back to 180° (top-to-bottom)
         try:
             x1 = float(element.get("x1", "0") or 0)
@@ -447,12 +442,12 @@ class GradientService:
             import math
 
             angle = math.degrees(math.atan2(dy, dx))
-            ppt_angle = int(((90 - angle) % 360) * 60000)
-            return ppt_angle
+            rotated = (90 - angle) % 360
+            return degrees_to_ppt(rotated)
         except Exception:  # pragma: no cover - defensive
             return 180000
 
-    def _analyze_mesh(self, element: "etree._Element") -> tuple[int, int]:
+    def _analyze_mesh(self, element: etree._Element) -> tuple[int, int]:
         rows = 0
         cols = 0
         for patch in element.findall(".//*[local-name()='meshrow']"):

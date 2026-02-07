@@ -5,18 +5,16 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable
-from typing import Any, Optional
+from typing import Any
 
 from lxml import etree
 
 from svg2ooxml.core.parser.xml_utils import children
 from svg2ooxml.core.pipeline.navigation import NavigationSpec, parse_svg_navigation
-
-from svg2ooxml.core.traversal.coordinate_space import CoordinateSpace
-from svg2ooxml.core.traversal.viewbox import viewbox_matrix_from_element
-from svg2ooxml.core.traversal.transform_parser import TransformParser
 from svg2ooxml.core.traversal import runtime as traversal_runtime
-
+from svg2ooxml.core.traversal.coordinate_space import CoordinateSpace
+from svg2ooxml.core.traversal.transform_parser import TransformParser
+from svg2ooxml.core.traversal.viewbox import viewbox_matrix_from_element
 
 TraverseCallback = Callable[[etree._Element, Any | None], list]
 
@@ -116,7 +114,7 @@ class ElementTraversal:
 __all__ = ["ElementTraversal", "TraverseCallback"]
 
 
-def navigation_from_attributes(element: etree._Element) -> Optional[NavigationSpec]:
+def navigation_from_attributes(element: etree._Element) -> NavigationSpec | None:
     """Inspect data-* attributes on non-anchor elements to infer navigation."""
 
     attrs: dict[str, str] = {}

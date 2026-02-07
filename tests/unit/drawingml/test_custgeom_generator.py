@@ -4,7 +4,11 @@ from __future__ import annotations
 
 import pytest
 
-from svg2ooxml.drawingml.custgeom_generator import CustGeomGenerationError, CustGeomGenerator, segments_from_primitives
+from svg2ooxml.drawingml.custgeom_generator import (
+    CustGeomGenerationError,
+    CustGeomGenerator,
+    segments_from_primitives,
+)
 from svg2ooxml.ir.geometry import BezierSegment, LineSegment, Point
 
 

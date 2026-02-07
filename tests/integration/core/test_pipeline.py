@@ -9,11 +9,11 @@ pytest.importorskip("skia")
 
 from svg2ooxml.core.parser import SVGParser
 from svg2ooxml.core.pptx_exporter import SvgToPptxExporter
+from svg2ooxml.core.resvg import normalize_svg_string
 from svg2ooxml.core.tracing import ConversionTracer
 from svg2ooxml.ir import convert_parser_output
-from svg2ooxml.services import configure_services
 from svg2ooxml.render import render
-from svg2ooxml.core.resvg import normalize_svg_string
+from svg2ooxml.services import configure_services
 
 
 @dataclasses.dataclass(slots=True)

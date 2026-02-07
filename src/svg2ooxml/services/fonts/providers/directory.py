@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Iterable, Iterator, List
 
 from ..service import FontMatch, FontProvider, FontQuery
 
@@ -18,13 +18,13 @@ class DirectoryFontProvider(FontProvider):
     roots: tuple[Path, ...]
 
     def __post_init__(self) -> None:
-        normalised: List[Path] = []
+        normalised: list[Path] = []
         for root in self.roots:
             resolved = root.expanduser()
             if resolved.exists() and resolved.is_dir():
                 normalised.append(resolved.resolve())
         self._roots = tuple(normalised)
-        self._index: Dict[str, List[FontMatch]] | None = None
+        self._index: dict[str, list[FontMatch]] | None = None
 
     def resolve(self, query: FontQuery) -> FontMatch | None:
         index = self._ensure_index()
@@ -57,10 +57,10 @@ class DirectoryFontProvider(FontProvider):
     # Internal helpers
     # ------------------------------------------------------------------
 
-    def _ensure_index(self) -> Dict[str, List[FontMatch]]:
+    def _ensure_index(self) -> dict[str, list[FontMatch]]:
         if self._index is not None:
             return self._index
-        index: Dict[str, List[FontMatch]] = {}
+        index: dict[str, list[FontMatch]] = {}
         for root in self._roots:
             for path in self._iter_fonts(root):
                 match = _match_from_path(path)

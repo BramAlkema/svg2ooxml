@@ -2,15 +2,16 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
 import logging
-from typing import Callable
+from collections.abc import Callable
+from dataclasses import replace
 
 from svg2ooxml.ir.effects import CustomEffect
 from svg2ooxml.ir.geometry import Point, Rect
 from svg2ooxml.ir.paint import RadialGradientPaint, SolidPaint
-from svg2ooxml.ir.scene import Group, Image, Path as IRPath
-from svg2ooxml.ir.shapes import Circle, Ellipse, Rectangle, Line, Polygon, Polyline
+from svg2ooxml.ir.scene import Group, Image
+from svg2ooxml.ir.scene import Path as IRPath
+from svg2ooxml.ir.shapes import Circle, Ellipse, Line, Polygon, Polyline, Rectangle
 from svg2ooxml.policy.constants import FALLBACK_BITMAP, FALLBACK_RASTERIZE
 
 from . import paint_runtime, shapes_runtime

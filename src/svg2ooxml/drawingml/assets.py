@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass, field
-from typing import Iterable, Tuple
 
 from svg2ooxml.ir.text import EmbeddedFontPlan
 
@@ -51,11 +51,11 @@ class NavigationAsset:
 class AssetRegistrySnapshot:
     """Immutable view of the collected assets."""
 
-    media: Tuple[MediaAsset, ...] = field(default_factory=tuple)
-    fonts: Tuple[FontAsset, ...] = field(default_factory=tuple)
-    navigation: Tuple[NavigationAsset, ...] = field(default_factory=tuple)
-    diagnostics: Tuple[str, ...] = field(default_factory=tuple)
-    masks: Tuple[dict[str, object], ...] = field(default_factory=tuple)
+    media: tuple[MediaAsset, ...] = field(default_factory=tuple)
+    fonts: tuple[FontAsset, ...] = field(default_factory=tuple)
+    navigation: tuple[NavigationAsset, ...] = field(default_factory=tuple)
+    diagnostics: tuple[str, ...] = field(default_factory=tuple)
+    masks: tuple[dict[str, object], ...] = field(default_factory=tuple)
 
     def iter_media(self) -> Iterable[MediaAsset]:
         """Iterate media assets."""

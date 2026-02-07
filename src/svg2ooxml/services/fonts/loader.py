@@ -5,11 +5,11 @@ from __future__ import annotations
 import base64
 import logging
 import re
-from urllib.parse import urldefrag
 from dataclasses import dataclass
 from io import BytesIO
 from pathlib import Path
 from typing import TYPE_CHECKING, TypedDict
+from urllib.parse import urldefrag
 
 if TYPE_CHECKING:  # pragma: no cover - type checking only
     from svg2ooxml.ir.fonts import FontFaceSrc
@@ -74,7 +74,7 @@ class FontLoader:
 
     def __init__(
         self,
-        fetcher: "FontFetcher | None" = None,
+        fetcher: FontFetcher | None = None,
         *,
         allow_network: bool = True,
         max_size: int = MAX_FONT_SIZE,
@@ -97,7 +97,7 @@ class FontLoader:
         self.allow_svg_fonts = allow_svg_fonts
         self._logger = logger or globals()["logger"]
 
-    def load_from_src(self, src: "FontFaceSrc") -> LoadedFont | None:
+    def load_from_src(self, src: FontFaceSrc) -> LoadedFont | None:
         """Load font from a FontFaceSrc.
 
         Args:

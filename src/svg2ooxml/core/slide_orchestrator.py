@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Sequence
-
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:  # pragma: no cover - type checking only
     from svg2ooxml.core.pptx_exporter import SvgPageSource
@@ -16,15 +15,15 @@ class FallbackVariant:
     """Represents a derived slide variant based on fallback decisions."""
 
     name: str
-    policy_overrides: Dict[str, Dict[str, object]] = field(default_factory=dict)
+    policy_overrides: dict[str, dict[str, object]] = field(default_factory=dict)
     title_suffix: str = ""
 
 
 def derive_variants_from_trace(
-    trace_report: Dict[str, object] | None,
+    trace_report: dict[str, object] | None,
     *,
     enable_split: bool,
-) -> List[FallbackVariant]:
+) -> list[FallbackVariant]:
     """Inspect trace reports and derive fallback-driven slide variants."""
 
     if not enable_split or not trace_report:
@@ -33,15 +32,15 @@ def derive_variants_from_trace(
     variants: list[FallbackVariant] = []
     seen: set[str] = set()
 
-    def register(name: str, overrides: Dict[str, Dict[str, object]], suffix: str) -> None:
+    def register(name: str, overrides: dict[str, dict[str, object]], suffix: str) -> None:
         if name in seen:
             return
         variants.append(FallbackVariant(name=name, policy_overrides=overrides, title_suffix=suffix))
         seen.add(name)
 
-    geometry_totals: Dict[str, int] = trace_report.get("geometry_totals", {})  # type: ignore[assignment]
-    paint_totals: Dict[str, int] = trace_report.get("paint_totals", {})  # type: ignore[assignment]
-    stage_events: List[Dict[str, object]] = trace_report.get("stage_events", [])  # type: ignore[assignment]
+    geometry_totals: dict[str, int] = trace_report.get("geometry_totals", {})  # type: ignore[assignment]
+    paint_totals: dict[str, int] = trace_report.get("paint_totals", {})  # type: ignore[assignment]
+    stage_events: list[dict[str, object]] = trace_report.get("stage_events", [])  # type: ignore[assignment]
 
     if geometry_totals.get("emf"):
         register(
@@ -69,7 +68,7 @@ def derive_variants_from_trace(
 
     for event in stage_events:
         stage = event.get("stage")
-        metadata: Dict[str, object] = event.get("metadata") or {}
+        metadata: dict[str, object] = event.get("metadata") or {}
         if stage == "filter":
             fallback = metadata.get("fallback")
             if fallback is None and isinstance(metadata.get("metadata"), dict):
@@ -104,7 +103,7 @@ def derive_variants_from_trace(
     return variants
 
 
-def build_fidelity_tier_variants() -> List[FallbackVariant]:
+def build_fidelity_tier_variants() -> list[FallbackVariant]:
     """Return tiered slide variants covering direct, mimic, EMF, and bitmap output."""
 
     base_vector_overrides = {
@@ -197,15 +196,15 @@ def build_fidelity_tier_variants() -> List[FallbackVariant]:
 
 
 def expand_page_with_variants(
-    page: "SvgPageSource",
+    page: SvgPageSource,
     variants: Sequence[FallbackVariant],
-) -> List["SvgPageSource"]:
+) -> list[SvgPageSource]:
     """Generate additional page sources for each variant."""
 
-    clones: list["SvgPageSource"] = []
+    clones: list[SvgPageSource] = []
 
     for variant in variants:
-        metadata: Dict[str, Any] = dict(page.metadata or {})
+        metadata: dict[str, Any] = dict(page.metadata or {})
         variant_meta = metadata.setdefault("variant", {})
         variant_meta["type"] = variant.name
         policy_bucket = metadata.setdefault("policy_overrides", {})

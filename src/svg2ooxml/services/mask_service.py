@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Iterable, Mapping, Sequence
+from typing import Any
 
 from svg2ooxml.drawingml.mask_generator import MaskGeometryResult, compute_mask_geometry
 from svg2ooxml.ir.scene import MaskMode, MaskRef

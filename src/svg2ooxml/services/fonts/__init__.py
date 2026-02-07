@@ -25,22 +25,32 @@ __all__ = [
     'FontSystemConfig',
     'LoadedFont',
     'MAX_FONT_SIZE',
+    'OS2Metrics',
     'WOFFTableEntry',
     'build_eot',
     'collect_font_directories',
+    'convert_svg_font',
+    'generate_font_bytes',
+    'get_table_data',
+    'open_font',
     'parse_directory_list',
+    'parse_head_checksum',
+    'parse_os2_table',
     'embedding',
     'eot',
     'fetcher',
+    'fontforge_utils',
     'loader',
+    'opentype_utils',
     'providers',
     'service',
+    'svg_font_converter',
     'system'
 ]
 
 # map symbol -> relative module
-_symbol_map = {'FontOptimisationLevel': 'embedding', 'FontEmbeddingEngine': 'embedding', 'EmbeddingPermission': 'embedding', 'FontEmbeddingResult': 'embedding', 'EmbeddedFontPayload': 'embedding', 'FontEmbeddingRequest': 'embedding', 'EOTConversionError': 'eot', 'EOTResult': 'eot', 'build_eot': 'eot', 'FontFetcher': 'fetcher', 'MAX_FONT_SIZE': 'fetcher', 'FontSource': 'fetcher', 'DATA_URI_PATTERN': 'loader', 'FontLoader': 'loader', 'WOFFTableEntry': 'loader', 'LoadedFont': 'loader', 'FontQuery': 'service', 'FontMatch': 'service', 'FontService': 'service', 'FontProvider': 'service', 'collect_font_directories': 'system', 'FontSystemConfig': 'system', 'ENV_FONT_DIRS': 'system', 'FontSystem': 'system', 'parse_directory_list': 'system'}
-_module_map = {'embedding': 'embedding', 'eot': 'eot', 'fetcher': 'fetcher', 'loader': 'loader', 'providers': 'providers', 'service': 'service', 'system': 'system'}
+_symbol_map = {'FontEmbeddingRequest': 'embedding', 'EmbeddedFontPayload': 'embedding', 'FontOptimisationLevel': 'embedding', 'EmbeddingPermission': 'embedding', 'FontEmbeddingResult': 'embedding', 'FontEmbeddingEngine': 'embedding', 'EOTResult': 'eot', 'build_eot': 'eot', 'EOTConversionError': 'eot', 'MAX_FONT_SIZE': 'fetcher', 'FontFetcher': 'fetcher', 'FontSource': 'fetcher', 'get_table_data': 'fontforge_utils', 'generate_font_bytes': 'fontforge_utils', 'open_font': 'fontforge_utils', 'FontLoader': 'loader', 'DATA_URI_PATTERN': 'loader', 'LoadedFont': 'loader', 'WOFFTableEntry': 'loader', 'parse_os2_table': 'opentype_utils', 'parse_head_checksum': 'opentype_utils', 'OS2Metrics': 'opentype_utils', 'FontQuery': 'service', 'FontProvider': 'service', 'FontService': 'service', 'FontMatch': 'service', 'convert_svg_font': 'svg_font_converter', 'FontSystemConfig': 'system', 'FontSystem': 'system', 'collect_font_directories': 'system', 'parse_directory_list': 'system', 'ENV_FONT_DIRS': 'system'}
+_module_map = {'embedding': 'embedding', 'eot': 'eot', 'fetcher': 'fetcher', 'fontforge_utils': 'fontforge_utils', 'loader': 'loader', 'opentype_utils': 'opentype_utils', 'providers': 'providers', 'service': 'service', 'svg_font_converter': 'svg_font_converter', 'system': 'system'}
 
 
 def __getattr__(name: str) -> _Any:  # PEP 562

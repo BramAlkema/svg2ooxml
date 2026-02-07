@@ -3,12 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, Iterable, List, Tuple
 
 import tinycss2
 
-
-SelectorSpecificity = Tuple[int, int, int]
+SelectorSpecificity = tuple[int, int, int]
 
 
 @dataclass(slots=True)
@@ -17,7 +15,7 @@ class StyleRule:
     selector_type: str
     value: str
     specificity: SelectorSpecificity
-    declarations: Dict[str, str]
+    declarations: dict[str, str]
     order: int
 
 
@@ -33,8 +31,8 @@ def _normalize_value(value: str) -> str:
     return value.strip()
 
 
-def parse_stylesheet(css_text: str, *, order_offset: int = 0) -> List[StyleRule]:
-    rules: List[StyleRule] = []
+def parse_stylesheet(css_text: str, *, order_offset: int = 0) -> list[StyleRule]:
+    rules: list[StyleRule] = []
     parsed = tinycss2.parse_stylesheet(css_text, skip_comments=True, skip_whitespace=True)
     order = order_offset
     for rule in parsed:
@@ -43,7 +41,7 @@ def parse_stylesheet(css_text: str, *, order_offset: int = 0) -> List[StyleRule]
         selector_text = tinycss2.serialize(rule.prelude).strip()
         if not selector_text:
             continue
-        declarations: Dict[str, str] = {}
+        declarations: dict[str, str] = {}
         for decl in tinycss2.parse_declaration_list(
             rule.content, skip_comments=True, skip_whitespace=True
         ):

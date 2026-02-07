@@ -44,7 +44,7 @@ class FilterService:
     ) -> None:
         self._descriptors: dict[str, ResolvedFilter] = {}
         self._materialized_filters: dict[str, etree._Element] = {}
-        self._services: "ConversionServices | None" = None
+        self._services: ConversionServices | None = None
         self._policy_engine = policy_engine
         self._registry = registry or self._create_registry()
         self._logger = logger or logging.getLogger(__name__)
@@ -63,7 +63,7 @@ class FilterService:
     # Binding & cloning                                                  #
     # ------------------------------------------------------------------ #
 
-    def bind_services(self, services: "ConversionServices") -> None:
+    def bind_services(self, services: ConversionServices) -> None:
         """Allow the DI container to hydrate the service on registration."""
         self._services = services
         if self._policy_engine is None:
@@ -73,7 +73,7 @@ class FilterService:
         if existing:
             self.update_definitions(existing)
 
-    def clone(self) -> "FilterService":
+    def clone(self) -> FilterService:
         """Create a shallow copy that shares definitions and policy context."""
         clone = FilterService(
             policy_engine=self._policy_engine,
@@ -353,14 +353,14 @@ class FilterService:
     # Strategy helpers                                                   #
     # ------------------------------------------------------------------ #
 
-    def _configure_palette_resolver(self, services: "ConversionServices") -> None:
+    def _configure_palette_resolver(self, services: ConversionServices) -> None:
         resolver = self._extract_palette_resolver(services)
         if resolver is not None:
             self.set_palette_resolver(resolver)
         elif self._palette_resolver is not None:
             self._renderer.set_palette_resolver(self._palette_resolver)
 
-    def _extract_palette_resolver(self, services: "ConversionServices") -> PaletteResolver | None:
+    def _extract_palette_resolver(self, services: ConversionServices) -> PaletteResolver | None:
         candidate_names = (
             "filter_palette_resolver",
             "palette_resolver",

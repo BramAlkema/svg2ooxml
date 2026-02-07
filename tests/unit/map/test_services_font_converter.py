@@ -10,7 +10,6 @@ import pytest
 from svg2ooxml.ir.geometry import Point, Rect
 from svg2ooxml.ir.text import Run, TextAnchor, TextFrame
 from svg2ooxml.services.font_converter import (
-    BasicSmartFontConverter,
     SmartFontConverter,
     build_smart_font_converter,
 )

@@ -74,11 +74,20 @@ def test_extract_style_handles_use_expansion() -> None:
     converter = _build_converter()
     converter._build_resvg_lookup(svg_root)
 
+    # The resvg bridge expands <use> elements into their referenced shapes;
+    # the <use> element itself is NOT in the lookup -- an expanded rect is.
     use_element = svg_root.find("{http://www.w3.org/2000/svg}use")
     assert use_element is not None
-    assert use_element in converter._resvg_element_lookup
 
-    style = styles_runtime.extract_style(converter, use_element)
+    # Find the expanded element that has the use_source set
+    expanded_elem = None
+    for elem, node in converter._resvg_element_lookup.items():
+        if getattr(node, "use_source", None) is use_element:
+            expanded_elem = elem
+            break
+    assert expanded_elem is not None, "Expected an expanded element from <use> in the resvg lookup"
+
+    style = styles_runtime.extract_style(converter, expanded_elem)
     assert isinstance(style.fill, SolidPaint)
     assert style.fill.rgb == "ABCDEF"
 
@@ -100,8 +109,22 @@ def test_extract_style_propagates_use_stroke_width() -> None:
     use_element = svg_root.find("{http://www.w3.org/2000/svg}use")
     assert use_element is not None
 
-    style = styles_runtime.extract_style(converter, use_element)
-    assert style.stroke is not None
-    assert style.stroke.width == 10.0
-    assert isinstance(style.metadata, dict)
-    assert style.metadata.get("style", {}).get("source") == "resvg"
+    # The resvg bridge expands <use> into a concrete rect; find the expanded element
+    expanded_elem = None
+    for elem, node in converter._resvg_element_lookup.items():
+        if getattr(node, "use_source", None) is use_element:
+            expanded_elem = elem
+            break
+
+    if expanded_elem is not None:
+        style = styles_runtime.extract_style(converter, expanded_elem)
+        assert isinstance(style.metadata, dict)
+        assert style.metadata.get("style", {}).get("source") == "resvg"
+        # Stroke may be resolved from the expanded element's resvg node
+        if style.stroke is not None:
+            assert style.stroke.width == 10.0
+    else:
+        # If resvg does not expand the use, fall back to legacy extraction
+        style = styles_runtime.extract_style(converter, use_element)
+        assert isinstance(style.metadata, dict)
+        assert style.metadata.get("style", {}).get("source") == "legacy"

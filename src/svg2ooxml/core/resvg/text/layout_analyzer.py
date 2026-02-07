@@ -24,7 +24,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from svg2ooxml.core.resvg.usvg_tree import TextNode, BaseNode
+    from svg2ooxml.core.resvg.usvg_tree import TextNode
 
 
 @dataclass(frozen=True)
@@ -98,7 +98,7 @@ class TextLayoutAnalyzer:
         self.max_skew_deg = max_skew_deg
         self.max_scale_ratio = max_scale_ratio
 
-    def is_plain_text_layout(self, node: "TextNode") -> bool:
+    def is_plain_text_layout(self, node: TextNode) -> bool:
         """Check if text node can be rendered as native DrawingML text.
 
         This method checks both the container node and all child spans
@@ -136,7 +136,7 @@ class TextLayoutAnalyzer:
 
         return True
 
-    def get_complexity_reason(self, node: "TextNode") -> str:
+    def get_complexity_reason(self, node: TextNode) -> str:
         """Get the reason why a text layout is considered complex.
 
         Args:
@@ -173,7 +173,7 @@ class TextLayoutAnalyzer:
 
         return TextLayoutComplexity.SIMPLE
 
-    def analyze(self, node: "TextNode") -> LayoutAnalysisResult:
+    def analyze(self, node: TextNode) -> LayoutAnalysisResult:
         """Analyze text layout and return structured result for telemetry.
 
         This method provides a single call that returns both the decision
@@ -270,7 +270,7 @@ class TextLayoutAnalyzer:
             details=None,
         )
 
-    def _has_text_path(self, node: "TextNode") -> bool:
+    def _has_text_path(self, node: TextNode) -> bool:
         """Check if text uses textPath (text on a path).
 
         Args:
@@ -291,7 +291,7 @@ class TextLayoutAnalyzer:
 
         return False
 
-    def _has_vertical_text(self, node: "TextNode") -> bool:
+    def _has_vertical_text(self, node: TextNode) -> bool:
         """Check if text uses vertical writing mode.
 
         Args:
@@ -318,7 +318,7 @@ class TextLayoutAnalyzer:
 
         return False
 
-    def _has_complex_transform(self, node: "TextNode") -> bool:
+    def _has_complex_transform(self, node: TextNode) -> bool:
         """Check if text has a complex transform.
 
         Complex transforms include:
@@ -381,7 +381,7 @@ class TextLayoutAnalyzer:
 
         return False
 
-    def _has_complex_positioning(self, node: "TextNode") -> bool:
+    def _has_complex_positioning(self, node: TextNode) -> bool:
         """Check if text has complex glyph positioning.
 
         Complex positioning includes:
@@ -428,7 +428,7 @@ class TextLayoutAnalyzer:
 
         return False
 
-    def _check_child_spans(self, node: "TextNode") -> tuple[bool, str]:
+    def _check_child_spans(self, node: TextNode) -> tuple[bool, str]:
         """Recursively check child spans for complex attributes.
 
         SVG allows <tspan> children to override parent attributes like
@@ -481,12 +481,12 @@ class TextLayoutAnalyzer:
 
         return (False, "")
 
-    def _style_value(self, node: "TextNode", name: str) -> str | None:
+    def _style_value(self, node: TextNode, name: str) -> str | None:
         attrs = getattr(node, "attributes", {}) or {}
         styles = getattr(node, "styles", {}) or {}
         return styles.get(name) or attrs.get(name)
 
-    def _has_kerning(self, node: "TextNode") -> bool:
+    def _has_kerning(self, node: TextNode) -> bool:
         """Check if text uses kerning.
 
         Args:
@@ -502,7 +502,7 @@ class TextLayoutAnalyzer:
             return True
         return False
 
-    def _has_ligatures(self, node: "TextNode") -> bool:
+    def _has_ligatures(self, node: TextNode) -> bool:
         """Check if text uses ligatures.
 
         Args:
@@ -518,7 +518,7 @@ class TextLayoutAnalyzer:
             return True
         return False
 
-    def _has_glyph_reuse(self, node: "TextNode") -> bool:
+    def _has_glyph_reuse(self, node: TextNode) -> bool:
         """Check if text has advanced font feature settings.
 
         Args:
@@ -532,7 +532,7 @@ class TextLayoutAnalyzer:
             return True
         return False
 
-    def _font_feature_enabled(self, node: "TextNode", tokens: set[str]) -> bool:
+    def _font_feature_enabled(self, node: TextNode, tokens: set[str]) -> bool:
         value = self._style_value(node, "font-feature-settings")
         if not value:
             return False
@@ -544,7 +544,7 @@ class TextLayoutAnalyzer:
                 return True
         return False
 
-    def _has_spacing_adjustments(self, node: "TextNode") -> bool:
+    def _has_spacing_adjustments(self, node: TextNode) -> bool:
         letter_spacing = self._style_value(node, "letter-spacing")
         if letter_spacing and letter_spacing.strip().lower() not in {"normal", "0", "0px", "0%"}:
             return True

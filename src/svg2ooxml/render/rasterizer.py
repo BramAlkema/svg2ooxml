@@ -3,15 +3,15 @@
 from __future__ import annotations
 
 import math
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
-from typing import Iterable, Sequence, Tuple
 
 import numpy as np
 
-from svg2ooxml.core.resvg.usvg_tree import Tree
 from svg2ooxml.core.resvg.geometry.tessellation import TessellationResult
+from svg2ooxml.core.resvg.usvg_tree import Tree
 
-PixelPoint = Tuple[float, float]
+PixelPoint = tuple[float, float]
 
 
 @dataclass(frozen=True)
@@ -26,7 +26,7 @@ class Viewport:
     scale_y: float
 
     @classmethod
-    def from_tree(cls, tree: Tree, default_size: float = 256.0) -> "Viewport":
+    def from_tree(cls, tree: Tree, default_size: float = 256.0) -> Viewport:
         root = tree.root
         view_box = root.view_box
 
@@ -98,7 +98,7 @@ class Rasterizer:
         return _scanline_fill(pixel_contours, viewport, tessellation.winding_rule)
 
 
-def _to_pixel_contour(contour: Sequence[Tuple[float, float]], viewport: Viewport) -> np.ndarray:
+def _to_pixel_contour(contour: Sequence[tuple[float, float]], viewport: Viewport) -> np.ndarray:
     if not contour:
         return np.empty((0, 2), dtype=np.float32)
     points = [viewport.to_pixel(x, y) for x, y in contour]

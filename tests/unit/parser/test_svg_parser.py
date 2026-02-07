@@ -1,6 +1,6 @@
 """Tests for the simplified SVG parser."""
 
-from svg2ooxml.core.parser import ParseResult, ParserConfig, SVGParser
+from svg2ooxml.core.parser import ParserConfig, ParseResult, SVGParser
 
 
 def test_parse_returns_success_with_valid_svg() -> None:

@@ -1,12 +1,11 @@
 """Tests for transform parsing utilities."""
 
-import pytest
 
 from svg2ooxml.common.conversions.transforms import (
+    parse_angle,
     parse_numeric_list,
     parse_scale_pair,
     parse_translation_pair,
-    parse_angle,
 )
 
 

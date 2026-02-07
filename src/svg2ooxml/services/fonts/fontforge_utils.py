@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from contextlib import contextmanager
 import os
-from pathlib import Path
 import tempfile
-from typing import Iterator, Any
+from collections.abc import Iterator
+from contextlib import contextmanager
+from pathlib import Path
+from typing import Any
 
 from svg2ooxml.common.tempfiles import project_temp_dir
 

@@ -1,86 +1,11 @@
 """Tests for animation XML builders."""
 
-import pytest
 from lxml import etree
 
-from svg2ooxml.drawingml.animation.xml_builders import AnimationXMLBuilder
-from svg2ooxml.drawingml.xml_builder import NS_A
 from svg2ooxml.drawingml.animation.constants import SVG2_ANIMATION_NS
-
-
-def _parse_animation_fragment(fragment: str) -> etree._Element:
-    """Parse animation XML fragment with DrawingML namespace."""
-    wrapped = f'<root xmlns:a="{NS_A}">{fragment}</root>'
-    root = etree.fromstring(wrapped)
-    return root[0] if len(root) > 0 else root
-
-
-class TestBehaviorCore:
-    """Test build_behavior_core method."""
-
-    def test_basic_behavior(self):
-        builder = AnimationXMLBuilder()
-
-        bhvr_xml = builder.build_behavior_core(
-            behavior_id=1002,
-            duration_ms=1000,
-            target_shape="shape1"
-        )
-        bhvr = _parse_animation_fragment(bhvr_xml)
-
-        assert bhvr.tag.endswith("cBhvr")
-
-        # Find cTn child
-        cTn = bhvr.find(".//{http://schemas.openxmlformats.org/drawingml/2006/main}cTn")
-        assert cTn is not None
-        assert cTn.get("id") == "1002"
-        assert cTn.get("dur") == "1000"
-        assert cTn.get("fill") == "hold"
-
-    def test_behavior_with_repeat(self):
-        builder = AnimationXMLBuilder()
-
-        bhvr_xml = builder.build_behavior_core(
-            behavior_id=1002,
-            duration_ms=1000,
-            target_shape="shape1",
-            repeat_count="indefinite"
-        )
-        bhvr = _parse_animation_fragment(bhvr_xml)
-
-        cTn = bhvr.find(".//{http://schemas.openxmlformats.org/drawingml/2006/main}cTn")
-        assert cTn.get("repeatCount") == "indefinite"
-
-    def test_behavior_with_accel_decel(self):
-        builder = AnimationXMLBuilder()
-
-        bhvr_xml = builder.build_behavior_core(
-            behavior_id=1002,
-            duration_ms=1000,
-            target_shape="shape1",
-            accel=50000,
-            decel=50000
-        )
-        bhvr = _parse_animation_fragment(bhvr_xml)
-
-        cTn = bhvr.find(".//{http://schemas.openxmlformats.org/drawingml/2006/main}cTn")
-        assert cTn.get("accel") == "50000"
-        assert cTn.get("decel") == "50000"
-
-    def test_behavior_target_element(self):
-        builder = AnimationXMLBuilder()
-
-        bhvr_xml = builder.build_behavior_core(
-            behavior_id=1002,
-            duration_ms=1000,
-            target_shape="shape1"
-        )
-        bhvr = _parse_animation_fragment(bhvr_xml)
-
-        # Find spTgt
-        spTgt = bhvr.find(".//{http://schemas.openxmlformats.org/drawingml/2006/main}spTgt")
-        assert spTgt is not None
-        assert spTgt.get("spid") == "shape1"
+from svg2ooxml.drawingml.animation.id_allocator import TimingIDAllocator
+from svg2ooxml.drawingml.animation.xml_builders import AnimationXMLBuilder
+from svg2ooxml.drawingml.xml_builder import NS_P
 
 
 class TestAttributeList:
@@ -93,21 +18,20 @@ class TestAttributeList:
 
         assert attr_list.tag.endswith("attrNameLst")
 
-        # Find attrName children
-        attr_names = attr_list.findall(".//{http://schemas.openxmlformats.org/drawingml/2006/main}attrName")
+        # Find attrName children (in p: namespace)
+        attr_names = attr_list.findall(".//{http://schemas.openxmlformats.org/presentationml/2006/main}attrName")
         assert len(attr_names) == 1
-        assert attr_names[0].get("val") == "ppt_x"
-        assert attr_names[0].get("type") is None
+        assert attr_names[0].text == "ppt_x"
 
     def test_multiple_attributes(self):
         builder = AnimationXMLBuilder()
 
         attr_list = builder.build_attribute_list(["ppt_x", "ppt_y", "ppt_w"])
 
-        attr_names = attr_list.findall(".//{http://schemas.openxmlformats.org/drawingml/2006/main}attrName")
+        attr_names = attr_list.findall(".//{http://schemas.openxmlformats.org/presentationml/2006/main}attrName")
         assert len(attr_names) == 3
 
-        values = [attr.get("val") for attr in attr_names]
+        values = [attr.text for attr in attr_names]
         assert values == ["ppt_x", "ppt_y", "ppt_w"]
 
     def test_empty_attribute_list(self):
@@ -115,7 +39,7 @@ class TestAttributeList:
 
         attr_list = builder.build_attribute_list([])
 
-        attr_names = attr_list.findall(".//{http://schemas.openxmlformats.org/drawingml/2006/main}attrName")
+        attr_names = attr_list.findall(".//{http://schemas.openxmlformats.org/presentationml/2006/main}attrName")
         assert len(attr_names) == 0
 
 
@@ -136,8 +60,8 @@ class TestTAVElement:
         assert tav.tag.endswith("tav")
         assert tav.get("tm") == "0"
 
-        # Check value child
-        val_child = tav.find(".//{http://schemas.openxmlformats.org/drawingml/2006/main}val")
+        # Check value child (in p: namespace)
+        val_child = tav.find(".//{http://schemas.openxmlformats.org/presentationml/2006/main}val")
         assert val_child is not None
 
     def test_tav_with_accel_decel(self):
@@ -153,8 +77,8 @@ class TestTAVElement:
 
         assert tav.get("tm") == "50000"
 
-        # Check accel/decel attributes on tavPr
-        tav_pr = tav.find(".//{http://schemas.openxmlformats.org/drawingml/2006/main}tavPr")
+        # Check accel/decel attributes on tavPr (in p: namespace)
+        tav_pr = tav.find(".//{http://schemas.openxmlformats.org/presentationml/2006/main}tavPr")
         assert tav_pr is not None
         assert tav_pr.get("accel") == "25000"
         assert tav_pr.get("decel") == "25000"
@@ -186,28 +110,9 @@ class TestTAVElement:
             decel=0
         )
 
-        # Zero accel/decel should not create tavPr
-        tav_pr = tav.find(".//{http://schemas.openxmlformats.org/drawingml/2006/main}tavPr")
+        # Zero accel/decel should not create tavPr (in p: namespace)
+        tav_pr = tav.find(".//{http://schemas.openxmlformats.org/presentationml/2006/main}tavPr")
         assert tav_pr is None
-
-
-class TestStartCondition:
-    """Test build_start_condition method."""
-
-    def test_basic_start_condition(self):
-        builder = AnimationXMLBuilder()
-
-        cond = builder.build_start_condition(1000)
-
-        assert cond.tag.endswith("cond")
-        assert cond.get("delay") == "1000"
-
-    def test_zero_delay(self):
-        builder = AnimationXMLBuilder()
-
-        cond = builder.build_start_condition(0)
-
-        assert cond.get("delay") == "0"
 
 
 class TestTAVListContainer:
@@ -234,7 +139,7 @@ class TestTAVListContainer:
 
         assert len(tavLst) == 2
 
-        tavs = tavLst.findall(".//{http://schemas.openxmlformats.org/drawingml/2006/main}tav")
+        tavs = tavLst.findall(".//{http://schemas.openxmlformats.org/presentationml/2006/main}tav")
         assert len(tavs) == 2
 
 
@@ -247,7 +152,11 @@ class TestValueElements:
         val = builder.build_numeric_value("12345")
 
         assert val.tag.endswith("val")
-        assert val.get("val") == "12345"
+
+        # Check fltVal child
+        flt_val = val.find(".//{http://schemas.openxmlformats.org/presentationml/2006/main}fltVal")
+        assert flt_val is not None
+        assert flt_val.get("val") == "12345"
 
     def test_color_value(self):
         builder = AnimationXMLBuilder()
@@ -256,8 +165,8 @@ class TestValueElements:
 
         assert val.tag.endswith("val")
 
-        # Check srgbClr child
-        srgb = val.find(".//{http://schemas.openxmlformats.org/drawingml/2006/main}srgbClr")
+        # Check srgbClr child (in p: namespace)
+        srgb = val.find(".//{http://schemas.openxmlformats.org/presentationml/2006/main}srgbClr")
         assert srgb is not None
         assert srgb.get("val") == "FF0000"
 
@@ -268,153 +177,366 @@ class TestValueElements:
 
         assert val.tag.endswith("val")
 
-        # Check pt child
-        pt = val.find(".//{http://schemas.openxmlformats.org/drawingml/2006/main}pt")
+        # Check pt child (in p: namespace)
+        pt = val.find(".//{http://schemas.openxmlformats.org/presentationml/2006/main}pt")
         assert pt is not None
         assert pt.get("x") == "100"
         assert pt.get("y") == "200"
 
 
-class TestParContainer:
-    """Test build_par_container method."""
+class TestBuildTimingTree:
+    """Test build_timing_tree — ECMA-376 compliant structure."""
 
-    def test_basic_par(self):
+    def _make_dummy_par(self) -> etree._Element:
+        """Create a minimal <p:par> element for testing."""
+        from svg2ooxml.drawingml.xml_builder import p_elem as _p
+        return _p("par")
+
+    def test_returns_element(self):
         builder = AnimationXMLBuilder()
+        ids = TimingIDAllocator().allocate(1)
+        tree = builder.build_timing_tree(
+            ids=ids,
+            animation_elements=[self._make_dummy_par()],
+            animated_shape_ids=[],
+        )
+        assert isinstance(tree, etree._Element)
+        assert tree.tag == f"{{{NS_P}}}timing"
 
-        # Create simple child content
-        child = "<a:anim xmlns:a='http://schemas.openxmlformats.org/drawingml/2006/main'></a:anim>"
+    def test_root_ids(self):
+        builder = AnimationXMLBuilder()
+        ids = TimingIDAllocator().allocate(1)
+        tree = builder.build_timing_tree(
+            ids=ids,
+            animation_elements=[self._make_dummy_par()],
+            animated_shape_ids=[],
+        )
+        # tmRoot cTn
+        root_ctn = tree.find(f".//{{{NS_P}}}cTn[@nodeType='tmRoot']")
+        assert root_ctn is not None
+        assert root_ctn.get("id") == "1"
+        assert root_ctn.get("dur") == "indefinite"
+        assert root_ctn.get("restart") == "never"
 
-        par_xml = builder.build_par_container(
-            par_id=1001,
+    def test_main_seq_id(self):
+        builder = AnimationXMLBuilder()
+        ids = TimingIDAllocator().allocate(1)
+        tree = builder.build_timing_tree(
+            ids=ids,
+            animation_elements=[self._make_dummy_par()],
+            animated_shape_ids=[],
+        )
+        seq_ctn = tree.find(f".//{{{NS_P}}}cTn[@nodeType='mainSeq']")
+        assert seq_ctn is not None
+        assert seq_ctn.get("id") == "2"
+
+    def test_click_group_present(self):
+        builder = AnimationXMLBuilder()
+        ids = TimingIDAllocator().allocate(2)
+        elems = [self._make_dummy_par(), self._make_dummy_par()]
+        tree = builder.build_timing_tree(
+            ids=ids,
+            animation_elements=elems,
+            animated_shape_ids=[],
+        )
+        # Click group is a par > cTn with id=3
+        click_ctn = tree.find(f".//{{{NS_P}}}cTn[@id='3']")
+        assert click_ctn is not None
+        assert click_ctn.get("fill") == "hold"
+
+        # Animations are children of the click group's childTnLst
+        click_child_lst = click_ctn.find(f"{{{NS_P}}}childTnLst")
+        assert click_child_lst is not None
+        assert len(click_child_lst) == 2
+
+    def test_navigation_triggers(self):
+        builder = AnimationXMLBuilder()
+        ids = TimingIDAllocator().allocate(0)
+        tree = builder.build_timing_tree(
+            ids=ids,
+            animation_elements=[],
+            animated_shape_ids=[],
+        )
+        seq = tree.find(f".//{{{NS_P}}}seq")
+        prev = seq.find(f"{{{NS_P}}}prevCondLst")
+        next_ = seq.find(f"{{{NS_P}}}nextCondLst")
+        assert prev is not None
+        assert next_ is not None
+
+    def test_bld_lst(self):
+        builder = AnimationXMLBuilder()
+        ids = TimingIDAllocator().allocate(1)
+        tree = builder.build_timing_tree(
+            ids=ids,
+            animation_elements=[self._make_dummy_par()],
+            animated_shape_ids=["42", "99"],
+        )
+        bld_lst = tree.find(f"{{{NS_P}}}bldLst")
+        assert bld_lst is not None
+        bld_ps = bld_lst.findall(f"{{{NS_P}}}bldP")
+        assert len(bld_ps) == 2
+        assert bld_ps[0].get("spid") == "42"
+        assert bld_ps[1].get("spid") == "99"
+
+    def test_no_bld_lst_when_empty(self):
+        builder = AnimationXMLBuilder()
+        ids = TimingIDAllocator().allocate(0)
+        tree = builder.build_timing_tree(
+            ids=ids,
+            animation_elements=[],
+            animated_shape_ids=[],
+        )
+        assert tree.find(f"{{{NS_P}}}bldLst") is None
+
+    def test_zero_animations(self):
+        builder = AnimationXMLBuilder()
+        ids = TimingIDAllocator().allocate(0)
+        tree = builder.build_timing_tree(
+            ids=ids,
+            animation_elements=[],
+            animated_shape_ids=[],
+        )
+        # Structure should still be valid with empty click group
+        click_ctn = tree.find(f".//{{{NS_P}}}cTn[@id='3']")
+        assert click_ctn is not None
+
+
+class TestBuildParContainerElem:
+    """Test build_par_container_elem."""
+
+    def test_returns_element(self):
+        builder = AnimationXMLBuilder()
+        from svg2ooxml.drawingml.xml_builder import p_elem as _p
+        child = _p("set")
+
+        par = builder.build_par_container_elem(
+            par_id=4,
             duration_ms=1000,
             delay_ms=0,
-            child_content=child
+            child_element=child,
         )
+        assert isinstance(par, etree._Element)
+        assert par.tag == f"{{{NS_P}}}par"
 
-        assert "<p:par>" in par_xml
-        assert 'id="1001"' in par_xml
-
-    def test_par_with_delay(self):
+    def test_ctn_attributes(self):
         builder = AnimationXMLBuilder()
+        from svg2ooxml.drawingml.xml_builder import p_elem as _p
+        child = _p("set")
 
-        child = "<a:anim xmlns:a='http://schemas.openxmlformats.org/drawingml/2006/main'></a:anim>"
-
-        par_xml = builder.build_par_container(
-            par_id=1001,
-            duration_ms=1000,
+        par = builder.build_par_container_elem(
+            par_id=4,
+            duration_ms=1500,
             delay_ms=500,
-            child_content=child
+            child_element=child,
+            preset_id=10,
+            preset_class="emph",
+            preset_subtype=2,
         )
+        ctn = par.find(f"{{{NS_P}}}cTn")
+        assert ctn.get("id") == "4"
+        assert ctn.get("dur") == "1500"
+        assert ctn.get("fill") == "hold"
+        assert ctn.get("presetID") == "10"
+        assert ctn.get("presetClass") == "emph"
+        assert ctn.get("presetSubtype") == "2"
 
-        assert "<p:stCondLst>" in par_xml
-        assert 'delay="500"' in par_xml
-
-    def test_par_with_malformed_child(self):
+    def test_start_condition(self):
         builder = AnimationXMLBuilder()
+        from svg2ooxml.drawingml.xml_builder import p_elem as _p
 
-        # Malformed XML
-        child = "<invalid><unclosed>"
+        par = builder.build_par_container_elem(
+            par_id=4,
+            duration_ms=1000,
+            delay_ms=250,
+            child_element=_p("set"),
+        )
+        cond = par.find(f".//{{{NS_P}}}cond")
+        assert cond is not None
+        assert cond.get("delay") == "250"
 
-        par_xml = builder.build_par_container(
-            par_id=1001,
+    def test_child_appended(self):
+        builder = AnimationXMLBuilder()
+        from svg2ooxml.drawingml.xml_builder import p_elem as _p
+        child = _p("set")
+
+        par = builder.build_par_container_elem(
+            par_id=4,
             duration_ms=1000,
             delay_ms=0,
-            child_content=child
+            child_element=child,
         )
+        child_tn_lst = par.find(f".//{{{NS_P}}}childTnLst")
+        assert len(child_tn_lst) == 1
+        assert child_tn_lst[0].tag == f"{{{NS_P}}}set"
 
-        # Should still produce valid par (without child)
-        assert "<p:par>" in par_xml
 
+class TestBuildBehaviorCoreElem:
+    """Test build_behavior_core_elem."""
 
-class TestTimingContainer:
-    """Test build_timing_container method."""
-
-    def test_basic_timing(self):
+    def test_returns_element(self):
         builder = AnimationXMLBuilder()
-
-        # Create simple fragment
-        fragment = "<p:par xmlns:p='http://schemas.openxmlformats.org/presentationml/2006/main'></p:par>"
-
-        timing_xml = builder.build_timing_container(
-            timing_id=1,
-            fragments=[fragment]
-        )
-
-        assert "<p:timing>" in timing_xml
-        assert 'id="1"' in timing_xml
-        assert 'nodeType="tmRoot"' in timing_xml
-
-    def test_multiple_fragments(self):
-        builder = AnimationXMLBuilder()
-
-        fragments = [
-            "<p:par xmlns:p='http://schemas.openxmlformats.org/presentationml/2006/main'></p:par>",
-            "<p:par xmlns:p='http://schemas.openxmlformats.org/presentationml/2006/main'></p:par>",
-        ]
-
-        timing_xml = builder.build_timing_container(
-            timing_id=1,
-            fragments=fragments
-        )
-
-        # Should contain both fragments (as <p:par/> inside childTnLst)
-        # One outer <p:par> container, two inner fragments
-        assert "<p:childTnLst>" in timing_xml
-        assert timing_xml.count("<p:par/>") == 2  # The two fragments
-
-    def test_empty_fragments(self):
-        builder = AnimationXMLBuilder()
-
-        timing_xml = builder.build_timing_container(
-            timing_id=1,
-            fragments=[]
-        )
-
-        assert "<p:timing>" in timing_xml
-
-
-class TestIntegration:
-    """Test integrated workflows."""
-
-    def test_complete_animation_structure(self):
-        """Test building a complete animation structure."""
-        builder = AnimationXMLBuilder()
-
-        # 1. Build TAV elements
-        val1 = builder.build_numeric_value("0")
-        val2 = builder.build_numeric_value("100")
-
-        tav1 = builder.build_tav_element(tm=0, value_elem=val1)
-        tav2 = builder.build_tav_element(tm=100000, value_elem=val2)
-
-        # 2. Build TAV list
-        tavLst = builder.build_tav_list_container([tav1, tav2])
-
-        # 3. Build behavior
-        bhvr = builder.build_behavior_core(
-            behavior_id=1002,
+        elem = builder.build_behavior_core_elem(
+            behavior_id=5,
             duration_ms=1000,
-            target_shape="shape1"
+            target_shape="shape1",
         )
+        assert isinstance(elem, etree._Element)
+        assert elem.tag == f"{{{NS_P}}}cBhvr"
 
-        # All elements should be valid
-        assert tavLst is not None
-        assert bhvr is not None
-
-    def test_namespace_handling(self):
-        """Test that custom namespaces are properly handled."""
+    def test_ctn_attributes(self):
         builder = AnimationXMLBuilder()
-
-        val = builder.build_numeric_value("100")
-        tav = builder.build_tav_element(
-            tm=0,
-            value_elem=val,
-            metadata={
-                "svg2:spline": "0.42 0 0.58 1",
-                "svg2:custom": "test"
-            }
+        elem = builder.build_behavior_core_elem(
+            behavior_id=5,
+            duration_ms=2000,
+            target_shape="shape1",
         )
+        ctn = elem.find(f"{{{NS_P}}}cTn")
+        assert ctn.get("id") == "5"
+        assert ctn.get("dur") == "2000"
+        assert ctn.get("fill") == "hold"
 
-        # Verify custom namespace attributes
-        assert tav.get(f"{{{SVG2_ANIMATION_NS}}}spline") == "0.42 0 0.58 1"
-        assert tav.get(f"{{{SVG2_ANIMATION_NS}}}custom") == "test"
+    def test_target_shape(self):
+        builder = AnimationXMLBuilder()
+        elem = builder.build_behavior_core_elem(
+            behavior_id=5,
+            duration_ms=1000,
+            target_shape="shape42",
+        )
+        sp_tgt = elem.find(f".//{{{NS_P}}}spTgt")
+        assert sp_tgt is not None
+        assert sp_tgt.get("spid") == "shape42"
+
+    def test_accel_decel(self):
+        builder = AnimationXMLBuilder()
+        elem = builder.build_behavior_core_elem(
+            behavior_id=5,
+            duration_ms=1000,
+            target_shape="shape1",
+            accel=50000,
+            decel=50000,
+        )
+        ctn = elem.find(f"{{{NS_P}}}cTn")
+        assert ctn.get("accel") == "50000"
+        assert ctn.get("decel") == "50000"
+
+    def test_attr_name_list(self):
+        builder = AnimationXMLBuilder()
+        elem = builder.build_behavior_core_elem(
+            behavior_id=5,
+            duration_ms=1000,
+            target_shape="shape1",
+            attr_name_list=["ppt_x", "ppt_y"],
+        )
+        attr_lst = elem.find(f"{{{NS_P}}}attrNameLst")
+        assert attr_lst is not None
+        names = attr_lst.findall(f"{{{NS_P}}}attrName")
+        assert len(names) == 2
+
+    def test_additive_sum(self):
+        builder = AnimationXMLBuilder()
+        elem = builder.build_behavior_core_elem(
+            behavior_id=5,
+            duration_ms=1000,
+            target_shape="shape1",
+            additive="sum",
+        )
+        assert elem.get("additive") == "sum"
+
+    def test_additive_replace_omitted(self):
+        """additive='replace' (SVG default) should not set attribute."""
+        builder = AnimationXMLBuilder()
+        elem = builder.build_behavior_core_elem(
+            behavior_id=5,
+            duration_ms=1000,
+            target_shape="shape1",
+            additive="replace",
+        )
+        assert elem.get("additive") is None
+
+    def test_additive_none_omitted(self):
+        """additive=None should not set attribute."""
+        builder = AnimationXMLBuilder()
+        elem = builder.build_behavior_core_elem(
+            behavior_id=5,
+            duration_ms=1000,
+            target_shape="shape1",
+        )
+        assert elem.get("additive") is None
+
+    def test_fill_mode_freeze_maps_to_hold(self):
+        builder = AnimationXMLBuilder()
+        elem = builder.build_behavior_core_elem(
+            behavior_id=5,
+            duration_ms=1000,
+            target_shape="shape1",
+            fill_mode="freeze",
+        )
+        ctn = elem.find(f"{{{NS_P}}}cTn")
+        assert ctn.get("fill") == "hold"
+
+    def test_fill_mode_remove(self):
+        builder = AnimationXMLBuilder()
+        elem = builder.build_behavior_core_elem(
+            behavior_id=5,
+            duration_ms=1000,
+            target_shape="shape1",
+            fill_mode="remove",
+        )
+        ctn = elem.find(f"{{{NS_P}}}cTn")
+        assert ctn.get("fill") == "remove"
+
+    def test_fill_mode_default_is_hold(self):
+        builder = AnimationXMLBuilder()
+        elem = builder.build_behavior_core_elem(
+            behavior_id=5,
+            duration_ms=1000,
+            target_shape="shape1",
+        )
+        ctn = elem.find(f"{{{NS_P}}}cTn")
+        assert ctn.get("fill") == "hold"
+
+    def test_repeat_count_default(self):
+        """Default repeat (None/1) → repeatCount='0' (PPT: play once)."""
+        builder = AnimationXMLBuilder()
+        elem = builder.build_behavior_core_elem(
+            behavior_id=5,
+            duration_ms=1000,
+            target_shape="shape1",
+        )
+        ctn = elem.find(f"{{{NS_P}}}cTn")
+        assert ctn.get("repeatCount") == "0"
+
+    def test_repeat_count_indefinite(self):
+        builder = AnimationXMLBuilder()
+        elem = builder.build_behavior_core_elem(
+            behavior_id=5,
+            duration_ms=1000,
+            target_shape="shape1",
+            repeat_count="indefinite",
+        )
+        ctn = elem.find(f"{{{NS_P}}}cTn")
+        assert ctn.get("repeatCount") == "indefinite"
+
+    def test_repeat_count_integer(self):
+        """repeat_count=3 → repeatCount='3000' (PPT uses millis)."""
+        builder = AnimationXMLBuilder()
+        elem = builder.build_behavior_core_elem(
+            behavior_id=5,
+            duration_ms=1000,
+            target_shape="shape1",
+            repeat_count=3,
+        )
+        ctn = elem.find(f"{{{NS_P}}}cTn")
+        assert ctn.get("repeatCount") == "3000"
+
+    def test_repeat_count_one_is_default(self):
+        """repeat_count=1 → repeatCount='0' (same as default)."""
+        builder = AnimationXMLBuilder()
+        elem = builder.build_behavior_core_elem(
+            behavior_id=5,
+            duration_ms=1000,
+            target_shape="shape1",
+            repeat_count=1,
+        )
+        ctn = elem.find(f"{{{NS_P}}}cTn")
+        assert ctn.get("repeatCount") == "0"

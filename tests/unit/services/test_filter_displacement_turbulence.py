@@ -6,8 +6,8 @@ import struct
 
 from lxml import etree
 
-from svg2ooxml.ir.effects import CustomEffect
 from svg2ooxml.io.emf import EMFRecordType
+from svg2ooxml.ir.effects import CustomEffect
 from svg2ooxml.services import ConversionServices
 from svg2ooxml.services.filter_service import FilterService
 from svg2ooxml.services.filter_types import FilterEffectResult

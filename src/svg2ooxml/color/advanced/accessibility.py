@@ -9,7 +9,6 @@ and automatic accessible color generation following WCAG 2.1 guidelines.
 from __future__ import annotations
 
 from enum import Enum
-from typing import Dict, List, Optional
 
 import colorspacious
 import numpy as np

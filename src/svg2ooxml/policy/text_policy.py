@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import logging
 import os
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import asdict, dataclass, field, replace
 from enum import Enum
-from typing import Any, Iterable, Mapping, Sequence
+from typing import Any
 
 from svg2ooxml.ir.text import TextFrame
 from svg2ooxml.services.fonts import FontMatch, FontQuery

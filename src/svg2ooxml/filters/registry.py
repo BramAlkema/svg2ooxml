@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-import logging
 import copy
-from typing import Any, Dict, Iterable, List, Optional
+import logging
+from collections.abc import Iterable
+from typing import Any
 
 from lxml import etree
 
 from .base import Filter, FilterContext, FilterResult
-from .utils import build_exporter_hook
 from .primitives.blend import BlendFilter
 from .primitives.color_matrix import ColorMatrixFilter
 from .primitives.component_transfer import ComponentTransferFilter
@@ -20,20 +20,21 @@ from .primitives.drop_shadow import DropShadowFilter, GlowFilter
 from .primitives.flood import FloodFilter
 from .primitives.gaussian_blur import GaussianBlurFilter
 from .primitives.image import ImageFilter
+from .primitives.lighting import DiffuseLightingFilter, SpecularLightingFilter
 from .primitives.merge import MergeFilter
 from .primitives.morphology import MorphologyFilter
 from .primitives.offset import OffsetFilter
-from .primitives.lighting import DiffuseLightingFilter, SpecularLightingFilter
 from .primitives.tile import TileFilter
 from .primitives.turbulence import TurbulenceFilter
+from .utils import build_exporter_hook
 
 
 class FilterRegistry:
     """Registry that maps SVG filter primitives to processors."""
 
     def __init__(self) -> None:
-        self._filters_by_type: Dict[str, Filter] = {}
-        self._filters_by_tag: Dict[str, List[Filter]] = {}
+        self._filters_by_type: dict[str, Filter] = {}
+        self._filters_by_tag: dict[str, list[Filter]] = {}
         self._logger = logging.getLogger(f"{__name__}.{self.__class__.__name__}")
 
     def register_default_filters(self) -> None:
@@ -73,7 +74,7 @@ class FilterRegistry:
     def iter_filters(self) -> Iterable[Filter]:
         return tuple(self._filters_by_type.values())
 
-    def get_filter(self, name: str) -> Optional[Filter]:
+    def get_filter(self, name: str) -> Filter | None:
         return self._filters_by_type.get(name)
 
     def render_filter_element(
@@ -103,8 +104,8 @@ class FilterRegistry:
         primitive: etree._Element,
         context: FilterContext,
         sequence_index: int,
-        pipeline: Dict[str, FilterResult],
-    ) -> Optional[FilterResult]:
+        pipeline: dict[str, FilterResult],
+    ) -> FilterResult | None:
         tag = Filter._local_name(getattr(primitive, "tag", ""))
         candidates = self._filters_by_tag.get(tag, [])
         for filter_obj in candidates:
@@ -130,7 +131,7 @@ class FilterRegistry:
         self,
         filter_obj: Filter,
         sequence_index: int,
-        pipeline: Dict[str, FilterResult],
+        pipeline: dict[str, FilterResult],
     ) -> str:
         base = filter_obj.filter_type or "filter"
         candidate = base
@@ -140,7 +141,7 @@ class FilterRegistry:
             counter += 1
         return candidate
 
-    def _seed_base_inputs(self, pipeline: Dict[str, FilterResult], context: FilterContext) -> None:
+    def _seed_base_inputs(self, pipeline: dict[str, FilterResult], context: FilterContext) -> None:
         filter_inputs: dict[str, Any] = {}
         options = context.options if isinstance(context.options, dict) else {}
         raw_inputs = options.get("filter_inputs")
@@ -183,7 +184,7 @@ class FilterRegistry:
                 metadata=metadata_alpha,
             )
 
-    def clone(self) -> "FilterRegistry":
+    def clone(self) -> FilterRegistry:
         clone = FilterRegistry()
         clone._filters_by_type = dict(self._filters_by_type)
         clone._filters_by_tag = {tag: list(filters) for tag, filters in self._filters_by_tag.items()}

@@ -6,10 +6,11 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:  # pragma: no cover - type checking only
-    from .style_context import StyleContext as ParserStyleContext
+    from svg2ooxml.ir.fonts import FontFaceRule, SvgFontDefinition
     from svg2ooxml.policy import PolicyContext, PolicyEngine
     from svg2ooxml.services.conversion import ConversionServices
-    from svg2ooxml.ir.fonts import FontFaceRule, SvgFontDefinition
+
+    from .style_context import StyleContext as ParserStyleContext
 
 
 @dataclass(slots=True)
@@ -36,12 +37,12 @@ class ParseResult:
     animations: list[Any] | None = None
     viewbox_scale: tuple[float, float] | None = None
     root_color: tuple[float, float, float, float] | None = None
-    services: "ConversionServices | None" = None
-    policy_engine: "PolicyEngine | None" = None
-    policy_context: "PolicyContext | None" = None
-    style_context: "ParserStyleContext | None" = None
-    web_fonts: "list[FontFaceRule] | None" = None
-    svg_fonts: "list[SvgFontDefinition] | None" = None
+    services: ConversionServices | None = None
+    policy_engine: PolicyEngine | None = None
+    policy_context: PolicyContext | None = None
+    style_context: ParserStyleContext | None = None
+    web_fonts: list[FontFaceRule] | None = None
+    svg_fonts: list[SvgFontDefinition] | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
@@ -66,12 +67,12 @@ class ParseResult:
         normalization_changes: dict[str, Any] | None = None,
         normalization_applied: bool = False,
         processing_time_ms: float = 0.0,
-        services: "ConversionServices | None" = None,
-        policy_engine: "PolicyEngine | None" = None,
-        policy_context: "PolicyContext | None" = None,
-        style_context: "ParserStyleContext | None" = None,
-        web_fonts: "list[FontFaceRule] | None" = None,
-        svg_fonts: "list[SvgFontDefinition] | None" = None,
+        services: ConversionServices | None = None,
+        policy_engine: PolicyEngine | None = None,
+        policy_context: PolicyContext | None = None,
+        style_context: ParserStyleContext | None = None,
+        web_fonts: list[FontFaceRule] | None = None,
+        svg_fonts: list[SvgFontDefinition] | None = None,
     ) -> ParseResult:
         """Construct a success result."""
         return cls(
@@ -108,10 +109,10 @@ class ParseResult:
         message: str,
         *,
         processing_time_ms: float = 0.0,
-        services: "ConversionServices | None" = None,
-        policy_engine: "PolicyEngine | None" = None,
-        policy_context: "PolicyContext | None" = None,
-        style_context: "ParserStyleContext | None" = None,
+        services: ConversionServices | None = None,
+        policy_engine: PolicyEngine | None = None,
+        policy_context: PolicyContext | None = None,
+        style_context: ParserStyleContext | None = None,
     ) -> ParseResult:
         """Construct a failure result."""
         return cls(

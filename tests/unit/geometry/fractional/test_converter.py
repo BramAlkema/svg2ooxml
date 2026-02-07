@@ -3,7 +3,6 @@
 import pytest
 
 from svg2ooxml.common.geometry.fractional import (
-    DEFAULT_DPI,
     EMU_PER_INCH,
     FractionalEMUConverter,
     PrecisionMode,

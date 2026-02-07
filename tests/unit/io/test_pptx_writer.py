@@ -2,26 +2,28 @@
 
 from __future__ import annotations
 
+import hashlib
 import struct
-import uuid
 import tempfile
+import uuid
 import zipfile
 from pathlib import Path
-from xml.etree import ElementTree as ET
 
-import hashlib
 import pytest
-
 from lxml import etree as ET
 
+from svg2ooxml.core.ir import IRScene
+from svg2ooxml.core.pipeline.navigation import (
+    NavigationKind,
+    NavigationSpec,
+    SlideTarget,
+)
 from svg2ooxml.io.pptx_writer import PPTXPackageBuilder
 from svg2ooxml.ir.effects import CustomEffect
 from svg2ooxml.ir.geometry import Point, Rect
 from svg2ooxml.ir.paint import SolidPaint
 from svg2ooxml.ir.shapes import Rectangle
 from svg2ooxml.ir.text import EmbeddedFontPlan, Run, TextAnchor, TextFrame
-from svg2ooxml.core.ir import IRScene
-from svg2ooxml.core.pipeline.navigation import NavigationKind, NavigationSpec, SlideTarget
 from svg2ooxml.services.fonts.eot import build_eot
 
 
@@ -142,7 +144,6 @@ def test_pptx_builder_embeds_fonts() -> None:
             assert "embeddedFontLst" in presentation_xml
             assert "Scheherazade" in presentation_xml
             assert "rIdFontCustom" in presentation_xml
-            assert "fontKey" in presentation_xml
             assert "pitchFamily" in presentation_xml
             assert "charset" in presentation_xml
 

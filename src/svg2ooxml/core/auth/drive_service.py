@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import io
 import logging
-from typing import Dict, Optional
 
 try:
     from google.oauth2.credentials import Credentials
@@ -40,8 +39,8 @@ class GoogleDriveService:
         *,
         pptx_bytes: bytes,
         title: str,
-        parent_folder_id: Optional[str] = None,
-    ) -> Dict[str, str]:
+        parent_folder_id: str | None = None,
+    ) -> dict[str, str]:
         if not pptx_bytes:
             raise ValueError("pptx_bytes cannot be empty")
         if not title or not title.strip():
@@ -54,7 +53,7 @@ class GoogleDriveService:
                 resumable=True,
             )
 
-            body: Dict[str, object] = {
+            body: dict[str, object] = {
                 "name": title,
                 "mimeType": "application/vnd.google-apps.presentation",
             }

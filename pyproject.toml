@@ -37,10 +37,12 @@ src_paths = [ "src", "tests",]
 [tool.ruff]
 target-version = "py310"
 line-length = 88
-select = [ "E", "F", "I", "N", "UP", "B",]
-ignore = [ "E203",]
 src = [ "src", "tests",]
 exclude = [ "venv",]
+
+[tool.ruff.lint]
+select = [ "E", "F", "I", "N", "UP", "B",]
+ignore = [ "B008", "E203", "E501", "N802", "N803", "N806", "N812",]
 
 [tool.mypy]
 python_version = "3.10"

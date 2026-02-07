@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
-import tempfile
 
 from svg2ooxml.services.fonts import FontFetcher
 
@@ -35,7 +35,7 @@ class ExportServiceDependencies:
         firestore_client: object | None = None,
         storage_client: object | None = None,
         font_fetcher: FontFetcher | None = None,
-    ) -> "ExportServiceDependencies":
+    ) -> ExportServiceDependencies:
         return ExportServiceDependencies(
             firestore_client=firestore_client or self.firestore_client,
             storage_client=storage_client or self.storage_client,

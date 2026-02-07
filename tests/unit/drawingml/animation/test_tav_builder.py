@@ -1,10 +1,9 @@
 """Tests for TAV builder."""
 
-import pytest
 from lxml import etree
 
-from svg2ooxml.drawingml.animation.xml_builders import AnimationXMLBuilder
 from svg2ooxml.drawingml.animation.tav_builder import TAVBuilder
+from svg2ooxml.drawingml.animation.xml_builders import AnimationXMLBuilder
 
 
 # Simple value formatter for testing
@@ -45,7 +44,7 @@ class TestResolveKeyTimes:
         builder = TAVBuilder(AnimationXMLBuilder())
         result = builder.resolve_key_times(["0", "33", "66", "100"], None)
         expected = [0.0, 1/3, 2/3, 1.0]
-        for r, e in zip(result, expected):
+        for r, e in zip(result, expected, strict=True):
             assert abs(r - e) < 0.0001
 
     def test_single_value(self):

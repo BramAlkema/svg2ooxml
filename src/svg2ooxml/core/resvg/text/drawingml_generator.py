@@ -17,21 +17,27 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING
 
-# Import centralized unit conversion constants
-from svg2ooxml.common.units.scalars import EMU_PER_POINT
+from lxml import etree  # For type annotations
 
 # Import centralized color model for hex conversion
 from svg2ooxml.color.models import Color as CentralizedColor
 
+# Import centralized unit conversion constants
+from svg2ooxml.common.conversions.opacity import opacity_to_ppt
+from svg2ooxml.common.units import px_to_emu
+
 # Import centralized XML builders for safe DrawingML generation
-from svg2ooxml.drawingml.xml_builder import a_elem, p_elem, a_sub, to_string
-from lxml import etree  # For type annotations
+from svg2ooxml.drawingml.xml_builder import a_elem, a_sub, p_elem, to_string
 
 if TYPE_CHECKING:
-    from svg2ooxml.core.resvg.usvg_tree import TextNode, TextSpan
-    from svg2ooxml.core.resvg.painting.paint import TextStyle, Color as ResvgColor, FillStyle
-    from svg2ooxml.services.fonts.service import FontService, FontMatch
-    from svg2ooxml.services.fonts.embedding import FontEmbeddingEngine, FontEmbeddingResult
+    from svg2ooxml.core.resvg.painting.paint import Color as ResvgColor
+    from svg2ooxml.core.resvg.painting.paint import FillStyle, StrokeStyle, TextStyle
+    from svg2ooxml.core.resvg.usvg_tree import TextNode
+    from svg2ooxml.services.fonts.embedding import (
+        FontEmbeddingEngine,
+        FontEmbeddingResult,
+    )
+    from svg2ooxml.services.fonts.service import FontMatch, FontService
 
 # DrawingML font size is specified in hundredths of a point
 # 1 point = 100 hundredths = EMU_PER_POINT (12,700) EMUs
@@ -312,7 +318,7 @@ class DrawingMLTextGenerator:
                 ln = a_sub(rPr, "ln", w=str(px_to_emu(stroke_style.width)))
                 strokeFill = a_sub(ln, "solidFill")
                 
-                stroke_alpha = int(round(stroke_style.opacity * 100000))
+                stroke_alpha = opacity_to_ppt(stroke_style.opacity)
                 if stroke_alpha < 100000:
                     srgbClr = a_sub(strokeFill, "srgbClr", val=hex_color)
                     a_sub(srgbClr, "alpha", val=str(stroke_alpha))
@@ -324,7 +330,7 @@ class DrawingMLTextGenerator:
             hex_color = _color_to_hex(fill_style.color)
             solidFill = a_sub(rPr, "solidFill")
             
-            fill_alpha = int(round(fill_style.opacity * 100000))
+            fill_alpha = opacity_to_ppt(fill_style.opacity)
             if fill_alpha < 100000:
                 srgbClr = a_sub(solidFill, "srgbClr", val=hex_color)
                 a_sub(srgbClr, "alpha", val=str(fill_alpha))

@@ -8,7 +8,8 @@ See ADR-geometry-ir for the broader migration plan.
 from __future__ import annotations
 
 import math
-from typing import Any, Mapping, Sequence
+from collections.abc import Mapping, Sequence
+from typing import Any
 
 from svg2ooxml.ir.geometry import SegmentType
 from svg2ooxml.policy.constants import FALLBACK_BITMAP, FALLBACK_EMF, FALLBACK_NATIVE

@@ -4,14 +4,14 @@ from __future__ import annotations
 
 import logging
 import os
+import uuid
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import Enum
 from hashlib import sha1
 from pathlib import Path
-from typing import Iterable, Mapping, Sequence
-import uuid
 
-from svg2ooxml.services.fonts.eot import build_eot, EOTConversionError
+from svg2ooxml.services.fonts.eot import EOTConversionError, build_eot
 from svg2ooxml.services.fonts.fontforge_utils import (
     FONTFORGE_AVAILABLE,
     generate_font_bytes,
@@ -378,7 +378,7 @@ class FontEmbeddingEngine:
 
             try:
                 selection.invert()
-                getattr(font, "clear")()
+                font.clear()
             except Exception as exc:
                 logger.debug("FontForge glyph pruning failed: %s", exc)
 

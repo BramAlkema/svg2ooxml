@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Union
+from typing import Any
 
 from .numpy_compat import np
 
@@ -53,10 +53,10 @@ class RadialGradientPaint:
     transform: np.ndarray | None = None
     gradient_id: str | None = None
     # Phase 1: Transform detection & telemetry fields
-    gradient_transform: "Any | None" = None        # Original gradient transform (before baking)
-    original_transform: "Any | None" = None        # Shape transform (for telemetry)
+    gradient_transform: Any | None = None        # Original gradient transform (before baking)
+    original_transform: Any | None = None        # Shape transform (for telemetry)
     had_transform_flag: bool = False                # Was any transform applied?
-    transform_class: "Any | None" = None            # SVD classification (TransformClass from adapter)
+    transform_class: Any | None = None            # SVD classification (TransformClass from adapter)
     policy_decision: str | None = None              # "vector_ok" / "vector_warn_mild_anisotropy" / "rasterize_nonuniform"
     # Phase 4: Units & Spread tracking
     gradient_units: str | None = None               # "userSpaceOnUse" or "objectBoundingBox"
@@ -79,14 +79,7 @@ class GradientPaintRef:
     transform: np.ndarray | None = None
 
 
-Paint = Union[
-    SolidPaint,
-    LinearGradientPaint,
-    RadialGradientPaint,
-    PatternPaint,
-    GradientPaintRef,
-    None,
-]
+Paint = SolidPaint | LinearGradientPaint | RadialGradientPaint | PatternPaint | GradientPaintRef | None
 
 
 class StrokeJoin(Enum):

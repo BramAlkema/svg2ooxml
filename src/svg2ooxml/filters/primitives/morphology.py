@@ -6,12 +6,13 @@ from dataclasses import dataclass
 
 from lxml import etree
 
-from svg2ooxml.filters.base import Filter, FilterContext, FilterResult
-from svg2ooxml.filters.utils import build_exporter_hook, parse_number
-from svg2ooxml.units.conversion import px_to_emu
+from svg2ooxml.common.conversions.opacity import opacity_to_ppt
 
 # Import centralized XML builders for safe DrawingML generation
 from svg2ooxml.drawingml.xml_builder import a_elem, a_sub, to_string
+from svg2ooxml.filters.base import Filter, FilterContext, FilterResult
+from svg2ooxml.filters.utils import build_exporter_hook, parse_number
+from svg2ooxml.units.conversion import px_to_emu
 
 
 @dataclass
@@ -80,7 +81,7 @@ class MorphologyFilter(Filter):
             alpha = max(0.0, min(alpha, 1.0))
 
             radius_emu = int(px_to_emu(effective_radius))
-            alpha_val = int(alpha * 100000)
+            alpha_val = opacity_to_ppt(alpha)
 
             if policy_hint:
                 metadata["policy"] = dict(policy_hint)

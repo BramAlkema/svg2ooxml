@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import hashlib
 import struct
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from enum import IntEnum
-from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 from .path import DashPattern, apply_dash_pattern
 
@@ -104,9 +104,9 @@ class EMFBlob:
         self._records: list[bytes] = []
         self._handles: list[int] = []
         self._next_handle = 1
-        self._brush_cache: Dict[BrushSpec, int] = {}
-        self._pen_cache: Dict[PenSpec, int] = {}
-        self._dib_brush_cache: Dict[tuple[int, bytes], int] = {}
+        self._brush_cache: dict[BrushSpec, int] = {}
+        self._pen_cache: dict[PenSpec, int] = {}
+        self._dib_brush_cache: dict[tuple[int, bytes], int] = {}
         self._clip_depth = 0
         self._poly_fill_mode = 1  # 1 = ALTERNATE, 2 = WINDING
         self._init_header()
@@ -125,7 +125,7 @@ class EMFBlob:
     def _to_px(self, value: int | float) -> int:
         return int(round(value * self._scale))
 
-    def _to_px_point(self, point: Tuple[int | float, int | float]) -> Tuple[int, int]:
+    def _to_px_point(self, point: tuple[int | float, int | float]) -> tuple[int, int]:
         return (self._to_px(point[0]), self._to_px(point[1]))
 
     # ------------------------------------------------------------------
@@ -310,10 +310,10 @@ class EMFBlob:
 
     def stroke_polyline(
         self,
-        points: Sequence[Tuple[int, int]],
+        points: Sequence[tuple[int, int]],
         *,
-        pen_handle: Optional[int] = None,
-        pen_color: Optional[int] = None,
+        pen_handle: int | None = None,
+        pen_color: int | None = None,
         pen_width_px: int = 1,
         dash_pattern: DashPattern | None = None,
         line_cap: int = 0,
@@ -355,10 +355,10 @@ class EMFBlob:
 
     def fill_polygon(
         self,
-        points: Sequence[Tuple[int, int]],
+        points: Sequence[tuple[int, int]],
         *,
-        brush_handle: Optional[int] = None,
-        brush_color: Optional[int] = None,
+        brush_handle: int | None = None,
+        brush_color: int | None = None,
     ) -> None:
         """Fill a polygon using the supplied brush."""
 
@@ -412,7 +412,7 @@ class EMFBlob:
 
     def draw_polygon(
         self,
-        points: Sequence[Tuple[int, int]],
+        points: Sequence[tuple[int, int]],
         *,
         brush_handle: int | None,
         pen_handle: int | None,
@@ -429,7 +429,7 @@ class EMFBlob:
 
     def draw_polyline(
         self,
-        points: Sequence[Tuple[int, int]],
+        points: Sequence[tuple[int, int]],
         *,
         pen_handle: int | None,
     ) -> None:
@@ -520,16 +520,16 @@ class EMFBlob:
 
     def fill_polypolygon(
         self,
-        polygons: Sequence[Sequence[Tuple[int, int]]],
+        polygons: Sequence[Sequence[tuple[int, int]]],
         *,
-        brush_handle: Optional[int] = None,
-        brush_color: Optional[int] = None,
-        pen_handle: Optional[int] = None,
-        pen_color: Optional[int] = None,
+        brush_handle: int | None = None,
+        brush_color: int | None = None,
+        pen_handle: int | None = None,
+        pen_color: int | None = None,
     ) -> None:
         """Fill multiple polygons in one record."""
 
-        normalised: list[list[Tuple[int, int]]] = []
+        normalised: list[list[tuple[int, int]]] = []
         for polygon in polygons:
             points = self._ensure_int_points(polygon)
             if len(points) >= 3:
@@ -561,7 +561,7 @@ class EMFBlob:
         payload = header + struct.pack("<II", polygon_count, total_points) + counts_blob + points_blob
         self._append_record(EMFRecordType.EMR_POLYPOLYGON, payload)
 
-    def _ensure_int_points(self, points: Iterable[Tuple[int | float, int | float]]) -> List[Tuple[int, int]]:
+    def _ensure_int_points(self, points: Iterable[tuple[int | float, int | float]]) -> list[tuple[int, int]]:
         return [self._to_px_point((x, y)) for x, y in points]
 
     def _init_header(self) -> None:
@@ -596,17 +596,17 @@ class EMFBlob:
         self._records.append(bytes(payload))
 
 
-PointList = Sequence[Tuple[int, int]] | Iterable[Tuple[int, int]]
+PointList = Sequence[tuple[int, int]] | Iterable[tuple[int, int]]
 
 
-def _normalise_points(points: PointList) -> list[Tuple[int, int]]:
-    result: list[Tuple[int, int]] = []
+def _normalise_points(points: PointList) -> list[tuple[int, int]]:
+    result: list[tuple[int, int]] = []
     for x, y in points:
         result.append((int(round(x)), int(round(y))))
     return result
 
 
-def _polygon_payload(points: Sequence[Tuple[int, int]]) -> bytes:
+def _polygon_payload(points: Sequence[tuple[int, int]]) -> bytes:
     min_x, min_y, max_x, max_y = _bounds(points)
     bounds = struct.pack("<4l", min_x, min_y, max_x, max_y)
     count = len(points)
@@ -614,7 +614,7 @@ def _polygon_payload(points: Sequence[Tuple[int, int]]) -> bytes:
     return bounds + struct.pack("<I", count) + data
 
 
-def _polyline_payload(points: Sequence[Tuple[int, int]]) -> bytes:
+def _polyline_payload(points: Sequence[tuple[int, int]]) -> bytes:
     min_x, min_y, max_x, max_y = _bounds(points)
     bounds = struct.pack("<4l", min_x, min_y, max_x, max_y)
     count = len(points)
@@ -622,7 +622,7 @@ def _polyline_payload(points: Sequence[Tuple[int, int]]) -> bytes:
     return bounds + struct.pack("<I", count) + data
 
 
-def _bounds(points: Sequence[Tuple[int, int]]) -> Tuple[int, int, int, int]:
+def _bounds(points: Sequence[tuple[int, int]]) -> tuple[int, int, int, int]:
     xs = [x for x, _ in points]
     ys = [y for _, y in points]
     return min(xs), min(ys), max(xs), max(ys)

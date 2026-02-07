@@ -3,20 +3,21 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import List
 
 from lxml import etree
 
-from svg2ooxml.filters.base import Filter, FilterContext, FilterResult
+from svg2ooxml.common.conversions.angles import degrees_to_ppt
+from svg2ooxml.common.conversions.scale import scale_to_ppt
 
 # Import centralized XML builders for safe DrawingML generation
 from svg2ooxml.drawingml.xml_builder import a_elem, a_sub, to_string
+from svg2ooxml.filters.base import Filter, FilterContext, FilterResult
 
 
 @dataclass
 class ColorMatrixParams:
     matrix_type: str
-    values: List[float]
+    values: list[float]
 
 
 class ColorMatrixFilter(Filter):
@@ -62,9 +63,9 @@ class ColorMatrixFilter(Filter):
             values = []
         return ColorMatrixParams(matrix_type=matrix_type, values=values)
 
-    def _parse_floats(self, payload: str) -> List[float]:
+    def _parse_floats(self, payload: str) -> list[float]:
         cleaned = payload.replace(",", " ").split()
-        values: List[float] = []
+        values: list[float] = []
         for token in cleaned:
             try:
                 values.append(float(token))
@@ -75,7 +76,7 @@ class ColorMatrixFilter(Filter):
     def _to_drawingml(self, params: ColorMatrixParams) -> str:
         if params.matrix_type == "saturate":
             value = params.values[0] if params.values else 1.0
-            sat = max(0, min(int(value * 100000), 200000))
+            sat = max(0, min(scale_to_ppt(value), 200000))
 
             effectLst = a_elem("effectLst")
             clrChange = a_sub(effectLst, "clrChange")
@@ -86,7 +87,7 @@ class ColorMatrixFilter(Filter):
 
         if params.matrix_type == "hueRotate":
             degrees = params.values[0] if params.values else 0.0
-            hue = int((degrees % 360) * 60000)
+            hue = degrees_to_ppt(degrees % 360)
 
             effectLst = a_elem("effectLst")
             hsl = a_sub(effectLst, "hsl")
