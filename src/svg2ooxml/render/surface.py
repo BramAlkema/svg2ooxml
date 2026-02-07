@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Iterable, Tuple
 
 import numpy as np
 
-RGBA = Tuple[float, float, float, float]
+RGBA = tuple[float, float, float, float]
 
 
 @dataclass(slots=True)
@@ -19,7 +19,7 @@ class Surface:
     data: np.ndarray  # shape (height, width, 4), premultiplied RGBA in float32
 
     @classmethod
-    def make(cls, width: int, height: int, color: RGBA | None = None) -> "Surface":
+    def make(cls, width: int, height: int, color: RGBA | None = None) -> Surface:
         array = np.zeros((height, width, 4), dtype=np.float32)
         surface = cls(width=width, height=height, data=array)
         if color is not None:
@@ -27,12 +27,12 @@ class Surface:
         return surface
 
     @classmethod
-    def from_rgba8(cls, buffer: Iterable[int], width: int, height: int) -> "Surface":
+    def from_rgba8(cls, buffer: Iterable[int], width: int, height: int) -> Surface:
         array = np.fromiter(buffer, dtype=np.uint8, count=width * height * 4)
         array = array.reshape((height, width, 4)).astype(np.float32) / 255.0
         return cls(width=width, height=height, data=array)
 
-    def clone(self) -> "Surface":
+    def clone(self) -> Surface:
         return Surface(self.width, self.height, self.data.copy())
 
     def clear(self, color: RGBA) -> None:
@@ -49,13 +49,13 @@ class Surface:
         return self.data
 
     @property
-    def shape(self) -> Tuple[int, int, int]:
+    def shape(self) -> tuple[int, int, int]:
         return self.data.shape
 
     def as_view(self) -> np.ndarray:
         return self.data
 
-    def blend(self, other: "Surface") -> None:
+    def blend(self, other: Surface) -> None:
         if other.shape != self.shape:
             raise ValueError("Surface shapes must match for blending")
         src = other.data

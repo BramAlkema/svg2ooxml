@@ -18,7 +18,6 @@ import math
 import re
 from dataclasses import dataclass
 from enum import Enum
-from typing import Dict, List, Optional, Tuple
 
 from svg2ooxml.ir.geometry import Point
 from svg2ooxml.ir.text_path import PathPoint
@@ -315,7 +314,6 @@ class CurveTextPositioner:
                 # Arc - approximate with segments
                 if len(args) >= 7:
                     rx, ry = abs(args[0]), abs(args[1])
-                    rotation = args[2]
                     large_arc = bool(args[3])
                     sweep = bool(args[4])
                     end_point = Point(args[5], args[6])
@@ -808,7 +806,7 @@ class PathWarpFitter:
             ) + baseline['slope'] * x + baseline['intercept'] for x in x_values]
 
             rms_error = math.sqrt(sum((actual - pred)**2 for actual, pred in
-                                    zip(y_values, predicted_y)) / len(y_values))
+                                    zip(y_values, predicted_y, strict=True)) / len(y_values))
 
             # Normalize error to calculate confidence
             y_range = max(y_values) - min(y_values)
@@ -854,7 +852,7 @@ class PathWarpFitter:
                           quadratic_params['c'] for x in x_values]
 
             rms_error = math.sqrt(sum((actual - pred)**2 for actual, pred in
-                                    zip(y_values, predicted_y)) / len(y_values))
+                                    zip(y_values, predicted_y, strict=True)) / len(y_values))
 
             # Normalize error to calculate confidence
             y_range = max(y_values) - min(y_values)
@@ -927,7 +925,7 @@ class PathWarpFitter:
 
         sum_x = sum(x_values)
         sum_y = sum(y_values)
-        sum_xy = sum(x * y for x, y in zip(x_values, y_values))
+        sum_xy = sum(x * y for x, y in zip(x_values, y_values, strict=True))
         sum_x2 = sum(x * x for x in x_values)
 
         # Linear regression
@@ -977,8 +975,8 @@ class PathWarpFitter:
         sum(x * x * x for x in x_values)
         sum_x4 = sum(x * x * x * x for x in x_values)
         sum_y = sum(y_values)
-        sum_xy = sum(x * y for x, y in zip(x_values, y_values))
-        sum_x2y = sum(x * x * y for x, y in zip(x_values, y_values))
+        sum_xy = sum(x * y for x, y in zip(x_values, y_values, strict=True))
+        sum_x2y = sum(x * x * y for x, y in zip(x_values, y_values, strict=True))
 
         # Solve 3x3 system (simplified for robustness)
         try:
@@ -996,7 +994,7 @@ class PathWarpFitter:
 
             return {'a': a, 'b': b, 'c': c}
 
-        except:
+        except Exception:
             # Fallback to linear
             return {'a': 0.0, 'b': 0.0, 'c': sum_y / max(n, 1)}
 

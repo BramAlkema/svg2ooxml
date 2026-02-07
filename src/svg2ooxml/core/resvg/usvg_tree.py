@@ -3,14 +3,20 @@
 from __future__ import annotations
 
 import copy
+from collections.abc import Iterator
 from dataclasses import dataclass, field, replace
-from typing import Any, Dict, Iterable, Iterator, List, Optional, TYPE_CHECKING, Tuple, Union
+from typing import (
+    TYPE_CHECKING,
+    Any,
+)
 
-from .parser.presentation import Presentation, collect_presentation, parse_transform
-from .parser.tree import SvgDocument, SvgNode
-from .parser.style import parse_inline_style
-from .parser.options import Options
-from .painting.gradients import GradientStop, LinearGradient, PatternPaint, RadialGradient
+from .geometry.matrix import Matrix, matrix_from_commands
+from .painting.gradients import (
+    GradientStop,
+    LinearGradient,
+    PatternPaint,
+    RadialGradient,
+)
 from .painting.paint import (
     FillStyle,
     PaintReference,
@@ -21,7 +27,9 @@ from .painting.paint import (
     resolve_stroke,
     resolve_text_style,
 )
-from .geometry.matrix import Matrix, matrix_from_commands
+from .parser.options import Options
+from .parser.presentation import Presentation, collect_presentation, parse_transform
+from .parser.tree import SvgDocument, SvgNode
 
 if TYPE_CHECKING:  # pragma: no cover
     from .geometry.path_normalizer import NormalizedPath
@@ -36,7 +44,7 @@ def _strip_namespace(tag: Any) -> str:
     return tag_str
 
 
-def _propagate_use_source(node: "BaseNode", source_elem: Any | None) -> None:
+def _propagate_use_source(node: BaseNode, source_elem: Any | None) -> None:
     node.use_source = source_elem
     for child in getattr(node, "children", []) or []:
         _propagate_use_source(child, source_elem)
@@ -45,20 +53,20 @@ def _propagate_use_source(node: "BaseNode", source_elem: Any | None) -> None:
 @dataclass(slots=True)
 class BaseNode:
     tag: str
-    id: Optional[str]
+    id: str | None
     presentation: Presentation
     attributes: dict[str, str]
     styles: dict[str, str]
-    children: list["BaseNode"] = field(default_factory=list)
+    children: list[BaseNode] = field(default_factory=list)
     transform: Matrix = field(default_factory=Matrix.identity)
-    fill: Optional[FillStyle] = None
-    stroke: Optional[StrokeStyle] = None
-    text_style: Optional[TextStyle] = None
-    view_box: Optional[Tuple[float, float, float, float]] = None
+    fill: FillStyle | None = None
+    stroke: StrokeStyle | None = None
+    text_style: TextStyle | None = None
+    view_box: tuple[float, float, float, float] | None = None
     source: Any | None = None
     use_source: Any | None = None
 
-    def iter(self) -> Iterator["BaseNode"]:
+    def iter(self) -> Iterator[BaseNode]:
         yield self
         for child in self.children:
             yield from child.iter()
@@ -71,8 +79,8 @@ class GroupNode(BaseNode):
 
 @dataclass(slots=True)
 class PathNode(BaseNode):
-    d: Optional[str] = None
-    geometry: Optional["NormalizedPath"] = None
+    d: str | None = None
+    geometry: NormalizedPath | None = None
 
 
 @dataclass(slots=True)
@@ -110,21 +118,21 @@ class LineNode(BaseNode):
 
 @dataclass(slots=True)
 class PolyNode(BaseNode):
-    points: Tuple[float, ...] = ()
+    points: tuple[float, ...] = ()
 
 
 @dataclass(slots=True)
 class ImageNode(BaseNode):
-    href: Optional[str] = None
-    width: Optional[str] = None
-    height: Optional[str] = None
-    data: Optional[bytes] = None
+    href: str | None = None
+    width: str | None = None
+    height: str | None = None
+    data: bytes | None = None
 
 
 @dataclass(slots=True)
 class TextNode(BaseNode):
-    text_content: Optional[str] = None
-    spans: list["TextSpan"] = field(default_factory=list)
+    text_content: str | None = None
+    spans: list[TextSpan] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -161,63 +169,63 @@ class FilterPrimitive:
     tag: str
     attributes: dict[str, str]
     styles: dict[str, str]
-    children: Tuple["FilterPrimitive", ...] = ()
+    children: tuple[FilterPrimitive, ...] = ()
 
 
 @dataclass(slots=True)
 class FilterNode(BaseNode):
-    primitives: Tuple[FilterPrimitive, ...] = ()
+    primitives: tuple[FilterPrimitive, ...] = ()
     filter_units: str = "objectBoundingBox"
     primitive_units: str = "userSpaceOnUse"
 
 
 @dataclass(slots=True)
 class UseNode(BaseNode):
-    href: Optional[str] = None
+    href: str | None = None
     x: float = 0.0
     y: float = 0.0
-    width: Optional[float] = None
-    height: Optional[float] = None
+    width: float | None = None
+    height: float | None = None
 
 
 @dataclass(slots=True)
 class LinearGradientNode(PaintServerNode):
-    gradient: Optional[LinearGradient] = None
+    gradient: LinearGradient | None = None
 
 
 @dataclass(slots=True)
 class RadialGradientNode(PaintServerNode):
-    gradient: Optional[RadialGradient] = None
+    gradient: RadialGradient | None = None
 
 
 @dataclass(slots=True)
 class PatternNode(PaintServerNode):
-    pattern: Optional[PatternPaint] = None
+    pattern: PatternPaint | None = None
 
 
 @dataclass(slots=True)
 class Tree:
     root: BaseNode
-    ids: Dict[str, BaseNode] = field(default_factory=dict)
-    paint_servers: Dict[str, PaintServerNode] = field(default_factory=dict)
-    masks: Dict[str, MaskNode] = field(default_factory=dict)
-    clip_paths: Dict[str, ClipPathNode] = field(default_factory=dict)
-    markers: Dict[str, MarkerNode] = field(default_factory=dict)
-    filters: Dict[str, FilterNode] = field(default_factory=dict)
-    text_nodes: List[TextNode] = field(default_factory=list)
+    ids: dict[str, BaseNode] = field(default_factory=dict)
+    paint_servers: dict[str, PaintServerNode] = field(default_factory=dict)
+    masks: dict[str, MaskNode] = field(default_factory=dict)
+    clip_paths: dict[str, ClipPathNode] = field(default_factory=dict)
+    markers: dict[str, MarkerNode] = field(default_factory=dict)
+    filters: dict[str, FilterNode] = field(default_factory=dict)
+    text_nodes: list[TextNode] = field(default_factory=list)
 
-    def node_by_id(self, node_id: str) -> Optional[BaseNode]:
+    def node_by_id(self, node_id: str) -> BaseNode | None:
         return self.ids.get(node_id) if node_id else None
 
     def has_text_nodes(self) -> bool:
         return any(isinstance(node, TextNode) for node in self.root.iter())
 
-    def paint_server(self, href: str) -> Optional[PaintServerNode]:
+    def paint_server(self, href: str) -> PaintServerNode | None:
         if href.startswith("#"):
             return self.paint_servers.get(href[1:])
         return None
 
-    def resolve_paint(self, reference: PaintReference) -> Optional[PaintServer]:
+    def resolve_paint(self, reference: PaintReference) -> PaintServer | None:
         if not reference.href:
             return None
         server_node = self.paint_server(reference.href)
@@ -232,28 +240,28 @@ class Tree:
             return _resolve_pattern_reference(server_node, self.paint_servers, visited)
         return None
 
-    def resolve_mask(self, href: str) -> Optional[MaskNode]:
+    def resolve_mask(self, href: str) -> MaskNode | None:
         if not href:
             return None
         if href.startswith("#"):
             return self.masks.get(href[1:])
         return None
 
-    def resolve_clip_path(self, href: str) -> Optional[ClipPathNode]:
+    def resolve_clip_path(self, href: str) -> ClipPathNode | None:
         if not href:
             return None
         if href.startswith("#"):
             return self.clip_paths.get(href[1:])
         return None
 
-    def resolve_marker(self, href: str) -> Optional[MarkerNode]:
+    def resolve_marker(self, href: str) -> MarkerNode | None:
         if not href:
             return None
         if href.startswith("#"):
             return self.markers.get(href[1:])
         return None
 
-    def resolve_filter(self, href: str) -> Optional[FilterNode]:
+    def resolve_filter(self, href: str) -> FilterNode | None:
         if not href:
             return None
         if href.startswith("#"):
@@ -261,7 +269,7 @@ class Tree:
         return None
 
 
-def _gather_text(node: SvgNode) -> Optional[str]:
+def _gather_text(node: SvgNode) -> str | None:
     parts: list[str] = []
 
     def walk(current: SvgNode) -> None:
@@ -277,14 +285,14 @@ def _gather_text(node: SvgNode) -> Optional[str]:
     return content or None
 
 
-def _extract_href(attributes: dict[str, str]) -> Optional[str]:
+def _extract_href(attributes: dict[str, str]) -> str | None:
     for key in ("href", "{http://www.w3.org/1999/xlink}href"):
         if key in attributes:
             return attributes[key]
     return None
 
 
-def _parse_number(value: Optional[str], default: float = 0.0) -> float:
+def _parse_number(value: str | None, default: float = 0.0) -> float:
     if value is None:
         return default
     value = value.strip()
@@ -298,7 +306,7 @@ def _parse_number(value: Optional[str], default: float = 0.0) -> float:
         return default
 
 
-def _parse_offset(value: Optional[str]) -> float:
+def _parse_offset(value: str | None) -> float:
     offset = _parse_number(value, 0.0)
     if offset < 0.0:
         return 0.0
@@ -307,7 +315,7 @@ def _parse_offset(value: Optional[str]) -> float:
     return offset
 
 
-def _parse_stop(node: SvgNode) -> Optional[GradientStop]:
+def _parse_stop(node: SvgNode) -> GradientStop | None:
     offset = _parse_offset(node.attributes.get("offset"))
     color_value = node.attributes.get("stop-color") or node.styles.get("stop-color")
     opacity_value = node.attributes.get("stop-opacity") or node.styles.get("stop-opacity")
@@ -318,7 +326,7 @@ def _parse_stop(node: SvgNode) -> Optional[GradientStop]:
     return GradientStop(offset=offset, color=color)
 
 
-def _optional_number(value: Optional[str]) -> Optional[float]:
+def _optional_number(value: str | None) -> float | None:
     if value is None:
         return None
     value = value.strip()
@@ -332,12 +340,12 @@ def _optional_number(value: Optional[str]) -> Optional[float]:
         return None
 
 
-def _parse_points(raw: str) -> Tuple[float, ...]:
+def _parse_points(raw: str) -> tuple[float, ...]:
     if not raw:
         return ()
     cleaned = raw.replace(",", " ")
     parts = [part for part in cleaned.split() if part]
-    numbers: List[float] = []
+    numbers: list[float] = []
     for part in parts:
         try:
             numbers.append(float(part))
@@ -346,7 +354,7 @@ def _parse_points(raw: str) -> Tuple[float, ...]:
     return tuple(numbers)
 
 
-def _parse_view_box(raw: Optional[str]) -> Optional[Tuple[float, float, float, float]]:
+def _parse_view_box(raw: str | None) -> tuple[float, float, float, float] | None:
     if not raw:
         return None
     numbers = _parse_points(raw)
@@ -444,7 +452,7 @@ def _parse_pattern(node: SvgNode) -> PatternPaint:
 
 def _resolve_linear_gradient_reference(
     node: LinearGradientNode,
-    paint_servers: Dict[str, PaintServerNode],
+    paint_servers: dict[str, PaintServerNode],
     visited: set[str],
 ) -> LinearGradient:
     gradient = node.gradient
@@ -477,7 +485,7 @@ def _resolve_linear_gradient_reference(
 
 def _resolve_radial_gradient_reference(
     node: RadialGradientNode,
-    paint_servers: Dict[str, PaintServerNode],
+    paint_servers: dict[str, PaintServerNode],
     visited: set[str],
 ) -> RadialGradient:
     gradient = node.gradient
@@ -511,7 +519,7 @@ def _resolve_radial_gradient_reference(
 
 def _resolve_pattern_reference(
     node: PatternNode,
-    paint_servers: Dict[str, PaintServerNode],
+    paint_servers: dict[str, PaintServerNode],
     visited: set[str],
 ) -> PatternPaint:
     pattern = node.pattern
@@ -540,7 +548,7 @@ def _resolve_pattern_reference(
     )
 
 
-def _convert_node(node: SvgNode, parent: Optional[BaseNode] = None, options: Optional[Options] = None) -> BaseNode:
+def _convert_node(node: SvgNode, parent: BaseNode | None = None, options: Options | None = None) -> BaseNode:
     presentation = collect_presentation(node)
     attributes = dict(node.attributes)
     styles = dict(node.styles)
@@ -612,7 +620,9 @@ def _convert_node(node: SvgNode, parent: Optional[BaseNode] = None, options: Opt
     if tag_local == "path":
         path_node = PathNode(d=attributes.get("d"), **base_kwargs)
         path_node.children = [_convert_node(child, path_node, options) for child in node.children]
-        from .geometry.path_normalizer import normalize_path  # local import to avoid cycle
+        from .geometry.path_normalizer import (
+            normalize_path,  # local import to avoid cycle
+        )
 
         stroke_width = path_node.stroke.width if path_node.stroke else None
         path_node.geometry = normalize_path(path_node.d, path_node.transform, stroke_width)
@@ -774,7 +784,7 @@ def _build_filter_primitive(node) -> FilterPrimitive:
     )
 
 
-def _collect_ids(node: BaseNode, ids: Dict[str, BaseNode]) -> None:
+def _collect_ids(node: BaseNode, ids: dict[str, BaseNode]) -> None:
     if node.id:
         ids[node.id] = node
     for child in node.children:
@@ -787,8 +797,8 @@ def _clear_ids(node: BaseNode) -> None:
         _clear_ids(child)
 
 
-def _expand_use_nodes(root: BaseNode, ids: Dict[str, BaseNode]) -> None:
-    stack: List[BaseNode] = [root]
+def _expand_use_nodes(root: BaseNode, ids: dict[str, BaseNode]) -> None:
+    stack: list[BaseNode] = [root]
     while stack:
         current = stack.pop()
         for index, child in enumerate(list(current.children)):
@@ -852,9 +862,9 @@ def _expand_use_nodes(root: BaseNode, ids: Dict[str, BaseNode]) -> None:
                 stack.append(child)
 
 
-def build_tree(document: SvgDocument, options: Optional[Options] = None) -> Tree:
+def build_tree(document: SvgDocument, options: Options | None = None) -> Tree:
     root = _convert_node(document.root, None, options)
-    ids: Dict[str, BaseNode] = {}
+    ids: dict[str, BaseNode] = {}
     _collect_ids(root, ids)
     _expand_use_nodes(root, ids)
     paint_servers = {
@@ -880,24 +890,24 @@ def build_tree(document: SvgDocument, options: Optional[Options] = None) -> Tree
     from .text.layout import build_text_layout
     build_text_layout(tree)
     return tree
-PaintServer = Union[LinearGradient, RadialGradient, PatternPaint]
+PaintServer = LinearGradient | RadialGradient | PatternPaint
 
 
-def _inherit_fill(fill: Optional[FillStyle], parent: Optional[BaseNode]) -> Optional[FillStyle]:
+def _inherit_fill(fill: FillStyle | None, parent: BaseNode | None) -> FillStyle | None:
     if fill is not None:
         return fill
     if parent and parent.fill is not None:
         return replace(parent.fill)
     return None
 
-def _inherit_stroke(stroke: Optional[StrokeStyle], parent: Optional[BaseNode]) -> Optional[StrokeStyle]:
+def _inherit_stroke(stroke: StrokeStyle | None, parent: BaseNode | None) -> StrokeStyle | None:
     if stroke is not None:
         return stroke
     if parent and parent.stroke is not None:
         return replace(parent.stroke)
     return None
 
-def _inherit_text(text_style: Optional[TextStyle], parent: Optional[BaseNode]) -> Optional[TextStyle]:
+def _inherit_text(text_style: TextStyle | None, parent: BaseNode | None) -> TextStyle | None:
     parent_style = parent.text_style if parent and parent.text_style is not None else None
     if text_style is None:
         return replace(parent_style) if parent_style is not None else None
@@ -911,7 +921,7 @@ def _inherit_text(text_style: Optional[TextStyle], parent: Optional[BaseNode]) -
     )
 
 
-def _inherit_fill(fill: Optional[FillStyle], parent: Optional[BaseNode]) -> Optional[FillStyle]:
+def _inherit_fill(fill: FillStyle | None, parent: BaseNode | None) -> FillStyle | None:
     if fill is not None:
         return fill
     if parent and parent.fill is not None:
@@ -919,7 +929,7 @@ def _inherit_fill(fill: Optional[FillStyle], parent: Optional[BaseNode]) -> Opti
     return None
 
 
-def _inherit_stroke(stroke: Optional[StrokeStyle], parent: Optional[BaseNode]) -> Optional[StrokeStyle]:
+def _inherit_stroke(stroke: StrokeStyle | None, parent: BaseNode | None) -> StrokeStyle | None:
     if stroke is not None:
         return stroke
     if parent and parent.stroke is not None:
@@ -927,7 +937,7 @@ def _inherit_stroke(stroke: Optional[StrokeStyle], parent: Optional[BaseNode]) -
     return None
 
 
-def _inherit_text(text_style: Optional[TextStyle], parent: Optional[BaseNode]) -> Optional[TextStyle]:
+def _inherit_text(text_style: TextStyle | None, parent: BaseNode | None) -> TextStyle | None:
     parent_style = parent.text_style if parent and parent.text_style is not None else None
     if text_style is None:
         return replace(parent_style) if parent_style is not None else None

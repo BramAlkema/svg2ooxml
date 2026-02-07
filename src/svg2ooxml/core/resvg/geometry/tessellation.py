@@ -4,16 +4,14 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import List, Optional, Tuple
 
 from .path_normalizer import NormalizedPath
 from .primitives import ClosePath, LineTo, MoveTo
 
+Point = tuple[float, float]
 
-Point = Tuple[float, float]
 
-
-def _polygon_area(points: List[Point]) -> float:
+def _polygon_area(points: list[Point]) -> float:
     area = 0.0
     if len(points) < 3:
         return 0.0
@@ -26,11 +24,11 @@ def _polygon_area(points: List[Point]) -> float:
 
 @dataclass(slots=True)
 class TessellationResult:
-    contours: List[List[Point]]
-    stroke_width: Optional[float]
+    contours: list[list[Point]]
+    stroke_width: float | None
     winding_rule: str
-    areas: List[float]
-    stroke_outline: Optional[List[List[Point]]] = None
+    areas: list[float]
+    stroke_outline: list[list[Point]] | None = None
 
 
 class Tessellator:
@@ -42,9 +40,9 @@ class Tessellator:
         tolerance: float = 0.25,
         winding_rule: str = "nonzero",
     ) -> TessellationResult:
-        contours: List[List[Point]] = []
-        current: List[Point] = []
-        start: Optional[Point] = None
+        contours: list[list[Point]] = []
+        current: list[Point] = []
+        start: Point | None = None
 
         for prim in path.to_primitives(tolerance=tolerance):
             if isinstance(prim, MoveTo):
@@ -90,11 +88,11 @@ class Tessellator:
         stroke_width = path.stroke_width or 0.0
         if stroke_width > 0 and fill_result.contours:
             offset = stroke_width / 2.0
-            outlines: List[List[Point]] = []
+            outlines: list[list[Point]] = []
             for contour in fill_result.contours:
                 if len(contour) < 2:
                     continue
-                outline: List[Point] = []
+                outline: list[Point] = []
                 for idx, point in enumerate(contour):
                     prev = contour[idx - 1] if idx > 0 else contour[idx]
                     nxt = contour[idx + 1] if idx + 1 < len(contour) else contour[idx]

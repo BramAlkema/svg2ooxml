@@ -9,19 +9,25 @@ import os
 import shutil
 import tempfile
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
-from typing import Any, Optional, Sequence
+from typing import Any
 from urllib.parse import urlparse
+
+from svg2ooxml.services.fonts import FontFetcher, FontSource
 
 from ..caching.status import job_status_cache
 from ..models import RequestedFont, SVGFrame
 from .converter import ConversionArtifacts, FontDiagnostics, render_pptx_for_frames
-from .slides_publisher import SlidesPublishResult, SlidesPublishingError, upload_pptx_to_slides
 from .dependencies import ExportServiceDependencies, build_export_service_dependencies
-from svg2ooxml.services.fonts import FontFetcher, FontSource
+from .slides_publisher import (
+    SlidesPublishingError,
+    SlidesPublishResult,
+    upload_pptx_to_slides,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -113,13 +119,13 @@ class ExportService:
     def create_job(
         self,
         frames: Sequence[SVGFrame],
-        figma_file_id: Optional[str],
-        figma_file_name: Optional[str],
+        figma_file_id: str | None,
+        figma_file_name: str | None,
         output_format: str,
-        fonts: Optional[Sequence[RequestedFont]],
-        user: Optional[dict] = None,
-        parent_folder_id: Optional[str] = None,
-        user_refresh_token: Optional[str] = None,
+        fonts: Sequence[RequestedFont] | None,
+        user: dict | None = None,
+        parent_folder_id: str | None = None,
+        user_refresh_token: str | None = None,
     ) -> str:
         """Register a new export job.
 
@@ -714,8 +720,7 @@ class ExportService:
     def _upload_pptx(self, job_id: str, pptx_path: Path) -> str:
         """Upload PPTX artefact to Cloud Storage and return a signed URL."""
         from datetime import timedelta
-        from google.auth.transport import requests as auth_requests
-        from google.cloud import iam_credentials_v1
+
 
         bucket = self.storage_client.bucket(self.bucket_name)
         blob_name = f"exports/{job_id}/presentation.pptx"

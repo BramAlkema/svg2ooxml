@@ -38,7 +38,7 @@ __all__ = [
 ]
 
 # map symbol -> relative module
-_symbol_map = {'ContrastLevel': 'accessibility', 'ColorAccessibility': 'accessibility', 'ColorBlindnessType': 'accessibility', 'ColorBatch': 'batch', 'oklch_to_oklab': 'color_spaces', 'oklab_to_rgb': 'color_spaces', 'oklab_to_oklch': 'color_spaces', 'rgb_to_oklab': 'color_spaces', 'ColorSpaceConverter': 'color_spaces', 'rgb_to_oklch': 'color_spaces', 'oklch_to_rgb': 'color_spaces', 'Color': 'core', 'NAMED_COLORS': 'css_colors', 'is_css_color': 'css_colors', 'get_css_color': 'css_colors', 'require_color_engine': 'engine', 'ColorHarmony': 'harmony', 'ColorManipulation': 'manipulation', 'BlendMode': 'manipulation', 'ColorParser': 'parser', 'color_to_hex': 'utils'}
+_symbol_map = {'ColorAccessibility': 'accessibility', 'ColorBlindnessType': 'accessibility', 'ContrastLevel': 'accessibility', 'ColorBatch': 'batch', 'rgb_to_oklab': 'color_spaces', 'oklch_to_rgb': 'color_spaces', 'oklab_to_rgb': 'color_spaces', 'rgb_to_oklch': 'color_spaces', 'oklch_to_oklab': 'color_spaces', 'ColorSpaceConverter': 'color_spaces', 'oklab_to_oklch': 'color_spaces', 'Color': 'core', 'get_css_color': 'css_colors', 'NAMED_COLORS': 'css_colors', 'is_css_color': 'css_colors', 'require_color_engine': 'engine', 'ColorHarmony': 'harmony', 'ColorManipulation': 'manipulation', 'BlendMode': 'manipulation', 'ColorParser': 'parser', 'color_to_hex': 'utils'}
 _module_map = {'accessibility': 'accessibility', 'batch': 'batch', 'color_spaces': 'color_spaces', 'core': 'core', 'css_colors': 'css_colors', 'engine': 'engine', 'harmony': 'harmony', 'manipulation': 'manipulation', 'parser': 'parser', 'utils': 'utils'}
 
 

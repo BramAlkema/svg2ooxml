@@ -6,12 +6,14 @@ from dataclasses import dataclass
 
 from lxml import etree
 
-from svg2ooxml.filters.base import Filter, FilterContext, FilterResult
-from svg2ooxml.filters.utils.dml import extract_effect_children, is_effect_list, merge_effect_fragments
-
 # Import centralized XML builders for safe DrawingML generation
-from svg2ooxml.drawingml.xml_builder import a_elem, a_sub, to_string
-
+from svg2ooxml.drawingml.xml_builder import a_elem, a_sub, graft_xml_fragment, to_string
+from svg2ooxml.filters.base import Filter, FilterContext, FilterResult
+from svg2ooxml.filters.utils.dml import (
+    extract_effect_children,
+    is_effect_list,
+    merge_effect_fragments,
+)
 
 SUPPORTED_OPERATORS = {
     "over",
@@ -370,12 +372,8 @@ class CompositeFilter(Filter):
         if source_fragment:
             source_children = extract_effect_children(source_fragment) if is_effect_list(source_fragment) else source_fragment
             if source_children:
-                # Parse and append source children to outer effectLst
                 try:
-                    wrapped = f'<root xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">{source_children}</root>'
-                    temp_root = etree.fromstring(wrapped.encode('utf-8'))
-                    for child_elem in temp_root:
-                        outer_effectLst.append(child_elem)
+                    graft_xml_fragment(outer_effectLst, source_children)
                 except Exception:
                     pass  # Skip if parsing fails
 
@@ -384,12 +382,9 @@ class CompositeFilter(Filter):
         a_sub(alpha_elem, "cont")
         inner_effectLst = a_sub(alpha_elem, "effectLst")
 
-        # Parse and append mask children to inner effectLst
+        # Append mask children to inner effectLst
         try:
-            wrapped = f'<root xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">{mask_children}</root>'
-            temp_root = etree.fromstring(wrapped.encode('utf-8'))
-            for child_elem in temp_root:
-                inner_effectLst.append(child_elem)
+            graft_xml_fragment(inner_effectLst, mask_children)
         except Exception:
             pass  # Skip if parsing fails
 

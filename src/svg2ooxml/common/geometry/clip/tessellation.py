@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
-from typing import Iterable, List, Sequence
 
 from svg2ooxml.common.geometry.paths.drawingml import PathCommand, build_path_commands
 from svg2ooxml.drawingml.custgeom_generator import CustGeomGenerator

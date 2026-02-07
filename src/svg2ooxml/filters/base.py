@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import Iterable
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Dict, Iterable, Optional
+from typing import TYPE_CHECKING, Any
 
 from lxml import etree
 
@@ -19,13 +20,13 @@ class FilterContext:
     filter_element: etree._Element
     services: Any | None = None
     policy_engine: Any | None = None
-    viewport: Dict[str, float] | None = None
-    options: Dict[str, Any] = field(default_factory=dict)
+    viewport: dict[str, float] | None = None
+    options: dict[str, Any] = field(default_factory=dict)
     primitive: etree._Element | None = None
-    pipeline_state: Dict[str, "FilterResult"] | None = None
-    tracer: "RenderTracer | None" = None
+    pipeline_state: dict[str, FilterResult] | None = None
+    tracer: RenderTracer | None = None
 
-    def with_primitive(self, primitive: etree._Element) -> "FilterContext":
+    def with_primitive(self, primitive: etree._Element) -> FilterContext:
         """Return a child context referencing the current primitive."""
 
         return FilterContext(
@@ -47,9 +48,9 @@ class FilterResult:
     success: bool
     drawingml: str | None = None
     fallback: str | None = None
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
     warnings: Iterable[str] = field(default_factory=list)
-    result_name: Optional[str] = None
+    result_name: str | None = None
 
     def is_success(self) -> bool:
         return self.success

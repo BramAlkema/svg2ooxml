@@ -4,7 +4,6 @@ import importlib.util
 import sys
 import types
 
-
 # Check if google package exists first, then check google.cloud
 if importlib.util.find_spec("google") is None or importlib.util.find_spec("google.cloud") is None:  # pragma: no cover - used for test isolation
     # Create google namespace package if it doesn't exist

@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import replace
 from pathlib import Path
-from typing import Sequence, Set, Tuple, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
 from svg2ooxml.common.geometry.algorithms import classify_text_path_warp
 from svg2ooxml.ir.text import (
@@ -40,10 +41,10 @@ class TextPipeline:
 
     def __init__(
         self,
-        context: "IRConverterContext",
+        context: IRConverterContext,
         *,
-        converter: "TextConverter | None" = None,
-        pipeline: "TextConversionPipeline | None" = None,
+        converter: TextConverter | None = None,
+        pipeline: TextConversionPipeline | None = None,
     ) -> None:
         if converter is None:
             from svg2ooxml.core.ir.text_converter import TextConverter
@@ -51,11 +52,11 @@ class TextPipeline:
             converter = TextConverter(context, pipeline=pipeline)
         self._converter = converter
 
-    def convert(self, *, element, coord_space: "CoordinateSpace", resvg_node=None):
+    def convert(self, *, element, coord_space: CoordinateSpace, resvg_node=None):
         return self._converter.convert(element=element, coord_space=coord_space, resvg_node=resvg_node)
 
     @property
-    def converter(self) -> "TextConverter":
+    def converter(self) -> TextConverter:
         return self._converter
 
 
@@ -73,7 +74,7 @@ class TextConversionPipeline:
         self._font_service = font_service
         self._embedding = embedding_engine
         self._logger = logger
-        self._registered_dirs: Set[Path] = set()
+        self._registered_dirs: set[Path] = set()
         self._font_system = font_system
         if self._font_system is None and font_service is not None:
             directories = collect_font_directories()
@@ -349,7 +350,7 @@ class TextConversionPipeline:
         frame: TextFrame,
         text_path_id: str | None,
         decision: TextPolicyDecision,
-    ) -> Tuple[str, float]:
+    ) -> tuple[str, float]:
         base_confidence = max(0.05, decision.wordart.confidence_threshold)
         confidence = base_confidence * 0.75
         preset = "textWave1"

@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from svg2ooxml.ir.geometry import Point, Rect
 from svg2ooxml.common.geometry import Matrix2D
+from svg2ooxml.ir.geometry import Point, Rect
 
 
 def is_axis_aligned(matrix: Matrix2D, tolerance: float = 1e-6) -> bool:

@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from typing import Any, Callable, Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
+from typing import Any
 
-from svg2ooxml.drawingml.generator import CustomGeometry, DrawingMLPathGenerator
-from svg2ooxml.common.geometry.paths import parse_path_data
-from svg2ooxml.ir.geometry import BezierSegment, LineSegment, Point, SegmentType
 from svg2ooxml.common.geometry import Matrix2D
+from svg2ooxml.common.geometry.paths import parse_path_data
+from svg2ooxml.drawingml.generator import CustomGeometry, DrawingMLPathGenerator
+from svg2ooxml.ir.geometry import BezierSegment, LineSegment, Point, SegmentType
 
 PrimitiveDict = Mapping[str, Any]
 PrimitiveIterable = Iterable[PrimitiveDict]
@@ -25,7 +26,7 @@ class CustGeomGenerator:
         self,
         *,
         path_generator: DrawingMLPathGenerator | None = None,
-        primitive_builder: "PrimitiveSegmentBuilder" | None = None,
+        primitive_builder: PrimitiveSegmentBuilder | None = None,
     ) -> None:
         self._path_generator = path_generator or DrawingMLPathGenerator()
         self._primitive_builder = primitive_builder or PrimitiveSegmentBuilder()
@@ -115,7 +116,7 @@ class PrimitiveSegmentBuilder:
         transformed.append(transformed[0])
 
         segments: SegmentList = []
-        for start, end in zip(transformed, transformed[1:]):
+        for start, end in zip(transformed, transformed[1:], strict=False):
             segments.append(LineSegment(start, end))
         return segments
 
@@ -201,7 +202,7 @@ class PrimitiveSegmentBuilder:
     def _points_to_segments(self, points: Sequence[tuple[float, float]], matrix: Matrix2D) -> SegmentList:
         transformed = [matrix.transform_point(Point(px, py)) for px, py in points]
         segments: SegmentList = []
-        for start, end in zip(transformed, transformed[1:]):
+        for start, end in zip(transformed, transformed[1:], strict=False):
             segments.append(LineSegment(start, end))
         return segments
 
@@ -224,7 +225,7 @@ class PrimitiveSegmentBuilder:
             parts = parts[:-1]
         result: list[tuple[float, float]] = []
         it = iter(parts)
-        for x_str, y_str in zip(it, it):
+        for x_str, y_str in zip(it, it, strict=False):
             try:
                 result.append((float(x_str), float(y_str)))
             except ValueError:

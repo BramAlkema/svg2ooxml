@@ -5,8 +5,9 @@ from __future__ import annotations
 import math
 import re
 from collections import Counter
+from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import Any, Iterable, Sequence
+from typing import Any
 
 from svg2ooxml.ir.text_path import PathPoint, TextPathFrame, TextPathSide
 
@@ -382,7 +383,7 @@ def _linear_regression(xs: Sequence[float], ys: Sequence[float]) -> tuple[float,
 
     sum_x = sum(xs)
     sum_y = sum(ys)
-    sum_xy = sum(x * y for x, y in zip(xs, ys))
+    sum_xy = sum(x * y for x, y in zip(xs, ys, strict=True))
     sum_x2 = sum(x * x for x in xs)
 
     denominator = n * sum_x2 - sum_x ** 2

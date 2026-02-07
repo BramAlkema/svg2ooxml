@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Any, Iterable, Literal, Mapping, Sequence
-
+from typing import Any, Literal
 
 MaskKind = Literal["vector", "raster", "emf"]
 
@@ -51,7 +51,7 @@ class MaskAsset:
         if source_id:
             self.sources.add(source_id)
 
-    def clone(self) -> "MaskAsset":
+    def clone(self) -> MaskAsset:
         return MaskAsset(
             asset_id=self.asset_id,
             relationship_id=self.relationship_id,
@@ -285,7 +285,7 @@ class MaskAssetStore:
         self._key_index.clear()
         self._next_index = 1
 
-    def clone(self) -> "MaskAssetStore":
+    def clone(self) -> MaskAssetStore:
         """Return a deep-cloned store."""
         cloned = MaskAssetStore(
             mask_directory=self._mask_directory,

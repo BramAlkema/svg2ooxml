@@ -4,7 +4,6 @@ from importlib import import_module as _im
 from typing import Any as _Any
 
 __all__ = [
-    'AnimationDefinition',
     'AnimationHandler',
     'ColorAnimationHandler',
     'MotionAnimationHandler',
@@ -22,7 +21,7 @@ __all__ = [
 ]
 
 # map symbol -> relative module
-_symbol_map = {'AnimationDefinition': 'base', 'AnimationHandler': 'base', 'ColorAnimationHandler': 'color', 'MotionAnimationHandler': 'motion', 'NumericAnimationHandler': 'numeric', 'OpacityAnimationHandler': 'opacity', 'SetAnimationHandler': 'set', 'TransformAnimationHandler': 'transform'}
+_symbol_map = {'AnimationHandler': 'base', 'ColorAnimationHandler': 'color', 'MotionAnimationHandler': 'motion', 'NumericAnimationHandler': 'numeric', 'OpacityAnimationHandler': 'opacity', 'SetAnimationHandler': 'set', 'TransformAnimationHandler': 'transform'}
 _module_map = {'base': 'base', 'color': 'color', 'motion': 'motion', 'numeric': 'numeric', 'opacity': 'opacity', 'set': 'set', 'transform': 'transform'}
 
 

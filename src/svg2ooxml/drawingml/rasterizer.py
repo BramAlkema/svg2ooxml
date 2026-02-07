@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import math
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Iterable
 
 from svg2ooxml.ir.geometry import BezierSegment, LineSegment, Rect, SegmentType
 from svg2ooxml.ir.paint import (
+    GradientStop,
     LinearGradientPaint,
     RadialGradientPaint,
     SolidPaint,
@@ -15,7 +16,8 @@ from svg2ooxml.ir.paint import (
     StrokeCap,
     StrokeJoin,
 )
-from svg2ooxml.ir.scene import Group, Image, Path as IRPath
+from svg2ooxml.ir.scene import Group, Image
+from svg2ooxml.ir.scene import Path as IRPath
 from svg2ooxml.ir.shapes import Circle, Ellipse, Rectangle
 
 try:  # pragma: no cover - optional dependency
@@ -124,7 +126,7 @@ class Rasterizer:
     # Drawing helpers
     # ------------------------------------------------------------------ #
 
-    def _draw_rectangle(self, canvas: "skia.Canvas", rect: Rectangle, bounds: Rect) -> bool:
+    def _draw_rectangle(self, canvas: skia.Canvas, rect: Rectangle, bounds: Rect) -> bool:
         sk_rect = skia.Rect.MakeXYWH(rect.bounds.x, rect.bounds.y, rect.bounds.width, rect.bounds.height)
         drawn = False
         if rect.fill is not None:
@@ -139,7 +141,7 @@ class Rasterizer:
                 drawn = True
         return drawn
 
-    def _draw_circle(self, canvas: "skia.Canvas", circle: Circle, bounds: Rect) -> bool:
+    def _draw_circle(self, canvas: skia.Canvas, circle: Circle, bounds: Rect) -> bool:
         rect = skia.Rect.MakeXYWH(
             circle.center.x - circle.radius,
             circle.center.y - circle.radius,
@@ -159,7 +161,7 @@ class Rasterizer:
                 drawn = True
         return drawn
 
-    def _draw_ellipse(self, canvas: "skia.Canvas", ellipse: Ellipse, bounds: Rect) -> bool:
+    def _draw_ellipse(self, canvas: skia.Canvas, ellipse: Ellipse, bounds: Rect) -> bool:
         rect = skia.Rect.MakeXYWH(
             ellipse.center.x - ellipse.radius_x,
             ellipse.center.y - ellipse.radius_y,
@@ -179,7 +181,7 @@ class Rasterizer:
                 drawn = True
         return drawn
 
-    def _draw_path(self, canvas: "skia.Canvas", path: IRPath, bounds: Rect) -> bool:
+    def _draw_path(self, canvas: skia.Canvas, path: IRPath, bounds: Rect) -> bool:
         if not path.segments:
             return False
         sk_path = self._build_skia_path(path.segments, path.is_closed)
@@ -196,14 +198,14 @@ class Rasterizer:
                 drawn = True
         return drawn
 
-    def _paint_from_fill(self, paint, bounds: Rect) -> "skia.Paint | None":
+    def _paint_from_fill(self, paint, bounds: Rect) -> skia.Paint | None:
         sk_paint = skia.Paint(AntiAlias=True)
         sk_paint.setStyle(skia.Paint.kFill_Style)
         if self._apply_paint(sk_paint, paint, bounds, opacity=1.0):
             return sk_paint
         return None
 
-    def _paint_from_stroke(self, stroke: Stroke, bounds: Rect) -> "skia.Paint | None":
+    def _paint_from_stroke(self, stroke: Stroke, bounds: Rect) -> skia.Paint | None:
         sk_paint = skia.Paint(AntiAlias=True)
         sk_paint.setStyle(skia.Paint.kStroke_Style)
         if not self._apply_paint(sk_paint, stroke.paint, bounds, opacity=stroke.opacity):
@@ -229,7 +231,7 @@ class Rasterizer:
                     sk_paint.setPathEffect(effect)
         return sk_paint
 
-    def _apply_paint(self, sk_paint: "skia.Paint", paint, bounds: Rect, *, opacity: float) -> bool:
+    def _apply_paint(self, sk_paint: skia.Paint, paint, bounds: Rect, *, opacity: float) -> bool:
         if isinstance(paint, SolidPaint):
             color = self._color_from_hex(paint.rgb, paint.opacity * opacity)
             if color is None:
@@ -255,7 +257,7 @@ class Rasterizer:
         paint: LinearGradientPaint,
         bounds: Rect,
         opacity: float,
-    ) -> "skia.Shader | None":
+    ) -> skia.Shader | None:
         prepared = self._prepare_gradient_stops(paint.stops, opacity)
         if prepared is None:
             return None
@@ -287,7 +289,7 @@ class Rasterizer:
         paint: RadialGradientPaint,
         bounds: Rect,
         opacity: float,
-    ) -> "skia.Shader | None":
+    ) -> skia.Shader | None:
         prepared = self._prepare_gradient_stops(paint.stops, opacity)
         if prepared is None:
             return None
@@ -340,7 +342,7 @@ class Rasterizer:
                 tile_mode,
             )
 
-    def _build_skia_path(self, segments: Iterable[SegmentType], closed: bool) -> "skia.Path":
+    def _build_skia_path(self, segments: Iterable[SegmentType], closed: bool) -> skia.Path:
         segment_list = list(segments)
         path = skia.Path()
         if not segment_list:
@@ -388,11 +390,11 @@ class Rasterizer:
 
     def _prepare_gradient_stops(
         self,
-        stops: Iterable["GradientStop"],
+        stops: Iterable[GradientStop],
         opacity: float,
-    ) -> tuple[list[float], list["skia.Color4f"]] | None:
+    ) -> tuple[list[float], list[skia.Color4f]] | None:
         positions: list[float] = []
-        colors: list["skia.Color4f"] = []
+        colors: list[skia.Color4f] = []
         for stop in stops:
             offset = max(0.0, min(1.0, float(stop.offset)))
             color = self._color_from_hex(stop.rgb, float(stop.opacity) * opacity)
@@ -454,7 +456,7 @@ class Rasterizer:
         return skia.TileMode.kClamp
 
     @staticmethod
-    def _to_skia_matrix(matrix) -> "skia.Matrix | None":
+    def _to_skia_matrix(matrix) -> skia.Matrix | None:
         if matrix is None:
             return None
         try:
@@ -473,7 +475,7 @@ class Rasterizer:
             return None
 
     @staticmethod
-    def _color_from_hex(value: str, opacity: float) -> "skia.Color4f | None":
+    def _color_from_hex(value: str, opacity: float) -> skia.Color4f | None:
         value = value.strip().lstrip("#")
         if len(value) != 6:
             return None

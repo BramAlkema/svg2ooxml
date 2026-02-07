@@ -8,7 +8,6 @@ from lxml import etree
 
 from svg2ooxml.services.filter_service import FilterService
 
-
 EXPECTED_EMF_DIGESTS: dict[str, str] = {
     "combo": "872bde4b2ebfd0d257b1eb012161dd01880f99e4",
     "blend": "7e7f3a7767f9ead23ac7d9ac31c491532fe8fbee",

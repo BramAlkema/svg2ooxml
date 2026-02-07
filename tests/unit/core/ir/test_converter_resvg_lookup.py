@@ -5,8 +5,8 @@ from __future__ import annotations
 from lxml import etree
 
 from svg2ooxml.core.ir import IRConverter
-from svg2ooxml.services import configure_services
 from svg2ooxml.core.traversal.coordinate_space import CoordinateSpace
+from svg2ooxml.services import configure_services
 
 
 def _create_converter() -> IRConverter:

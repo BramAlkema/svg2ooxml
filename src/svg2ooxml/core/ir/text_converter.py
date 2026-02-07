@@ -2,23 +2,23 @@
 
 from __future__ import annotations
 
+import re
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, replace
 from hashlib import sha1
 from pathlib import Path
-import re
-from typing import TYPE_CHECKING, Any, Iterable, Mapping
+from typing import TYPE_CHECKING, Any
 
 from lxml import etree
 
 from svg2ooxml.common.geometry.algorithms import CurveTextPositioner, PathSamplingMethod
+from svg2ooxml.core.ir.smart_font_bridge import SmartFontBridge
+from svg2ooxml.core.ir.text_pipeline import TextConversionPipeline
+from svg2ooxml.core.traversal.coordinate_space import CoordinateSpace
 from svg2ooxml.ir.geometry import Point, Rect
 from svg2ooxml.ir.text import Run, TextAnchor, TextFrame
 from svg2ooxml.policy.constants import FALLBACK_EMF
 from svg2ooxml.policy.text_policy import TextPolicyDecision
-
-from svg2ooxml.core.traversal.coordinate_space import CoordinateSpace
-from svg2ooxml.core.ir.smart_font_bridge import SmartFontBridge
-from svg2ooxml.core.ir.text_pipeline import TextConversionPipeline
 from svg2ooxml.services.fonts.fontforge_utils import (
     FONTFORGE_AVAILABLE,
     open_font,
@@ -185,7 +185,7 @@ class TextConverter:
 
     def __init__(
         self,
-        context: "IRConverterContext | Any",
+        context: IRConverterContext | Any,
         pipeline: TextConversionPipeline | None = None,
     ) -> None:
         self._context = self._resolve_context(context)
@@ -498,7 +498,7 @@ class TextConverter:
         return self._pipeline
 
     @staticmethod
-    def _resolve_context(context: "IRConverterContext | Any") -> "IRConverterContext":
+    def _resolve_context(context: IRConverterContext | Any) -> IRConverterContext:
         if hasattr(context, "style_resolver") and hasattr(context, "services"):
             return context
         parent_context = getattr(context, "_context", None)
@@ -707,8 +707,10 @@ class TextConverter:
         if not hasattr(resvg_node, "text_content"):
             return
         try:
+            from svg2ooxml.core.resvg.text.drawingml_generator import (
+                DrawingMLTextGenerator,
+            )
             from svg2ooxml.core.resvg.text.layout_analyzer import TextLayoutAnalyzer
-            from svg2ooxml.core.resvg.text.drawingml_generator import DrawingMLTextGenerator
         except Exception:
             return
 

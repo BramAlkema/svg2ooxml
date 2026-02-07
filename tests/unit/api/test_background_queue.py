@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-import pytest
 from unittest.mock import MagicMock
+
+import pytest
 
 
 def test_enqueue_export_job_huey(monkeypatch: pytest.MonkeyPatch):

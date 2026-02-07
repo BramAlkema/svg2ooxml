@@ -23,7 +23,7 @@ def test_gaussian_blur_native_support() -> None:
     assert isinstance(first, FilterEffectResult)
     assert first.strategy == "native"
     assert isinstance(first.effect, CustomEffect)
-    assert "<a:blur" in first.effect.drawingml
+    assert "<a:softEdge" in first.effect.drawingml
 
 
 def test_gaussian_blur_anisotropic_fallback() -> None:
@@ -56,5 +56,5 @@ def test_gaussian_blur_anisotropic_with_policy_native() -> None:
     first = results[0]
     assert first.strategy == "native"
     assert isinstance(first.effect, CustomEffect)
-    assert "blur" in first.effect.drawingml
+    assert "softEdge" in first.effect.drawingml
     assert first.metadata.get("anisotropic_mode") == "approx_native"

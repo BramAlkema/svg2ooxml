@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import io
 from dataclasses import dataclass
-from typing import Tuple
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from svg2ooxml.services import ConversionServices
 
 from svg2ooxml.color.analysis import summarize_palette
 from svg2ooxml.color.bridge import (
@@ -108,10 +111,10 @@ class ColorSpaceService:
             updated = resource
         return ColorNormalizedImage(resource=updated, result=result)
 
-    def bind_services(self, _services: "ConversionServices") -> None:  # pragma: no cover - for DI consistency
+    def bind_services(self, _services: ConversionServices) -> None:  # pragma: no cover - for DI consistency
         return
 
-    def clone(self) -> "ColorSpaceService":
+    def clone(self) -> ColorSpaceService:
         return ColorSpaceService(self._converter)
 
     def _analyze_image_palette(self, payload: bytes) -> dict[str, object] | None:
@@ -157,8 +160,8 @@ class ColorSpaceService:
             return None
         try:
             ensure_advanced_color_engine()
-            from PIL import Image
             import numpy as np
+            from PIL import Image
         except Exception:
             return None
 

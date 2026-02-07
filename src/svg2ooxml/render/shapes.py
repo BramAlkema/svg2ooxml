@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Iterable, Optional, Tuple
+from collections.abc import Iterable
 
 from svg2ooxml.core.resvg.geometry.path_normalizer import NormalizedPath, normalize_path
 from svg2ooxml.core.resvg.usvg_tree import (
@@ -16,7 +16,7 @@ from svg2ooxml.core.resvg.usvg_tree import (
 )
 
 
-def node_geometry(node: BaseNode) -> Optional[NormalizedPath]:
+def node_geometry(node: BaseNode) -> NormalizedPath | None:
     if isinstance(node, PathNode):
         return node.geometry
     if isinstance(node, RectNode):
@@ -32,7 +32,7 @@ def node_geometry(node: BaseNode) -> Optional[NormalizedPath]:
     return None
 
 
-def _rect_geometry(node: RectNode) -> Optional[NormalizedPath]:
+def _rect_geometry(node: RectNode) -> NormalizedPath | None:
     width = node.width
     height = node.height
     if width <= 0 or height <= 0:
@@ -46,7 +46,7 @@ def _rect_geometry(node: RectNode) -> Optional[NormalizedPath]:
     return normalize_path(path, node.transform, stroke_width)
 
 
-def _circle_geometry(node: CircleNode) -> Optional[NormalizedPath]:
+def _circle_geometry(node: CircleNode) -> NormalizedPath | None:
     radius = node.r
     if radius <= 0:
         return None
@@ -62,7 +62,7 @@ def _circle_geometry(node: CircleNode) -> Optional[NormalizedPath]:
     return normalize_path(d, node.transform, stroke_width)
 
 
-def _ellipse_geometry(node: EllipseNode) -> Optional[NormalizedPath]:
+def _ellipse_geometry(node: EllipseNode) -> NormalizedPath | None:
     rx = node.rx
     ry = node.ry
     if rx <= 0 or ry <= 0:
@@ -78,7 +78,7 @@ def _ellipse_geometry(node: EllipseNode) -> Optional[NormalizedPath]:
     return normalize_path(d, node.transform, stroke_width)
 
 
-def _line_geometry(node: LineNode) -> Optional[NormalizedPath]:
+def _line_geometry(node: LineNode) -> NormalizedPath | None:
     x1, y1, x2, y2 = node.x1, node.y1, node.x2, node.y2
     if x1 == x2 and y1 == y2:
         return None
@@ -87,7 +87,7 @@ def _line_geometry(node: LineNode) -> Optional[NormalizedPath]:
     return normalize_path(d, node.transform, stroke_width)
 
 
-def _poly_geometry(node: PolyNode) -> Optional[NormalizedPath]:
+def _poly_geometry(node: PolyNode) -> NormalizedPath | None:
     points = node.points
     if len(points) < 4:
         return None
@@ -102,7 +102,7 @@ def _poly_geometry(node: PolyNode) -> Optional[NormalizedPath]:
     return normalize_path(path_data, node.transform, stroke_width)
 
 
-def _iter_pairs(values: Iterable[float]) -> Iterable[Tuple[float, float]]:
+def _iter_pairs(values: Iterable[float]) -> Iterable[tuple[float, float]]:
     iterator = iter(values)
     for x in iterator:
         y = next(iterator, None)

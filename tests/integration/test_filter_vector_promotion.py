@@ -6,7 +6,6 @@ import pytest
 
 from svg2ooxml.core.pptx_exporter import SvgToPptxExporter
 
-
 ASSETS_DIR = Path(__file__).resolve().parents[1] / "assets"
 
 

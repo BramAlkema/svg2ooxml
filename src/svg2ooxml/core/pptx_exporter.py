@@ -3,13 +3,24 @@
 from __future__ import annotations
 
 from collections import Counter
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Sequence, Type
-
-from copy import deepcopy
+from typing import Any
 
 from svg2ooxml.core.animation import SMILParser, TimelineSampler, TimelineSamplingConfig
+from svg2ooxml.core.ir.converter import IRScene
+from svg2ooxml.core.parser import ParserConfig, SVGParser
+from svg2ooxml.core.slide_orchestrator import (
+    build_fidelity_tier_variants,
+    derive_variants_from_trace,
+    expand_page_with_variants,
+)
+from svg2ooxml.core.tracing import ConversionTracer
+from svg2ooxml.drawingml.result import DrawingMLRenderResult
+from svg2ooxml.drawingml.writer import DrawingMLWriter
+from svg2ooxml.io.pptx_writer import ALLOWED_SLIDE_SIZE_MODES, PPTXPackageBuilder
+from svg2ooxml.ir import convert_parser_output
 from svg2ooxml.ir.animation import (
     AnimationDefinition,
     AnimationScene,
@@ -17,19 +28,7 @@ from svg2ooxml.ir.animation import (
     AnimationTiming,
     CalcMode,
 )
-from svg2ooxml.drawingml.result import DrawingMLRenderResult
-from svg2ooxml.drawingml.writer import DrawingMLWriter
-from svg2ooxml.io.pptx_writer import PPTXPackageBuilder, ALLOWED_SLIDE_SIZE_MODES
-from svg2ooxml.core.ir.converter import IRScene
-from svg2ooxml.ir import convert_parser_output
-from svg2ooxml.core.tracing import ConversionTracer
-from svg2ooxml.core.parser import ParserConfig, SVGParser
 from svg2ooxml.policy import PolicyContext
-from svg2ooxml.core.slide_orchestrator import (
-    build_fidelity_tier_variants,
-    derive_variants_from_trace,
-    expand_page_with_variants,
-)
 from svg2ooxml.services import configure_services
 
 
@@ -43,7 +42,7 @@ class SvgToPptxResult:
 
     pptx_path: Path
     slide_count: int
-    trace_report: Dict[str, Any] | None = None
+    trace_report: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -53,7 +52,7 @@ class SvgPageSource:
     svg_text: str
     title: str | None = None
     name: str | None = None
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -61,8 +60,8 @@ class SvgPageResult:
     """Per-page conversion result."""
 
     title: str | None
-    trace_report: Dict[str, Any]
-    metadata: Dict[str, Any] | None = None
+    trace_report: dict[str, Any]
+    metadata: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -71,9 +70,9 @@ class SvgToPptxMultiResult:
 
     pptx_path: Path
     slide_count: int
-    page_results: List[SvgPageResult]
-    packaging_report: Dict[str, Any]
-    aggregated_trace_report: Dict[str, Any]
+    page_results: list[SvgPageResult]
+    packaging_report: dict[str, Any]
+    aggregated_trace_report: dict[str, Any]
 
 
 class SvgToPptxExporter:
@@ -85,7 +84,7 @@ class SvgToPptxExporter:
         writer: DrawingMLWriter | None = None,
         builder: PPTXPackageBuilder | None = None,
         *,
-        animation_parser_factory: Type[SMILParser] | None = None,
+        animation_parser_factory: type[SMILParser] | None = None,
         timeline_sampler: TimelineSampler | None = None,
         timeline_config: TimelineSamplingConfig | None = None,
         filter_strategy: str | None = None,
@@ -151,7 +150,7 @@ class SvgToPptxExporter:
         output_path: Path | None = None,
         *,
         tracer: ConversionTracer | None = None,
-        policy_overrides: Dict[str, Dict[str, Any]] | None = None,
+        policy_overrides: dict[str, dict[str, Any]] | None = None,
     ) -> SvgToPptxResult:
         """Convert the SVG located at *input_path* into a PPTX package."""
 
@@ -175,7 +174,7 @@ class SvgToPptxExporter:
         *,
         tracer: ConversionTracer | None = None,
         source_path: str | None = None,
-        policy_overrides: Dict[str, Dict[str, Any]] | None = None,
+        policy_overrides: dict[str, dict[str, Any]] | None = None,
     ) -> SvgToPptxResult:
         """Convert an SVG payload into a PPTX written to *output_path*."""
 
@@ -255,7 +254,7 @@ class SvgToPptxExporter:
                         or f"Slide {index}"
                     )
 
-                    variant_metadata: Dict[str, Any] | None = None
+                    variant_metadata: dict[str, Any] | None = None
                     if isinstance(variant_scene.metadata, dict):
                         variant_scene.metadata.setdefault("page_title", variant_title)
                         variant_scene.metadata.setdefault("trace_report", variant_report)
@@ -293,7 +292,7 @@ class SvgToPptxExporter:
                 or f"Slide {index}"
             )
 
-            scene_metadata: Dict[str, Any] | None = None
+            scene_metadata: dict[str, Any] | None = None
             if isinstance(scene.metadata, dict):
                 scene.metadata.setdefault("page_title", slide_title)
                 scene.metadata.setdefault("trace_report", report_dict)
@@ -333,7 +332,7 @@ class SvgToPptxExporter:
                         or f"{slide_title} ({variant_page.metadata.get('variant', {}).get('type', 'variant')})"
                     )
 
-                    variant_metadata: Dict[str, Any] | None = None
+                    variant_metadata: dict[str, Any] | None = None
                     if isinstance(variant_scene.metadata, dict):
                         variant_scene.metadata.setdefault("page_title", variant_title)
                         variant_scene.metadata.setdefault("trace_report", variant_report)
@@ -381,7 +380,7 @@ class SvgToPptxExporter:
         self,
         svg_text: str,
         tracer: ConversionTracer,
-        policy_overrides: Dict[str, Dict[str, Any]] | None = None,
+        policy_overrides: dict[str, dict[str, Any]] | None = None,
         *,
         source_path: str | None = None,
     ) -> tuple[DrawingMLRenderResult, IRScene]:
@@ -407,9 +406,9 @@ class SvgToPptxExporter:
             services_override.filter_service.set_strategy(self._filter_strategy)
 
         if parse_result.width_px is not None:
-            setattr(services_override, "viewport_width", parse_result.width_px)
+            services_override.viewport_width = parse_result.width_px
         if parse_result.height_px is not None:
-            setattr(services_override, "viewport_height", parse_result.height_px)
+            services_override.viewport_height = parse_result.height_px
 
         animations = []
         timeline_scenes: list[AnimationScene] = []
@@ -489,12 +488,12 @@ class SvgToPptxExporter:
     @staticmethod
     def _apply_policy_overrides(
         context: PolicyContext | None,
-        overrides: Dict[str, Dict[str, Any]] | None,
+        overrides: dict[str, dict[str, Any]] | None,
     ) -> PolicyContext | None:
         if not overrides:
             return context
 
-        base_selections: Dict[str, Dict[str, Any]] = {}
+        base_selections: dict[str, dict[str, Any]] = {}
         if context is not None:
             for key, value in context.selections.items():
                 base_selections[key] = dict(value)
@@ -507,7 +506,7 @@ class SvgToPptxExporter:
         return PolicyContext(selections=base_selections)
 
 
-def _merge_trace_reports(reports: Iterable[Dict[str, Any]]) -> Dict[str, Any]:
+def _merge_trace_reports(reports: Iterable[dict[str, Any]]) -> dict[str, Any]:
     """Merge multiple trace report dictionaries into a single aggregate report."""
 
     geometry_totals: Counter[str] = Counter()

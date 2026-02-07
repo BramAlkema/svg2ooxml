@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Union
-
-Numeric = Union[int, float]
+Numeric = int | float
 
 
 def parse_time_value(time_str: str | None) -> float:

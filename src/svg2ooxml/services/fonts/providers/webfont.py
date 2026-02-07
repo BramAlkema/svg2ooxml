@@ -3,14 +3,14 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
-from functools import lru_cache
-from typing import TYPE_CHECKING, Iterable
+from collections.abc import Iterable
+from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from ..service import FontMatch, FontProvider, FontQuery
 
 if TYPE_CHECKING:  # pragma: no cover - type checking only
-    from svg2ooxml.ir.fonts import FontFaceRule, FontFaceSrc
+    from svg2ooxml.ir.fonts import FontFaceRule
     from svg2ooxml.services.fonts.loader import FontLoader, LoadedFont
 
 logger = logging.getLogger(__name__)
@@ -26,8 +26,8 @@ class WebFontProvider(FontProvider):
     Optionally loads and caches font data when a FontLoader is provided.
     """
 
-    rules: tuple["FontFaceRule", ...]
-    loader: "FontLoader | None" = None
+    rules: tuple[FontFaceRule, ...]
+    loader: FontLoader | None = None
     enable_loading: bool = True  # Load fonts on demand
     cache_loaded_fonts: bool = True  # Cache loaded font data
 
@@ -40,7 +40,7 @@ class WebFontProvider(FontProvider):
             self._index.setdefault(family_key, []).append(rule)
 
         # Font data cache: (family, weight, style) -> LoadedFont
-        self._font_cache: dict[tuple[str, int, str], "LoadedFont"] = {}
+        self._font_cache: dict[tuple[str, int, str], LoadedFont] = {}
 
     def resolve(self, query: FontQuery) -> FontMatch | None:
         """Return the best matching web font for the query.
@@ -100,8 +100,8 @@ class WebFontProvider(FontProvider):
     # ------------------------------------------------------------------
 
     def _find_best_rule(
-        self, rules: list["FontFaceRule"], query: FontQuery
-    ) -> "FontFaceRule | None":
+        self, rules: list[FontFaceRule], query: FontQuery
+    ) -> FontFaceRule | None:
         """Find the rule that best matches the query."""
         best_score = 0.0
         best_rule = None
@@ -114,7 +114,7 @@ class WebFontProvider(FontProvider):
 
         return best_rule
 
-    def _score_rule(self, rule: "FontFaceRule", query: FontQuery) -> float:
+    def _score_rule(self, rule: FontFaceRule, query: FontQuery) -> float:
         """Calculate compatibility score for a rule.
 
         Score components:
@@ -156,7 +156,7 @@ class WebFontProvider(FontProvider):
             rule_weight < 600 and query_weight < 600
         )
 
-    def _has_compatible_format(self, rule: "FontFaceRule") -> bool:
+    def _has_compatible_format(self, rule: FontFaceRule) -> bool:
         """Check if rule has web-compatible font formats."""
         compatible_formats = {"woff", "woff2", "truetype", "opentype", "svg"}
         for src in rule.src:
@@ -169,7 +169,7 @@ class WebFontProvider(FontProvider):
 
     def _rule_to_match(
         self,
-        rule: "FontFaceRule",
+        rule: FontFaceRule,
         query: FontQuery,
         score: float | None = None,
     ) -> FontMatch:

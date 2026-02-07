@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-
 MOVE_TO = "M"
 LINE_TO = "L"
 H_LINE_TO = "H"

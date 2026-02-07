@@ -7,6 +7,7 @@ from xml.etree import ElementTree as ET
 
 from svg2ooxml.core.pptx_exporter import SvgPageSource, SvgToPptxExporter
 
+
 def test_convert_string_produces_slide_with_expected_fill(tmp_path) -> None:
     exporter = SvgToPptxExporter()
     svg_markup = (

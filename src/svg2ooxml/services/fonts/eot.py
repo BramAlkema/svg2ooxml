@@ -15,10 +15,11 @@ adapted to fit svg2ooxml’s coding style.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import struct
 import uuid
-from typing import Final, Iterable
+from collections.abc import Iterable
+from dataclasses import dataclass
+from typing import Final
 
 from svg2ooxml.services.fonts.fontforge_utils import (
     FONTFORGE_AVAILABLE,
@@ -26,7 +27,6 @@ from svg2ooxml.services.fonts.fontforge_utils import (
     open_font,
 )
 from svg2ooxml.services.fonts.opentype_utils import parse_head_checksum, parse_os2_table
-
 
 EOT_VERSION: Final[int] = 0x00020001
 EOT_MAGIC: Final[int] = 0x504C

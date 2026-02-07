@@ -27,7 +27,7 @@ __all__ = [
 ]
 
 # map symbol -> relative module
-_symbol_map = {'write_pptx': 'pptx_writer', 'ASSETS_ROOT': 'pptx_writer', 'SlideAssembly': 'pptx_writer', 'THEME_FAMILY_NS': 'pptx_writer', 'THEME_NS': 'pptx_writer', 'SlideAssembler': 'pptx_writer', 'P_NS': 'pptx_writer', 'ALLOWED_SLIDE_SIZE_MODES': 'pptx_writer', 'PackageWriter': 'pptx_writer', 'PPTXPackageBuilder': 'pptx_writer', 'CONTENT_NS': 'pptx_writer', 'REL_NS': 'pptx_writer', 'PackagingContext': 'pptx_writer', 'MASK_REL_TYPE': 'pptx_writer', 'R_DOC_NS': 'pptx_writer', 'read_svg_shapes': 'svg_reader'}
+_symbol_map = {'CONTENT_NS': 'pptx_writer', 'THEME_FAMILY_NS': 'pptx_writer', 'ALLOWED_SLIDE_SIZE_MODES': 'pptx_writer', 'PackageWriter': 'pptx_writer', 'R_DOC_NS': 'pptx_writer', 'REL_NS': 'pptx_writer', 'ASSETS_ROOT': 'pptx_writer', 'THEME_NS': 'pptx_writer', 'SlideAssembler': 'pptx_writer', 'PPTXPackageBuilder': 'pptx_writer', 'MASK_REL_TYPE': 'pptx_writer', 'P_NS': 'pptx_writer', 'write_pptx': 'pptx_writer', 'PackagingContext': 'pptx_writer', 'SlideAssembly': 'pptx_writer', 'read_svg_shapes': 'svg_reader'}
 _module_map = {'api': 'api', 'emf': 'emf', 'pptx_writer': 'pptx_writer', 'svg_reader': 'svg_reader'}
 
 

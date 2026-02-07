@@ -6,9 +6,9 @@ import logging
 import os
 from datetime import datetime, timezone
 
+import stripe
 from fastapi import APIRouter, HTTPException, Request
 from firebase_admin import firestore
-import stripe
 
 from ..services.stripe_service import StripeService
 from ..services.subscription_repository import SubscriptionRepository
@@ -120,11 +120,11 @@ async def stripe_webhook(request: Request):
 
     except stripe.error.SignatureVerificationError as e:
         logger.error(f"Invalid webhook signature: {e}")
-        raise HTTPException(status_code=400, detail="Invalid signature")
+        raise HTTPException(status_code=400, detail="Invalid signature") from e
 
     except Exception as e:
         logger.error(f"Webhook error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 async def handle_subscription_created(subscription, repo: SubscriptionRepository):

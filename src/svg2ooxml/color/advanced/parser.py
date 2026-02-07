@@ -3,8 +3,6 @@
 
 from __future__ import annotations
 
-from typing import Optional, Tuple
-
 from .core import Color
 
 
@@ -19,8 +17,8 @@ class ColorParser:
         value: str | None,
         *,
         include_hash: bool = False,
-        default: Optional[str] = None,
-    ) -> Optional[str]:
+        default: str | None = None,
+    ) -> str | None:
         hex_value = self.to_hex(value, include_hash=include_hash)
         if hex_value is None:
             return default
@@ -31,7 +29,7 @@ class ColorParser:
         value: str | None,
         *,
         include_hash: bool = False,
-    ) -> Optional[str]:
+    ) -> str | None:
         if not value:
             return None
         try:
@@ -41,7 +39,7 @@ class ColorParser:
         except Exception:
             return None
 
-    def to_rgb(self, value: str | None) -> Optional[Tuple[int, int, int]]:
+    def to_rgb(self, value: str | None) -> tuple[int, int, int] | None:
         if not value:
             return None
         try:

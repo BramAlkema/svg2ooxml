@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any
 
 from firebase_admin import firestore
 from google.cloud.firestore_v1 import FieldFilter
@@ -24,7 +24,7 @@ class SubscriptionRepository:
     # Users
     # ============================================================================
 
-    def get_user(self, firebase_uid: str) -> Optional[Dict[str, Any]]:
+    def get_user(self, firebase_uid: str) -> dict[str, Any] | None:
         """Get user by Firebase UID.
 
         Args:
@@ -49,8 +49,8 @@ class SubscriptionRepository:
         self,
         firebase_uid: str,
         email: str,
-        stripe_customer_id: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        stripe_customer_id: str | None = None,
+    ) -> dict[str, Any]:
         """Create or update user record.
 
         Args:
@@ -93,7 +93,7 @@ class SubscriptionRepository:
 
     def get_active_subscription(
         self, firebase_uid: str
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """Get active subscription for user.
 
         Args:
@@ -131,8 +131,8 @@ class SubscriptionRepository:
         current_period_start: datetime,
         current_period_end: datetime,
         cancel_at_period_end: bool = False,
-        canceled_at: Optional[datetime] = None,
-    ) -> Dict[str, Any]:
+        canceled_at: datetime | None = None,
+    ) -> dict[str, Any]:
         """Create or update subscription record.
 
         Args:
@@ -180,7 +180,7 @@ class SubscriptionRepository:
 
     def get_subscription(
         self, stripe_subscription_id: str
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """Get subscription by Stripe ID.
 
         Args:
@@ -211,7 +211,7 @@ class SubscriptionRepository:
 
     def get_usage(
         self, firebase_uid: str, month_year: str
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """Get usage for specific month.
 
         Args:
@@ -236,7 +236,7 @@ class SubscriptionRepository:
 
     def increment_usage(
         self, firebase_uid: str, month_year: str
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Increment usage count for current month.
 
         Uses Firestore transaction to ensure atomic increment.
@@ -303,7 +303,7 @@ class SubscriptionRepository:
 
     def get_user_by_stripe_customer(
         self, stripe_customer_id: str
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """Find user by Stripe customer ID.
 
         Args:

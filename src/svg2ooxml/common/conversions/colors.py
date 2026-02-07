@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from svg2ooxml.color.utils import color_to_hex
 from svg2ooxml.color.parsers import parse_color as _parse_color
+from svg2ooxml.color.utils import color_to_hex
 
 __all__ = [
     "color_to_hex",

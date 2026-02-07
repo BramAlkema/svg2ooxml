@@ -9,7 +9,6 @@ mixing, gradients, and professional color adjustment tools.
 from __future__ import annotations
 
 from enum import Enum
-from typing import List, Optional
 
 import colorspacious
 import numpy as np
@@ -146,7 +145,7 @@ class ColorManipulation:
         mixed_rgb = np.zeros(3)
         total_alpha = 0.0
 
-        for color, weight in zip(colors, weights):
+        for color, weight in zip(colors, weights, strict=True):
             rgb = np.array(color.rgb())
             mixed_rgb += rgb * weight
             total_alpha += getattr(color, '_alpha', 1.0) * weight

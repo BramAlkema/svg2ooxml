@@ -6,16 +6,28 @@ import logging
 from dataclasses import dataclass
 from typing import Any
 
-from svg2ooxml.drawingml.generator import DrawingMLPathGenerator
+# Import centralized XML builders for safe DrawingML generation
+from lxml import etree
+
+from svg2ooxml.common.conversions.opacity import opacity_to_ppt
 from svg2ooxml.common.units import px_to_emu
+from svg2ooxml.drawingml.generator import DrawingMLPathGenerator
+from svg2ooxml.drawingml.xml_builder import (
+    a_elem,
+    a_sub,
+    graft_xml_fragment,
+    ln,
+    no_fill,
+    p_elem,
+    p_sub,
+    solid_fill,
+    to_string,
+)
 from svg2ooxml.ir.geometry import Rect
 from svg2ooxml.ir.scene import Path
 
 from .base import Mapper, MapperResult, OutputFormat
 from .clip_render import clip_result_to_xml
-
-# Import centralized XML builders for safe DrawingML generation
-from svg2ooxml.drawingml.xml_builder import a_elem, a_sub, p_elem, p_sub, to_string
 
 
 @dataclass
@@ -67,7 +79,7 @@ class PathMapper(Mapper):
             fill_mode="solid" if path.fill else "none",
             stroke_mode="solid" if path.stroke else "none",
         )
-        geometry_xml = geometry.xml
+        geometry_elem = geometry.element
         clip_xml = ""
         metadata = {}
         media_files = None
@@ -82,8 +94,6 @@ class PathMapper(Mapper):
                 self._logger.debug("Clip processing failed: %s", exc)
 
         bounds = _path_bounds(path)
-        fill_xml = _fill_xml(path)
-        stroke_xml = _stroke_xml(path)
 
         # Build p:sp with lxml
         sp = p_elem("sp")
@@ -103,32 +113,16 @@ class PathMapper(Mapper):
         a_sub(xfrm, "ext", cx=px_to_emu(bounds.width or 1.0), cy=px_to_emu(bounds.height or 1.0))
 
         # Add clip_xml if present
-        from lxml import etree
         if clip_xml:
-            wrapped = f'<root xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">{clip_xml}</root>'
-            temp = etree.fromstring(wrapped.encode('utf-8'))
-            for child in temp:
-                spPr.append(child)
+            graft_xml_fragment(spPr, clip_xml)
 
-        # Add geometry_xml
-        if geometry_xml:
-            wrapped = f'<root xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">{geometry_xml}</root>'
-            temp = etree.fromstring(wrapped.encode('utf-8'))
-            for child in temp:
-                spPr.append(child)
+        # Add geometry element
+        if geometry_elem is not None:
+            spPr.append(geometry_elem)
 
-        # Add fill_xml and stroke_xml
-        if fill_xml:
-            wrapped = f'<root xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">{fill_xml}</root>'
-            temp = etree.fromstring(wrapped.encode('utf-8'))
-            for child in temp:
-                spPr.append(child)
-
-        if stroke_xml:
-            wrapped = f'<root xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">{stroke_xml}</root>'
-            temp = etree.fromstring(wrapped.encode('utf-8'))
-            for child in temp:
-                spPr.append(child)
+        # Add fill and stroke
+        spPr.append(_fill_elem(path))
+        spPr.append(_stroke_elem(path))
 
         xml = to_string(sp)
 
@@ -173,36 +167,28 @@ def _path_bounds(path: Path) -> Rect:
     return bbox
 
 
-def _fill_xml(path: Path) -> str:
+def _fill_elem(path: Path) -> etree._Element:
     fill = getattr(path, "fill", None)
     if fill is None:
-        return "<a:noFill/>"
+        return no_fill()
     rgb = getattr(fill, "rgb", "000000")
     opacity = getattr(fill, "opacity", 1.0)
-    alpha = int(max(0.0, min(1.0, opacity)) * 100000)
-    return (
-        "<a:solidFill>"
-        f"<a:srgbClr val=\"{rgb}\">"
-        f"<a:alpha val=\"{alpha}\"/>"
-        "</a:srgbClr>"
-        "</a:solidFill>"
-    )
+    alpha = opacity_to_ppt(opacity)
+    return solid_fill(rgb, alpha=alpha)
 
 
-def _stroke_xml(path: Path) -> str:
+def _stroke_elem(path: Path) -> etree._Element:
     stroke = getattr(path, "stroke", None)
     if stroke is None:
-        return "<a:ln><a:noFill/></a:ln>"
+        line = a_elem("ln")
+        a_sub(line, "noFill")
+        return line
     paint = getattr(stroke, "paint", None)
     rgb = getattr(paint, "rgb", "000000") if paint else "000000"
     opacity = getattr(paint, "opacity", getattr(stroke, "opacity", 1.0))
-    alpha = int(max(0.0, min(1.0, opacity)) * 100000)
+    alpha = opacity_to_ppt(opacity)
     width = getattr(stroke, "width", 1.0) or 1.0
-    return (
-        f"<a:ln w=\"{px_to_emu(width)}\">"
-        f"<a:solidFill><a:srgbClr val=\"{rgb}\"><a:alpha val=\"{alpha}\"/></a:srgbClr></a:solidFill>"
-        "</a:ln>"
-    )
+    return ln(px_to_emu(width), solid_fill(rgb, alpha=alpha))
 
 
 __all__ = ["PathMapper", "PathDecision"]

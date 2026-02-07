@@ -3,29 +3,31 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
-from typing import Any, Iterable, Mapping, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from lxml import etree
 
-from svg2ooxml.css import StyleResolver
-from svg2ooxml.ir.scene import SceneGraph
 from svg2ooxml.core.parser import ParseResult
 from svg2ooxml.core.parser.units import UnitConverter
+from svg2ooxml.css import StyleResolver
+from svg2ooxml.ir.scene import SceneGraph
 from svg2ooxml.policy import PolicyContext, PolicyEngine
 from svg2ooxml.services import ConversionServices
 
 if TYPE_CHECKING:  # pragma: no cover - imported for type hints only
-    from svg2ooxml.core.tracing import ConversionTracer
     from svg2ooxml.core.ir.text_converter import TextConverter
+    from svg2ooxml.core.tracing import ConversionTracer
+    from svg2ooxml.ir.animation import AnimationDefinition
 
 from svg2ooxml.core.hyperlinks import HyperlinkProcessor
-from svg2ooxml.core.traversal.traversal import ElementTraversal
 from svg2ooxml.core.ir.context import IRConverterContext
 from svg2ooxml.core.ir.resource_tracker import ResourceTracker
 from svg2ooxml.core.ir.resvg_bridge import ResvgBridge
 from svg2ooxml.core.ir.shape_pipeline import ShapePipeline
 from svg2ooxml.core.ir.text_pipeline import TextPipeline
+from svg2ooxml.core.traversal.traversal import ElementTraversal
 
 
 @dataclass
@@ -49,7 +51,7 @@ class IRConverter:
         logger: logging.Logger | None = None,
         policy_engine: PolicyEngine | None = None,
         policy_context: PolicyContext | None = None,
-        tracer: "ConversionTracer | None" = None,
+        tracer: ConversionTracer | None = None,
     ) -> None:
         self._context = IRConverterContext(
             services=services,
@@ -165,7 +167,7 @@ class IRConverter:
         )
 
     @property
-    def text_converter(self) -> "TextConverter":
+    def text_converter(self) -> TextConverter:
         """Expose text converter helper for downstream integrations/tests."""
 
         return self._text_pipeline.converter

@@ -33,7 +33,7 @@ __all__ = [
 ]
 
 # map symbol -> relative module
-_symbol_map = {'ColorInterpolator': 'interpolation', 'BezierEasing': 'interpolation', 'InterpolationResult': 'interpolation', 'NumericInterpolator': 'interpolation', 'TransformInterpolator': 'interpolation', 'InterpolationEngine': 'interpolation', 'DEFAULT_TMP_DIR': 'tempfiles', 'PROJECT_ROOT': 'tempfiles', 'project_temp_dir': 'tempfiles', 'temporary_directory': 'tempfiles', 'parse_time_value': 'time', 'ShapeData': 'types'}
+_symbol_map = {'InterpolationEngine': 'interpolation', 'InterpolationResult': 'interpolation', 'ColorInterpolator': 'interpolation', 'BezierEasing': 'interpolation', 'NumericInterpolator': 'interpolation', 'TransformInterpolator': 'interpolation', 'temporary_directory': 'tempfiles', 'project_temp_dir': 'tempfiles', 'PROJECT_ROOT': 'tempfiles', 'DEFAULT_TMP_DIR': 'tempfiles', 'parse_time_value': 'time', 'ShapeData': 'types'}
 _module_map = {'compat': 'compat', 'conversions': 'conversions', 'geometry': 'geometry', 'geometry.algorithms': 'geometry.algorithms', 'geometry.clip': 'geometry.clip', 'geometry.fractional': 'geometry.fractional', 'geometry.paths': 'geometry.paths', 'geometry.transforms': 'geometry.transforms', 'interpolation': 'interpolation', 'style': 'style', 'tempfiles': 'tempfiles', 'time': 'time', 'types': 'types', 'units': 'units'}
 
 

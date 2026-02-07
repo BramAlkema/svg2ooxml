@@ -1,6 +1,5 @@
 """Tests for animation policy."""
 
-import pytest
 from unittest.mock import Mock
 
 from svg2ooxml.drawingml.animation.policy import AnimationPolicy

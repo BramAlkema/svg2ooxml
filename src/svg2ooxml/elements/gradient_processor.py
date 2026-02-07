@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """
 Gradient Processor
 
@@ -14,16 +12,18 @@ Features:
 - PowerPoint DrawingML generation
 """
 
+from __future__ import annotations
+
 import hashlib
 import logging
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Dict, List
+from typing import Any
 
 from lxml import etree as ET
 
+from svg2ooxml.color import parse_color, summarize_palette
 from svg2ooxml.services import ConversionServices
-from svg2ooxml.color import summarize_palette, parse_color
 
 logger = logging.getLogger(__name__)
 

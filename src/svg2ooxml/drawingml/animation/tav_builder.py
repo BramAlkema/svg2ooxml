@@ -11,9 +11,12 @@ TAV elements represent keyframes in PowerPoint animations, with support for:
 
 from __future__ import annotations
 
-from typing import Protocol, Sequence, TYPE_CHECKING
+from collections.abc import Sequence
+from typing import TYPE_CHECKING, Protocol
 
 from lxml import etree
+
+from svg2ooxml.common.conversions.opacity import opacity_to_ppt
 
 if TYPE_CHECKING:
     from .xml_builders import AnimationXMLBuilder
@@ -111,7 +114,7 @@ class TAVBuilder:
         uses_custom_namespace = False
         splines = key_splines or []
 
-        for index, (time_fraction, raw_value) in enumerate(zip(resolved_times, values)):
+        for index, (time_fraction, raw_value) in enumerate(zip(resolved_times, values, strict=True)):
             # Compute time in milliseconds
             tm = int(round(max(0.0, min(1.0, time_fraction)) * duration_ms))
 
@@ -292,7 +295,7 @@ class TAVBuilder:
         """
         # Clamp each value to 0.0-1.0 and format with 4 decimals
         formatted = [
-            "{0:.4f}".format(max(0.0, min(1.0, value)))
+            f"{max(0.0, min(1.0, value)):.4f}"
             for value in spline
         ]
         return ",".join(formatted)
@@ -313,5 +316,4 @@ class TAVBuilder:
             >>> TAVBuilder._clamp_percentage(1.5)
             100000
         """
-        clamped = max(0.0, min(1.0, value))
-        return int(round(clamped * 100000))
+        return opacity_to_ppt(value)

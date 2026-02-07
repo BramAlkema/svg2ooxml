@@ -35,15 +35,18 @@ for paint server conversion (gradients, patterns, etc.).
 
 from __future__ import annotations
 
-import math
 from typing import TYPE_CHECKING
 
-from svg2ooxml.ir.geometry import Point, LineSegment, BezierSegment, SegmentType
+from svg2ooxml.ir.geometry import BezierSegment, LineSegment, Point, SegmentType
 
 if TYPE_CHECKING:
-    from svg2ooxml.core.resvg.usvg_tree import PathNode, RectNode, CircleNode, EllipseNode, BaseNode
-    from svg2ooxml.core.resvg.geometry.primitives import MoveTo, LineTo, CubicCurve, QuadraticCurve, ClosePath
-    from svg2ooxml.core.resvg.geometry.path_normalizer import NormalizedPath
+    from svg2ooxml.core.resvg.usvg_tree import (
+        BaseNode,
+        CircleNode,
+        EllipseNode,
+        PathNode,
+        RectNode,
+    )
 
 
 class ResvgShapeAdapterError(Exception):
@@ -64,7 +67,7 @@ class ResvgShapeAdapter:
     - EllipseNode: Approximates with 4 cubic Bezier curves
     """
 
-    def from_path_node(self, node: "PathNode") -> list[SegmentType]:
+    def from_path_node(self, node: PathNode) -> list[SegmentType]:
         """Convert a resvg PathNode to IR segments.
 
         ✅ node.transform IS applied! Transform is baked into segment coordinates.
@@ -93,7 +96,7 @@ class ResvgShapeAdapter:
 
         return segments
 
-    def from_rect_node(self, node: "RectNode") -> list[SegmentType]:
+    def from_rect_node(self, node: RectNode) -> list[SegmentType]:
         """Convert a resvg RectNode to IR segments.
 
         Creates a closed rectangular path. Handles rounded corners (rx/ry)
@@ -204,7 +207,7 @@ class ResvgShapeAdapter:
 
         return segments
 
-    def from_circle_node(self, node: "CircleNode") -> list[SegmentType]:
+    def from_circle_node(self, node: CircleNode) -> list[SegmentType]:
         """Convert a resvg CircleNode to IR segments.
 
         Approximates circle using 4 cubic Bezier curves (standard technique).
@@ -231,7 +234,7 @@ class ResvgShapeAdapter:
 
         return segments
 
-    def from_ellipse_node(self, node: "EllipseNode") -> list[SegmentType]:
+    def from_ellipse_node(self, node: EllipseNode) -> list[SegmentType]:
         """Convert a resvg EllipseNode to IR segments.
 
         Approximates ellipse using 4 cubic Bezier curves.
@@ -335,11 +338,11 @@ class ResvgShapeAdapter:
             List of IR segment objects
         """
         from svg2ooxml.core.resvg.geometry.primitives import (
-            MoveTo,
-            LineTo,
-            CubicCurve,
-            QuadraticCurve,
             ClosePath,
+            CubicCurve,
+            LineTo,
+            MoveTo,
+            QuadraticCurve,
         )
 
         segments: list[SegmentType] = []
@@ -398,7 +401,7 @@ class ResvgShapeAdapter:
 
         return segments
 
-    def from_node(self, node: "BaseNode") -> list[SegmentType]:
+    def from_node(self, node: BaseNode) -> list[SegmentType]:
         """Convert any supported resvg node to IR segments.
 
         Dispatches to appropriate converter based on node type.
@@ -412,7 +415,12 @@ class ResvgShapeAdapter:
         Raises:
             ResvgShapeAdapterError: If node type is unsupported
         """
-        from svg2ooxml.core.resvg.usvg_tree import PathNode, RectNode, CircleNode, EllipseNode
+        from svg2ooxml.core.resvg.usvg_tree import (
+            CircleNode,
+            EllipseNode,
+            PathNode,
+            RectNode,
+        )
 
         if isinstance(node, PathNode):
             return self.from_path_node(node)

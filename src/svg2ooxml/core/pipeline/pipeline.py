@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Iterable, Tuple
 
-DEFAULT_STAGE_NAMES: Tuple[str, ...] = (
+DEFAULT_STAGE_NAMES: tuple[str, ...] = (
     'parse_svg',
     'build_scene',
     'write_package',
@@ -16,7 +16,7 @@ DEFAULT_STAGE_NAMES: Tuple[str, ...] = (
 class ConversionPipeline:
     """Lightweight pipeline descriptor for the CLI converter."""
 
-    stages: Tuple[str, ...] = DEFAULT_STAGE_NAMES
+    stages: tuple[str, ...] = DEFAULT_STAGE_NAMES
 
     def describe_stage_names(self) -> Iterable[str]:
         return self.stages

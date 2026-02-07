@@ -1,16 +1,16 @@
 from __future__ import annotations
 
 import struct
-from pathlib import Path
 import uuid
+from pathlib import Path
 
 import pytest
 
 from svg2ooxml.services.fonts.eot import (
-    HEADER_SCHEMA,
-    HEADER_SIZE,
     EOT_MAGIC,
     EOT_VERSION,
+    HEADER_SCHEMA,
+    HEADER_SIZE,
     build_eot,
 )
 

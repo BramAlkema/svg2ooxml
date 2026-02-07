@@ -6,181 +6,25 @@ structures (<p:timing>, <p:par>, <a:cBhvr>, <a:tav>, etc.).
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from lxml import etree
 
 from svg2ooxml.drawingml.xml_builder import (
-    a_elem,
-    a_sub,
     p_elem,
     p_sub,
-    to_string,
 )
 
 from .constants import SVG2_ANIMATION_NS
+
+if TYPE_CHECKING:
+    from .id_allocator import TimingIDs
 
 __all__ = ["AnimationXMLBuilder"]
 
 
 class AnimationXMLBuilder:
     """Build PowerPoint animation timing XML using lxml."""
-
-    # ------------------------------------------------------------------ #
-    # Top-Level Containers                                               #
-    # ------------------------------------------------------------------ #
-
-    def build_timing_container(
-        self,
-        *,
-        timing_id: int,
-        fragments: list[str],
-        animated_shape_ids: list[str],
-    ) -> str:
-        """Build <p:timing> root container with mainSeq hierarchy."""
-        timing = p_elem("timing")
-        tnlst = p_sub(timing, "tnLst")
-        
-        # 1. tmRoot container
-        root_par = p_sub(tnlst, "par")
-        root_ctn = p_sub(root_par, "cTn", id=str(timing_id), dur="indefinite", restart="never", nodeType="tmRoot")
-        root_child_tn_lst = p_sub(root_ctn, "childTnLst")
-        
-        # 2. mainSeq container
-        seq = p_sub(root_child_tn_lst, "seq", concurrent="1", nextAc="seek")
-        seq_ctn = p_sub(seq, "cTn", id=str(timing_id + 1), dur="indefinite", nodeType="mainSeq")
-        child_tn_lst = p_sub(seq_ctn, "childTnLst")
-
-        # 3. Append fragments directly to mainSeq
-        for fragment in fragments:
-            try:
-                from svg2ooxml.drawingml.xml_builder import NS_A, NS_P
-                wrapped = f'<root xmlns:a="{NS_A}" xmlns:p="{NS_P}">{fragment}</root>'
-                root = etree.fromstring(wrapped)
-                if len(root) > 0:
-                    child = root[0]
-                    # Strip duplicated namespaces
-                    for prefix in ("a", "p"):
-                        attr_name = f"{{http://www.w3.org/2000/xmlns/}}{prefix}"
-                        if attr_name in child.attrib:
-                            del child.attrib[attr_name]
-                    child_tn_lst.append(child)
-            except etree.XMLSyntaxError:
-                continue
-
-        # Add navigation triggers to the sequence (Standard PowerPoint behavior)
-        prev_cond_lst = p_sub(seq, "prevCondLst")
-        prev_cond = p_sub(prev_cond_lst, "cond", evt="onPrev", delay="0")
-        p_sub(p_sub(prev_cond, "tgtEl"), "sldTgt")
-
-        next_cond_lst = p_sub(seq, "nextCondLst")
-        next_cond = p_sub(next_cond_lst, "cond", evt="onNext", delay="0")
-        p_sub(p_sub(next_cond, "tgtEl"), "sldTgt")
-
-        # 4. Build List (p:bldLst)
-        if animated_shape_ids:
-            bld_lst = p_sub(timing, "bldLst")
-            for shape_id in animated_shape_ids:
-                p_sub(bld_lst, "bldP", spid=shape_id, grpId="0", animBg="1")
-
-        return to_string(timing)
-
-    def build_par_container(
-        self,
-        *,
-        par_id: int,
-        duration_ms: int,
-        delay_ms: int,
-        child_content: str,
-        preset_id: int = 0,
-        preset_class: str = "entr",
-        preset_subtype: int = 0,
-        node_type: str = "withEffect",
-    ) -> str:
-        """Build <p:par> container with timing and preset metadata."""
-        par = p_elem("par")
-        ctn = p_sub(
-            par, "cTn", 
-            id=str(par_id), 
-            dur=str(duration_ms), 
-            fill="hold", 
-            nodeType=node_type,
-            presetID=str(preset_id),
-            presetClass=preset_class,
-            presetSubtype=str(preset_subtype),
-            grpId="0"
-        )
-
-        # Start condition
-        stCondLst = p_sub(ctn, "stCondLst")
-        p_sub(stCondLst, "cond", delay=str(delay_ms)) # Revert to original delay, no evt
-
-        # Child timing list
-        child_tn_lst = p_sub(ctn, "childTnLst")
-
-        # Parse and append child content
-        if child_content and child_content.strip():
-            try:
-                from svg2ooxml.drawingml.xml_builder import NS_A, NS_P
-                wrapped = f'<root xmlns:a="{NS_A}" xmlns:p="{NS_P}">{child_content}</root>'
-                root = etree.fromstring(wrapped)
-                if len(root) > 0:
-                    child = root[0]
-                    # Strip duplicated namespaces
-                    for prefix in ("a", "p"):
-                        attr_name = f"{{http://www.w3.org/2000/xmlns/}}{prefix}"
-                        if attr_name in child.attrib:
-                            del child.attrib[attr_name]
-                    child_tn_lst.append(child)
-            except etree.XMLSyntaxError:
-                pass
-
-        return to_string(par)
-
-    def build_behavior_core(
-        self,
-        *,
-        behavior_id: int,
-        duration_ms: int,
-        target_shape: str,
-        repeat_count: str | int | None = None,
-        accel: int | None = None,
-        decel: int | None = None,
-        attr_name_list: list[str] | None = None,
-    ) -> str:
-        """Build <p:cBhvr> common behavior element."""
-        cBhvr = p_elem("cBhvr")
-
-        # Common timing node
-        ctn_attrs = {
-            "id": str(behavior_id),
-            "dur": str(duration_ms),
-            "fill": "hold",
-            "repeatCount": "0",
-            "nodeType": "withEffect",
-        }
-
-        if repeat_count is not None:
-            ctn_attrs["repeatCount"] = str(repeat_count)
-        if accel is not None:
-            ctn_attrs["accel"] = str(accel)
-        if decel is not None:
-            ctn_attrs["decel"] = str(decel)
-
-        cTn = p_sub(cBhvr, "cTn", **ctn_attrs)
-
-        # Start condition list for the behavior's internal time node
-        stCondLst = p_sub(cTn, "stCondLst")
-        p_sub(stCondLst, "cond", delay="0")
-
-        # Target element
-        tgtEl = p_sub(cBhvr, "tgtEl")
-        spTgt = p_sub(tgtEl, "spTgt", spid=target_shape)
-
-        # Optional attribute list
-        if attr_name_list is not None:
-            attrNameLst = self.build_attribute_list(attr_name_list)
-            cBhvr.append(attrNameLst)
-
-        return to_string(cBhvr)
 
     def build_attribute_list(
         self,
@@ -256,3 +100,245 @@ class AnimationXMLBuilder:
         val = p_elem("val")
         p_sub(val, "pt", x=x, y=y)
         return val
+
+    # ------------------------------------------------------------------ #
+    # Top-Level Containers                                               #
+    # ------------------------------------------------------------------ #
+
+    def build_timing_tree(
+        self,
+        *,
+        ids: TimingIDs,
+        animation_elements: list[etree._Element],
+        animated_shape_ids: list[str],
+    ) -> etree._Element:
+        """Build ECMA-376 compliant ``<p:timing>`` tree.
+
+        Returns the root element *without* serializing — the caller is
+        responsible for calling ``to_string()`` once at the end.
+
+        Structure::
+
+            <p:timing>
+              <p:tnLst>
+                <p:par>
+                  <p:cTn id="1" dur="indefinite" restart="never" nodeType="tmRoot">
+                    <p:childTnLst>
+                      <p:seq concurrent="1" nextAc="seek">
+                        <p:cTn id="2" dur="indefinite" nodeType="mainSeq">
+                          <p:childTnLst>
+                            <p:par>                        ← click group
+                              <p:cTn id="3" fill="hold">
+                                <p:stCondLst>
+                                  <p:cond delay="0"/>
+                                </p:stCondLst>
+                                <p:childTnLst>
+                                  ...animation <p:par> elements...
+                                </p:childTnLst>
+                              </p:cTn>
+                            </p:par>
+                          </p:childTnLst>
+                        </p:cTn>
+                        <p:prevCondLst>...</p:prevCondLst>
+                        <p:nextCondLst>...</p:nextCondLst>
+                      </p:seq>
+                    </p:childTnLst>
+                  </p:cTn>
+                </p:par>
+              </p:tnLst>
+              <p:bldLst>...</p:bldLst>
+            </p:timing>
+        """
+        timing = p_elem("timing")
+        tn_lst = p_sub(timing, "tnLst")
+
+        # tmRoot
+        root_par = p_sub(tn_lst, "par")
+        root_ctn = p_sub(
+            root_par, "cTn",
+            id=str(ids.root),
+            dur="indefinite",
+            restart="never",
+            nodeType="tmRoot",
+        )
+        root_child_tn_lst = p_sub(root_ctn, "childTnLst")
+
+        # mainSeq
+        seq = p_sub(root_child_tn_lst, "seq", concurrent="1", nextAc="seek")
+        seq_ctn = p_sub(
+            seq, "cTn",
+            id=str(ids.main_seq),
+            dur="indefinite",
+            nodeType="mainSeq",
+        )
+        main_child_tn_lst = p_sub(seq_ctn, "childTnLst")
+
+        # Click group wrapper
+        click_par = p_sub(main_child_tn_lst, "par")
+        click_ctn = p_sub(click_par, "cTn", id=str(ids.click_group), fill="hold")
+        click_st = p_sub(click_ctn, "stCondLst")
+        p_sub(click_st, "cond", delay="0")
+        click_child_tn_lst = p_sub(click_ctn, "childTnLst")
+
+        # Append animation elements
+        for elem in animation_elements:
+            click_child_tn_lst.append(elem)
+
+        # Navigation triggers
+        prev_cond_lst = p_sub(seq, "prevCondLst")
+        prev_cond = p_sub(prev_cond_lst, "cond", evt="onPrev", delay="0")
+        p_sub(p_sub(prev_cond, "tgtEl"), "sldTgt")
+
+        next_cond_lst = p_sub(seq, "nextCondLst")
+        next_cond = p_sub(next_cond_lst, "cond", evt="onNext", delay="0")
+        p_sub(p_sub(next_cond, "tgtEl"), "sldTgt")
+
+        # Build list
+        if animated_shape_ids:
+            bld_lst = p_sub(timing, "bldLst")
+            for shape_id in animated_shape_ids:
+                p_sub(bld_lst, "bldP", spid=shape_id, grpId="0", animBg="1")
+
+        return timing
+
+    def build_par_container_elem(
+        self,
+        *,
+        par_id: int,
+        duration_ms: int,
+        delay_ms: int,
+        child_element: etree._Element,
+        preset_id: int = 0,
+        preset_class: str = "entr",
+        preset_subtype: int = 0,
+        node_type: str = "withEffect",
+    ) -> etree._Element:
+        """Build ``<p:par>`` container accepting a child *element*."""
+        par = p_elem("par")
+        ctn = p_sub(
+            par, "cTn",
+            id=str(par_id),
+            dur=str(duration_ms),
+            fill="hold",
+            nodeType=node_type,
+            presetID=str(preset_id),
+            presetClass=preset_class,
+            presetSubtype=str(preset_subtype),
+            grpId="0",
+        )
+
+        st_cond_lst = p_sub(ctn, "stCondLst")
+        p_sub(st_cond_lst, "cond", delay=str(delay_ms))
+
+        child_tn_lst = p_sub(ctn, "childTnLst")
+        child_tn_lst.append(child_element)
+
+        return par
+
+    def build_behavior_core_elem(
+        self,
+        *,
+        behavior_id: int,
+        duration_ms: int,
+        target_shape: str,
+        repeat_count: str | int | None = None,
+        fill_mode: str | None = None,
+        additive: str | None = None,
+        accel: int | None = None,
+        decel: int | None = None,
+        attr_name_list: list[str] | None = None,
+    ) -> etree._Element:
+        """Build ``<p:cBhvr>`` common behavior element.
+
+        Parameters
+        ----------
+        fill_mode:
+            SVG fill mode: ``"freeze"`` → ``fill="hold"``,
+            ``"remove"`` → ``fill="remove"``.  Defaults to ``"hold"``
+            when *None*.
+        additive:
+            SVG additive mode: ``"sum"`` → ``additive="sum"`` on
+            ``<p:cBhvr>``.  ``"replace"`` or *None* omits the
+            attribute (PowerPoint default).
+        repeat_count:
+            SVG repeatCount: *None*/``1`` → ``repeatCount="0"``
+            (PowerPoint default, play once), ``"indefinite"`` →
+            ``repeatCount="indefinite"``, integer *N* →
+            ``repeatCount="{N * 1000}"``.
+        """
+        cBhvr = p_elem("cBhvr")
+
+        # Additive attribute on <p:cBhvr> itself (not on cTn)
+        if additive == "sum":
+            cBhvr.set("additive", "sum")
+
+        # Map fill_mode
+        ppt_fill = "hold"
+        if fill_mode == "remove":
+            ppt_fill = "remove"
+
+        # Map repeat_count
+        ppt_repeat = "0"
+        if repeat_count == "indefinite":
+            ppt_repeat = "indefinite"
+        elif repeat_count is not None:
+            try:
+                n = int(repeat_count)
+                if n > 1:
+                    ppt_repeat = str(n * 1000)
+            except (ValueError, TypeError):
+                pass
+
+        ctn_attrs: dict[str, str] = {
+            "id": str(behavior_id),
+            "dur": str(duration_ms),
+            "fill": ppt_fill,
+            "repeatCount": ppt_repeat,
+            "nodeType": "withEffect",
+        }
+        if accel is not None:
+            ctn_attrs["accel"] = str(accel)
+        if decel is not None:
+            ctn_attrs["decel"] = str(decel)
+
+        cTn = p_sub(cBhvr, "cTn", **ctn_attrs)
+
+        st_cond_lst = p_sub(cTn, "stCondLst")
+        p_sub(st_cond_lst, "cond", delay="0")
+
+        tgt_el = p_sub(cBhvr, "tgtEl")
+        p_sub(tgt_el, "spTgt", spid=target_shape)
+
+        if attr_name_list is not None:
+            cBhvr.append(self.build_attribute_list(attr_name_list))
+
+        return cBhvr
+
+    def build_set_elem(
+        self,
+        *,
+        behavior_id: int,
+        duration_ms: int,
+        target_shape: str,
+        ppt_attribute: str,
+        fill_mode: str | None = None,
+        additive: str | None = None,
+        repeat_count: str | int | None = None,
+    ) -> etree._Element:
+        """Build ``<p:set>`` element with behavior core.
+
+        The caller is responsible for appending ``<p:to>`` with the target
+        value after this method returns.
+        """
+        set_elem = p_elem("set")
+        cBhvr = self.build_behavior_core_elem(
+            behavior_id=behavior_id,
+            duration_ms=duration_ms,
+            target_shape=target_shape,
+            attr_name_list=[ppt_attribute],
+            fill_mode=fill_mode,
+            additive=additive,
+            repeat_count=repeat_count,
+        )
+        set_elem.append(cBhvr)
+        return set_elem

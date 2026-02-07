@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from lxml import etree
 
+from svg2ooxml.common.units import px_to_emu
 from svg2ooxml.services.filter_service import FilterService
 from svg2ooxml.services.filter_types import FilterEffectResult
-from svg2ooxml.common.units import px_to_emu
 
 
 def _resolve(service: FilterService, markup: str) -> list[FilterEffectResult]:
@@ -293,14 +293,10 @@ def test_diffuse_lighting_captures_light_source() -> None:
     effect = results[0]
     assert effect.metadata.get("filter_type") == "diffuse_lighting"
     assert effect.metadata.get("native_support") is False
-    assert effect.metadata.get("fallback_reason") == "diffuse_lighting_requires_emf"
-    assert effect.fallback == "emf"
-    assert "svg2ooxml:emf" in effect.effect.drawingml
-    assert effect.strategy == "vector"
+    assert effect.fallback == "raster"
+    assert effect.strategy == "raster"
     assets = effect.metadata.get("fallback_assets")
-    assert assets and assets[0]["type"] == "emf"
-    assert assets[0].get("data_hex") or assets[0].get("data")
-    assert assets[0].get("metadata", {}).get("filter_type") == "diffuse_lighting"
+    assert assets and assets[0]["type"] == "raster"
 
 
 def test_specular_lighting_serialises_spot_light() -> None:
@@ -317,10 +313,8 @@ def test_specular_lighting_serialises_spot_light() -> None:
     effect = results[0]
     assert effect.metadata.get("filter_type") == "specular_lighting"
     assert effect.metadata.get("native_support") is False
-    assert effect.metadata.get("fallback_reason") == "specular_lighting_requires_emf"
-    assert effect.fallback == "emf"
-    assert effect.strategy == "vector"
+    assert effect.metadata.get("fallback_reason") == "specular_lighting_rendered_via_resvg"
+    assert effect.fallback == "raster"
+    assert effect.strategy == "raster"
     assets = effect.metadata.get("fallback_assets")
-    assert assets and assets[0]["type"] == "emf"
-    assert assets[0].get("data_hex") or assets[0].get("data")
-    assert assets[0].get("metadata", {}).get("filter_type") == "specular_lighting"
+    assert assets and assets[0]["type"] == "raster"

@@ -3,7 +3,6 @@
 import pytest
 
 from svg2ooxml.common.units.conversion import (
-    ConversionContext,
     UnitConverter,
     emu_to_px,
     emu_to_unit,

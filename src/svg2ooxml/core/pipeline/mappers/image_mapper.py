@@ -7,14 +7,20 @@ from dataclasses import dataclass
 from typing import Any
 
 from svg2ooxml.drawingml.generator import px_to_emu
+
+# Import centralized XML builders for safe DrawingML generation
+from svg2ooxml.drawingml.xml_builder import (
+    a_sub,
+    graft_xml_fragment,
+    p_elem,
+    p_sub,
+    to_string,
+)
 from svg2ooxml.ir.scene import Image
 
 from .base import Mapper, MapperResult, OutputFormat
 from .clip_render import clip_result_to_xml
 from .image_adapter import ImageProcessingAdapter, create_image_adapter
-
-# Import centralized XML builders for safe DrawingML generation
-from svg2ooxml.drawingml.xml_builder import a_elem, a_sub, p_elem, p_sub, to_string
 
 
 @dataclass
@@ -148,11 +154,7 @@ class ImageMapper(Mapper):
 
         # Add clip_xml if present
         if clip_xml:
-            from lxml import etree
-            wrapped = f'<root xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">{clip_xml}</root>'
-            temp = etree.fromstring(wrapped.encode('utf-8'))
-            for child in temp:
-                spPr.append(child)
+            graft_xml_fragment(spPr, clip_xml)
 
         return to_string(pic)
 

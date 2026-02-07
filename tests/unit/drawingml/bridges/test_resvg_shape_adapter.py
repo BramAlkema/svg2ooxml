@@ -7,12 +7,21 @@ import pytest
 # Skip entire module if resvg is not available
 pytest.importorskip("svg2ooxml.core.resvg.usvg_tree")
 
-from svg2ooxml.drawingml.bridges.resvg_shape_adapter import ResvgShapeAdapter, ResvgShapeAdapterError
-from svg2ooxml.ir.geometry import Point, LineSegment, BezierSegment
-from svg2ooxml.core.resvg.usvg_tree import PathNode, RectNode, CircleNode, EllipseNode, GroupNode
-from svg2ooxml.core.resvg.geometry.path_normalizer import NormalizedPath, PathCommand
 from svg2ooxml.core.resvg.geometry.matrix import Matrix
+from svg2ooxml.core.resvg.geometry.path_normalizer import NormalizedPath, PathCommand
 from svg2ooxml.core.resvg.parser.presentation import Presentation
+from svg2ooxml.core.resvg.usvg_tree import (
+    CircleNode,
+    EllipseNode,
+    GroupNode,
+    PathNode,
+    RectNode,
+)
+from svg2ooxml.drawingml.bridges.resvg_shape_adapter import (
+    ResvgShapeAdapter,
+    ResvgShapeAdapterError,
+)
+from svg2ooxml.ir.geometry import BezierSegment, LineSegment
 
 
 def default_presentation() -> Presentation:
@@ -335,7 +344,7 @@ class TestResvgShapeAdapterPrimitives:
 
     def test_primitives_moveto_lineto(self):
         """Test MoveTo and LineTo primitive conversion."""
-        from svg2ooxml.core.resvg.geometry.primitives import MoveTo, LineTo
+        from svg2ooxml.core.resvg.geometry.primitives import LineTo, MoveTo
 
         adapter = ResvgShapeAdapter()
         primitives = (
@@ -366,7 +375,7 @@ class TestResvgShapeAdapterPrimitives:
 
     def test_primitives_cubic_curve(self):
         """Test CubicCurve primitive conversion."""
-        from svg2ooxml.core.resvg.geometry.primitives import MoveTo, CubicCurve
+        from svg2ooxml.core.resvg.geometry.primitives import CubicCurve, MoveTo
 
         adapter = ResvgShapeAdapter()
         primitives = (
@@ -393,7 +402,7 @@ class TestResvgShapeAdapterPrimitives:
 
     def test_primitives_close_path(self):
         """ClosePath now yields an explicit closing segment."""
-        from svg2ooxml.core.resvg.geometry.primitives import MoveTo, LineTo, ClosePath
+        from svg2ooxml.core.resvg.geometry.primitives import ClosePath, LineTo, MoveTo
 
         adapter = ResvgShapeAdapter()
         primitives = (
@@ -450,7 +459,6 @@ class TestResvgShapeAdapterTransforms:
 
     def test_rect_with_rotation(self):
         """Test rectangle with 90-degree rotation."""
-        import math
         adapter = ResvgShapeAdapter()
         # 90-degree rotation: cos(90°)=0, sin(90°)=1
         transform = Matrix(a=0.0, b=1.0, c=-1.0, d=0.0, e=0.0, f=0.0)

@@ -3,9 +3,22 @@
 from __future__ import annotations
 
 import math
-from typing import Any, Mapping
+from collections.abc import Mapping
+from typing import Any
 
+from svg2ooxml.common.conversions.angles import degrees_to_ppt
+from svg2ooxml.common.conversions.opacity import opacity_to_ppt
+from svg2ooxml.common.conversions.scale import position_to_ppt
 from svg2ooxml.drawingml.generator import px_to_emu
+
+# Import centralized XML builders for safe DrawingML generation
+from svg2ooxml.drawingml.xml_builder import (
+    a_elem,
+    a_sub,
+    no_fill,
+    solid_fill,
+    to_string,
+)
 from svg2ooxml.ir.paint import (
     GradientPaintRef,
     LinearGradientPaint,
@@ -15,16 +28,8 @@ from svg2ooxml.ir.paint import (
     StrokeCap,
     StrokeJoin,
 )
-from .markers import marker_end_elements
 
-# Import centralized XML builders for safe DrawingML generation
-from svg2ooxml.drawingml.xml_builder import (
-    a_elem,
-    a_sub,
-    to_string,
-    solid_fill,
-    no_fill,
-)
+from .markers import marker_end_elements
 
 
 def paint_to_fill(paint, *, opacity: float | None = None) -> str:
@@ -32,7 +37,7 @@ def paint_to_fill(paint, *, opacity: float | None = None) -> str:
         effective = paint.opacity
         if opacity is not None:
             effective = max(0.0, min(1.0, effective * opacity))
-        alpha = int(round(max(0.0, min(1.0, effective)) * 100000))
+        alpha = opacity_to_ppt(effective)
         return to_string(solid_fill(paint.rgb, alpha=alpha))
     if isinstance(paint, LinearGradientPaint):
         return linear_gradient_to_fill(paint)
@@ -53,25 +58,15 @@ def stroke_to_xml(stroke, metadata: Mapping[str, Any] | None = None) -> str:
     if isinstance(metadata, Mapping):
         markers = metadata.get("markers") or {}
 
-    head_xml, tail_xml = marker_end_elements(markers)
+    head_elem, tail_elem = marker_end_elements(markers)
 
     if stroke is None or stroke.paint is None:
         # Create ln element with noFill
         ln = a_elem("ln")
         a_sub(ln, "noFill")
-        # Add markers if present (parse XML strings to elements)
-        from lxml import etree
-        if tail_xml:
-            # Add namespace declaration for parsing
-            wrapped = f'<root xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">{tail_xml}</root>'
-            temp = etree.fromstring(wrapped.encode('utf-8'))
-            tail_elem = temp[0]
+        if tail_elem is not None:
             ln.append(tail_elem)
-        if head_xml:
-            # Add namespace declaration for parsing
-            wrapped = f'<root xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">{head_xml}</root>'
-            temp = etree.fromstring(wrapped.encode('utf-8'))
-            head_elem = temp[0]
+        if head_elem is not None:
             ln.append(head_elem)
         return to_string(ln)
 
@@ -82,7 +77,7 @@ def stroke_to_xml(stroke, metadata: Mapping[str, Any] | None = None) -> str:
     paint = stroke.paint
     if isinstance(paint, SolidPaint):
         color = paint.rgb.upper()
-        alpha = int(round(max(0.0, min(1.0, paint.opacity)) * 100000))
+        alpha = opacity_to_ppt(paint.opacity)
         fill = solid_fill(color, alpha=alpha)
         ln.append(fill)
     elif isinstance(paint, PatternPaint):
@@ -123,19 +118,10 @@ def stroke_to_xml(stroke, metadata: Mapping[str, Any] | None = None) -> str:
         else:
             a_sub(ln, "miter")
 
-    # Add markers (parse XML strings to elements)
-    from lxml import etree
-    if tail_xml:
-        # Add namespace declaration for parsing
-        wrapped = f'<root xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">{tail_xml}</root>'
-        temp = etree.fromstring(wrapped.encode('utf-8'))
-        tail_elem = temp[0]
+    # Add markers if present
+    if tail_elem is not None:
         ln.append(tail_elem)
-    if head_xml:
-        # Add namespace declaration for parsing
-        wrapped = f'<root xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">{head_xml}</root>'
-        temp = etree.fromstring(wrapped.encode('utf-8'))
-        head_elem = temp[0]
+    if head_elem is not None:
         ln.append(head_elem)
 
     return to_string(ln)
@@ -216,7 +202,7 @@ def _linear_gradient_to_fill_elem(paint: LinearGradientPaint):
     else:
         radians = math.atan2(dy, dx)
         angle = (450 - math.degrees(radians)) % 360
-    ang_val = int(round(angle * 60000))
+    ang_val = degrees_to_ppt(angle)
 
     # Build gradient fill element
     gradFill = a_elem("gradFill", rotWithShape="1")
@@ -241,10 +227,10 @@ def _radial_gradient_to_fill_elem(paint: RadialGradientPaint):
     """Create radial gradient fill element (internal helper)."""
     cx, cy = paint.center
     radius = max(paint.radius, 1e-6)
-    left = max(0, min(100000, int(round(max(0.0, (cx - radius)) * 100000))))
-    top = max(0, min(100000, int(round(max(0.0, (cy - radius)) * 100000))))
-    right = max(0, min(100000, int(round(max(0.0, (1.0 - (cx + radius))) * 100000))))
-    bottom = max(0, min(100000, int(round(max(0.0, (1.0 - (cy + radius))) * 100000))))
+    left = position_to_ppt(max(0.0, cx - radius))
+    top = position_to_ppt(max(0.0, cy - radius))
+    right = position_to_ppt(max(0.0, 1.0 - (cx + radius)))
+    bottom = position_to_ppt(max(0.0, 1.0 - (cy + radius)))
 
     # Build gradient fill element
     gradFill = a_elem("gradFill", rotWithShape="1")
@@ -283,8 +269,7 @@ def _pattern_to_fill_elem(paint: PatternPaint, *, opacity: float | None = None):
     fgClr = a_sub(pattFill, "fgClr")
     fg_srgbClr = a_sub(fgClr, "srgbClr", val=foreground)
     if opacity is not None and opacity < 0.999:
-        alpha_val = int(round(max(0.0, min(1.0, opacity)) * 100000))
-        a_sub(fg_srgbClr, "alpha", val=alpha_val)
+        a_sub(fg_srgbClr, "alpha", val=opacity_to_ppt(opacity))
 
     # Background color
     bgClr = a_sub(pattFill, "bgClr")
@@ -312,8 +297,8 @@ def _gradient_stop_elem(stop):
 
     Internal helper that returns lxml element for efficient composition.
     """
-    position = int(max(0.0, min(1.0, stop.offset)) * 100000)
-    alpha = int(max(0.0, min(1.0, stop.opacity)) * 100000)
+    position = position_to_ppt(stop.offset)
+    alpha = opacity_to_ppt(stop.opacity)
 
     gs = a_elem("gs", pos=position)
     srgbClr = a_sub(gs, "srgbClr", val=stop.rgb.upper())

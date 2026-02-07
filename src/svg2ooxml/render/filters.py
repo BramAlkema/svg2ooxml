@@ -6,8 +6,9 @@ import base64
 import binascii
 import math
 import urllib.parse
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
+from typing import Any
 
 import numpy as np
 
@@ -118,19 +119,19 @@ class ComponentTransferPlan:
 class FilterPrimitivePlan:
     primitive: FilterPrimitive
     tag: str
-    inputs: Tuple[Optional[str], ...] = ()
-    result_name: Optional[str] = None
+    inputs: tuple[str | None, ...] = ()
+    result_name: str | None = None
     color_mode: str = "sRGB"
-    extra: Dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(slots=True)
 class FilterPlan:
     filter_node: FilterNode
-    primitives: List[FilterPrimitivePlan]
+    primitives: list[FilterPrimitivePlan]
 
 
-def plan_filter(filter_node: FilterNode) -> Optional[FilterPlan]:
+def plan_filter(filter_node: FilterNode) -> FilterPlan | None:
     """Return a filter plan or *None* when the filter must fall back."""
 
     try:
@@ -141,7 +142,7 @@ def plan_filter(filter_node: FilterNode) -> Optional[FilterPlan]:
 
 def _plan_filter(filter_node: FilterNode) -> FilterPlan:
     available: set[str] = {"SourceGraphic", "SourceAlpha"}
-    plans: List[FilterPrimitivePlan] = []
+    plans: list[FilterPrimitivePlan] = []
 
     for primitive in filter_node.primitives:
         tag_lower = primitive.tag.lower()
@@ -150,8 +151,8 @@ def _plan_filter(filter_node: FilterNode) -> FilterPlan:
 
         color_mode = _resolve_color_mode(filter_node, primitive)
         attrs = primitive.attributes
-        inputs: List[Optional[str]] = []
-        extra: Dict[str, Any] = {}
+        inputs: list[str | None] = []
+        extra: dict[str, Any] = {}
 
         if tag_lower == "fegaussianblur":
             inputs.append(_normalise_input(attrs.get("in"), available, primitive, allow_default=True, label="in"))
@@ -251,13 +252,13 @@ def _plan_filter(filter_node: FilterNode) -> FilterPlan:
 
 
 def _normalise_input(
-    raw_value: Optional[str],
+    raw_value: str | None,
     available: Iterable[str],
     primitive: FilterPrimitive,
     *,
     allow_default: bool,
     label: str,
-) -> Optional[str]:
+) -> str | None:
     if raw_value is None or not raw_value.strip():
         if allow_default:
             return None
@@ -268,8 +269,8 @@ def _normalise_input(
     return name
 
 
-def _collect_merge_inputs(primitive: FilterPrimitive, available: Iterable[str]) -> Tuple[Optional[str], ...]:
-    inputs: List[Optional[str]] = []
+def _collect_merge_inputs(primitive: FilterPrimitive, available: Iterable[str]) -> tuple[str | None, ...]:
+    inputs: list[str | None] = []
     for node in primitive.children:
         if node.tag.lower() != "femergenode":
             continue
@@ -280,7 +281,7 @@ def _collect_merge_inputs(primitive: FilterPrimitive, available: Iterable[str]) 
     return tuple(inputs)
 
 
-def _parse_number(value: Optional[str], default: float = 0.0) -> float:
+def _parse_number(value: str | None, default: float = 0.0) -> float:
     if value is None:
         return default
     try:
@@ -294,10 +295,10 @@ def _parse_number(value: Optional[str], default: float = 0.0) -> float:
         return default
 
 
-def _parse_float_list(payload: Optional[str]) -> List[float]:
+def _parse_float_list(payload: str | None) -> list[float]:
     if not payload:
         return []
-    values: List[float] = []
+    values: list[float] = []
     for token in payload.replace(",", " ").split():
         try:
             values.append(float(token))
@@ -306,7 +307,7 @@ def _parse_float_list(payload: Optional[str]) -> List[float]:
     return values
 
 
-def _parse_std_deviation(value: Optional[str]) -> Tuple[float, float]:
+def _parse_std_deviation(value: str | None) -> tuple[float, float]:
     values = _parse_float_list(value)
     if not values:
         return (0.0, 0.0)
@@ -315,7 +316,7 @@ def _parse_std_deviation(value: Optional[str]) -> Tuple[float, float]:
     return (abs(values[0]), abs(values[1]))
 
 
-def _parse_radius(value: Optional[str]) -> Tuple[float, float]:
+def _parse_radius(value: str | None) -> tuple[float, float]:
     values = _parse_float_list(value)
     if not values:
         return (0.0, 0.0)
@@ -365,7 +366,7 @@ def _parse_component_transfer_functions(primitive: FilterPrimitive) -> Component
     )
 
 
-def _parse_turbulence_params(primitive: FilterPrimitive) -> Dict[str, Any]:
+def _parse_turbulence_params(primitive: FilterPrimitive) -> dict[str, Any]:
     attrs = primitive.attributes
     freq_values = _parse_float_list(attrs.get("baseFrequency"))
     if not freq_values:
@@ -390,7 +391,7 @@ def _parse_turbulence_params(primitive: FilterPrimitive) -> Dict[str, Any]:
     }
 
 
-def _parse_kernel_unit(value: Optional[str]) -> tuple[float, float]:
+def _parse_kernel_unit(value: str | None) -> tuple[float, float]:
     values = _parse_float_list(value)
     if not values:
         return (1.0, 1.0)
@@ -407,7 +408,7 @@ def _parse_lighting_color(attrs: Mapping[str, str], styles: Mapping[str, str]) -
     return (color.r, color.g, color.b)
 
 
-def _parse_light(primitive: FilterPrimitive) -> Optional[Dict[str, Any]]:
+def _parse_light(primitive: FilterPrimitive) -> dict[str, Any] | None:
     for child in primitive.children:
         tag = child.tag.lower()
         attrs = child.attributes
@@ -444,7 +445,7 @@ def _parse_light(primitive: FilterPrimitive) -> Optional[Dict[str, Any]]:
     return None
 
 
-def _plan_image_primitive(primitive: FilterPrimitive) -> Dict[str, Any]:
+def _plan_image_primitive(primitive: FilterPrimitive) -> dict[str, Any]:
     href = _extract_href(primitive.attributes)
     if not href:
         raise UnsupportedPrimitiveError(primitive.tag, "feImage requires an href attribute", primitive=primitive)
@@ -482,7 +483,7 @@ def _plan_image_primitive(primitive: FilterPrimitive) -> Dict[str, Any]:
     }
 
 
-def _extract_href(attrs: Mapping[str, str]) -> Optional[str]:
+def _extract_href(attrs: Mapping[str, str]) -> str | None:
     for key in ("href", "xlink:href", "{http://www.w3.org/1999/xlink}href"):
         value = attrs.get(key)
         if value:
@@ -490,7 +491,7 @@ def _extract_href(attrs: Mapping[str, str]) -> Optional[str]:
     return None
 
 
-def _decode_data_uri(uri: str) -> Tuple[Optional[str], bytes]:
+def _decode_data_uri(uri: str) -> tuple[str | None, bytes]:
     if not uri.startswith("data:"):
         raise ValueError("external feImage references are not supported")
     header, _, payload = uri.partition(",")
@@ -524,7 +525,7 @@ def apply_filter(
     region = _compute_filter_region(plan.filter_node, bounds, viewport)
     unit_scale = _primitive_unit_scale(plan.filter_node, bounds, viewport)
 
-    images: Dict[str, Surface] = {
+    images: dict[str, Surface] = {
         "SourceGraphic": surface.clone(),
         "SourceAlpha": _extract_alpha(surface),
     }
@@ -640,11 +641,11 @@ def apply_filter(
 
 def _resolve_inputs(
     images: Mapping[str, Surface],
-    names: Sequence[Optional[str]],
+    names: Sequence[str | None],
     current: Surface,
     linear: bool,
-) -> List[Surface]:
-    resolved: List[Surface] = []
+) -> list[Surface]:
+    resolved: list[Surface] = []
     for name in names:
         input_surface = _resolve_input_surface(images, name, current)
         resolved.append(_convert_to_colorspace(input_surface, linear))
@@ -724,7 +725,7 @@ def _extract_alpha(surface: Surface) -> Surface:
     return alpha_surface
 
 
-def _apply_color_matrix(surface: Surface, attrs: Dict[str, str]) -> Surface:
+def _apply_color_matrix(surface: Surface, attrs: dict[str, str]) -> Surface:
     matrix_type = attrs.get("type", "matrix")
     data = surface.data.copy()
 
@@ -1164,7 +1165,7 @@ def _place_image_surface(image: Surface, width: int, height: int) -> Surface:
     return result
 
 
-def _apply_flood(width: int, height: int, attrs: Dict[str, str], styles: Dict[str, str], mode: str) -> Surface:
+def _apply_flood(width: int, height: int, attrs: dict[str, str], styles: dict[str, str], mode: str) -> Surface:
     color_value = attrs.get("flood-color") or styles.get("flood-color") or "#000000"
     opacity_value = attrs.get("flood-opacity") or styles.get("flood-opacity")
     opacity = float(opacity_value) if opacity_value is not None and opacity_value.strip() else 1.0
@@ -1214,7 +1215,7 @@ def _apply_composite(a: Surface, b: Surface, operator: str) -> Surface:
     return result
 
 
-def _resolve_input_surface(images: Dict[str, Surface], name: Optional[str], fallback: Surface) -> Surface:
+def _resolve_input_surface(images: dict[str, Surface], name: str | None, fallback: Surface) -> Surface:
     if not name:
         return fallback.clone()
     surface = images.get(name)
@@ -1299,7 +1300,7 @@ def _compute_filter_region(
     return left, top, right, bottom
 
 
-def _parse_fraction(value: Optional[str], default: float) -> float:
+def _parse_fraction(value: str | None, default: float) -> float:
     if value is None:
         return default
     value = value.strip()
@@ -1313,7 +1314,7 @@ def _parse_fraction(value: Optional[str], default: float) -> float:
         return default
 
 
-def _parse_user_length(value: Optional[str], default: float, viewport_length: float) -> float:
+def _parse_user_length(value: str | None, default: float, viewport_length: float) -> float:
     if value is None:
         return default
     value = value.strip()
@@ -1358,7 +1359,7 @@ def _linear_to_srgb_surface(surface: Surface) -> Surface:
     return result
 
 
-def _apply_blend(a: Surface, b: Surface, mode: Optional[str], linear: bool) -> Surface:
+def _apply_blend(a: Surface, b: Surface, mode: str | None, linear: bool) -> Surface:
     mode = (mode or "normal").strip().lower()
     _ = linear  # linear interpolation placeholder for future enhancements
     src = a.data.copy()

@@ -4,15 +4,22 @@ from __future__ import annotations
 
 import logging
 import math
-from typing import Callable, Mapping
+from collections.abc import Callable, Mapping
 
 from lxml import etree
 
-from svg2ooxml.drawingml.generator import DrawingMLPathGenerator, px_to_emu
-from svg2ooxml.ir.geometry import Rect
-from svg2ooxml.ir.scene import ClipRef, ClipStrategy, MaskDefinition, MaskInstance, MaskMode, MaskRef
 from svg2ooxml.clipmask.types import ClipDefinition, MaskInfo
 from svg2ooxml.common.geometry import Matrix2D
+from svg2ooxml.drawingml.generator import DrawingMLPathGenerator, px_to_emu
+from svg2ooxml.ir.geometry import Rect
+from svg2ooxml.ir.scene import (
+    ClipRef,
+    ClipStrategy,
+    MaskDefinition,
+    MaskInstance,
+    MaskMode,
+    MaskRef,
+)
 from svg2ooxml.services import ConversionServices
 
 GeometryPayload = tuple[str, Rect, tuple[int, int]]

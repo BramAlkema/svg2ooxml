@@ -1,11 +1,11 @@
 import os
 import subprocess
 import time
+from urllib.parse import urlparse
 
 import pytest
 import requests
 from requests import exceptions as request_exceptions
-from urllib.parse import urlparse
 
 try:  # pragma: no cover - optional dependency
     import google.auth
@@ -39,7 +39,7 @@ def _request(method: str, path: str, *, json: dict | None = None, headers: dict 
             timeout=30,
         )
         resp.raise_for_status()
-    except request_exceptions.HTTPError as exc:
+    except request_exceptions.HTTPError:
         if not SMOKE_STRICT and resp.status_code == 404:
             pytest.skip(f"Smoke endpoint returned 404: {resp.url}")
         raise

@@ -1,684 +1,756 @@
-"""Tests for transform animation handler."""
+"""Tests for TransformAnimationHandler."""
+
+from __future__ import annotations
 
 import pytest
-from unittest.mock import Mock, call
 from lxml import etree
 
+from svg2ooxml.common.geometry.matrix import Matrix2D
+from svg2ooxml.common.units import UnitConverter
 from svg2ooxml.drawingml.animation.handlers.transform import TransformAnimationHandler
-from svg2ooxml.drawingml.animation.handlers.base import AnimationDefinition
+from svg2ooxml.drawingml.animation.tav_builder import TAVBuilder
+from svg2ooxml.drawingml.animation.value_processors import ValueProcessor
+from svg2ooxml.drawingml.animation.xml_builders import AnimationXMLBuilder
+from svg2ooxml.drawingml.xml_builder import NS_P
+from svg2ooxml.ir.animation import (
+    AnimationDefinition,
+    AnimationTiming,
+    AnimationType,
+    TransformType,
+)
 
 
-def create_test_animation(**kwargs):
-    """Helper to create mock animation with defaults."""
-    animation = Mock(spec=AnimationDefinition)
-    animation.transform_type = kwargs.get("transform_type", "scale")
-    attribute_name = kwargs.get("attribute_name", "transform")
-    target_attribute = kwargs.get("target_attribute", attribute_name)
-    animation.attribute_name = attribute_name
-    animation.target_attribute = target_attribute
-    animation.animation_type = kwargs.get("animation_type", None)
-    animation.values = kwargs.get("values", ["1", "2"])
-    animation.duration_ms = kwargs.get("duration_ms", 1000)
-    animation.begin_ms = kwargs.get("begin_ms", 0)
-    animation.fill_mode = kwargs.get("fill_mode", "freeze")
-    animation.element_id = kwargs.get("element_id", "shape1")
-    animation.key_times = kwargs.get("key_times", None)
-    animation.key_splines = kwargs.get("key_splines", None)
-    animation.additive = kwargs.get("additive", "replace")
-    animation.accumulate = kwargs.get("accumulate", "none")
-    return animation
+def make_transform_animation(**overrides) -> AnimationDefinition:
+    """Build a real AnimationDefinition for transform animations."""
+    defaults = dict(
+        element_id="shape1",
+        animation_type=AnimationType.ANIMATE_TRANSFORM,
+        target_attribute="transform",
+        values=["1", "2"],
+        timing=AnimationTiming(begin=0.0, duration=1.0),
+        transform_type=TransformType.SCALE,
+    )
+    defaults.update(overrides)
+    return AnimationDefinition(**defaults)
 
 
-class TestInit:
-    """Test TransformAnimationHandler initialization."""
+@pytest.fixture
+def handler() -> TransformAnimationHandler:
+    xml = AnimationXMLBuilder()
+    vp = ValueProcessor()
+    tav = TAVBuilder(xml)
+    uc = UnitConverter()
+    return TransformAnimationHandler(xml, vp, tav, uc)
 
-    def test_init_with_dependencies(self):
-        """Handler should accept all dependencies."""
-        xml_builder = Mock()
-        value_processor = Mock()
-        tav_builder = Mock()
-        unit_converter = Mock()
 
-        handler = TransformAnimationHandler(
-            xml_builder, value_processor, tav_builder, unit_converter
-        )
-
-        assert handler._xml is xml_builder
-        assert handler._processor is value_processor
-        assert handler._tav is tav_builder
-        assert handler._units is unit_converter
+# ------------------------------------------------------------------ #
+# can_handle                                                          #
+# ------------------------------------------------------------------ #
 
 
 class TestCanHandle:
-    """Test can_handle method."""
+    def test_handles_scale(self, handler: TransformAnimationHandler):
+        anim = make_transform_animation(transform_type=TransformType.SCALE)
+        assert handler.can_handle(anim) is True
 
-    def test_handles_scale_transform(self):
-        """Should handle scale transform."""
-        handler = TransformAnimationHandler(Mock(), Mock(), Mock(), Mock())
-        animation = create_test_animation(transform_type="scale")
+    def test_handles_rotate(self, handler: TransformAnimationHandler):
+        anim = make_transform_animation(transform_type=TransformType.ROTATE)
+        assert handler.can_handle(anim) is True
 
-        assert handler.can_handle(animation) is True
+    def test_handles_translate(self, handler: TransformAnimationHandler):
+        anim = make_transform_animation(transform_type=TransformType.TRANSLATE)
+        assert handler.can_handle(anim) is True
 
-    def test_handles_rotate_transform(self):
-        """Should handle rotate transform."""
-        handler = TransformAnimationHandler(Mock(), Mock(), Mock(), Mock())
-        animation = create_test_animation(transform_type="rotate")
+    def test_handles_matrix(self, handler: TransformAnimationHandler):
+        anim = make_transform_animation(transform_type=TransformType.MATRIX)
+        assert handler.can_handle(anim) is True
 
-        assert handler.can_handle(animation) is True
+    def test_rejects_none_transform(self, handler: TransformAnimationHandler):
+        anim = make_transform_animation(transform_type=None)
+        assert handler.can_handle(anim) is False
 
-    def test_handles_translate_transform(self):
-        """Should handle translate transform."""
-        handler = TransformAnimationHandler(Mock(), Mock(), Mock(), Mock())
-        animation = create_test_animation(transform_type="translate")
+    def test_rejects_skewx(self, handler: TransformAnimationHandler):
+        anim = make_transform_animation(transform_type=TransformType.SKEWX)
+        assert handler.can_handle(anim) is False
 
-        assert handler.can_handle(animation) is True
-
-    def test_handles_matrix_transform(self):
-        """Should handle matrix transform when reducible."""
-        handler = TransformAnimationHandler(Mock(), Mock(), Mock(), Mock())
-        animation = create_test_animation(transform_type="matrix")
-
-        assert handler.can_handle(animation) is True
-
-    def test_does_not_handle_missing_transform_type(self):
-        """Should not handle animations without transform_type."""
-        handler = TransformAnimationHandler(Mock(), Mock(), Mock(), Mock())
-        animation = create_test_animation()
-        delattr(animation, "transform_type")
-
-        assert handler.can_handle(animation) is False
-
-    def test_does_not_handle_unknown_transform_type(self):
-        """Should not handle unknown transform types."""
-        handler = TransformAnimationHandler(Mock(), Mock(), Mock(), Mock())
-        animation = create_test_animation(transform_type="skew")
-
-        assert handler.can_handle(animation) is False
+    def test_rejects_skewy(self, handler: TransformAnimationHandler):
+        anim = make_transform_animation(transform_type=TransformType.SKEWY)
+        assert handler.can_handle(anim) is False
 
 
-class TestBuild:
-    """Test build method dispatch."""
+# ------------------------------------------------------------------ #
+# build — scale                                                       #
+# ------------------------------------------------------------------ #
 
-    def test_dispatches_to_scale_for_scale_transform(self):
-        """Should dispatch to _build_scale_animation for scale."""
-        xml_builder = Mock()
-        xml_builder.build_behavior_core = Mock(return_value="<behavior/>")
-        xml_builder.build_par_container = Mock(return_value="<p:par/>")
 
-        value_processor = Mock()
-        value_processor.parse_scale_pair = Mock(return_value=(1.0, 1.0))
+class TestBuildScale:
+    def test_returns_par_element(self, handler: TransformAnimationHandler):
+        anim = make_transform_animation(
+            transform_type=TransformType.SCALE, values=["1", "2"]
+        )
+        result = handler.build(anim, par_id=4, behavior_id=5)
+        assert isinstance(result, etree._Element)
+        assert result.tag == f"{{{NS_P}}}par"
 
-        tav_builder = Mock()
-        tav_builder.build_tav_list = Mock(return_value=([], False))
+    def test_ctn_has_correct_id(self, handler: TransformAnimationHandler):
+        anim = make_transform_animation(
+            transform_type=TransformType.SCALE, values=["1", "2"]
+        )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        ctn = par.find(f"{{{NS_P}}}cTn")
+        assert ctn.get("id") == "4"
 
-        handler = TransformAnimationHandler(xml_builder, value_processor, tav_builder, Mock())
-        animation = create_test_animation(transform_type="scale")
+    def test_anim_scale_present(self, handler: TransformAnimationHandler):
+        anim = make_transform_animation(
+            transform_type=TransformType.SCALE, values=["1", "2"]
+        )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        anim_scale = par.find(f".//{{{NS_P}}}animScale")
+        assert anim_scale is not None
 
-        result = handler.build(animation, par_id=1, behavior_id=2)
+    def test_behavior_id(self, handler: TransformAnimationHandler):
+        anim = make_transform_animation(
+            transform_type=TransformType.SCALE, values=["1", "2"]
+        )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        bhvr_ctn = par.find(f".//{{{NS_P}}}cBhvr/{{{NS_P}}}cTn")
+        assert bhvr_ctn.get("id") == "5"
 
-        # Should call parse_scale_pair
-        assert value_processor.parse_scale_pair.called
-        assert isinstance(result, str)
+    def test_target_shape(self, handler: TransformAnimationHandler):
+        anim = make_transform_animation(
+            transform_type=TransformType.SCALE,
+            values=["1", "2"],
+            element_id="shape42",
+        )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        sp_tgt = par.find(f".//{{{NS_P}}}spTgt")
+        assert sp_tgt.get("spid") == "shape42"
 
-    def test_dispatches_to_rotate_for_rotate_transform(self):
-        """Should dispatch to _build_rotate_animation for rotate."""
-        xml_builder = Mock()
-        xml_builder.build_behavior_core = Mock(return_value="<behavior/>")
-        xml_builder.build_par_container = Mock(return_value="<p:par/>")
+    def test_from_scale_values(self, handler: TransformAnimationHandler):
+        anim = make_transform_animation(
+            transform_type=TransformType.SCALE, values=["1", "2"]
+        )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        from_elem = par.find(f".//{{{NS_P}}}from")
+        assert from_elem is not None
+        assert from_elem.get("x") == "100000"
+        assert from_elem.get("y") == "100000"
 
-        value_processor = Mock()
-        value_processor.parse_angle = Mock(return_value=0.0)
-        value_processor.format_ppt_angle = Mock(return_value="0")
+    def test_to_scale_values(self, handler: TransformAnimationHandler):
+        anim = make_transform_animation(
+            transform_type=TransformType.SCALE, values=["1", "2"]
+        )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        to_elem = par.find(f".//{{{NS_P}}}to")
+        assert to_elem is not None
+        assert to_elem.get("x") == "200000"
+        assert to_elem.get("y") == "200000"
 
-        tav_builder = Mock()
-        tav_builder.build_tav_list = Mock(return_value=([], False))
+    def test_asymmetric_scale(self, handler: TransformAnimationHandler):
+        anim = make_transform_animation(
+            transform_type=TransformType.SCALE, values=["1 2", "3 4"]
+        )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        from_elem = par.find(f".//{{{NS_P}}}from")
+        assert from_elem.get("x") == "100000"
+        assert from_elem.get("y") == "200000"
+        to_elem = par.find(f".//{{{NS_P}}}to")
+        assert to_elem.get("x") == "300000"
+        assert to_elem.get("y") == "400000"
 
-        handler = TransformAnimationHandler(xml_builder, value_processor, tav_builder, Mock())
-        animation = create_test_animation(transform_type="rotate", values=["0", "360"])
+    def test_preset_class_is_entr(self, handler: TransformAnimationHandler):
+        anim = make_transform_animation(
+            transform_type=TransformType.SCALE, values=["1", "2"]
+        )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        ctn = par.find(f"{{{NS_P}}}cTn")
+        assert ctn.get("presetClass") == "entr"
 
-        result = handler.build(animation, par_id=1, behavior_id=2)
+    def test_single_scale_value(self, handler: TransformAnimationHandler):
+        anim = make_transform_animation(
+            transform_type=TransformType.SCALE, values=["2"]
+        )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        assert par is not None
+        from_elem = par.find(f".//{{{NS_P}}}from")
+        to_elem = par.find(f".//{{{NS_P}}}to")
+        # Single value: from and to are the same
+        assert from_elem.get("x") == to_elem.get("x")
 
-        # Should call parse_angle
-        assert value_processor.parse_angle.called
-        assert isinstance(result, str)
+    def test_delay_from_begin(self, handler: TransformAnimationHandler):
+        anim = make_transform_animation(
+            transform_type=TransformType.SCALE,
+            values=["1", "2"],
+            timing=AnimationTiming(begin=0.5, duration=1.0),
+        )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        cond = par.find(f".//{{{NS_P}}}cTn/{{{NS_P}}}stCondLst/{{{NS_P}}}cond")
+        assert cond.get("delay") == "500"
 
-    def test_builds_translate_animation(self):
-        """Should build animMotion element for translate."""
-        xml_builder = Mock()
-        xml_builder.build_behavior_core = Mock(return_value="<behavior/>")
-        xml_builder.build_par_container = Mock(return_value="<p:par/>")
+    def test_duration(self, handler: TransformAnimationHandler):
+        anim = make_transform_animation(
+            transform_type=TransformType.SCALE,
+            values=["1", "2"],
+            timing=AnimationTiming(begin=0.0, duration=2.5),
+        )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        ctn = par.find(f"{{{NS_P}}}cTn")
+        assert ctn.get("dur") == "2500"
 
-        value_processor = Mock()
-        value_processor.parse_translation_pair = Mock(side_effect=[(0.0, 0.0), (10.0, 20.0)])
 
-        tav_builder = Mock()
+# ------------------------------------------------------------------ #
+# build — rotate                                                      #
+# ------------------------------------------------------------------ #
 
-        def to_emu(value, axis):
-            factor = 1000 if axis == "x" else 2000
-            return value * factor
 
-        unit_converter = Mock()
-        unit_converter.to_emu = Mock(side_effect=to_emu)
+class TestBuildRotate:
+    def test_returns_par_element(self, handler: TransformAnimationHandler):
+        anim = make_transform_animation(
+            transform_type=TransformType.ROTATE, values=["0", "360"]
+        )
+        result = handler.build(anim, par_id=4, behavior_id=5)
+        assert isinstance(result, etree._Element)
+        assert result.tag == f"{{{NS_P}}}par"
 
-        handler = TransformAnimationHandler(xml_builder, value_processor, tav_builder, unit_converter)
-        animation = create_test_animation(transform_type="translate", values=["0 0", "10 20"])
+    def test_anim_rot_present(self, handler: TransformAnimationHandler):
+        anim = make_transform_animation(
+            transform_type=TransformType.ROTATE, values=["0", "360"]
+        )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        anim_rot = par.find(f".//{{{NS_P}}}animRot")
+        assert anim_rot is not None
 
-        handler.build(animation, par_id=5, behavior_id=6)
+    def test_rotation_delta(self, handler: TransformAnimationHandler):
+        anim = make_transform_animation(
+            transform_type=TransformType.ROTATE, values=["0", "360"]
+        )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        anim_rot = par.find(f".//{{{NS_P}}}animRot")
+        # 360 * 60000 = 21600000
+        assert anim_rot.get("by") == "21600000"
 
-        # Verify translation values were parsed
-        assert value_processor.parse_translation_pair.call_args_list == [
-            call("0 0"),
-            call("10 20"),
-        ]
+    def test_rotation_partial_delta(self, handler: TransformAnimationHandler):
+        anim = make_transform_animation(
+            transform_type=TransformType.ROTATE, values=["45", "90"]
+        )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        anim_rot = par.find(f".//{{{NS_P}}}animRot")
+        # (90 - 45) * 60000 = 2700000
+        assert anim_rot.get("by") == "2700000"
 
-        # Verify EMU conversion called with delta values
-        assert unit_converter.to_emu.call_args_list == [
-            call(10.0, axis="x"),
-            call(20.0, axis="y"),
-        ]
+    def test_behavior_id(self, handler: TransformAnimationHandler):
+        anim = make_transform_animation(
+            transform_type=TransformType.ROTATE, values=["0", "360"]
+        )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        bhvr_ctn = par.find(f".//{{{NS_P}}}cBhvr/{{{NS_P}}}cTn")
+        assert bhvr_ctn.get("id") == "5"
 
-        call_args = xml_builder.build_par_container.call_args
-        child_xml = call_args.kwargs.get("child_content") or call_args.kwargs["child_xml"]
+    def test_single_rotate_value(self, handler: TransformAnimationHandler):
+        anim = make_transform_animation(
+            transform_type=TransformType.ROTATE, values=["45"]
+        )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        assert par is not None
+        anim_rot = par.find(f".//{{{NS_P}}}animRot")
+        # Delta = 45 - 45 = 0
+        assert anim_rot.get("by") == "0"
 
-        assert "<a:animMotion>" in child_xml
-        assert "<a:by" in child_xml
-        expected_x = int(round(to_emu(10.0, axis="x")))
-        expected_y = int(round(to_emu(20.0, axis="y")))
-        assert f'<a:by x="{expected_x}" y="{expected_y}"/>' in child_xml
 
-    def test_builds_matrix_translation_animation(self):
-        """Should reduce matrix translation to animMotion."""
-        xml_builder = Mock()
-        xml_builder.build_behavior_core = Mock(return_value="<behavior/>")
-        xml_builder.build_par_container = Mock(return_value="<p:par/>")
+# ------------------------------------------------------------------ #
+# build — translate                                                   #
+# ------------------------------------------------------------------ #
 
-        unit_converter = Mock()
-        unit_converter.to_emu = Mock(side_effect=lambda value, axis: value * 1000)
 
-        handler = TransformAnimationHandler(xml_builder, Mock(), Mock(), unit_converter)
-        animation = create_test_animation(
-            transform_type="matrix",
+class TestBuildTranslate:
+    def test_returns_par_element(self, handler: TransformAnimationHandler):
+        anim = make_transform_animation(
+            transform_type=TransformType.TRANSLATE, values=["0 0", "10 20"]
+        )
+        result = handler.build(anim, par_id=4, behavior_id=5)
+        assert isinstance(result, etree._Element)
+        assert result.tag == f"{{{NS_P}}}par"
+
+    def test_anim_motion_present(self, handler: TransformAnimationHandler):
+        anim = make_transform_animation(
+            transform_type=TransformType.TRANSLATE, values=["0 0", "10 20"]
+        )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        anim_motion = par.find(f".//{{{NS_P}}}animMotion")
+        assert anim_motion is not None
+
+    def test_by_element_present(self, handler: TransformAnimationHandler):
+        anim = make_transform_animation(
+            transform_type=TransformType.TRANSLATE, values=["0 0", "10 20"]
+        )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        by_elem = par.find(f".//{{{NS_P}}}by")
+        assert by_elem is not None
+        # Values are EMU-converted: 10px and 20px
+        assert by_elem.get("x") is not None
+        assert by_elem.get("y") is not None
+
+    def test_preset_class_is_path(self, handler: TransformAnimationHandler):
+        anim = make_transform_animation(
+            transform_type=TransformType.TRANSLATE, values=["0 0", "10 20"]
+        )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        ctn = par.find(f"{{{NS_P}}}cTn")
+        assert ctn.get("presetClass") == "path"
+
+    def test_returns_none_for_single_value(self, handler: TransformAnimationHandler):
+        anim = make_transform_animation(
+            transform_type=TransformType.TRANSLATE, values=["10 20"]
+        )
+        result = handler.build(anim, par_id=4, behavior_id=5)
+        assert result is None
+
+    def test_behavior_id(self, handler: TransformAnimationHandler):
+        anim = make_transform_animation(
+            transform_type=TransformType.TRANSLATE, values=["0 0", "10 20"]
+        )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        bhvr_ctn = par.find(f".//{{{NS_P}}}cBhvr/{{{NS_P}}}cTn")
+        assert bhvr_ctn.get("id") == "5"
+
+
+# ------------------------------------------------------------------ #
+# build — translate multi-keyframe                                     #
+# ------------------------------------------------------------------ #
+
+
+class TestBuildTranslateMultiKeyframe:
+    def test_three_values_uses_path(self, handler: TransformAnimationHandler):
+        anim = make_transform_animation(
+            transform_type=TransformType.TRANSLATE,
+            values=["0 0", "50 0", "50 50"],
+        )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        anim_motion = par.find(f".//{{{NS_P}}}animMotion")
+        assert anim_motion is not None
+        assert anim_motion.get("path") is not None
+
+    def test_path_starts_with_M(self, handler: TransformAnimationHandler):
+        anim = make_transform_animation(
+            transform_type=TransformType.TRANSLATE,
+            values=["0 0", "50 0", "50 50"],
+        )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        anim_motion = par.find(f".//{{{NS_P}}}animMotion")
+        path = anim_motion.get("path")
+        assert path.startswith("M ")
+
+    def test_path_ends_with_E(self, handler: TransformAnimationHandler):
+        anim = make_transform_animation(
+            transform_type=TransformType.TRANSLATE,
+            values=["0 0", "50 0", "50 50"],
+        )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        anim_motion = par.find(f".//{{{NS_P}}}animMotion")
+        path = anim_motion.get("path")
+        assert path.endswith(" E")
+
+    def test_path_has_correct_segment_count(self, handler: TransformAnimationHandler):
+        anim = make_transform_animation(
+            transform_type=TransformType.TRANSLATE,
+            values=["0 0", "50 0", "50 50", "100 100"],
+        )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        anim_motion = par.find(f".//{{{NS_P}}}animMotion")
+        path = anim_motion.get("path")
+        # 1 M + 3 L segments
+        assert path.count("M ") == 1
+        assert path.count("L ") == 3
+
+    def test_path_first_point_is_zero(self, handler: TransformAnimationHandler):
+        anim = make_transform_animation(
+            transform_type=TransformType.TRANSLATE,
+            values=["10 20", "60 20", "60 70"],
+        )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        anim_motion = par.find(f".//{{{NS_P}}}animMotion")
+        path = anim_motion.get("path")
+        # First point should be M 0 0 (relative to start)
+        assert path.startswith("M 0 0 ")
+
+    def test_has_origin_and_edit_mode(self, handler: TransformAnimationHandler):
+        anim = make_transform_animation(
+            transform_type=TransformType.TRANSLATE,
+            values=["0 0", "50 0", "50 50"],
+        )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        anim_motion = par.find(f".//{{{NS_P}}}animMotion")
+        assert anim_motion.get("origin") == "layout"
+        assert anim_motion.get("pathEditMode") == "relative"
+
+    def test_has_attr_name_list(self, handler: TransformAnimationHandler):
+        anim = make_transform_animation(
+            transform_type=TransformType.TRANSLATE,
+            values=["0 0", "50 0", "50 50"],
+        )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        attr_names = par.findall(f".//{{{NS_P}}}attrName")
+        texts = [n.text for n in attr_names]
+        assert "ppt_x" in texts
+        assert "ppt_y" in texts
+
+    def test_pts_types_matches_point_count(self, handler: TransformAnimationHandler):
+        anim = make_transform_animation(
+            transform_type=TransformType.TRANSLATE,
+            values=["0 0", "50 0", "50 50"],
+        )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        anim_motion = par.find(f".//{{{NS_P}}}animMotion")
+        assert anim_motion.get("ptsTypes") == "AAA"
+
+    def test_two_values_still_uses_by(self, handler: TransformAnimationHandler):
+        """Verify 2-value translate still uses the simple by approach."""
+        anim = make_transform_animation(
+            transform_type=TransformType.TRANSLATE, values=["0 0", "10 20"]
+        )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        by_elem = par.find(f".//{{{NS_P}}}by")
+        assert by_elem is not None
+        # Should NOT have path attribute
+        anim_motion = par.find(f".//{{{NS_P}}}animMotion")
+        assert anim_motion.get("path") is None
+
+
+# ------------------------------------------------------------------ #
+# build — matrix                                                      #
+# ------------------------------------------------------------------ #
+
+
+class TestBuildMatrix:
+    def test_matrix_translate_returns_anim_motion(self, handler: TransformAnimationHandler):
+        anim = make_transform_animation(
+            transform_type=TransformType.MATRIX,
             values=["1 0 0 1 0 0", "1 0 0 1 15 5"],
         )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        assert par is not None
+        anim_motion = par.find(f".//{{{NS_P}}}animMotion")
+        assert anim_motion is not None
 
-        handler.build(animation, par_id=7, behavior_id=8)
+    def test_matrix_translate_preset_class(self, handler: TransformAnimationHandler):
+        anim = make_transform_animation(
+            transform_type=TransformType.MATRIX,
+            values=["1 0 0 1 0 0", "1 0 0 1 15 5"],
+        )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        ctn = par.find(f"{{{NS_P}}}cTn")
+        assert ctn.get("presetClass") == "path"
 
-        xml_builder.build_behavior_core.assert_called_once()
-        call_args = xml_builder.build_par_container.call_args
-        child_xml = call_args.kwargs.get("child_content") or call_args.kwargs["child_xml"]
-
-        assert "<a:animMotion>" in child_xml
-        assert '<a:by x="15000" y="5000"/>' in child_xml
-
-    def test_builds_matrix_scale_animation(self):
-        """Should reduce matrix scale to animScale."""
-        xml_builder = Mock()
-        xml_builder.build_behavior_core = Mock(return_value="<behavior/>")
-        xml_builder.build_tav_list_container = Mock(return_value=etree.fromstring("<a:tavLst xmlns:a='http://schemas.openxmlformats.org/drawingml/2006/main'/>"))
-        xml_builder.build_par_container = Mock(return_value="<p:par/>")
-
-        tav_builder = Mock()
-        tav_builder.build_tav_list = Mock(return_value=([], False))
-
-        handler = TransformAnimationHandler(xml_builder, Mock(), tav_builder, Mock())
-        animation = create_test_animation(
-            transform_type="matrix",
+    def test_matrix_scale_returns_anim_scale(self, handler: TransformAnimationHandler):
+        anim = make_transform_animation(
+            transform_type=TransformType.MATRIX,
             values=["2 0 0 2 0 0", "3 0 0 3 0 0"],
         )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        assert par is not None
+        anim_scale = par.find(f".//{{{NS_P}}}animScale")
+        assert anim_scale is not None
 
-        handler.build(animation, par_id=9, behavior_id=10)
+    def test_matrix_scale_from_to(self, handler: TransformAnimationHandler):
+        anim = make_transform_animation(
+            transform_type=TransformType.MATRIX,
+            values=["2 0 0 2 0 0", "3 0 0 3 0 0"],
+        )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        from_elem = par.find(f".//{{{NS_P}}}from")
+        assert from_elem.get("x") == "200000"
+        assert from_elem.get("y") == "200000"
+        to_elem = par.find(f".//{{{NS_P}}}to")
+        assert to_elem.get("x") == "300000"
+        assert to_elem.get("y") == "300000"
 
-        call_args = xml_builder.build_par_container.call_args
-        child_xml = call_args.kwargs.get("child_content") or call_args.kwargs["child_xml"]
-
-        assert "<a:animScale>" in child_xml
-        assert '<a:pt x="2.0" y="2.0"/>' in child_xml
-        assert '<a:pt x="3.0" y="3.0"/>' in child_xml
-
-    def test_builds_matrix_rotate_animation(self):
-        """Should reduce matrix rotation to animRot."""
-        xml_builder = Mock()
-        xml_builder.build_behavior_core = Mock(return_value="<behavior/>")
-        xml_builder.build_par_container = Mock(return_value="<p:par/>")
-
-        tav_builder = Mock()
-        tav_builder.build_tav_list = Mock(return_value=([], False))
-
-        handler = TransformAnimationHandler(xml_builder, Mock(), tav_builder, Mock())
-        rotation_matrix = "0.8660254 0.5 -0.5 0.8660254 0 0"  # ≈ rotate(30)
-        animation = create_test_animation(
-            transform_type="matrix",
+    def test_matrix_rotate_returns_anim_rot(self, handler: TransformAnimationHandler):
+        # rotate(30) matrix ≈ cos30, sin30, -sin30, cos30, 0, 0
+        rotation_matrix = "0.8660254 0.5 -0.5 0.8660254 0 0"
+        anim = make_transform_animation(
+            transform_type=TransformType.MATRIX,
             values=[rotation_matrix, "1 0 0 1 0 0"],
         )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        assert par is not None
+        anim_rot = par.find(f".//{{{NS_P}}}animRot")
+        assert anim_rot is not None
 
-        handler.build(animation, par_id=11, behavior_id=12)
-
-        call_args = xml_builder.build_par_container.call_args
-        child_xml = call_args.kwargs.get("child_content") or call_args.kwargs["child_xml"]
-
-        assert "<a:animRot>" in child_xml
-        assert 'a:by' in child_xml
-
-    def test_matrix_with_mixed_components_returns_empty(self):
-        """Should skip matrix animations that combine multiple components."""
-        handler = TransformAnimationHandler(Mock(), Mock(), Mock(), Mock())
-        animation = create_test_animation(
-            transform_type="matrix",
-            values=["2 0 0 2 5 5"],
+    def test_matrix_composite_decomposes(self, handler: TransformAnimationHandler):
+        """Matrix with scale+translate decomposes; translate wins."""
+        anim = make_transform_animation(
+            transform_type=TransformType.MATRIX,
+            values=["1 0 0 1 0 0", "2 0 0 2 5 5"],
         )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        assert par is not None
+        ctn = par.find(f"{{{NS_P}}}cTn")
+        # Translate is dominant → path preset class
+        assert ctn.get("presetClass") == "path"
 
-        result = handler.build(animation, par_id=13, behavior_id=14)
-
-        assert result == ""
-
-    def test_inserts_origin_for_single_translate_value(self):
-        """Should add origin point when only a single translate value is provided."""
-        xml_builder = Mock()
-        xml_builder.build_behavior_core = Mock(return_value="<behavior/>")
-        xml_builder.build_par_container = Mock(return_value="<p:par/>")
-
-        value_processor = Mock()
-        value_processor.parse_translation_pair = Mock(return_value=(15.0, -5.0))
-
-        unit_converter = Mock()
-        unit_converter.to_emu = Mock(side_effect=lambda value, axis: value * 1000)
-
-        handler = TransformAnimationHandler(xml_builder, value_processor, Mock(), unit_converter)
-        animation = create_test_animation(transform_type="translate", values=["15 -5"])
-
-        handler.build(animation, par_id=2, behavior_id=3)
-
-        call_args = xml_builder.build_par_container.call_args
-        child_xml = call_args.kwargs.get("child_content") or call_args.kwargs["child_xml"]
-
-        assert '<a:by x="15000" y="-5000"/>' in child_xml
-
-    def test_returns_empty_for_missing_transform_type(self):
-        """Should return empty string if transform_type missing."""
-        handler = TransformAnimationHandler(Mock(), Mock(), Mock(), Mock())
-        animation = create_test_animation()
-        delattr(animation, "transform_type")
-
-        result = handler.build(animation, par_id=1, behavior_id=2)
-
-        assert result == ""
+    def test_matrix_all_identity_returns_none(self, handler: TransformAnimationHandler):
+        anim = make_transform_animation(
+            transform_type=TransformType.MATRIX,
+            values=["1 0 0 1 0 0", "1 0 0 1 0 0"],
+        )
+        result = handler.build(anim, par_id=4, behavior_id=5)
+        assert result is None
 
 
-class TestScaleAnimation:
-    """Test scale animation building."""
-
-    def test_builds_anim_scale_element(self):
-        """Should build animScale element."""
-        xml_builder = Mock()
-        xml_builder.build_behavior_core = Mock(return_value="<behavior/>")
-        xml_builder.build_par_container = Mock(return_value="<p:par/>")
-
-        value_processor = Mock()
-        value_processor.parse_scale_pair = Mock(side_effect=[(1.0, 1.0), (2.0, 2.0)])
-
-        tav_builder = Mock()
-        tav_builder.build_tav_list = Mock(return_value=([], False))
-
-        handler = TransformAnimationHandler(xml_builder, value_processor, tav_builder, Mock())
-        animation = create_test_animation(transform_type="scale", values=["1", "2"])
-
-        handler.build(animation, par_id=1, behavior_id=2)
-
-        call_args = xml_builder.build_par_container.call_args
-        child_xml = call_args.kwargs.get("child_content") or call_args.kwargs["child_xml"]
-
-        assert "<a:animScale>" in child_xml
-        assert "<a:from>" in child_xml
-        assert '<a:pt x="1.0" y="1.0"/>' in child_xml
-        assert "<a:to>" in child_xml
-        assert '<a:pt x="2.0" y="2.0"/>' in child_xml
-        assert "</a:animScale>" in child_xml
-
-    def test_parses_from_and_to_scale_values(self):
-        """Should parse first and last scale values."""
-        xml_builder = Mock()
-        xml_builder.build_behavior_core = Mock(return_value="<behavior/>")
-        xml_builder.build_par_container = Mock(return_value="<p:par/>")
-
-        value_processor = Mock()
-        value_processor.parse_scale_pair = Mock(return_value=(1.0, 1.0))
-
-        tav_builder = Mock()
-        tav_builder.build_tav_list = Mock(return_value=([], False))
-
-        handler = TransformAnimationHandler(xml_builder, value_processor, tav_builder, Mock())
-        animation = create_test_animation(values=["1", "1.5", "2"])
-
-        handler._build_scale_animation(animation, 1, 2)
-
-        # Should parse each value exactly once
-        assert value_processor.parse_scale_pair.call_count == 3
-        value_processor.parse_scale_pair.assert_any_call("1")
-        value_processor.parse_scale_pair.assert_any_call("2")
-
-    def test_includes_tav_list_for_multi_keyframe(self):
-        """Should include TAV list for multi-keyframe scale."""
-        xml_builder = Mock()
-        xml_builder.build_behavior_core = Mock(return_value="<behavior/>")
-        xml_builder.build_tav_list_container = Mock(return_value=etree.fromstring("<a:tavLst xmlns:a='http://schemas.openxmlformats.org/drawingml/2006/main'><a:tav tm='25000'/></a:tavLst>"))
-        xml_builder.build_par_container = Mock(return_value="<p:par/>")
-
-        value_processor = Mock()
-        value_processor.parse_scale_pair = Mock(side_effect=[
-            (1.0, 1.0), (2.0, 2.0),  # from/to
-            (1.0, 1.0), (1.5, 1.5), (2.0, 2.0)  # TAV list
-        ])
-
-        tav_builder = Mock()
-        tav_builder.build_tav_list = Mock(return_value=(["<tav1/>", "<tav2/>"], False))
-
-        handler = TransformAnimationHandler(xml_builder, value_processor, tav_builder, Mock())
-        animation = create_test_animation(values=["1", "1.5", "2"])
-
-        handler._build_scale_animation(animation, 1, 2)
-
-        call_args = xml_builder.build_par_container.call_args
-        child_xml = call_args.kwargs.get("child_content") or call_args.kwargs["child_xml"]
-
-        assert "<a:tavLst" in child_xml
-        assert '<a:tav tm="25000"/>' in child_xml
-        assert '<a:tav tm="25000"/>' in child_xml
-
-    def test_returns_empty_for_no_values(self):
-        """Should return empty string if no values."""
-        handler = TransformAnimationHandler(Mock(), Mock(), Mock(), Mock())
-        animation = create_test_animation(values=[])
-
-        result = handler._build_scale_animation(animation, 1, 2)
-
-        assert result == ""
+# ------------------------------------------------------------------ #
+# build — returns None for bad inputs                                 #
+# ------------------------------------------------------------------ #
 
 
-class TestRotateAnimation:
-    """Test rotate animation building."""
+class TestBuildReturnsNone:
+    def test_none_transform_type(self, handler: TransformAnimationHandler):
+        anim = make_transform_animation(transform_type=None)
+        result = handler.build(anim, par_id=4, behavior_id=5)
+        assert result is None
 
-    def test_builds_anim_rot_element(self):
-        """Should build animRot element."""
-        xml_builder = Mock()
-        xml_builder.build_behavior_core = Mock(return_value="<behavior/>")
-        xml_builder.build_par_container = Mock(return_value="<p:par/>")
 
-        value_processor = Mock()
-        value_processor.parse_angle = Mock(side_effect=[0.0, 360.0])
-        value_processor.format_ppt_angle = Mock(return_value="21600000")  # 360 * 60000
-
-        tav_builder = Mock()
-        tav_builder.build_tav_list = Mock(return_value=([], False))
-
-        handler = TransformAnimationHandler(xml_builder, value_processor, tav_builder, Mock())
-        animation = create_test_animation(transform_type="rotate", values=["0", "360"])
-
-        handler.build(animation, par_id=1, behavior_id=2)
-
-        call_args = xml_builder.build_par_container.call_args
-        child_xml = call_args.kwargs.get("child_content") or call_args.kwargs["child_xml"]
-
-        assert "<a:animRot>" in child_xml
-        assert '<a:by val="21600000"/>' in child_xml
-        assert "</a:animRot>" in child_xml
-
-    def test_calculates_rotation_delta(self):
-        """Should calculate rotation delta correctly."""
-        xml_builder = Mock()
-        xml_builder.build_behavior_core = Mock(return_value="<behavior/>")
-        xml_builder.build_par_container = Mock(return_value="<p:par/>")
-
-        value_processor = Mock()
-        value_processor.parse_angle = Mock(side_effect=[45.0, 90.0])
-        value_processor.format_ppt_angle = Mock(return_value="2700000")  # 45 * 60000
-
-        tav_builder = Mock()
-        tav_builder.build_tav_list = Mock(return_value=([], False))
-
-        handler = TransformAnimationHandler(xml_builder, value_processor, tav_builder, Mock())
-        animation = create_test_animation(transform_type="rotate", values=["45", "90"])
-
-        handler._build_rotate_animation(animation, 1, 2)
-
-        # Should calculate delta: 90 - 45 = 45 degrees
-        value_processor.format_ppt_angle.assert_called_with(45.0)
-
-    def test_includes_tav_list_for_multi_keyframe(self):
-        """Should include TAV list for multi-keyframe rotate."""
-        xml_builder = Mock()
-        xml_builder.build_behavior_core = Mock(return_value="<behavior/>")
-        xml_builder.build_tav_list_container = Mock(return_value=etree.fromstring("<a:tavLst xmlns:a='http://schemas.openxmlformats.org/drawingml/2006/main'><a:tav tm='25000'/></a:tavLst>"))
-        xml_builder.build_par_container = Mock(return_value="<p:par/>")
-
-        value_processor = Mock()
-        value_processor.parse_angle = Mock(side_effect=[
-            0.0, 360.0,  # from/to
-            0.0, 180.0, 360.0  # TAV list
-        ])
-        value_processor.format_ppt_angle = Mock(return_value="21600000")
-
-        tav_builder = Mock()
-        tav_builder.build_tav_list = Mock(return_value=(["<tav1/>", "<tav2/>"], False))
-
-        handler = TransformAnimationHandler(xml_builder, value_processor, tav_builder, Mock())
-        animation = create_test_animation(transform_type="rotate", values=["0", "180", "360"])
-
-        handler._build_rotate_animation(animation, 1, 2)
-
-        call_args = xml_builder.build_par_container.call_args
-        child_xml = call_args.kwargs.get("child_content") or call_args.kwargs["child_xml"]
-
-        assert "<a:tavLst" in child_xml
-        assert '<a:tav tm="25000"/>' in child_xml
-
-    def test_returns_empty_for_no_values(self):
-        """Should return empty string if no values."""
-        handler = TransformAnimationHandler(Mock(), Mock(), Mock(), Mock())
-        animation = create_test_animation(transform_type="rotate", values=[])
-
-        result = handler._build_rotate_animation(animation, 1, 2)
-
-        assert result == ""
+# ------------------------------------------------------------------ #
+# _build_scale_tav_list                                               #
+# ------------------------------------------------------------------ #
 
 
 class TestBuildScaleTAVList:
-    """Test _build_scale_tav_list helper."""
-
-    def test_returns_empty_for_two_values(self):
-        """Should return empty for simple two-value animation."""
-        tav_builder = Mock()
-
-        handler = TransformAnimationHandler(Mock(), Mock(), tav_builder, Mock())
-        animation = create_test_animation(values=["1", "2"], key_times=None)
+    def test_returns_empty_for_two_values(self, handler: TransformAnimationHandler):
+        anim = make_transform_animation(values=["1", "2"])
         scale_pairs = [(1.0, 1.0), (2.0, 2.0)]
+        result = handler._build_scale_tav_list(anim, scale_pairs)
+        assert result == []
 
-        tav_elements, needs_ns = handler._build_scale_tav_list(animation, scale_pairs)
-
-        assert tav_elements == []
-        assert needs_ns is False
-
-    def test_builds_tav_list_for_three_values(self):
-        """Should build TAV list for three+ values."""
-        tav_builder = Mock()
-        tav_builder.build_tav_list = Mock(return_value=(["<tav1/>"], False))
-
-        handler = TransformAnimationHandler(Mock(), Mock(), tav_builder, Mock())
-        animation = create_test_animation(values=["1", "1.5", "2"])
+    def test_builds_list_for_three_values(self, handler: TransformAnimationHandler):
+        anim = make_transform_animation(values=["1", "1.5", "2"])
         scale_pairs = [(1.0, 1.0), (1.5, 1.5), (2.0, 2.0)]
+        result = handler._build_scale_tav_list(anim, scale_pairs)
+        assert len(result) == 3
 
-        tav_elements, needs_ns = handler._build_scale_tav_list(animation, scale_pairs)
-
-        # Should call tav_builder with formatted scale strings
-        call_args = tav_builder.build_tav_list.call_args
-        assert call_args.kwargs["values"] == ["1.0 1.0", "1.5 1.5", "2.0 2.0"]
-
-    def test_uses_point_formatter(self):
-        """Should use format_point_value formatter."""
-        tav_builder = Mock()
-        tav_builder.build_tav_list = Mock(return_value=([], False))
-
-        handler = TransformAnimationHandler(Mock(), Mock(), tav_builder, Mock())
-        animation = create_test_animation(values=["1", "2"])
-
-        # Force TAV list build with explicit key_times
-        animation.key_times = [0.0, 1.0]
+    def test_builds_list_with_explicit_key_times(self, handler: TransformAnimationHandler):
+        anim = make_transform_animation(
+            values=["1", "2"],
+            key_times=[0.0, 1.0],
+        )
         scale_pairs = [(1.0, 1.0), (2.0, 2.0)]
-        handler._build_scale_tav_list(animation, scale_pairs)
+        result = handler._build_scale_tav_list(anim, scale_pairs)
+        assert len(result) == 2
 
-        # Verify formatter is format_point_value
-        call_args = tav_builder.build_tav_list.call_args
-        formatter = call_args.kwargs["value_formatter"]
-        assert formatter.__name__ == "format_point_value"
+
+# ------------------------------------------------------------------ #
+# _build_rotate_tav_list                                              #
+# ------------------------------------------------------------------ #
 
 
 class TestBuildRotateTAVList:
-    """Test _build_rotate_tav_list helper."""
-
-    def test_returns_empty_for_two_values(self):
-        """Should return empty for simple two-value animation."""
-        tav_builder = Mock()
-
-        handler = TransformAnimationHandler(Mock(), Mock(), tav_builder, Mock())
-        animation = create_test_animation(transform_type="rotate", values=["0", "360"], key_times=None)
-
+    def test_returns_empty_for_two_values(self, handler: TransformAnimationHandler):
+        anim = make_transform_animation(
+            transform_type=TransformType.ROTATE, values=["0", "360"]
+        )
         angles = [0.0, 360.0]
-        tav_elements, needs_ns = handler._build_rotate_tav_list(animation, angles, 0.0)
+        result = handler._build_rotate_tav_list(anim, angles, 0.0)
+        assert result == []
 
-        assert tav_elements == []
-        assert needs_ns is False
-
-    def test_builds_tav_list_with_cumulative_deltas(self):
-        """Should build TAV list with cumulative angle deltas."""
-        tav_builder = Mock()
-        tav_builder.build_tav_list = Mock(return_value=(["<tav1/>"], False))
-
-        handler = TransformAnimationHandler(Mock(), Mock(), tav_builder, Mock())
-        animation = create_test_animation(transform_type="rotate", values=["0", "180", "360"])
-
+    def test_builds_list_for_three_values(self, handler: TransformAnimationHandler):
+        anim = make_transform_animation(
+            transform_type=TransformType.ROTATE, values=["0", "180", "360"]
+        )
         angles = [0.0, 180.0, 360.0]
-        tav_elements, needs_ns = handler._build_rotate_tav_list(animation, angles, 0.0)
+        result = handler._build_rotate_tav_list(anim, angles, 0.0)
+        assert len(result) == 3
 
-        # Should call tav_builder with deltas from start
-        call_args = tav_builder.build_tav_list.call_args
-        assert call_args.kwargs["values"] == ["0.0", "180.0", "360.0"]
-
-    def test_uses_angle_formatter(self):
-        """Should use format_angle_value formatter."""
-        tav_builder = Mock()
-        tav_builder.build_tav_list = Mock(return_value=([], False))
-
-        handler = TransformAnimationHandler(Mock(), Mock(), tav_builder, Mock())
-        animation = create_test_animation(transform_type="rotate", values=["0", "360"])
-
-        # Force TAV list build with explicit key_times
-        animation.key_times = [0.0, 1.0]
+    def test_builds_list_with_explicit_key_times(self, handler: TransformAnimationHandler):
+        anim = make_transform_animation(
+            transform_type=TransformType.ROTATE,
+            values=["0", "360"],
+            key_times=[0.0, 1.0],
+        )
         angles = [0.0, 360.0]
-        handler._build_rotate_tav_list(animation, angles, 0.0)
-
-        # Verify formatter is format_angle_value
-        call_args = tav_builder.build_tav_list.call_args
-        formatter = call_args.kwargs["value_formatter"]
-        assert formatter.__name__ == "format_angle_value"
+        result = handler._build_rotate_tav_list(anim, angles, 0.0)
+        assert len(result) == 2
 
 
-class TestIntegration:
-    """Test integrated workflows."""
-
-    def test_complete_scale_workflow(self):
-        """Test complete scale animation workflow."""
-        xml_builder = Mock()
-        xml_builder.build_behavior_core = Mock(return_value="<behavior/>")
-        xml_builder.build_par_container = Mock(return_value="<p:par>complete</p:par>")
-
-        value_processor = Mock()
-        value_processor.parse_scale_pair = Mock(side_effect=[(1.0, 1.0), (2.0, 2.0)])
-
-        tav_builder = Mock()
-        tav_builder.build_tav_list = Mock(return_value=([], False))
-
-        handler = TransformAnimationHandler(xml_builder, value_processor, tav_builder, Mock())
-        animation = create_test_animation(transform_type="scale")
-
-        assert handler.can_handle(animation) is True
-        result = handler.build(animation, par_id=1, behavior_id=2)
-        assert result == "<p:par>complete</p:par>"
-
-    def test_complete_rotate_workflow(self):
-        """Test complete rotate animation workflow."""
-        xml_builder = Mock()
-        xml_builder.build_behavior_core = Mock(return_value="<behavior/>")
-        xml_builder.build_par_container = Mock(return_value="<p:par>complete</p:par>")
-
-        value_processor = Mock()
-        value_processor.parse_angle = Mock(side_effect=[0.0, 360.0])
-        value_processor.format_ppt_angle = Mock(return_value="21600000")
-
-        tav_builder = Mock()
-        tav_builder.build_tav_list = Mock(return_value=([], False))
-
-        handler = TransformAnimationHandler(xml_builder, value_processor, tav_builder, Mock())
-        animation = create_test_animation(transform_type="rotate")
-
-        assert handler.can_handle(animation) is True
-        result = handler.build(animation, par_id=1, behavior_id=2)
-        assert result == "<p:par>complete</p:par>"
+# ------------------------------------------------------------------ #
+# _classify_matrix                                                    #
+# ------------------------------------------------------------------ #
 
 
-class TestEdgeCases:
-    """Test edge cases and error handling."""
+class TestClassifyMatrix:
+    def test_identity(self, handler: TransformAnimationHandler):
+        m = Matrix2D(1, 0, 0, 1, 0, 0)
+        assert handler._classify_matrix(m) == ("identity", None)
 
-    def test_handles_single_scale_value(self):
-        """Should handle scale animation with single value."""
-        xml_builder = Mock()
-        xml_builder.build_behavior_core = Mock(return_value="<behavior/>")
-        xml_builder.build_par_container = Mock(return_value="<p:par/>")
+    def test_translate(self, handler: TransformAnimationHandler):
+        m = Matrix2D(1, 0, 0, 1, 10, 20)
+        mtype, payload = handler._classify_matrix(m)
+        assert mtype == "translate"
+        assert payload == (10.0, 20.0)
 
-        value_processor = Mock()
-        value_processor.parse_scale_pair = Mock(return_value=(2.0, 2.0))
+    def test_scale(self, handler: TransformAnimationHandler):
+        m = Matrix2D(2, 0, 0, 3, 0, 0)
+        mtype, payload = handler._classify_matrix(m)
+        assert mtype == "scale"
+        assert payload == (2.0, 3.0)
 
-        tav_builder = Mock()
-        tav_builder.build_tav_list = Mock(return_value=([], False))
+    def test_rotation(self, handler: TransformAnimationHandler):
+        import math
 
-        handler = TransformAnimationHandler(xml_builder, value_processor, tav_builder, Mock())
-        animation = create_test_animation(values=["2"])
+        angle = 30.0
+        c = math.cos(math.radians(angle))
+        s = math.sin(math.radians(angle))
+        m = Matrix2D(c, s, -s, c, 0, 0)
+        mtype, payload = handler._classify_matrix(m)
+        assert mtype == "rotate"
+        assert abs(payload - 30.0) < 0.01
 
-        result = handler._build_scale_animation(animation, 1, 2)
-        assert isinstance(result, str)
+    def test_composite_decomposes_to_translate(self, handler: TransformAnimationHandler):
+        """Scale+translate composite decomposes; translate wins by priority."""
+        m = Matrix2D(2, 0, 0, 2, 5, 5)
+        mtype, payload = handler._classify_matrix(m)
+        assert mtype == "translate"
+        assert payload == (5.0, 5.0)
 
-    def test_handles_single_rotate_value(self):
-        """Should handle rotate animation with single value."""
-        xml_builder = Mock()
-        xml_builder.build_behavior_core = Mock(return_value="<behavior/>")
-        xml_builder.build_par_container = Mock(return_value="<p:par/>")
+    def test_nan_returns_none(self, handler: TransformAnimationHandler):
+        m = Matrix2D(float("nan"), 0, 0, 1, 0, 0)
+        mtype, payload = handler._classify_matrix(m)
+        assert mtype is None
 
-        value_processor = Mock()
-        value_processor.parse_angle = Mock(return_value=45.0)
-        value_processor.format_ppt_angle = Mock(return_value="0")
+    def test_inf_returns_none(self, handler: TransformAnimationHandler):
+        m = Matrix2D(float("inf"), 0, 0, 1, 0, 0)
+        mtype, payload = handler._classify_matrix(m)
+        assert mtype is None
 
-        tav_builder = Mock()
-        tav_builder.build_tav_list = Mock(return_value=([], False))
 
-        handler = TransformAnimationHandler(xml_builder, value_processor, tav_builder, Mock())
-        animation = create_test_animation(transform_type="rotate", values=["45"])
+# ------------------------------------------------------------------ #
+# _decompose_matrix                                                   #
+# ------------------------------------------------------------------ #
 
-        result = handler._build_rotate_animation(animation, 1, 2)
-        assert isinstance(result, str)
 
-    def test_handles_missing_element_id(self):
-        """Should handle animation without element_id."""
-        xml_builder = Mock()
-        xml_builder.build_behavior_core = Mock(return_value="<behavior/>")
-        xml_builder.build_par_container = Mock(return_value="<p:par/>")
+class TestDecomposeMatrix:
+    def test_translate_plus_scale(self, handler: TransformAnimationHandler):
+        """Matrix with translate + scale: should pick translate (dominant)."""
+        # [2 0 0 2 10 20] = scale(2,2) + translate(10,20)
+        m = Matrix2D(2, 0, 0, 2, 10, 20)
+        result = handler._decompose_matrix(m)
+        assert result is not None
+        mtype, payload = result
+        assert mtype == "translate"
+        assert payload == (10.0, 20.0)
 
-        value_processor = Mock()
-        value_processor.parse_scale_pair = Mock(return_value=(1.0, 1.0))
+    def test_rotate_plus_translate(self, handler: TransformAnimationHandler):
+        """Matrix with rotation + translation: should pick translate."""
+        import math
 
-        tav_builder = Mock()
-        tav_builder.build_tav_list = Mock(return_value=([], False))
+        angle = 30.0
+        c = math.cos(math.radians(angle))
+        s = math.sin(math.radians(angle))
+        # [cos sin -sin cos tx ty]
+        m = Matrix2D(c, s, -s, c, 5, 10)
+        result = handler._decompose_matrix(m)
+        assert result is not None
+        mtype, payload = result
+        assert mtype == "translate"
+        assert payload == (5.0, 10.0)
 
-        handler = TransformAnimationHandler(xml_builder, value_processor, tav_builder, Mock())
-        animation = create_test_animation()
-        delattr(animation, "element_id")
+    def test_rotate_plus_scale(self, handler: TransformAnimationHandler):
+        """Matrix with rotation + scale: should pick rotate."""
+        import math
 
-        result = handler._build_scale_animation(animation, 1, 2)
-        assert isinstance(result, str)
+        angle = 45.0
+        c = math.cos(math.radians(angle))
+        s = math.sin(math.radians(angle))
+        sx, sy = 2.0, 2.0
+        # [sx*cos sx*sin -sy*sin sy*cos 0 0]
+        m = Matrix2D(sx * c, sx * s, -sy * s, sy * c, 0, 0)
+        result = handler._decompose_matrix(m)
+        assert result is not None
+        mtype, _ = result
+        assert mtype == "rotate"
+
+    def test_full_composite(self, handler: TransformAnimationHandler):
+        """Matrix with translate + rotate + scale: should pick translate."""
+        import math
+
+        angle = 30.0
+        c = math.cos(math.radians(angle))
+        s = math.sin(math.radians(angle))
+        sx, sy = 1.5, 1.5
+        m = Matrix2D(sx * c, sx * s, -sy * s, sy * c, 10, 20)
+        result = handler._decompose_matrix(m)
+        assert result is not None
+        mtype, payload = result
+        assert mtype == "translate"
+        assert payload == (10.0, 20.0)
+
+    def test_skew_returns_none(self, handler: TransformAnimationHandler):
+        """Matrix with skew component cannot be decomposed."""
+        # Skew X by 30 degrees: [1, 0, tan(30), 1, 0, 0]
+        import math
+
+        m = Matrix2D(1, 0, math.tan(math.radians(30)), 1, 0, 0)
+        result = handler._decompose_matrix(m)
+        assert result is None
+
+    def test_degenerate_returns_none(self, handler: TransformAnimationHandler):
+        """Zero-scale matrix returns None."""
+        m = Matrix2D(0, 0, 0, 0, 10, 20)
+        result = handler._decompose_matrix(m)
+        assert result is None
+
+    def test_reflection(self, handler: TransformAnimationHandler):
+        """Flip X decomposes as rotate (180°) + scale(1, -1); rotate wins."""
+        m = Matrix2D(-1, 0, 0, 1, 0, 0)
+        result = handler._decompose_matrix(m)
+        assert result is not None
+        mtype, payload = result
+        # atan2(0, -1) = 180° — rotation is the dominant component
+        assert mtype == "rotate"
+        assert abs(payload - 180.0) < 0.01
+
+
+class TestClassifyMatrixComposite:
+    """Tests for _classify_matrix handling composite matrices via decomposition."""
+
+    def test_translate_plus_scale_classified(self, handler: TransformAnimationHandler):
+        m = Matrix2D(2, 0, 0, 2, 10, 20)
+        mtype, payload = handler._classify_matrix(m)
+        assert mtype == "translate"
+
+    def test_classify_falls_through_to_decompose(self, handler: TransformAnimationHandler):
+        """A matrix that fails simple classification is decomposed."""
+        import math
+
+        angle = 30.0
+        c = math.cos(math.radians(angle))
+        s = math.sin(math.radians(angle))
+        m = Matrix2D(c, s, -s, c, 5, 10)
+        mtype, _ = handler._classify_matrix(m)
+        # Should not return None anymore — decomposition handles it
+        assert mtype is not None
+
+    def test_skew_still_returns_none(self, handler: TransformAnimationHandler):
+        """Skew matrices still return None even with decomposition."""
+        import math
+
+        m = Matrix2D(1, 0, math.tan(math.radians(30)), 1, 0, 0)
+        mtype, _ = handler._classify_matrix(m)
+        assert mtype is None
+
+
+# ------------------------------------------------------------------ #
+# _identity_payload                                                   #
+# ------------------------------------------------------------------ #
+
+
+class TestIdentityPayload:
+    def test_translate(self, handler: TransformAnimationHandler):
+        assert handler._identity_payload("translate") == (0.0, 0.0)
+
+    def test_scale(self, handler: TransformAnimationHandler):
+        assert handler._identity_payload("scale") == (1.0, 1.0)
+
+    def test_rotate(self, handler: TransformAnimationHandler):
+        assert handler._identity_payload("rotate") == 0.0
+
+    def test_unknown(self, handler: TransformAnimationHandler):
+        assert handler._identity_payload("other") == (0.0, 0.0)

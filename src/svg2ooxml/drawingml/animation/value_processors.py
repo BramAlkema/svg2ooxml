@@ -20,7 +20,6 @@ from svg2ooxml.common.conversions.transforms import (
     parse_scale_pair,
     parse_translation_pair,
 )
-from svg2ooxml.common.conversions.units import px_to_emu
 
 from .constants import ANGLE_ATTRIBUTES, AXIS_MAP
 

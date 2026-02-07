@@ -3,36 +3,35 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from lxml import etree
 
-from svg2ooxml.common.style.resolver import StyleResolver
-from svg2ooxml.ir.effects import Effect
-from svg2ooxml.ir.paint import (
-    GradientPaintRef,
-    LinearGradientPaint,
-    PatternPaint,
-    RadialGradientPaint,
-    SolidPaint,
-    GradientStop,
-    Stroke,
-    StrokeCap,
-    StrokeJoin,
-)
-from svg2ooxml.ir.numpy_compat import np, NUMPY_AVAILABLE
 from svg2ooxml.common.geometry import Matrix2D, parse_transform_list
-from svg2ooxml.policy.constants import FALLBACK_EMF, geometry_fallback_for
-from svg2ooxml.services import ConversionServices
-from svg2ooxml.elements.gradient_processor import GradientComplexity
-from svg2ooxml.elements.pattern_processor import PatternComplexity, PatternType
+from svg2ooxml.common.style.resolver import StyleResolver
 from svg2ooxml.drawingml.bridges.resvg_paint_bridge import (
     GradientDescriptor,
     LinearGradientDescriptor,
     MeshGradientDescriptor,
     PatternDescriptor,
-    RadialGradientDescriptor,
 )
+from svg2ooxml.elements.gradient_processor import GradientComplexity
+from svg2ooxml.elements.pattern_processor import PatternComplexity, PatternType
+from svg2ooxml.ir.effects import Effect
+from svg2ooxml.ir.numpy_compat import NUMPY_AVAILABLE, np
+from svg2ooxml.ir.paint import (
+    GradientPaintRef,
+    GradientStop,
+    LinearGradientPaint,
+    PatternPaint,
+    RadialGradientPaint,
+    SolidPaint,
+    Stroke,
+    StrokeCap,
+    StrokeJoin,
+)
+from svg2ooxml.policy.constants import FALLBACK_EMF, geometry_fallback_for
+from svg2ooxml.services import ConversionServices
 
 if TYPE_CHECKING:  # pragma: no cover - hint only
     from svg2ooxml.core.tracing import ConversionTracer
@@ -53,10 +52,10 @@ class StyleExtractor:
     def __init__(self, style_resolver: StyleResolver) -> None:
         self._resolver = style_resolver
         self._unit_converter = getattr(style_resolver, "_unit_converter", None)
-        self._tracer: "ConversionTracer | None" = None
+        self._tracer: ConversionTracer | None = None
         self._paint_cache: dict[etree._Element, dict[str, Any]] = {}
 
-    def set_tracer(self, tracer: "ConversionTracer | None") -> None:
+    def set_tracer(self, tracer: ConversionTracer | None) -> None:
         self._tracer = tracer
 
     def clear_cache(self) -> None:

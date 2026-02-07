@@ -43,7 +43,10 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from svg2ooxml.core.resvg.painting.gradients import LinearGradient, RadialGradient
-    from svg2ooxml.ir.paint import LinearGradientPaint, RadialGradientPaint, GradientStop
+    from svg2ooxml.ir.paint import (
+        LinearGradientPaint,
+        RadialGradientPaint,
+    )
 
 logger = logging.getLogger(__name__)
 
@@ -215,7 +218,7 @@ def decide_radial_policy(a: float, b: float, c: float, d: float, mild_ratio: flo
 # ============================================================================
 
 
-def linear_gradient_to_paint(gradient: "LinearGradient") -> "LinearGradientPaint":
+def linear_gradient_to_paint(gradient: LinearGradient) -> LinearGradientPaint:
     """Convert resvg LinearGradient to IR LinearGradientPaint.
 
     Args:
@@ -242,7 +245,8 @@ def linear_gradient_to_paint(gradient: "LinearGradient") -> "LinearGradientPaint
         - **Gradient inheritance (href)**: Not resolved. If gradient references another via href,
           caller must resolve the chain before conversion.
     """
-    from svg2ooxml.ir.paint import LinearGradientPaint, GradientStop as IRGradientStop
+    from svg2ooxml.ir.paint import GradientStop as IRGradientStop
+    from svg2ooxml.ir.paint import LinearGradientPaint
 
     # Convert stops with clamped offsets
     ir_stops = [
@@ -321,7 +325,7 @@ def _calculate_raster_size(s1: float, s2: float, oversample: float = 2.0, min_si
     return max(min_size, min(size, max_size))
 
 
-def radial_gradient_to_paint(gradient: "RadialGradient") -> "RadialGradientPaint":
+def radial_gradient_to_paint(gradient: RadialGradient) -> RadialGradientPaint:
     """Convert resvg RadialGradient to IR RadialGradientPaint.
 
     Args:
@@ -359,7 +363,8 @@ def radial_gradient_to_paint(gradient: "RadialGradient") -> "RadialGradientPaint
           caller must resolve the chain before conversion.
         - **Focal point (fx, fy)**: Transformed along with center. May have limited DrawingML support.
     """
-    from svg2ooxml.ir.paint import RadialGradientPaint, GradientStop as IRGradientStop
+    from svg2ooxml.ir.paint import GradientStop as IRGradientStop
+    from svg2ooxml.ir.paint import RadialGradientPaint
 
     # Convert stops with clamped offsets
     ir_stops = [

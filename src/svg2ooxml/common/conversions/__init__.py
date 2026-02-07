@@ -7,6 +7,7 @@ __all__ = [
     'PPTConverter',
     'PPT_ANGLE_SCALE',
     'PPT_OPACITY_SCALE',
+    'PPT_SCALE',
     'alpha_to_ppt',
     'degrees_to_ppt',
     'hex_to_rgb',
@@ -17,6 +18,7 @@ __all__ = [
     'parse_scale_pair',
     'parse_translation_pair',
     'percentage_to_ppt',
+    'position_to_ppt',
     'ppt_to_alpha',
     'ppt_to_degrees',
     'ppt_to_opacity',
@@ -24,17 +26,19 @@ __all__ = [
     'ppt_to_radians',
     'radians_to_ppt',
     'rgb_to_hex',
+    'scale_to_ppt',
     'angles',
     'colors',
     'opacity',
     'powerpoint',
+    'scale',
     'transforms',
     'units'
 ]
 
 # map symbol -> relative module
-_symbol_map = {'ppt_to_radians': 'angles', 'ppt_to_degrees': 'angles', 'radians_to_ppt': 'angles', 'PPT_ANGLE_SCALE': 'angles', 'degrees_to_ppt': 'angles', 'hex_to_rgb': 'colors', 'rgb_to_hex': 'colors', 'parse_color': 'colors', 'opacity_to_ppt': 'opacity', 'percentage_to_ppt': 'opacity', 'ppt_to_alpha': 'opacity', 'ppt_to_opacity': 'opacity', 'alpha_to_ppt': 'opacity', 'PPT_OPACITY_SCALE': 'opacity', 'ppt_to_percentage': 'opacity', 'PPTConverter': 'powerpoint', 'parse_angle': 'transforms', 'parse_translation_pair': 'transforms', 'parse_numeric_list': 'transforms', 'parse_scale_pair': 'transforms'}
-_module_map = {'angles': 'angles', 'colors': 'colors', 'opacity': 'opacity', 'powerpoint': 'powerpoint', 'transforms': 'transforms', 'units': 'units'}
+_symbol_map = {'ppt_to_degrees': 'angles', 'radians_to_ppt': 'angles', 'ppt_to_radians': 'angles', 'degrees_to_ppt': 'angles', 'PPT_ANGLE_SCALE': 'angles', 'rgb_to_hex': 'colors', 'hex_to_rgb': 'colors', 'parse_color': 'colors', 'alpha_to_ppt': 'opacity', 'ppt_to_opacity': 'opacity', 'PPT_OPACITY_SCALE': 'opacity', 'ppt_to_percentage': 'opacity', 'percentage_to_ppt': 'opacity', 'ppt_to_alpha': 'opacity', 'opacity_to_ppt': 'opacity', 'PPTConverter': 'powerpoint', 'scale_to_ppt': 'scale', 'position_to_ppt': 'scale', 'PPT_SCALE': 'scale', 'parse_scale_pair': 'transforms', 'parse_angle': 'transforms', 'parse_numeric_list': 'transforms', 'parse_translation_pair': 'transforms'}
+_module_map = {'angles': 'angles', 'colors': 'colors', 'opacity': 'opacity', 'powerpoint': 'powerpoint', 'scale': 'scale', 'transforms': 'transforms', 'units': 'units'}
 
 
 def __getattr__(name: str) -> _Any:  # PEP 562

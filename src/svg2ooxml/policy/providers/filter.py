@@ -260,7 +260,7 @@ class FilterPolicyProvider(PolicyProvider):
     def _coerce_blur_strategy(value: Any) -> str:
         if isinstance(value, str):
             token = value.strip().lower().replace("-", "_")
-            if token in {"soft_edge", "softedge", "soft_edge"}:
+            if token in {"soft_edge", "softedge"}:
                 return "soft_edge"
             if token in {"blur"}:
                 return "blur"

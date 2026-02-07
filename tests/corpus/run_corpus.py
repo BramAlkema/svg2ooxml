@@ -35,11 +35,11 @@ sys.path.insert(0, str(project_root))
 # Add src to path for imports
 sys.path.insert(0, str(project_root / "src"))
 
-from svg2ooxml.core.parser import ParserConfig, SVGParser
-from svg2ooxml.drawingml.writer import DrawingMLWriter
-from svg2ooxml.io.pptx_writer import PPTXPackageBuilder
-from svg2ooxml.ir.entrypoints import convert_parser_output
-from svg2ooxml.services import configure_services
+from svg2ooxml.core.parser import ParserConfig, SVGParser  # noqa: E402
+from svg2ooxml.drawingml.writer import DrawingMLWriter  # noqa: E402
+from svg2ooxml.io.pptx_writer import PPTXPackageBuilder  # noqa: E402
+from svg2ooxml.ir.entrypoints import convert_parser_output  # noqa: E402
+from svg2ooxml.services import configure_services  # noqa: E402
 
 # Import visual tools if available
 try:

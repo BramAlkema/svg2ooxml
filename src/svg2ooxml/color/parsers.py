@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import math
 import re
-from typing import Mapping
+from collections.abc import Mapping
 
-from .models import Color, TRANSPARENT
+from .models import TRANSPARENT, Color
 from .names import CSS3_NAMES_TO_HEX
 
 _HEX_RE = re.compile(r"^#?(?P<value>[0-9a-fA-F]{3,8})$")
@@ -118,7 +118,7 @@ def _parse_hsl(body: str) -> Color:
     parts = _split_components(body, expected_min=3, expected_max=4)
     h = _parse_hue(parts[0])
     s = _parse_percentage(parts[1])
-    l = _parse_percentage(parts[2])
+    l = _parse_percentage(parts[2])  # noqa: E741 -- HSL spec notation for lightness
     a = _parse_alpha(parts[3]) if len(parts) == 4 else 1.0
     r, g, b = _hsl_to_rgb(h, s, l)
     return Color(r, g, b, a)
@@ -162,7 +162,7 @@ def _parse_percentage(component: str) -> float:
     return _clamp(float(component[:-1]) / 100.0)
 
 
-def _hsl_to_rgb(h: float, s: float, l: float) -> tuple[float, float, float]:
+def _hsl_to_rgb(h: float, s: float, l: float) -> tuple[float, float, float]:  # noqa: E741 -- HSL spec notation for lightness
     if s == 0.0:
         return l, l, l
     q = l * (1 + s) if l < 0.5 else l + s - l * s

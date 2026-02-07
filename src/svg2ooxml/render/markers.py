@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import List, Optional, Tuple
 
 from svg2ooxml.core.resvg.geometry.primitives import LineTo, MoveTo
 from svg2ooxml.core.resvg.usvg_tree import MarkerNode, Tree
@@ -13,19 +12,19 @@ from svg2ooxml.core.resvg.usvg_tree import MarkerNode, Tree
 @dataclass(slots=True)
 class MarkerPlacement:
     marker: MarkerNode
-    position: Tuple[float, float]
+    position: tuple[float, float]
     angle: float
 
 
-def resolve_marker(tree: Tree, href: Optional[str]) -> Optional[MarkerNode]:
+def resolve_marker(tree: Tree, href: str | None) -> MarkerNode | None:
     if not href:
         return None
     return tree.resolve_marker(href)
 
 
-def compute_marker_positions(commands: List[object]) -> List[Tuple[float, float, float]]:
-    positions: List[Tuple[float, float, float]] = []
-    last_point: Optional[Tuple[float, float]] = None
+def compute_marker_positions(commands: list[object]) -> list[tuple[float, float, float]]:
+    positions: list[tuple[float, float, float]] = []
+    last_point: tuple[float, float] | None = None
     for item in commands:
         if isinstance(item, MoveTo):
             last_point = (item.x, item.y)

@@ -155,6 +155,37 @@ def to_string(elem: etree._Element) -> str:
     return xml_str
 
 
+def graft_xml_fragment(
+    parent: etree._Element,
+    xml: str,
+    *,
+    namespaces: dict[str, str] | None = None,
+) -> None:
+    """Parse an XML fragment string and append its children to *parent*.
+
+    Transitional helper for migrating from string-returning producers to
+    element-returning producers.  New code should NOT call this; instead
+    have producers return ``etree._Element`` directly.
+
+    Args:
+        parent: Target element to append children to.
+        xml: Raw XML fragment (may contain multiple root-level elements).
+        namespaces: Namespace prefixes for the wrapper root.
+            Defaults to ``{"a": NS_A}`` when *None*.
+    """
+    if not xml or not xml.strip():
+        return
+    if namespaces is None:
+        namespaces = {"a": NS_A}
+    ns_decls = " ".join(
+        f'xmlns:{prefix}="{uri}"' for prefix, uri in namespaces.items()
+    )
+    wrapped = f"<root {ns_decls}>{xml}</root>"
+    temp = etree.fromstring(wrapped.encode("utf-8"))
+    for child in temp:
+        parent.append(child)
+
+
 # ============================================================================
 # Common DrawingML Builders
 # ============================================================================
@@ -381,6 +412,7 @@ __all__ = [
     "a_sub",
     "p_sub",
     "to_string",
+    "graft_xml_fragment",
     # Common patterns
     "solid_fill",
     "srgb_color",
@@ -396,5 +428,6 @@ __all__ = [
     # Namespaces (for advanced usage)
     "NS_A",
     "NS_P",
+    "NS_R",
     "NSMAP",
 ]

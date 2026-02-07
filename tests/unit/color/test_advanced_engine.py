@@ -18,7 +18,6 @@ from svg2ooxml.color.bridge import (
 )
 from svg2ooxml.color.models import Color
 
-
 if not ADVANCED_COLOR_ENGINE_AVAILABLE:
     pytest.skip("Advanced colour engine dependencies are not installed.", allow_module_level=True)
 

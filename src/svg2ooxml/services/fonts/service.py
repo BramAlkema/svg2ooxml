@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass, field, replace
-from typing import Iterable, Iterator, Mapping, Protocol
+from typing import Protocol
 
 
 @dataclass(frozen=True)
@@ -112,7 +113,7 @@ class FontService:
     def clear_cache(self) -> None:
         self._cache.clear()
 
-    def clone(self) -> "FontService":
+    def clone(self) -> FontService:
         """Create a shallow clone with the same providers but empty cache.
 
         Used for per-parse isolation to prevent cache pollution across documents.

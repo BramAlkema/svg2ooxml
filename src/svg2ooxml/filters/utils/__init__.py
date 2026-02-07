@@ -19,7 +19,7 @@ __all__ = [
 ]
 
 # map symbol -> relative module
-_symbol_map = {'is_effect_list': 'dml', 'extract_effect_children': 'dml', 'build_exporter_hook': 'dml', 'merge_effect_fragments': 'dml', 'TurbulenceParameters': 'parsing', 'parse_channel': 'parsing', 'parse_turbulence': 'parsing', 'parse_displacement_map': 'parsing', 'DisplacementMapParameters': 'parsing', 'parse_number': 'parsing'}
+_symbol_map = {'build_exporter_hook': 'dml', 'merge_effect_fragments': 'dml', 'extract_effect_children': 'dml', 'is_effect_list': 'dml', 'parse_turbulence': 'parsing', 'parse_channel': 'parsing', 'parse_number': 'parsing', 'TurbulenceParameters': 'parsing', 'DisplacementMapParameters': 'parsing', 'parse_displacement_map': 'parsing'}
 _module_map = {'dml': 'dml', 'parsing': 'parsing'}
 
 

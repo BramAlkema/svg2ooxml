@@ -247,7 +247,7 @@ class LocalAPIServer:
         except subprocess.CalledProcessError:
             raise FileNotFoundError(
                 "uvicorn not found. Install it with: pip install uvicorn[standard]"
-            )
+            ) from None
 
     def __enter__(self) -> LocalAPIServer:
         """Context manager entry."""

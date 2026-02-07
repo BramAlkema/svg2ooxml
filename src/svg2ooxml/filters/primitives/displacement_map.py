@@ -4,11 +4,10 @@ from __future__ import annotations
 
 from lxml import etree
 
-from svg2ooxml.filters.base import Filter, FilterContext, FilterResult
-from svg2ooxml.filters.utils import DisplacementMapParameters, parse_displacement_map
-
 # Import centralized XML builders for safe DrawingML generation
 from svg2ooxml.drawingml.xml_builder import a_elem, a_sub, to_string
+from svg2ooxml.filters.base import Filter, FilterContext, FilterResult
+from svg2ooxml.filters.utils import DisplacementMapParameters, parse_displacement_map
 
 
 class DisplacementMapFilter(Filter):

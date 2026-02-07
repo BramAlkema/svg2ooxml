@@ -6,19 +6,20 @@ import copy
 import logging
 import struct
 from collections import defaultdict
+from collections.abc import Callable, Mapping
 from dataclasses import replace
-from typing import Any, Callable, Mapping
+from typing import Any
 
 import numpy as np
 from lxml import etree
 
 from svg2ooxml.drawingml.emf_adapter import PaletteResolver
-from svg2ooxml.drawingml.filter_renderer import FilterRenderer as DrawingMLFilterRenderer
+from svg2ooxml.drawingml.filter_renderer import (
+    FilterRenderer as DrawingMLFilterRenderer,
+)
 from svg2ooxml.drawingml.raster_adapter import RasterAdapter, _surface_to_png
 from svg2ooxml.filters.base import FilterContext, FilterResult
 from svg2ooxml.filters.planner import FilterPlanner
-from svg2ooxml.filters.registry import FilterRegistry
-from svg2ooxml.filters.resvg_bridge import ResolvedFilter
 from svg2ooxml.filters.primitives.blend import BlendFilter
 from svg2ooxml.filters.primitives.color_matrix import ColorMatrixFilter
 from svg2ooxml.filters.primitives.component_transfer import ComponentTransferFilter
@@ -26,13 +27,18 @@ from svg2ooxml.filters.primitives.composite import CompositeFilter
 from svg2ooxml.filters.primitives.convolve_matrix import ConvolveMatrixFilter
 from svg2ooxml.filters.primitives.flood import FloodFilter
 from svg2ooxml.filters.primitives.gaussian_blur import GaussianBlurFilter
-from svg2ooxml.filters.primitives.lighting import DiffuseLightingFilter, SpecularLightingFilter
+from svg2ooxml.filters.primitives.lighting import (
+    DiffuseLightingFilter,
+    SpecularLightingFilter,
+)
 from svg2ooxml.filters.primitives.merge import MergeFilter
 from svg2ooxml.filters.primitives.morphology import MorphologyFilter
 from svg2ooxml.filters.primitives.offset import OffsetFilter
 from svg2ooxml.filters.primitives.tile import TileFilter
+from svg2ooxml.filters.registry import FilterRegistry
+from svg2ooxml.filters.resvg_bridge import ResolvedFilter
+from svg2ooxml.io.emf.blob import EMU_PER_INCH, EMFBlob
 from svg2ooxml.ir.effects import CustomEffect
-from svg2ooxml.io.emf.blob import EMFBlob, EMU_PER_INCH
 from svg2ooxml.render.filters import FilterPlan, UnsupportedPrimitiveError, apply_filter
 from svg2ooxml.render.rasterizer import Viewport
 from svg2ooxml.render.surface import Surface
@@ -83,7 +89,7 @@ class FilterRenderer:
         *,
         registry: FilterRegistry | None = None,
         planner: FilterPlanner | None = None,
-    ) -> "FilterRenderer":
+    ) -> FilterRenderer:
         clone = FilterRenderer(
             registry=registry or self._registry,
             planner=planner or self._planner,
@@ -567,7 +573,7 @@ class FilterRenderer:
         lighting_primitives: list[str] = []
         try:
             stage_results: list[FilterResult] = []
-            for primitive_plan, element in zip(plan.primitives, matched_elements):
+            for primitive_plan, element in zip(plan.primitives, matched_elements, strict=True):
                 tag = primitive_plan.tag.lower()
                 entry_override = (overrides or {}).get(tag)
                 if entry_override and entry_override.get("allow_promotion") is False:

@@ -1,20 +1,20 @@
 """Unit tests for DrawingMLTextGenerator."""
 
-import pytest
 from dataclasses import dataclass, field
-from typing import Optional
 
+import pytest
+
+from svg2ooxml.color.models import Color as CentralizedColor
+from svg2ooxml.common.units.scalars import EMU_PER_POINT
 from svg2ooxml.core.resvg.text.drawingml_generator import (
+    DRAWINGML_HUNDREDTHS_PER_POINT,
     DrawingMLTextGenerator,
-    _parse_font_weight,
-    _map_font_weight,
-    _map_font_style,
     _color_to_hex,
     _font_size_pt_to_drawingml,
-    DRAWINGML_HUNDREDTHS_PER_POINT,
+    _map_font_style,
+    _map_font_weight,
+    _parse_font_weight,
 )
-from svg2ooxml.common.units.scalars import EMU_PER_POINT
-from svg2ooxml.color.models import Color as CentralizedColor
 
 
 # Mock classes to simulate resvg structures
@@ -33,18 +33,18 @@ class MockTextStyle:
     """Mock TextStyle for testing."""
 
     font_families: tuple[str, ...]
-    font_size: Optional[float]
-    font_style: Optional[str]
-    font_weight: Optional[str]
+    font_size: float | None
+    font_style: str | None
+    font_weight: str | None
 
 
 @dataclass
 class MockFillStyle:
     """Mock FillStyle for testing."""
 
-    color: Optional[MockColor]
+    color: MockColor | None
     opacity: float = 1.0
-    reference: Optional[object] = None
+    reference: object | None = None
 
 
 @dataclass
@@ -52,9 +52,10 @@ class MockTextNode:
     """Mock TextNode for testing."""
 
     tag: str = "text"
-    text_content: Optional[str] = None
-    text_style: Optional[MockTextStyle] = None
-    fill: Optional[MockFillStyle] = None
+    text_content: str | None = None
+    text_style: MockTextStyle | None = None
+    fill: MockFillStyle | None = None
+    stroke: object | None = None
     attributes: dict = field(default_factory=dict)
 
 
@@ -743,7 +744,7 @@ class TestFontServiceIntegration:
 
     def test_resolve_font_builds_correct_query(self):
         """Test that resolve_font builds correct FontQuery."""
-        from unittest.mock import Mock, MagicMock
+        from unittest.mock import MagicMock, Mock
 
         font_service = Mock()
         font_service.find_font = MagicMock(return_value=None)
@@ -772,8 +773,8 @@ class TestFontServiceIntegration:
 
     def test_resolve_font_returns_match(self):
         """Test that resolve_font returns FontMatch from service."""
-        from unittest.mock import Mock
         from dataclasses import dataclass
+        from unittest.mock import Mock
 
         @dataclass
         class MockFontMatch:
@@ -812,7 +813,6 @@ class TestFontServiceIntegration:
 
     def test_embed_font_without_engine(self):
         """Test that embed_font returns None without embedding engine."""
-        from unittest.mock import Mock
         from dataclasses import dataclass
 
         @dataclass
@@ -840,8 +840,8 @@ class TestFontServiceIntegration:
 
     def test_embed_font_without_text_content(self):
         """Test that embed_font returns None without text content."""
-        from unittest.mock import Mock
         from dataclasses import dataclass
+        from unittest.mock import Mock
 
         @dataclass
         class MockFontMatch:
@@ -870,8 +870,8 @@ class TestFontServiceIntegration:
 
     def test_embed_font_builds_correct_request(self):
         """Test that embed_font builds correct FontEmbeddingRequest."""
-        from unittest.mock import Mock, MagicMock
         from dataclasses import dataclass
+        from unittest.mock import MagicMock, Mock
 
         @dataclass
         class MockFontMatch:
@@ -911,8 +911,8 @@ class TestFontServiceIntegration:
 
     def test_embed_font_passes_web_font_data(self):
         """Test that embed_font passes through web font data."""
-        from unittest.mock import Mock, MagicMock
         from dataclasses import dataclass
+        from unittest.mock import MagicMock, Mock
 
         @dataclass
         class MockFontMatch:
@@ -948,8 +948,8 @@ class TestFontServiceIntegration:
 
     def test_embed_font_returns_result(self):
         """Test that embed_font returns FontEmbeddingResult from engine."""
-        from unittest.mock import Mock
         from dataclasses import dataclass
+        from unittest.mock import Mock
 
         @dataclass
         class MockFontMatch:

@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from lxml import etree as ET
 
+from svg2ooxml.color.bridge import ADVANCED_COLOR_ENGINE_AVAILABLE
 from svg2ooxml.elements.gradient_processor import GradientProcessor
 from svg2ooxml.elements.pattern_processor import PatternProcessor
 from svg2ooxml.services import ConversionServices
-from svg2ooxml.color.bridge import ADVANCED_COLOR_ENGINE_AVAILABLE
 
 
 def _make_services() -> ConversionServices:

@@ -15,9 +15,9 @@ from typing import TYPE_CHECKING, Literal
 
 if TYPE_CHECKING:
     from svg2ooxml.core.resvg.usvg_tree import TextNode
-    from svg2ooxml.telemetry.render_decisions import RenderTracer
-    from svg2ooxml.services.fonts.service import FontService
     from svg2ooxml.services.fonts.embedding import FontEmbeddingEngine
+    from svg2ooxml.services.fonts.service import FontService
+    from svg2ooxml.telemetry.render_decisions import RenderTracer
 
 from .drawingml_generator import DrawingMLTextGenerator
 from .layout_analyzer import TextLayoutAnalyzer, TextLayoutComplexity

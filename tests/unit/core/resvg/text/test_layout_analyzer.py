@@ -1,14 +1,12 @@
 """Unit tests for TextLayoutAnalyzer."""
 
 import math
-import pytest
 from dataclasses import dataclass, field
-from typing import Optional
 
 from svg2ooxml.core.resvg.text.layout_analyzer import (
+    LayoutAnalysisResult,
     TextLayoutAnalyzer,
     TextLayoutComplexity,
-    LayoutAnalysisResult,
 )
 
 
@@ -56,12 +54,12 @@ class MockTextNode:
     """Mock TextNode for testing."""
 
     tag: str = "text"
-    id: Optional[str] = None
-    text_content: Optional[str] = None
+    id: str | None = None
+    text_content: str | None = None
     attributes: dict = field(default_factory=dict)
     styles: dict = field(default_factory=dict)
     children: list = field(default_factory=list)
-    transform: Optional[MockMatrix] = None
+    transform: MockMatrix | None = None
 
 
 class TestTextLayoutAnalyzer:

@@ -9,6 +9,7 @@ from .mask_writer import MaskWriter
 
 if TYPE_CHECKING:  # pragma: no cover - type checking only
     from svg2ooxml.core.tracing import ConversionTracer
+
     from .assets import AssetRegistry
 
 
@@ -19,7 +20,7 @@ class MaskPipeline:
         self._mask_store_factory = mask_store_factory
         self._mask_writer: MaskWriter | None = None
 
-    def reset(self, *, assets: "AssetRegistry", tracer: "ConversionTracer | None") -> None:
+    def reset(self, *, assets: AssetRegistry, tracer: ConversionTracer | None) -> None:
         mask_store = self._mask_store_factory()
         self._mask_writer = MaskWriter(mask_store=mask_store, tracer=tracer)
         self._mask_writer.bind_assets(assets)

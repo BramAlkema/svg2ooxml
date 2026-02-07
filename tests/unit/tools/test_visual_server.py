@@ -3,7 +3,6 @@ from __future__ import annotations
 from pathlib import Path
 
 from fastapi.testclient import TestClient
-
 from tools.visual.renderer import RenderedSlideSet
 from tools.visual.server import create_app
 

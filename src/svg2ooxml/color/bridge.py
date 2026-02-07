@@ -2,16 +2,20 @@
 
 from __future__ import annotations
 
-from typing import Sequence, Union
+from collections.abc import Sequence
 
-from .models import Color
+from .advanced.engine import (
+    COLOR_ENGINE_AVAILABLE as ADVANCED_COLOR_ENGINE_AVAILABLE,
+)
 from .advanced.engine import (
     AdvancedColor,
-    COLOR_ENGINE_AVAILABLE as ADVANCED_COLOR_ENGINE_AVAILABLE,
+)
+from .advanced.engine import (
     require_color_engine as _require_advanced_color_engine,
 )
+from .models import Color
 
-BasicColorInput = Union[Color, str, Sequence[float], Sequence[int], AdvancedColor]
+BasicColorInput = Color | str | Sequence[float] | Sequence[int] | AdvancedColor
 
 
 def ensure_advanced_color_engine() -> None:

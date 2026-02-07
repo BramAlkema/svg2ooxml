@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
+import tempfile
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
-import tempfile
-from typing import Any, Dict, Iterable, Iterator
+from typing import Any
 
 from svg2ooxml.services.fonts import FontFetcher, FontSource
-
 
 # ---------------------------------------------------------------------------
 # Firestore fakes
@@ -23,7 +23,7 @@ class _StoredDocument:
 class FakeDocumentSnapshot:
     """Minimal Firestore snapshot exposing ``exists`` and ``to_dict``."""
 
-    def __init__(self, data: dict[str, Any] | None, reference: "FakeDocumentReference") -> None:
+    def __init__(self, data: dict[str, Any] | None, reference: FakeDocumentReference) -> None:
         self._data = data
         self.reference = reference
 
@@ -38,7 +38,7 @@ class FakeDocumentSnapshot:
 class FakeDocumentReference:
     """In-memory document reference."""
 
-    def __init__(self, store: "FakeFirestoreClient", path: tuple[str, ...]) -> None:
+    def __init__(self, store: FakeFirestoreClient, path: tuple[str, ...]) -> None:
         self._store = store
         self._path = path
 
@@ -60,14 +60,14 @@ class FakeDocumentReference:
     def delete(self) -> None:
         self._store._documents.pop(self._path, None)
 
-    def collection(self, name: str) -> "FakeCollectionReference":
+    def collection(self, name: str) -> FakeCollectionReference:
         return FakeCollectionReference(self._store, self._path + (name,))
 
 
 class FakeCollectionReference:
     """Collection reference supporting ``document`` and ``stream``."""
 
-    def __init__(self, store: "FakeFirestoreClient", path: tuple[str, ...]) -> None:
+    def __init__(self, store: FakeFirestoreClient, path: tuple[str, ...]) -> None:
         self._store = store
         self._path = path
 
@@ -88,7 +88,7 @@ class FakeFirestoreClient:
 
     def __init__(self, *, project: str | None = None) -> None:
         self.project = project
-        self._documents: Dict[tuple[str, ...], _StoredDocument] = {}
+        self._documents: dict[tuple[str, ...], _StoredDocument] = {}
 
     def collection(self, name: str) -> FakeCollectionReference:
         return FakeCollectionReference(self, (name,))
@@ -102,7 +102,7 @@ class FakeFirestoreClient:
 class FakeBlob:
     """In-memory blob backing onto a ``FakeBucket`` store."""
 
-    def __init__(self, bucket: "FakeBucket", name: str) -> None:
+    def __init__(self, bucket: FakeBucket, name: str) -> None:
         self._bucket = bucket
         self.name = name
 
@@ -130,10 +130,10 @@ class FakeBlob:
 class FakeBucket:
     """Subset of the Cloud Storage bucket API."""
 
-    def __init__(self, client: "FakeStorageClient", name: str) -> None:
+    def __init__(self, client: FakeStorageClient, name: str) -> None:
         self._client = client
         self.name = name
-        self._objects: Dict[str, bytes] = client._objects.setdefault(name, {})
+        self._objects: dict[str, bytes] = client._objects.setdefault(name, {})
 
     def exists(self) -> bool:
         return self.name in self._client._created
@@ -158,9 +158,9 @@ class FakeStorageClient:
 
     def __init__(self, *, project: str | None = None) -> None:
         self.project = project
-        self._buckets: Dict[str, FakeBucket] = {}
+        self._buckets: dict[str, FakeBucket] = {}
         self._created: set[str] = set()
-        self._objects: Dict[str, Dict[str, bytes]] = {}
+        self._objects: dict[str, dict[str, bytes]] = {}
 
     def bucket(self, name: str) -> FakeBucket:
         bucket = self._buckets.get(name)
@@ -187,7 +187,7 @@ class OfflineFontFetcher(FontFetcher):
     def __init__(self, registry: dict[str, Path] | None = None) -> None:
         cache_dir = Path(tempfile.gettempdir()) / "svg2ooxml-offline-fonts"
         super().__init__(cache_directory=cache_dir, allow_network=False)
-        self._registry: Dict[str, Path] = {url: Path(path) for url, path in (registry or {}).items()}
+        self._registry: dict[str, Path] = {url: Path(path) for url, path in (registry or {}).items()}
         self.requests: list[FontSource] = []
 
     def register(self, url: str, path: Path | str) -> None:

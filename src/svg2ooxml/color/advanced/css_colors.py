@@ -9,7 +9,6 @@ This module provides the standard CSS named colors as RGB tuples
 for accurate color parsing in SVG to PPTX conversion.
 """
 
-from typing import Dict, Tuple
 
 
 # CSS Level 4 Named Colors

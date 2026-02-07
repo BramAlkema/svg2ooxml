@@ -1,8 +1,7 @@
 """Unit tests for IR font data structures."""
 from __future__ import annotations
 
-import pytest
-from svg2ooxml.ir.fonts import FontFaceSrc, FontFaceRule
+from svg2ooxml.ir.fonts import FontFaceRule, FontFaceSrc
 
 
 class TestFontFaceSrc:

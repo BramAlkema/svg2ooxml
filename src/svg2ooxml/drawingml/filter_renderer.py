@@ -5,19 +5,20 @@ from __future__ import annotations
 import logging
 import math
 import re
-from typing import Iterable, List
+from collections.abc import Iterable
 
-from svg2ooxml.filters.base import FilterContext, FilterResult
-from svg2ooxml.filters.utils.dml import is_effect_list
-from svg2ooxml.ir.effects import CustomEffect
-from svg2ooxml.services.filter_types import FilterEffectResult
+from svg2ooxml.common.conversions.angles import radians_to_ppt
+from svg2ooxml.common.conversions.opacity import opacity_to_ppt
 from svg2ooxml.common.units import px_to_emu
 from svg2ooxml.drawingml.emf_adapter import EMFAdapter, PaletteResolver
 from svg2ooxml.drawingml.raster_adapter import RasterAdapter
 
 # Import centralized XML builders for safe DrawingML generation
 from svg2ooxml.drawingml.xml_builder import a_elem, a_sub, to_string
-
+from svg2ooxml.filters.base import FilterContext, FilterResult
+from svg2ooxml.filters.utils.dml import is_effect_list
+from svg2ooxml.ir.effects import CustomEffect
+from svg2ooxml.services.filter_types import FilterEffectResult
 
 HOOK_PATTERN = re.compile(r"<!--\s*svg2ooxml:(?P<name>\w+)(?P<attrs>[^>]*)-->", re.IGNORECASE)
 ATTR_PATTERN = re.compile(r"(\w+)=\"([^\"]*)\"")
@@ -47,8 +48,8 @@ class FilterRenderer:
         filter_results: Iterable[FilterResult],
         *,
         context: FilterContext | None = None,
-    ) -> List[FilterEffectResult]:
-        outputs: List[FilterEffectResult] = []
+    ) -> list[FilterEffectResult]:
+        outputs: list[FilterEffectResult] = []
         policy = self._policy_from_context(context)
         for result in filter_results:
             if not isinstance(result, FilterResult) or not result.is_success():
@@ -126,7 +127,7 @@ class FilterRenderer:
         except ValueError:
             opacity = 1.0
         opacity = max(0.0, min(opacity, 1.0))
-        alpha = int(opacity * 100000)
+        alpha = opacity_to_ppt(opacity)
 
         effectLst = a_elem("effectLst")
         solidFill = a_sub(effectLst, "solidFill")
@@ -155,7 +156,7 @@ class FilterRenderer:
 
         # PowerPoint angle (0 = right, counter-clockwise positive, units 60000 per degree)
         angle_rad = math.atan2(dy_emu, dx_emu)
-        ppt_angle = int((math.degrees(angle_rad) * 60000) % 21600000)
+        ppt_angle = radians_to_ppt(angle_rad % (2 * math.pi))
 
         distance = min(distance, 914400)
 

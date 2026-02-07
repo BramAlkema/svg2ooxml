@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
-import pytest
 import json
 from pathlib import Path
 
+import pytest
 from lxml import etree
 
-from svg2ooxml.core.parser import ParseResult
 from svg2ooxml.common.geometry.paths import compute_segments_bbox
 from svg2ooxml.core.ir import IRScene
+from svg2ooxml.core.parser import ParseResult
 from svg2ooxml.ir.entrypoints import convert_parser_output
 from svg2ooxml.services.setup import configure_services
 
@@ -62,7 +62,7 @@ def test_polygon_path_segments_match_bounding_box() -> None:
     baseline = json.loads(baseline_path.read_text())
 
     assert len(segments) == len(baseline["segments"])
-    for segment, expected in zip(segments, baseline["segments"]):
+    for segment, expected in zip(segments, baseline["segments"], strict=True):
         assert segment.start.x == pytest.approx(expected["start"][0])
         assert segment.start.y == pytest.approx(expected["start"][1])
         assert segment.end.x == pytest.approx(expected["end"][0])

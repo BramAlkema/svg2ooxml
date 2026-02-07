@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Mapping
+from typing import Any
 
 from lxml import etree
 
-from svg2ooxml.ir.paint import LinearGradientPaint, SolidPaint, GradientStop, Paint
-from svg2ooxml.ir.scene import MaskRef, MaskDefinition
+from svg2ooxml.ir.paint import GradientStop, LinearGradientPaint, Paint, SolidPaint
+from svg2ooxml.ir.scene import MaskRef
 
 logger = logging.getLogger(__name__)
 
@@ -33,17 +33,20 @@ def try_bake_mask(fill: Paint, mask_ref: MaskRef | None, services: Any = None, d
         
         # Helper to find gradient by ID in definitions or doc_root
         def find_grad_by_id(grad_id):
-            if not grad_id: return None
+            if not grad_id:
+                return None
             # Search in the mask content itself first
             g = root.xpath(f"//svg:linearGradient[@id='{grad_id}']", namespaces=ns) or \
                 root.xpath(f"//linearGradient[@id='{grad_id}']")
-            if g: return g[0]
-            
+            if g:
+                return g[0]
+
             # Search in document root if available
             if doc_root is not None:
                 g = doc_root.xpath(f"//svg:linearGradient[@id='{grad_id}']", namespaces=ns) or \
                     doc_root.xpath(f"//linearGradient[@id='{grad_id}']")
-                if g: return g[0]
+                if g:
+                    return g[0]
             return None
 
         # 1. Look for linearGradient directly in the mask content
@@ -106,7 +109,8 @@ def _parse_percent(val: str) -> float:
         return 0.0
 
 def _parse_coord(val: str) -> float:
-    if val is None: return 0.0
+    if val is None:
+        return 0.0
     val = val.strip()
     if val.endswith("%"):
         return float(val[:-1]) / 100.0
@@ -116,7 +120,8 @@ def _parse_coord(val: str) -> float:
         return 0.0
 
 def _parse_float(val: str) -> float:
-    if val is None: return 1.0
+    if val is None:
+        return 1.0
     try:
         return float(val)
     except ValueError:
@@ -125,7 +130,7 @@ def _parse_float(val: str) -> float:
 def _calculate_luminance(color: str) -> float:
     color = color.strip().lstrip("#")
     if len(color) == 3:
-        color = "".join(c*2 for ch in color)
+        color = "".join(ch * 2 for ch in color)
     if len(color) != 6:
         return 1.0
         
@@ -138,6 +143,7 @@ def _calculate_luminance(color: str) -> float:
         return 1.0
 
 def _parse_style(style_str: str | None) -> dict[str, str]:
-    if not style_str: return {}
+    if not style_str:
+        return {}
     parts = [p.split(":", 1) for p in style_str.split(";") if ":" in p]
     return {k.strip(): v.strip() for k, v in parts}

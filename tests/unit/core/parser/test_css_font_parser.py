@@ -1,10 +1,9 @@
 """Unit tests for CSS @font-face parser."""
 from __future__ import annotations
 
-import pytest
 from lxml import etree
+
 from svg2ooxml.core.parser.css_font_parser import CSSFontFaceParser
-from svg2ooxml.ir.fonts import FontFaceRule, FontFaceSrc
 
 
 class TestCSSFontFaceParser:

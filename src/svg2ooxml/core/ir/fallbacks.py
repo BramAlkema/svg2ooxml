@@ -4,22 +4,23 @@ from __future__ import annotations
 
 import logging
 import math
+from collections.abc import Callable, Iterable, Sequence
 from io import BytesIO
-from typing import TYPE_CHECKING, Callable, Iterable, Sequence
+from typing import TYPE_CHECKING
 
 from lxml import etree
 
+from svg2ooxml.common.units import UnitConverter
 from svg2ooxml.drawingml.bridges import EMFPathAdapter, PathStyle
 from svg2ooxml.ir.geometry import Point, Rect, SegmentType
 from svg2ooxml.ir.paint import SolidPaint
 from svg2ooxml.ir.scene import ClipRef, Image, MaskInstance, MaskRef
 from svg2ooxml.policy.constants import FALLBACK_BITMAP, FALLBACK_EMF
-from svg2ooxml.common.units import UnitConverter
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
-    from svg2ooxml.core.traversal.coordinate_space import CoordinateSpace
-    from svg2ooxml.core.styling.style_extractor import StyleResult
     from svg2ooxml.common.units import ConversionContext
+    from svg2ooxml.core.styling.style_extractor import StyleResult
+    from svg2ooxml.core.traversal.coordinate_space import CoordinateSpace
 
 _PATH_ADAPTER = EMFPathAdapter()
 
@@ -27,15 +28,15 @@ _PATH_ADAPTER = EMFPathAdapter()
 def render_emf_fallback(
     *,
     element: etree._Element,
-    style: "StyleResult",
+    style: StyleResult,
     segments: Sequence[SegmentType],
-    coord_space: "CoordinateSpace",
+    coord_space: CoordinateSpace,
     clip_ref: ClipRef | None,
     mask_ref: MaskRef | None,
     mask_instance: MaskInstance | None,
     metadata: dict[str, object],
     unit_converter: UnitConverter,
-    conversion_context: "ConversionContext | None",
+    conversion_context: ConversionContext | None,
     adapter: EMFPathAdapter | None = None,
 ) -> Image | None:
     transformed = coord_space.apply_segments(segments)
@@ -123,9 +124,9 @@ def _normalise_fill_rule(rule: str) -> str:
 def render_bitmap_fallback(
     *,
     element: etree._Element,
-    style: "StyleResult",
+    style: StyleResult,
     segments: Sequence[SegmentType],
-    coord_space: "CoordinateSpace",
+    coord_space: CoordinateSpace,
     clip_ref: ClipRef | None,
     mask_ref: MaskRef | None,
     mask_instance: MaskInstance | None,
@@ -137,7 +138,8 @@ def render_bitmap_fallback(
     logger: logging.Logger | None,
 ) -> Image | None:
     try:
-        from PIL import Image as PILImage, ImageDraw
+        from PIL import Image as PILImage
+        from PIL import ImageDraw
     except ImportError:  # pragma: no cover - optional dependency
         return None
 

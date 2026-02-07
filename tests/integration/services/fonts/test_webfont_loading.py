@@ -7,10 +7,9 @@ from __future__ import annotations
 import base64
 from pathlib import Path
 
-import pytest
 from svg2ooxml.ir.fonts import FontFaceRule, FontFaceSrc
-from svg2ooxml.services.fonts.providers.webfont import WebFontProvider
 from svg2ooxml.services.fonts.loader import FontLoader
+from svg2ooxml.services.fonts.providers.webfont import WebFontProvider
 from svg2ooxml.services.fonts.service import FontQuery
 
 

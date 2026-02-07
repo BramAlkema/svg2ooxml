@@ -9,7 +9,6 @@ import pytest
 pytest.importorskip("PIL")
 
 from PIL import Image  # type: ignore[import]  # noqa: E402
-
 from tools.visual.diff import ImageDiffError
 
 

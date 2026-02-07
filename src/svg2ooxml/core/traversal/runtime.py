@@ -2,12 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Callable, Iterable, List
-
 from lxml import etree
-
-from svg2ooxml.core.pipeline.navigation import NavigationSpec
-
 
 
 def push_element_transform(traversal, element: etree._Element) -> bool:

@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from math import sqrt
-from typing import List, Sequence
 
 from svg2ooxml.ir.geometry import BezierSegment, LineSegment, Point, Rect, SegmentType
 
@@ -82,12 +82,9 @@ def build_path_commands(segments: Sequence[SegmentType], *, closed: bool) -> lis
         if start_point is None:
             continue
         commands.append(PathCommand("moveTo", (start_point,)))
-        current = start_point
-
         for segment in subpath:
             if isinstance(segment, LineSegment):
                 commands.append(PathCommand("lnTo", (segment.end,)))
-                current = segment.end
             elif isinstance(segment, BezierSegment):
                 commands.append(
                     PathCommand(
@@ -95,12 +92,10 @@ def build_path_commands(segments: Sequence[SegmentType], *, closed: bool) -> lis
                         (segment.control1, segment.control2, segment.end),
                     )
                 )
-                current = segment.end
             else:  # pragma: no cover - reserved for future segment types
                 end_point = getattr(segment, "end", None)
                 if end_point is not None:
                     commands.append(PathCommand("lnTo", (end_point,)))
-                    current = end_point
 
         last_segment = subpath[-1]
         last_point = getattr(last_segment, "end", None)
@@ -112,7 +107,6 @@ def build_path_commands(segments: Sequence[SegmentType], *, closed: bool) -> lis
 
         if should_close:
             commands.append(PathCommand("close"))
-            current = start_point
 
     return commands
 
@@ -163,7 +157,7 @@ def _bezier_extents(segment: BezierSegment) -> tuple[float, float, float, float]
     return min(xs), max(xs), min(ys), max(ys)
 
 
-def _cubic_axis_extrema(p0: float, p1: float, p2: float, p3: float) -> List[float]:
+def _cubic_axis_extrema(p0: float, p1: float, p2: float, p3: float) -> list[float]:
     """Return axis values (including extrema) for a cubic Bezier."""
 
     values = [p0, p3]

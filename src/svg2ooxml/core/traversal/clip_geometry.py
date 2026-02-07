@@ -4,15 +4,18 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, List
+from typing import Any
 
-from svg2ooxml.drawingml.custgeom_generator import CustGeomGenerator, segments_from_primitives
 from svg2ooxml.common.geometry.clip import (
     ClipPathSegment,
-    tessellate_segments,
     rect_to_emu,
+    tessellate_segments,
 )
-from svg2ooxml.ir.geometry import Rect, SegmentType
+from svg2ooxml.drawingml.custgeom_generator import (
+    CustGeomGenerator,
+    segments_from_primitives,
+)
+from svg2ooxml.ir.geometry import SegmentType
 from svg2ooxml.ir.scene import ClipRef, MaskDefinition, MaskRef
 
 _CUST_GEOM_GENERATOR = CustGeomGenerator()
@@ -32,7 +35,7 @@ class ClipFallback(Enum):
 class ClipCustGeom:
     """Custom geometry payload for clips."""
 
-    path: List[ClipPathSegment] = field(default_factory=list)
+    path: list[ClipPathSegment] = field(default_factory=list)
     path_xml: str | None = None
     fill_rule_even_odd: bool = False
     bbox_emu: tuple[int, int, int, int] | None = None

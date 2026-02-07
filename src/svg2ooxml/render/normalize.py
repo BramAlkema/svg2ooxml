@@ -2,15 +2,16 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any, Mapping
+from typing import Any
 
 import numpy as np
 from lxml import etree
 
-from svg2ooxml.common.units import UnitConverter
 from svg2ooxml.common.geometry import Matrix2D, parse_transform_list
-from svg2ooxml.common.geometry.paths import parse_path_data, PathParseError
+from svg2ooxml.common.geometry.paths import PathParseError, parse_path_data
+from svg2ooxml.common.units import UnitConverter
 from svg2ooxml.ir.geometry import Point
 from svg2ooxml.ir.scene import Path as IRPath
 from svg2ooxml.ir.shapes import Circle, Ellipse, Rectangle
@@ -45,7 +46,7 @@ class NormalizedNode:
     clip_href: str | None = None
     mask_href: str | None = None
     filter_href: str | None = None
-    children: list["NormalizedNode"] = field(default_factory=list)
+    children: list[NormalizedNode] = field(default_factory=list)
 
     def world_matrix_np(self) -> np.ndarray:
         """Return world transform as a NumPy 3x3 matrix."""

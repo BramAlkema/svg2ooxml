@@ -31,7 +31,7 @@ __all__ = [
 ]
 
 # map symbol -> relative module
-_symbol_map = {'Mapper': 'base', 'validate_mapper_result': 'base', 'MapperError': 'base', 'OutputFormat': 'base', 'MapperResult': 'base', 'clip_result_to_xml': 'clip_render', 'GroupMapper': 'group_mapper', 'ImageProcessingAdapter': 'image_adapter', 'create_image_adapter': 'image_adapter', 'ImageProcessingResult': 'image_adapter', 'DefaultImagePolicy': 'image_mapper', 'ImageMapper': 'image_mapper', 'ImageDecision': 'image_mapper', 'PathDecision': 'path_mapper', 'PathMapper': 'path_mapper', 'DefaultPathPolicy': 'path_mapper', 'TextMapper': 'text_mapper'}
+_symbol_map = {'validate_mapper_result': 'base', 'Mapper': 'base', 'MapperError': 'base', 'MapperResult': 'base', 'OutputFormat': 'base', 'clip_result_to_xml': 'clip_render', 'GroupMapper': 'group_mapper', 'create_image_adapter': 'image_adapter', 'ImageProcessingAdapter': 'image_adapter', 'ImageProcessingResult': 'image_adapter', 'ImageMapper': 'image_mapper', 'DefaultImagePolicy': 'image_mapper', 'ImageDecision': 'image_mapper', 'PathMapper': 'path_mapper', 'PathDecision': 'path_mapper', 'DefaultPathPolicy': 'path_mapper', 'TextMapper': 'text_mapper'}
 _module_map = {'base': 'base', 'clip_render': 'clip_render', 'group_mapper': 'group_mapper', 'image_adapter': 'image_adapter', 'image_mapper': 'image_mapper', 'path_mapper': 'path_mapper', 'text_mapper': 'text_mapper'}
 
 

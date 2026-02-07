@@ -1,7 +1,7 @@
 """Text policy integration behaviour within the IR converter."""
 
-from svg2ooxml.ir.text import Run
 from svg2ooxml.core.ir import IRConverter
+from svg2ooxml.ir.text import Run
 from svg2ooxml.policy import PolicyContext
 from svg2ooxml.policy.providers.text import TextPolicyProvider
 from svg2ooxml.policy.targets import PolicyTarget

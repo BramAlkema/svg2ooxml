@@ -5,11 +5,10 @@ from __future__ import annotations
 import os
 import re
 from dataclasses import dataclass
-from typing import Iterable, Optional
 
-from .tree import SvgNode
 from svg2ooxml.common.units.scalars import PX_PER_INCH
 
+from .tree import SvgNode
 
 PRESENTATION_KEYS = {
     "fill",
@@ -40,27 +39,27 @@ class TransformCommand:
 
 @dataclass(frozen=True)
 class Presentation:
-    fill: Optional[str]
-    stroke: Optional[str]
-    stroke_width: Optional[float]
-    fill_opacity: Optional[float]
-    stroke_opacity: Optional[float]
-    opacity: Optional[float]
+    fill: str | None
+    stroke: str | None
+    stroke_width: float | None
+    fill_opacity: float | None
+    stroke_opacity: float | None
+    opacity: float | None
     transform: tuple[TransformCommand, ...] | None
-    font_family: Optional[str]
-    font_size: Optional[float]
-    font_style: Optional[str]
-    font_weight: Optional[str]
+    font_family: str | None
+    font_size: float | None
+    font_style: str | None
+    font_weight: str | None
 
 
-def _parse_float(value: str) -> Optional[float]:
+def _parse_float(value: str) -> float | None:
     try:
         return float(value)
     except (TypeError, ValueError):
         return None
 
 
-def _parse_optional_positive(value: str | None) -> Optional[float]:
+def _parse_optional_positive(value: str | None) -> float | None:
     if value is None:
         return None
     try:
@@ -72,14 +71,14 @@ def _parse_optional_positive(value: str | None) -> Optional[float]:
     return number
 
 
-def _parse_font_size(value: str | None) -> Optional[float]:
+def _parse_font_size(value: str | None) -> float | None:
     number = _parse_optional_positive(value)
     if number is None:
         return None
     return number * _DEFAULT_UNITLESS_FONT_SCALE
 
 
-def _parse_opacity(value: str | None) -> Optional[float]:
+def _parse_opacity(value: str | None) -> float | None:
     number = _parse_optional_positive(value)
     if number is None:
         return None
@@ -88,7 +87,7 @@ def _parse_opacity(value: str | None) -> Optional[float]:
     return number
 
 
-def _parse_paint(value: str | None) -> Optional[str]:
+def _parse_paint(value: str | None) -> str | None:
     if value is None:
         return None
     value = value.strip()

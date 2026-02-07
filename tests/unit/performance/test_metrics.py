@@ -1,6 +1,5 @@
 """Tests for the lightweight metrics recorder."""
 
-from pathlib import Path
 
 from svg2ooxml.performance.metrics import recorder
 

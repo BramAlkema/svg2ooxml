@@ -37,7 +37,7 @@ def rgb_to_oklab(r: float, g: float, b: float) -> tuple[float, float, float]:
     g_lin = _srgb_to_linear(g)
     b_lin = _srgb_to_linear(b)
 
-    l = 0.4122214708 * r_lin + 0.5363325363 * g_lin + 0.0514459929 * b_lin
+    l = 0.4122214708 * r_lin + 0.5363325363 * g_lin + 0.0514459929 * b_lin  # noqa: E741 -- OKLab spec notation for lightness
     m = 0.2119034982 * r_lin + 0.6806995451 * g_lin + 0.1073969566 * b_lin
     s = 0.0883024619 * r_lin + 0.2817188376 * g_lin + 0.6299787005 * b_lin
 
@@ -51,7 +51,7 @@ def rgb_to_oklab(r: float, g: float, b: float) -> tuple[float, float, float]:
     return ok_l, ok_a, ok_b
 
 
-def oklab_to_rgb(l: float, a: float, b: float) -> tuple[float, float, float]:
+def oklab_to_rgb(l: float, a: float, b: float) -> tuple[float, float, float]:  # noqa: E741 -- OKLab spec notation for lightness
     """Convert OKLab components back to sRGB (0-1)."""
 
     l_ = l + 0.3963377774 * a + 0.2158037573 * b
@@ -72,7 +72,7 @@ def oklab_to_rgb(l: float, a: float, b: float) -> tuple[float, float, float]:
     return _clamp(r), _clamp(g), _clamp(b)
 
 
-def oklab_to_oklch(l: float, a: float, b: float) -> tuple[float, float, float]:
+def oklab_to_oklch(l: float, a: float, b: float) -> tuple[float, float, float]:  # noqa: E741 -- OKLab spec notation for lightness
     """Convert OKLab to cylindrical OKLCh."""
 
     c = (a * a + b * b) ** 0.5
@@ -82,7 +82,7 @@ def oklab_to_oklch(l: float, a: float, b: float) -> tuple[float, float, float]:
     return l, c, h
 
 
-def oklch_to_oklab(l: float, c: float, h_degrees: float) -> tuple[float, float, float]:
+def oklch_to_oklab(l: float, c: float, h_degrees: float) -> tuple[float, float, float]:  # noqa: E741 -- OKLCh spec notation for lightness
     """Convert OKLCh back to OKLab."""
 
     h_rad = radians(h_degrees)
@@ -97,7 +97,7 @@ def rgb_to_oklch(r: float, g: float, b: float) -> tuple[float, float, float]:
     return oklab_to_oklch(*rgb_to_oklab(r, g, b))
 
 
-def oklch_to_rgb(l: float, c: float, h_degrees: float) -> tuple[float, float, float]:
+def oklch_to_rgb(l: float, c: float, h_degrees: float) -> tuple[float, float, float]:  # noqa: E741 -- OKLCh spec notation for lightness
     """Convenience conversion from OKLCh to sRGB."""
 
     return oklab_to_rgb(*oklch_to_oklab(l, c, h_degrees))

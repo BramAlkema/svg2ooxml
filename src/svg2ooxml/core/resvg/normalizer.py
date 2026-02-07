@@ -4,14 +4,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-
 from typing import TYPE_CHECKING
+
 if TYPE_CHECKING:
     from lxml import etree
 
 from .parser.options import Options, build_default_options
-from .parser.xml_loader import parse_svg_bytes, parse_svg_file, parse_svg_string
 from .parser.tree import SvgDocument
+from .parser.xml_loader import parse_svg_bytes, parse_svg_file, parse_svg_string
 from .usvg_tree import Tree, build_tree
 
 

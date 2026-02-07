@@ -5,12 +5,11 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+# Import centralized XML builders for safe DrawingML generation
+from svg2ooxml.drawingml.xml_builder import a_sub, p_elem, to_string
 from svg2ooxml.ir.scene import TextFrame
 
 from .base import Mapper, MapperResult, OutputFormat
-
-# Import centralized XML builders for safe DrawingML generation
-from svg2ooxml.drawingml.xml_builder import a_elem, a_sub, p_elem, p_sub, to_string
 
 
 class TextMapper(Mapper):

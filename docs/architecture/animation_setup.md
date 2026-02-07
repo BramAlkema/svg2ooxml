@@ -47,16 +47,21 @@ The `DrawingMLAnimationWriter` (`src/svg2ooxml/drawingml/animation/writer.py`) o
 
 **Architecture:**
 
+*   **Element-Based Pipeline:** All handlers return `lxml.etree._Element` objects (not strings). The writer collects these elements, assembles the complete ECMA-376 compliant timing tree, and calls `to_string()` exactly once at the end. This eliminates fragile string→parse→graft patterns.
 *   **Handler-Based Design:** Employs a modular system where specialized `AnimationHandler` implementations (e.g., `OpacityAnimationHandler`, `ColorAnimationHandler`, `MotionAnimationHandler`, `TransformAnimationHandler`, `NumericAnimationHandler`, `SetAnimationHandler`) are responsible for specific `AnimationType`s. Handlers are processed in priority order (specific to general).
 *   **Dependency Injection:** Handlers receive `AnimationXMLBuilder`, `ValueProcessor`, `TAVBuilder`, and `UnitConverter` via constructor injection.
+*   **Pre-Allocated IDs:** `TimingIDAllocator` pre-allocates sequential IDs for the entire timing tree (root=1, mainSeq=2, clickGroup=3, then animation pairs) before any handler runs. This guarantees unique, sequential IDs without mutable counters.
+*   **ECMA-376 Compliant Timing Tree:** The writer builds a proper click group wrapper (`<p:par>` with `fill="hold"`) inside the mainSeq, matching the structure PowerPoint expects for auto-play animations.
 *   **`AnimationPolicy` Integration:** Utilizes `AnimationPolicy` to make decisions on whether to skip an animation (e.g., due to high spline approximation error or unsupported features) and to manage fallback strategies.
 *   **Tracing:** Integrates with `ConversionTracer` to log events (`fragment_emitted`, `fragment_skipped`) and metadata, aiding diagnostics.
 
 **Key Components & Their Roles:**
 
-*   **`AnimationXMLBuilder` (`xml_builders.py`):** Provides methods for generating well-formed PowerPoint timing XML structures (`<p:timing>`, `<p:par>`, `<a:anim>`, etc.).
-*   **`ValueProcessor` (`value_processors.py`):** Normalizes and formats animation values (e.g., angles, scale pairs, translation pairs) for PowerPoint's specific requirements.
-*   **`TAVBuilder` (`tav_builder.py`):** Builds Time-Animated Value (TAV) lists (`<a:tavLst>`) which are crucial for multi-keyframe animations, handling `keyTimes` and `keySplines` (cubic Bezier easing) interpolation by generating intermediate keyframes for PowerPoint.
+*   **`AnimationXMLBuilder` (`xml_builders.py`):** Provides element-returning builder methods for PowerPoint timing XML structures (`build_timing_tree()`, `build_par_container_elem()`, `build_behavior_core_elem()`, `build_set_elem()`, TAV elements, etc.).
+*   **`TimingIDAllocator` (`id_allocator.py`):** Pre-allocates all IDs for the timing tree in one call. Returns a `TimingIDs` dataclass with `root`, `main_seq`, `click_group`, and per-animation `(par, behavior)` ID pairs.
+*   **`AnimationUnitConverter` (`unit_conversion.py`):** Centralized unit conversion with named constants (`PPT_ANGLE_FACTOR=60000`, `PPT_OPACITY_FACTOR=100000`, `PPT_SCALE_FACTOR=100000`) and methods for opacity, angle, EMU, scale, and slide-fraction conversions.
+*   **`ValueProcessor` (`value_processors.py`):** Parses and normalizes animation values (colors, angles, scale pairs, translation pairs, opacity) for PowerPoint's specific requirements.
+*   **`TAVBuilder` (`tav_builder.py`):** Builds Time-Animated Value (TAV) lists (`<p:tavLst>`) for multi-keyframe animations, handling `keyTimes` and `keySplines` (cubic Bezier easing) interpolation.
 *   **`UnitConverter` (`common/units.py`):** Converts SVG units (e.g., pixels) to PowerPoint's internal EMU (English Metric Units).
 
 **Handler Specifics:**

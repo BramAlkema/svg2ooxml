@@ -3,28 +3,28 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any, Optional, Sequence
+from typing import Any
 
 from svg2ooxml.common.units import UnitConverter
-from svg2ooxml.drawingml.bridges.emf_path_adapter import EMFPathAdapter, PathStyle
-from svg2ooxml.drawingml.custgeom_generator import segments_from_primitives
-from svg2ooxml.drawingml.raster_adapter import RasterAdapter
-from svg2ooxml.ir.geometry import Rect, SegmentType
-from svg2ooxml.ir.scene import ClipRef
-from svg2ooxml.ir.paint import SolidPaint
-
 from svg2ooxml.core.traversal.clip_geometry import (
     ClipComputeResult,
     ClipCustGeom,
     ClipFallback,
-    ClipPathSegment,
     ClipMediaMeta,
+    ClipPathSegment,
     compute_clip_geometry,
 )
+from svg2ooxml.drawingml.bridges.emf_path_adapter import EMFPathAdapter, PathStyle
+from svg2ooxml.drawingml.custgeom_generator import segments_from_primitives
+from svg2ooxml.drawingml.raster_adapter import RasterAdapter
 
 # Import centralized XML builders for safe DrawingML generation
 from svg2ooxml.drawingml.xml_builder import a_elem, a_sub, to_string
+from svg2ooxml.ir.geometry import Rect, SegmentType
+from svg2ooxml.ir.paint import SolidPaint
+from svg2ooxml.ir.scene import ClipRef
 
 EMU_PER_PX = 9525
 
@@ -85,8 +85,8 @@ class StructuredClipService:
     def _extract_bounds(
         self,
         clip_ref: ClipRef,
-        element_context: Optional[dict[str, Any]],
-    ) -> Optional[Rect]:
+        element_context: dict[str, Any] | None,
+    ) -> Rect | None:
         bbox = getattr(clip_ref, "bounding_box", None)
         if bbox is None and element_context:
             ctx_bbox = element_context.get("bounding_box")

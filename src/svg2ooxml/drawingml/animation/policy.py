@@ -6,11 +6,15 @@ This module determines whether animations should be skipped based on:
 - Feature support flags
 
 Policy decisions are centralized here for easier testing and maintenance.
+
+Note: Event-based begin triggers (click, element.begin, element.end) are not
+yet supported. See ``docs/specs/animation-event-triggers.md`` for the roadmap.
 """
 
 from __future__ import annotations
 
-from typing import Any, Mapping, TYPE_CHECKING
+from collections.abc import Mapping
+from typing import TYPE_CHECKING, Any
 
 from svg2ooxml.common.interpolation import BezierEasing
 

@@ -28,7 +28,7 @@ class ConversionContextBundle:
         policy_context: PolicyContext | None = None,
         unit_converter: UnitConverter | None = None,
         style_resolver: StyleResolver | None = None,
-    ) -> "ConversionContextBundle":
+    ) -> ConversionContextBundle:
         services = _clone_services(self.services)
         engine = self.policy_engine
         context = policy_context or clone_policy_context(self.policy_context)

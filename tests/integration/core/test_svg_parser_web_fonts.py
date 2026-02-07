@@ -1,8 +1,7 @@
 """Integration tests for SVGParser with web font support."""
 from __future__ import annotations
 
-import pytest
-from svg2ooxml.core.parser import SVGParser, ParserConfig
+from svg2ooxml.core.parser import SVGParser
 
 
 class TestSVGParserWebFonts:

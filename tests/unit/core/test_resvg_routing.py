@@ -7,15 +7,14 @@ This module verifies that:
 4. Fallback to legacy works when resvg conversion fails
 """
 
-import pytest
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
+
 from lxml import etree
 
 from svg2ooxml.core.ir.shape_converters import ShapeConversionMixin
 from svg2ooxml.core.traversal.coordinate_space import CoordinateSpace
-from svg2ooxml.ir.geometry import Point, LineSegment
+from svg2ooxml.ir.geometry import LineSegment, Point
 from svg2ooxml.ir.scene import Path
-from svg2ooxml.common.geometry import Matrix2D
 
 
 class MockConverter(ShapeConversionMixin):
@@ -130,6 +129,10 @@ class TestResvgRouting:
         # Create mock resvg node
         mock_node = Mock()
         mock_node.__class__.__name__ = "CircleNode"
+        mock_node.fill = None
+        mock_node.stroke = None
+        mock_node.use_source = None
+        mock_node.source = None
         converter._resvg_element_lookup[element] = mock_node
 
         coord_space = CoordinateSpace()
@@ -154,8 +157,8 @@ class TestResvgRouting:
 
                 result = converter._convert_circle(element=element, coord_space=coord_space)
 
-                # Should have tried resvg adapter
-                mock_adapter.from_circle_node.assert_called_once_with(mock_node)
+                # Should have tried resvg adapter (called with GlobalTransformProxy wrapping mock_node)
+                mock_adapter.from_circle_node.assert_called_once()
                 # Result should be a Path from resvg
                 assert isinstance(result, Path)
 
@@ -173,6 +176,10 @@ class TestResvgRouting:
         # Create mock resvg node
         mock_node = Mock()
         mock_node.__class__.__name__ = "CircleNode"
+        mock_node.fill = None
+        mock_node.stroke = None
+        mock_node.use_source = None
+        mock_node.source = None
         converter._resvg_element_lookup[element] = mock_node
 
         coord_space = CoordinateSpace()
@@ -215,6 +222,10 @@ class TestResvgRouting:
 
         mock_node = Mock()
         mock_node.__class__.__name__ = "EllipseNode"
+        mock_node.fill = None
+        mock_node.stroke = None
+        mock_node.use_source = None
+        mock_node.source = None
         converter._resvg_element_lookup[element] = mock_node
 
         coord_space = CoordinateSpace()
@@ -239,7 +250,7 @@ class TestResvgRouting:
 
                 result = converter._convert_ellipse(element=element, coord_space=coord_space)
 
-                mock_adapter.from_ellipse_node.assert_called_once_with(mock_node)
+                mock_adapter.from_ellipse_node.assert_called_once()
                 assert isinstance(result, Path)
 
     def test_convert_rect_routing(self):
@@ -256,6 +267,10 @@ class TestResvgRouting:
 
         mock_node = Mock()
         mock_node.__class__.__name__ = "RectNode"
+        mock_node.fill = None
+        mock_node.stroke = None
+        mock_node.use_source = None
+        mock_node.source = None
         converter._resvg_element_lookup[element] = mock_node
 
         coord_space = CoordinateSpace()
@@ -280,7 +295,7 @@ class TestResvgRouting:
 
                 result = converter._convert_rect(element=element, coord_space=coord_space)
 
-                mock_adapter.from_rect_node.assert_called_once_with(mock_node)
+                mock_adapter.from_rect_node.assert_called_once()
                 assert isinstance(result, Path)
 
     def test_convert_path_routing(self):
@@ -294,6 +309,10 @@ class TestResvgRouting:
 
         mock_node = Mock()
         mock_node.__class__.__name__ = "PathNode"
+        mock_node.fill = None
+        mock_node.stroke = None
+        mock_node.use_source = None
+        mock_node.source = None
         converter._resvg_element_lookup[element] = mock_node
 
         coord_space = CoordinateSpace()
@@ -318,7 +337,7 @@ class TestResvgRouting:
 
                 result = converter._convert_path(element=element, coord_space=coord_space)
 
-                mock_adapter.from_path_node.assert_called_once_with(mock_node)
+                mock_adapter.from_path_node.assert_called_once()
                 assert isinstance(result, Path)
 
     def test_convert_via_resvg_returns_none_for_unsupported_node_type(self):
@@ -332,6 +351,10 @@ class TestResvgRouting:
         # Mock unsupported node type
         mock_node = Mock()
         mock_node.__class__.__name__ = "UnsupportedNode"
+        mock_node.fill = None
+        mock_node.stroke = None
+        mock_node.use_source = None
+        mock_node.source = None
         converter._resvg_element_lookup[element] = mock_node
 
         coord_space = CoordinateSpace()

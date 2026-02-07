@@ -16,6 +16,7 @@ __all__ = [
     'SvgToPptxMultiResult',
     'SvgToPptxResult',
     'build_conversion_context',
+    'build_fidelity_tier_variants',
     'clone_policy_context',
     'derive_variants_from_trace',
     'expand_page_with_variants',
@@ -52,7 +53,7 @@ __all__ = [
 ]
 
 # map symbol -> relative module
-_symbol_map = {'ConversionContextBundle': 'conversion_context', 'build_conversion_context': 'conversion_context', 'clone_policy_context': 'conversion_context', 'resolve_policy_engine': 'conversion_context', 'resolve_policy_context': 'conversion_context', 'Converter': 'converter', 'ConvertResult': 'converter', 'SplitPage': 'multipage', 'split_svg_into_pages': 'multipage', 'SvgToPptxMultiResult': 'pptx_exporter', 'SvgPageResult': 'pptx_exporter', 'SvgConversionError': 'pptx_exporter', 'SvgToPptxResult': 'pptx_exporter', 'SvgPageSource': 'pptx_exporter', 'SvgToPptxExporter': 'pptx_exporter', 'derive_variants_from_trace': 'slide_orchestrator', 'expand_page_with_variants': 'slide_orchestrator', 'FallbackVariant': 'slide_orchestrator'}
+_symbol_map = {'ConversionContextBundle': 'conversion_context', 'clone_policy_context': 'conversion_context', 'build_conversion_context': 'conversion_context', 'resolve_policy_engine': 'conversion_context', 'resolve_policy_context': 'conversion_context', 'Converter': 'converter', 'ConvertResult': 'converter', 'SplitPage': 'multipage', 'split_svg_into_pages': 'multipage', 'SvgConversionError': 'pptx_exporter', 'SvgToPptxMultiResult': 'pptx_exporter', 'SvgPageResult': 'pptx_exporter', 'SvgPageSource': 'pptx_exporter', 'SvgToPptxExporter': 'pptx_exporter', 'SvgToPptxResult': 'pptx_exporter', 'expand_page_with_variants': 'slide_orchestrator', 'FallbackVariant': 'slide_orchestrator', 'derive_variants_from_trace': 'slide_orchestrator', 'build_fidelity_tier_variants': 'slide_orchestrator'}
 _module_map = {'animation': 'animation', 'auth': 'auth', 'conversion_context': 'conversion_context', 'converter': 'converter', 'hyperlinks': 'hyperlinks', 'ir': 'ir', 'masks': 'masks', 'multipage': 'multipage', 'parser': 'parser', 'parser.batch': 'parser.batch', 'parser.colors': 'parser.colors', 'parser.preprocess': 'parser.preprocess', 'parser.split': 'parser.split', 'pipeline': 'pipeline', 'pipeline.mappers': 'pipeline.mappers', 'pptx_exporter': 'pptx_exporter', 'resvg': 'resvg', 'resvg.geometry': 'resvg.geometry', 'resvg.painting': 'resvg.painting', 'resvg.parser': 'resvg.parser', 'resvg.text': 'resvg.text', 'resvg.utils': 'resvg.utils', 'slide_orchestrator': 'slide_orchestrator', 'styling': 'styling', 'tracing': 'tracing', 'traversal': 'traversal', 'traversal.bridges': 'traversal.bridges'}
 
 

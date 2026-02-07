@@ -1,9 +1,9 @@
-from __future__ import annotations
-
 """Timeline sampling utilities for animated SVG content."""
 
-from dataclasses import dataclass
+from __future__ import annotations
+
 import re
+from dataclasses import dataclass
 from typing import Any
 
 from svg2ooxml.common.interpolation import InterpolationEngine

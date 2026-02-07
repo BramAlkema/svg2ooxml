@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import List, Tuple
 
 from lxml import etree
 
@@ -12,7 +11,7 @@ from svg2ooxml.filters.base import Filter, FilterContext, FilterResult
 
 @dataclass
 class MergeParams:
-    inputs: List[str]
+    inputs: list[str]
 
 
 class MergeFilter(Filter):
@@ -22,8 +21,8 @@ class MergeFilter(Filter):
     def apply(self, primitive: etree._Element, context: FilterContext) -> FilterResult:
         params = self._parse_params(primitive)
         pipeline = context.pipeline_state or {}
-        resolved: List[Tuple[str, FilterResult]] = []
-        missing: List[str] = []
+        resolved: list[tuple[str, FilterResult]] = []
+        missing: list[str] = []
         for name in params.inputs:
             if name in {"SourceGraphic", "SourceAlpha"}:
                 missing.append(name)
@@ -53,7 +52,7 @@ class MergeFilter(Filter):
         )
 
     def _parse_params(self, primitive: etree._Element) -> MergeParams:
-        inputs: List[str] = []
+        inputs: list[str] = []
         for node in primitive:
             if not hasattr(node, "tag"):
                 continue
@@ -64,7 +63,7 @@ class MergeFilter(Filter):
             inputs.append(ref)
         return MergeParams(inputs=inputs)
 
-    def _combine(self, inputs: List[Tuple[str, FilterResult]], order: List[str]) -> str:
+    def _combine(self, inputs: list[tuple[str, FilterResult]], order: list[str]) -> str:
         if not inputs:
             return ""
         parts = []
@@ -74,7 +73,7 @@ class MergeFilter(Filter):
                     parts.append(result.drawingml)
         return "".join(parts)
 
-    def _collect_fallback(self, inputs: List[Tuple[str, FilterResult]]) -> str | None:
+    def _collect_fallback(self, inputs: list[tuple[str, FilterResult]]) -> str | None:
         for _name, result in inputs:
             if result.fallback:
                 return result.fallback

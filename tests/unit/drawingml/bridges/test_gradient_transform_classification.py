@@ -14,7 +14,6 @@ import pytest
 pytest.importorskip("svg2ooxml.core.resvg.painting.gradients")
 
 from svg2ooxml.drawingml.bridges.resvg_gradient_adapter import (
-    TransformClass,
     classify_linear,
     decide_radial_policy,
     radial_gradient_to_paint,
@@ -165,7 +164,7 @@ class TestGradientTransformIntegration:
 
     def test_radial_gradient_no_transform(self):
         """Test radial gradient without transform."""
-        from svg2ooxml.core.resvg.painting.gradients import RadialGradient, GradientStop
+        from svg2ooxml.core.resvg.painting.gradients import GradientStop, RadialGradient
         from svg2ooxml.core.resvg.painting.paint import Color
 
         stops = [
@@ -194,7 +193,7 @@ class TestGradientTransformIntegration:
     def test_radial_gradient_with_uniform_scale(self):
         """Test radial gradient with uniform scale transform."""
         from svg2ooxml.core.resvg.geometry.matrix import Matrix
-        from svg2ooxml.core.resvg.painting.gradients import RadialGradient, GradientStop
+        from svg2ooxml.core.resvg.painting.gradients import GradientStop, RadialGradient
         from svg2ooxml.core.resvg.painting.paint import Color
 
         transform = Matrix(a=2.0, b=0.0, c=0.0, d=2.0, e=0.0, f=0.0)
@@ -226,7 +225,7 @@ class TestGradientTransformIntegration:
     def test_radial_gradient_with_non_uniform_scale(self):
         """Test radial gradient with non-uniform scale requests raster fallback (Phase 3)."""
         from svg2ooxml.core.resvg.geometry.matrix import Matrix
-        from svg2ooxml.core.resvg.painting.gradients import RadialGradient, GradientStop
+        from svg2ooxml.core.resvg.painting.gradients import GradientStop, RadialGradient
         from svg2ooxml.core.resvg.painting.paint import Color
         from svg2ooxml.ir.paint import RadialGradientPaint
 
@@ -255,7 +254,7 @@ class TestGradientTransformIntegration:
     def test_radial_gradient_with_skew(self):
         """Test radial gradient with skew transform requests raster fallback (Phase 3)."""
         from svg2ooxml.core.resvg.geometry.matrix import Matrix
-        from svg2ooxml.core.resvg.painting.gradients import RadialGradient, GradientStop
+        from svg2ooxml.core.resvg.painting.gradients import GradientStop, RadialGradient
         from svg2ooxml.core.resvg.painting.paint import Color
         from svg2ooxml.ir.paint import RadialGradientPaint
 
@@ -285,7 +284,7 @@ class TestGradientTransformIntegration:
     def test_radial_gradient_with_mild_anisotropy(self):
         """Test radial gradient with mild anisotropy (should warn)."""
         from svg2ooxml.core.resvg.geometry.matrix import Matrix
-        from svg2ooxml.core.resvg.painting.gradients import RadialGradient, GradientStop
+        from svg2ooxml.core.resvg.painting.gradients import GradientStop, RadialGradient
         from svg2ooxml.core.resvg.painting.paint import Color
 
         transform = Matrix(a=1.015, b=0.0, c=0.0, d=1.0, e=0.0, f=0.0)

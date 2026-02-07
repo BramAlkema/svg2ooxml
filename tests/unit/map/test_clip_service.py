@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+from svg2ooxml.core.traversal.clip_geometry import ClipComputeResult, ClipFallback
 from svg2ooxml.ir.geometry import Rect
 from svg2ooxml.ir.scene import ClipRef
-from svg2ooxml.core.traversal.clip_geometry import ClipComputeResult, ClipFallback
 from svg2ooxml.services.clip_service import ClipAnalysis, StructuredClipService
 
 

@@ -7,7 +7,15 @@ from svg2ooxml.core.pipeline.navigation import (
     NavigationKind,
     NavigationSpec,
 )
-from svg2ooxml.drawingml.navigation import normalize_navigation, register_navigation
+from svg2ooxml.drawingml.navigation import register_navigation
+from svg2ooxml.drawingml.xml_builder import to_string
+
+
+def _elem_to_xml(elem) -> str:
+    """Serialize element to XML string, or return empty string for None."""
+    if elem is None:
+        return ""
+    return to_string(elem)
 
 
 def test_action_navigation_generates_valid_ppaction_uri():
@@ -29,13 +37,14 @@ def test_action_navigation_generates_valid_ppaction_uri():
     def add_asset(asset):
         assets.append(asset)
 
-    xml = register_navigation(
+    result = register_navigation(
         spec,
         scope="shape",
         text="Next Slide",
         allocate_rel_id=allocate_rel_id,
         add_asset=add_asset,
     )
+    xml = _elem_to_xml(result)
 
     # Should generate ppaction:// URI with jump parameter
     assert "ppaction://hlinkshowjump?jump=nextslide" in xml
@@ -71,13 +80,14 @@ def test_bookmark_navigation_does_not_generate_invalid_ppaction():
     def add_asset(asset):
         assets.append(asset)
 
-    xml = register_navigation(
+    result = register_navigation(
         spec,
         scope="shape",
         text="Bookmark Link",
         allocate_rel_id=allocate_rel_id,
         add_asset=add_asset,
     )
+    xml = _elem_to_xml(result)
 
     # Should NOT generate ppaction:// URI with bookmark parameter
     assert "ppaction://hlinkshowjump?bookmark=" not in xml
@@ -108,13 +118,14 @@ def test_custom_show_navigation_does_not_generate_invalid_ppaction():
     def add_asset(asset):
         assets.append(asset)
 
-    xml = register_navigation(
+    result = register_navigation(
         spec,
         scope="shape",
         text="Custom Show",
         allocate_rel_id=allocate_rel_id,
         add_asset=add_asset,
     )
+    xml = _elem_to_xml(result)
 
     # Should NOT generate ppaction:// URI with show parameter
     assert "ppaction://hlinkshowjump?show=" not in xml
@@ -147,16 +158,17 @@ def test_all_action_types_generate_valid_uris():
 
         assets = []
 
-        def add_asset(asset):
-            assets.append(asset)
+        def add_asset(asset, _assets=assets):
+            _assets.append(asset)
 
-        xml = register_navigation(
+        result = register_navigation(
             spec,
             scope="shape",
             text=f"{action.name} Action",
             allocate_rel_id=allocate_rel_id,
             add_asset=add_asset,
         )
+        xml = _elem_to_xml(result)
 
         # Verify correct jump parameter
         expected_action = f"ppaction://hlinkshowjump?jump={expected_param}"
@@ -182,13 +194,14 @@ def test_external_hyperlink_uses_relationship_not_action():
     def add_asset(asset):
         assets.append(asset)
 
-    xml = register_navigation(
+    result = register_navigation(
         spec,
         scope="shape",
         text="External Link",
         allocate_rel_id=allocate_rel_id,
         add_asset=add_asset,
     )
+    xml = _elem_to_xml(result)
 
     # Should use relationship ID, not action attribute
     assert "r:id=" in xml
@@ -222,13 +235,14 @@ def test_slide_navigation_uses_relationship_not_action():
     def add_asset(asset):
         assets.append(asset)
 
-    xml = register_navigation(
+    result = register_navigation(
         spec,
         scope="shape",
         text="Go to Slide 2",
         allocate_rel_id=allocate_rel_id,
         add_asset=add_asset,
     )
+    xml = _elem_to_xml(result)
 
     # Should use relationship ID, not action attribute
     assert "r:id=" in xml

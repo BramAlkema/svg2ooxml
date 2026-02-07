@@ -2,7 +2,10 @@
 
 import pytest
 
-from svg2ooxml.common.geometry.transforms.decompose import compose_matrix, decompose_matrix
+from svg2ooxml.common.geometry.transforms.decompose import (
+    compose_matrix,
+    decompose_matrix,
+)
 from svg2ooxml.common.geometry.transforms.matrix import Matrix2D
 from svg2ooxml.ir.geometry import Point
 

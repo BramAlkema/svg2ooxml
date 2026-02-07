@@ -1,12 +1,10 @@
 from __future__ import annotations
 
 import os
-from typing import Generator
+from collections.abc import Generator
 
 import pytest
-
 from src.svg2ooxml.api.testing import LocalAPIConfig, LocalAPIServer
-
 
 pytestmark = pytest.mark.integration
 

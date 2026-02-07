@@ -1,239 +1,149 @@
 """Motion animation handler.
 
-This module handles motion path animations (animateMotion).
-Generates PowerPoint <a:animMotion> elements with point lists.
+Generates PowerPoint ``<p:animMotion>`` elements with SVG-derived motion
+paths for ``<animateMotion>`` animations.
 """
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from .base import AnimationHandler, AnimationDefinition
-from ..value_formatters import format_point_value
+from lxml import etree
+
+from svg2ooxml.drawingml.xml_builder import p_elem, p_sub
+from svg2ooxml.ir.animation import AnimationType
+
+from .base import AnimationHandler
 
 if TYPE_CHECKING:
-    from svg2ooxml.common.units import UnitConverter
-    from ..tav_builder import TAVBuilder
-    from ..value_processors import ValueProcessor
-    from ..xml_builders import AnimationXMLBuilder
+    from svg2ooxml.ir.animation import AnimationDefinition
 
 __all__ = ["MotionAnimationHandler"]
 
 
 class MotionAnimationHandler(AnimationHandler):
-    """Handler for motion path animations.
-
-    Handles animateMotion animations with motion paths.
-    Generates PowerPoint <a:animMotion> with point list.
-
-    PowerPoint motion animations use:
-    - <a:animMotion> container
-    - <a:ptLst> with list of <a:pt x="..." y="..."/> points
-    - Points are in EMU (English Metric Units)
-
-    Example:
-        >>> handler = MotionAnimationHandler(xml_builder, value_processor, tav_builder, unit_converter)
-        >>> animation = Mock(animation_type="animateMotion", values=["M0,0 L100,100"], duration_ms=1000)
-        >>> if handler.can_handle(animation):
-        ...     xml = handler.build(animation, par_id=1, behavior_id=2)
-    """
-
-    def __init__(
-        self,
-        xml_builder: AnimationXMLBuilder,
-        value_processor: ValueProcessor,
-        tav_builder: TAVBuilder,
-        unit_converter: UnitConverter,
-    ):
-        """Initialize motion animation handler.
-
-        Args:
-            xml_builder: XML builder for creating PowerPoint elements
-            value_processor: Processor for normalizing animation values
-            tav_builder: Builder for creating keyframe (TAV) lists
-            unit_converter: Converter for SVG units to PowerPoint EMU
-        """
-        super().__init__(xml_builder, value_processor, tav_builder, unit_converter)
+    """Handler for motion path animations (``<animateMotion>``)."""
 
     def can_handle(self, animation: AnimationDefinition) -> bool:
-        """Check if this handler can process the animation.
-
-        Handles animations with is_motion property or explicit motion animation type.
-
-        Args:
-            animation: Animation definition to check
-
-        Returns:
-            True if animation is a motion animation
-
-        Example:
-            >>> handler.can_handle(animation)
-            True  # if animation.is_motion == True
-        """
-        # Import AnimationType enum
-        from svg2ooxml.ir.animation import AnimationType
-
-        # Check for explicit ANIMATE_MOTION animation type
-        animation_type = self._resolve_animation_type(animation)
-        if animation_type is not None:
-            if isinstance(animation_type, AnimationType):
-                if animation_type == AnimationType.ANIMATE_MOTION:
-                    return True
-            else:
-                # String comparison for backward compatibility
-                animation_type_str = self._animation_type_to_str(animation_type)
-                canonical_token = animation_type_str
-                for delimiter in (".", ":"):
-                    if delimiter in canonical_token:
-                        canonical_token = canonical_token.split(delimiter)[-1]
-                canonical_token = canonical_token.replace("-", "_")
-                if canonical_token == "ANIMATEMOTION":
-                    canonical_token = "ANIMATE_MOTION"
-                if canonical_token == "ANIMATE_MOTION":
-                    return True
-
-        # Check for is_motion property (from AnimationDefinition)
-        # Must be explicitly True, not just truthy (to avoid Mock objects)
-        if hasattr(animation, "is_motion"):
-            is_motion_val = animation.is_motion
-            # Check if it's a callable (property/method) or a boolean value
-            if callable(is_motion_val):
-                try:
-                    return is_motion_val() is True
-                except:
-                    return False
-            else:
-                return is_motion_val is True
-
-        return False
-
-    def _format_coord(self, value: float) -> str:
-        """Format normalized coordinate as a string."""
-        if abs(value) < 1e-10:
-            return "0"
-        formatted = f"{value:.6g}"
-        return formatted
+        return animation.animation_type == AnimationType.ANIMATE_MOTION
 
     def build(
         self,
         animation: AnimationDefinition,
         par_id: int,
         behavior_id: int,
-    ) -> str:
-        """Build PowerPoint timing XML for motion animation.
-
-        Generates <p:par> container with <a:animMotion> element.
-        """
-        # Extract motion path from values
+    ) -> etree._Element | None:
+        """Build ``<p:par>`` containing ``<p:animMotion>`` with path data."""
         if not animation.values:
-            return ""
+            return None
 
         path_value = animation.values[0]
         points = self._parse_motion_path(path_value)
 
-        # Need at least 2 points for motion
         if len(points) < 2:
-            return ""
+            return None
 
-        # Build behavior core
-        # Note: attr_name_list triggers the generation of <p:attrNameLst> with ppt_x, ppt_y
-        behavior_core = self._xml.build_behavior_core(
-            behavior_id=behavior_id,
-            duration_ms=animation.duration_ms,
-            target_shape=animation.element_id if hasattr(animation, "element_id") else "",
-            attr_name_list=["ppt_x", "ppt_y"]
-        )
-
-        # Build animMotion element
-        # Convert points to normalized slide coordinates (fractions of slide width/height)
-        from svg2ooxml.drawingml.writer import DEFAULT_SLIDE_SIZE
-        SLIDE_WIDTH_EMU, SLIDE_HEIGHT_EMU = DEFAULT_SLIDE_SIZE
-
-        path_segments: list[str] = []
-        # Initial point (usually 0,0 in relative space)
-        start_x_px, start_y_px = points[0]
-        
-        for i, (x_px, y_px) in enumerate(points):
-            # Calculate delta relative to start point in pixels
-            dx_px = x_px - start_x_px
-            dy_px = y_px - start_y_px
-            
-            # Convert delta to EMU
-            dx_emu = self._units.to_emu(dx_px, axis="x")
-            dy_emu = self._units.to_emu(dy_px, axis="y")
-            
-            # Normalize to slide dimensions
-            nx = dx_emu / SLIDE_WIDTH_EMU
-            ny = dy_emu / SLIDE_HEIGHT_EMU
-            
-            cmd = "M" if i == 0 else "L"
-            path_segments.append(f"{cmd} {self._format_coord(nx)} {self._format_coord(ny)}")
-            
-        motion_path_attr = " ".join(path_segments) + " "
-
-        # ptsTypes: one character per path point, "A" = auto/anchor point type
+        # Convert points to normalised slide-fraction coordinates
+        motion_path = self._build_motion_path_string(points)
         pts_types = "A" * len(points)
 
-        # rCtr: rotation center for the motion path animation
-        # x="4306" (~0.005 inches) is a small offset calibrated from golden master PPTX files
-        anim_motion = (
-            f'                                    <p:animMotion origin="layout" path="{motion_path_attr}" pathEditMode="relative" rAng="0" ptsTypes="{pts_types}">\n'
-            f'{behavior_core}'
-            f'                                        <p:rCtr x="4306" y="0"/>\n'
-            f'                                    </p:animMotion>'
+        # Build <p:animMotion>
+        anim_motion = p_elem(
+            "animMotion",
+            origin="layout",
+            path=motion_path,
+            pathEditMode="relative",
+            rAng="0",
+            ptsTypes=pts_types,
         )
 
-        # Build par container
-        par = self._xml.build_par_container(
+        # Behavior core
+        cBhvr = self._xml.build_behavior_core_elem(
+            behavior_id=behavior_id,
+            duration_ms=animation.duration_ms,
+            target_shape=animation.element_id,
+            attr_name_list=["ppt_x", "ppt_y"],
+            additive=animation.additive,
+            fill_mode=animation.fill_mode,
+            repeat_count=animation.repeat_count,
+        )
+        anim_motion.append(cBhvr)
+
+        # Rotation center
+        p_sub(anim_motion, "rCtr", x="4306", y="0")
+
+        # Wrap in <p:par>
+        return self._xml.build_par_container_elem(
             par_id=par_id,
             duration_ms=animation.duration_ms,
             delay_ms=animation.begin_ms,
-            child_content=anim_motion,
+            child_element=anim_motion,
             preset_id=0,
             preset_class="path",
-            preset_subtype=0,
-            node_type="withEffect",
         )
 
-        return par
+    # ------------------------------------------------------------------ #
+    # Motion path helpers                                                 #
+    # ------------------------------------------------------------------ #
+
+    def _build_motion_path_string(
+        self, points: list[tuple[float, float]]
+    ) -> str:
+        """Convert parsed points to a PowerPoint motion path string.
+
+        Points are converted from pixel deltas (relative to the first point)
+        into slide-fraction coordinates.
+        """
+        from svg2ooxml.drawingml.writer import DEFAULT_SLIDE_SIZE
+
+        slide_w, slide_h = DEFAULT_SLIDE_SIZE
+        start_x, start_y = points[0]
+
+        segments: list[str] = []
+        for i, (x_px, y_px) in enumerate(points):
+            dx_px = x_px - start_x
+            dy_px = y_px - start_y
+
+            dx_emu = self._units.to_emu(dx_px, axis="x")
+            dy_emu = self._units.to_emu(dy_px, axis="y")
+
+            nx = dx_emu / slide_w
+            ny = dy_emu / slide_h
+
+            cmd = "M" if i == 0 else "L"
+            segments.append(f"{cmd} {self._format_coord(nx)} {self._format_coord(ny)}")
+
+        return " ".join(segments) + " "
+
+    @staticmethod
+    def _format_coord(value: float) -> str:
+        """Format normalised coordinate as a string."""
+        if abs(value) < 1e-10:
+            return "0"
+        return f"{value:.6g}"
+
+    # ------------------------------------------------------------------ #
+    # Path parsing                                                        #
+    # ------------------------------------------------------------------ #
 
     def _parse_motion_path(self, path_value: str) -> list[tuple[float, float]]:
-        """Parse SVG motion path into list of points.
-
-        Handles SVG path data by:
-        1. Parsing path commands (M, L, C, etc.)
-        2. Converting curves to line segments by sampling
-        3. Deduplicating points
-
-        Args:
-            path_value: SVG path data string (e.g., "M0,0 L100,100")
-
-        Returns:
-            List of (x, y) coordinate tuples in pixels
-
-        Example:
-            >>> handler._parse_motion_path("M0,0 L100,100")
-            [(0.0, 0.0), (100.0, 100.0)]
-        """
+        """Parse SVG motion path into list of (x, y) pixel tuples."""
         if not path_value:
             return []
 
-        # Import path parsing utilities
         try:
             from svg2ooxml.common.geometry.paths import (
-                parse_path_data,
                 PathParseError,
+                parse_path_data,
             )
             from svg2ooxml.common.geometry.paths.segments import (
-                LineSegment,
                 BezierSegment,
+                LineSegment,
             )
             from svg2ooxml.ir.geometry import Point
         except ImportError:
-            # Fallback: simple parsing
             return self._simple_path_parse(path_value)
 
-        # Parse path data
         try:
             segments = parse_path_data(path_value)
         except PathParseError:
@@ -242,87 +152,47 @@ class MotionAnimationHandler(AnimationHandler):
         if not segments:
             return []
 
-        # Extract points from segments
         points: list[Point] = []
-        first_segment = segments[0]
-        points.append(first_segment.start)
+        points.append(segments[0].start)
 
         for segment in segments:
             if isinstance(segment, LineSegment):
                 points.append(segment.end)
             elif isinstance(segment, BezierSegment):
-                # Sample bezier curve
                 points.extend(self._sample_bezier(segment))
 
-        # Convert to tuples and deduplicate
         return self._dedupe_points(points)
 
-    def _sample_bezier(
-        self,
-        segment: BezierSegment,
-        *,
-        steps: int = 20,
-    ) -> list[Point]:
-        """Sample bezier curve into line segments.
+    def _sample_bezier(self, segment, *, steps: int = 20):
+        """Sample a cubic bezier curve into *steps* evenly-spaced points."""
 
-        Args:
-            segment: Bezier curve segment
-            steps: Number of sample points
-
-        Returns:
-            List of sampled points along the curve
-        """
-        from svg2ooxml.ir.geometry import Point
-
-        samples: list[Point] = []
+        samples = []
         for index in range(1, steps + 1):
             t = index / steps
             samples.append(self._bezier_point(segment, t))
         return samples
 
-    def _bezier_point(self, segment: BezierSegment, t: float) -> Point:
-        """Calculate point on cubic bezier curve at parameter t.
-
-        Uses De Casteljau's algorithm for cubic bezier curves:
-        P(t) = (1-t)³P₀ + 3(1-t)²tP₁ + 3(1-t)t²P₂ + t³P₃
-
-        Args:
-            segment: Bezier segment with start, control1, control2, end points
-            t: Parameter in range [0, 1]
-
-        Returns:
-            Point on the curve at parameter t
-        """
+    def _bezier_point(self, segment, t: float):
+        """De Casteljau evaluation of a cubic bezier at parameter *t*."""
         from svg2ooxml.ir.geometry import Point
 
         mt = 1.0 - t
         x = (
-            mt ** 3 * segment.start.x
-            + 3 * mt ** 2 * t * segment.control1.x
-            + 3 * mt * t ** 2 * segment.control2.x
-            + t ** 3 * segment.end.x
+            mt**3 * segment.start.x
+            + 3 * mt**2 * t * segment.control1.x
+            + 3 * mt * t**2 * segment.control2.x
+            + t**3 * segment.end.x
         )
         y = (
-            mt ** 3 * segment.start.y
-            + 3 * mt ** 2 * t * segment.control1.y
-            + 3 * mt * t ** 2 * segment.control2.y
-            + t ** 3 * segment.end.y
+            mt**3 * segment.start.y
+            + 3 * mt**2 * t * segment.control1.y
+            + 3 * mt * t**2 * segment.control2.y
+            + t**3 * segment.end.y
         )
         return Point(x=x, y=y)
 
-    def _dedupe_points(self, points: list[Point]) -> list[tuple[float, float]]:
-        """Remove duplicate consecutive points from path.
-
-        Args:
-            points: List of Point objects
-
-        Returns:
-            List of unique (x, y) tuples with duplicates removed
-
-        Example:
-            >>> handler._dedupe_points([Point(0, 0), Point(0, 0), Point(1, 1)])
-            [(0.0, 0.0), (1.0, 1.0)]
-        """
+    def _dedupe_points(self, points) -> list[tuple[float, float]]:
+        """Remove consecutive duplicate points."""
         deduped: list[tuple[float, float]] = []
         epsilon = 1e-6
 
@@ -337,18 +207,7 @@ class MotionAnimationHandler(AnimationHandler):
         return deduped
 
     def _simple_path_parse(self, path_value: str) -> list[tuple[float, float]]:
-        """Fallback simple path parser for basic M/L commands.
-
-        Args:
-            path_value: SVG path string
-
-        Returns:
-            List of (x, y) points
-
-        Example:
-            >>> handler._simple_path_parse("M 0 0 L 100 100")
-            [(0.0, 0.0), (100.0, 100.0)]
-        """
+        """Fallback parser for basic M/L commands."""
         points: list[tuple[float, float]] = []
         tokens = path_value.replace(",", " ").split()
 

@@ -1,7 +1,14 @@
 
 """Public CSS helpers exposed by svg2ooxml."""
 
-from svg2ooxml.common.style.resolver import *  # noqa: F401,F403
+from svg2ooxml.common.style.resolver import (
+    CompiledSelector,
+    CSSDeclaration,
+    CSSRule,
+    SelectorPart,
+    StyleContext,
+    StyleResolver,
+)
 
 __all__ = [
     "CSSDeclaration",

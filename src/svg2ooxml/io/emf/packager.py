@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Dict, Iterable, Tuple
 
 
 @dataclass(frozen=True)
@@ -22,8 +22,8 @@ class EMFRelationshipManager:
     """Deduplicates EMF blobs and tracks their relationship identifiers."""
 
     def __init__(self) -> None:
-        self._hash_to_entry: Dict[str, EMFMedia] = {}
-        self._rel_to_entry: Dict[str, EMFMedia] = {}
+        self._hash_to_entry: dict[str, EMFMedia] = {}
+        self._rel_to_entry: dict[str, EMFMedia] = {}
         self._next_id = 1
 
     def reset(self) -> None:
@@ -40,7 +40,7 @@ class EMFRelationshipManager:
         rel_id: str | None = None,
         width_emu: int | None = None,
         height_emu: int | None = None,
-    ) -> Tuple[EMFMedia, bool]:
+    ) -> tuple[EMFMedia, bool]:
         """Register an EMF payload, returning (entry, is_new)."""
 
         digest = hashlib.md5(emf_bytes, usedforsecurity=False).hexdigest()

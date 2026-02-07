@@ -6,15 +6,16 @@ import logging
 from collections.abc import Mapping
 from typing import Any
 
-from .conversion import ConversionServices
-from .font_converter import build_smart_font_converter
-from .clip_service import StructuredClipService
-from .providers import registry as provider_registry
 from svg2ooxml.elements import (
     create_gradient_processor,
     create_image_processor,
     create_pattern_processor,
 )
+
+from .clip_service import StructuredClipService
+from .conversion import ConversionServices
+from .font_converter import build_smart_font_converter
+from .providers import registry as provider_registry
 
 
 def configure_services(

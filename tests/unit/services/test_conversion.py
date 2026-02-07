@@ -7,8 +7,8 @@ from svg2ooxml.services.filter_service import FilterService
 from svg2ooxml.services.gradient_service import GradientService
 from svg2ooxml.services.image_service import ImageResource, ImageService
 from svg2ooxml.services.pattern_service import PatternService
-from svg2ooxml.services.symbol_service import SymbolService
 from svg2ooxml.services.setup import configure_services
+from svg2ooxml.services.symbol_service import SymbolService
 
 
 def test_conversion_services_register_and_resolve() -> None:

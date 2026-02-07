@@ -7,9 +7,9 @@ from types import SimpleNamespace
 from urllib.error import URLError
 
 import pytest
+from cli.commands.convert import convert
 from click.testing import CliRunner
 
-from cli.commands.convert import convert
 from svg2ooxml.core.pptx_exporter import SvgPageSource
 
 
@@ -23,7 +23,7 @@ class _MockResponse:
     def read(self) -> bytes:
         return self._data
 
-    def __enter__(self) -> "_MockResponse":
+    def __enter__(self) -> _MockResponse:
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:

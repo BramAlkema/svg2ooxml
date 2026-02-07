@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
 
 from lxml import etree
 
@@ -17,7 +16,7 @@ class DisplacementMapParameters:
     scale: float
     x_channel: str
     y_channel: str
-    result: Optional[str]
+    result: str | None
 
 
 @dataclass
@@ -28,7 +27,7 @@ class TurbulenceParameters:
     seed: float
     turbulence_type: str
     stitch_tiles: bool
-    result: Optional[str]
+    result: str | None
 
 
 def parse_channel(value: str | None) -> str:

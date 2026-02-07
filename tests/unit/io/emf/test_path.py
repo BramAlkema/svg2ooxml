@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from svg2ooxml.io.emf.path import DashPattern, apply_dash_pattern, flatten_segments
-from svg2ooxml.ir.geometry import BezierSegment, LineSegment, Point
+from svg2ooxml.ir.geometry import BezierSegment, Point
 
 
 def test_flatten_segments_bezier() -> None:

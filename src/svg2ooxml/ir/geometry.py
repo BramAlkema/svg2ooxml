@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Sequence, Union
 
 from .numpy_compat import matmul, np, sqrt
 
@@ -19,7 +19,7 @@ class Point:
         yield self.x
         yield self.y
 
-    def transform(self, matrix: Sequence[Sequence[float]]) -> "Point":
+    def transform(self, matrix: Sequence[Sequence[float]]) -> Point:
         """Apply a 3x3 transformation matrix."""
         vec = np.array([self.x, self.y, 1.0])
         transformed = matmul(matrix, vec)
@@ -58,7 +58,7 @@ class Rect:
     def contains(self, point: Point) -> bool:
         return self.left <= point.x <= self.right and self.top <= point.y <= self.bottom
 
-    def intersects(self, other: "Rect") -> bool:
+    def intersects(self, other: Rect) -> bool:
         return not (
             self.right < other.left
             or self.left > other.right
@@ -109,7 +109,7 @@ class BezierSegment(Segment):
         return Rect(min_x, min_y, max_x - min_x, max_y - min_y)
 
 
-SegmentType = Union[LineSegment, BezierSegment]
+SegmentType = LineSegment | BezierSegment
 
 
 __all__ = [

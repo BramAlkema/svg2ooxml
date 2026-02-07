@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from svg2ooxml.core.conversion_context import (
     build_conversion_context,
@@ -27,9 +27,9 @@ def convert_parser_output(
     policy_context: PolicyContext | None = None,
     *,
     policy_name: str | None = None,
-    overrides: Dict[str, Dict[str, Any]] | None = None,
+    overrides: dict[str, dict[str, Any]] | None = None,
     logger: logging.Logger | None = None,
-    tracer: "ConversionTracer | None" = None,
+    tracer: ConversionTracer | None = None,
 ) -> IRScene:
     """Convert a parser result into an IR scene graph."""
 
@@ -59,7 +59,7 @@ def convert_parser_output(
                 target_obj = TargetRegistry.default().get(target)
                 if target_obj:
                     # Merge global options with these specific overrides
-                    combined_options = dict(getattr(engine, "_policy").options)
+                    combined_options = dict(engine._policy.options)
                     combined_options.update(values)
                     
                     for provider in getattr(engine, "_providers", []):
@@ -154,9 +154,9 @@ def _hydrate_services_from_parser(
         font_service = services.resolve("font")
         if font_service is not None:
             try:
-                from svg2ooxml.services.fonts.providers.webfont import WebFontProvider
-                from svg2ooxml.services.fonts.loader import FontLoader
                 from svg2ooxml.services.fonts.fetcher import FontFetcher
+                from svg2ooxml.services.fonts.loader import FontLoader
+                from svg2ooxml.services.fonts.providers.webfont import WebFontProvider
 
                 # Create font loader with fetcher for remote fonts
                 fetcher = FontFetcher()

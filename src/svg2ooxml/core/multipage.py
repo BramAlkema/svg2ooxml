@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import copy
 from dataclasses import dataclass
-from typing import Iterable, List, Tuple
 
 from lxml import etree as ET
 
@@ -29,7 +28,7 @@ PAGE_MARKER_XPATHS: tuple[str, ...] = (
 )
 
 
-def split_svg_into_pages(svg_content: str) -> List[SplitPage]:
+def split_svg_into_pages(svg_content: str) -> list[SplitPage]:
     """Split SVG content into multiple pages based on simple heuristics."""
 
     try:
@@ -48,7 +47,7 @@ def split_svg_into_pages(svg_content: str) -> List[SplitPage]:
     return [SplitPage(content=svg_content)]
 
 
-def _find_explicit_pages(root: ET.Element) -> List[SplitPage]:
+def _find_explicit_pages(root: ET.Element) -> list[SplitPage]:
     """Detect pages using explicit marker attributes."""
 
     pages: list[SplitPage] = []
@@ -75,7 +74,7 @@ def _find_explicit_pages(root: ET.Element) -> List[SplitPage]:
     return pages
 
 
-def _find_nested_svg_pages(root: ET.Element) -> List[SplitPage]:
+def _find_nested_svg_pages(root: ET.Element) -> list[SplitPage]:
     """Detect pages by looking for nested <svg> elements."""
 
     pages: list[SplitPage] = []

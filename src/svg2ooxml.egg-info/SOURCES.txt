@@ -1,17 +1,11 @@
 .gitignore
 AGENTS.md
-DEPLOYMENT.md
-Procfile
 README.md
-cloudbuild.yaml
 debug.sh
 main.py
 pyproject.toml
 requirements-dev.txt
 requirements.txt
-requirements.txt.new
-runtime.txt
-test_api.py
 .github/workflows/test-suite.yml
 assets/.gitkeep
 assets/pptx_templates/content_types.xml
@@ -149,6 +143,7 @@ src/svg2ooxml/common/conversions/angles.py
 src/svg2ooxml/common/conversions/colors.py
 src/svg2ooxml/common/conversions/opacity.py
 src/svg2ooxml/common/conversions/powerpoint.py
+src/svg2ooxml/common/conversions/scale.py
 src/svg2ooxml/common/conversions/transforms.py
 src/svg2ooxml/common/conversions/units.py
 src/svg2ooxml/common/geometry/__init__.py
@@ -210,6 +205,7 @@ src/svg2ooxml/core/ir/smart_font_bridge.py
 src/svg2ooxml/core/ir/text_converter.py
 src/svg2ooxml/core/ir/text_pipeline.py
 src/svg2ooxml/core/masks/__init__.py
+src/svg2ooxml/core/masks/baker.py
 src/svg2ooxml/core/masks/processor.py
 src/svg2ooxml/core/parser/__init__.py
 src/svg2ooxml/core/parser/content_cleaner.py
@@ -326,8 +322,11 @@ src/svg2ooxml/drawingml/writer.py
 src/svg2ooxml/drawingml/xml_builder.py
 src/svg2ooxml/drawingml/animation/__init__.py
 src/svg2ooxml/drawingml/animation/constants.py
+src/svg2ooxml/drawingml/animation/id_allocator.py
 src/svg2ooxml/drawingml/animation/policy.py
 src/svg2ooxml/drawingml/animation/tav_builder.py
+src/svg2ooxml/drawingml/animation/timing_utils.py
+src/svg2ooxml/drawingml/animation/unit_conversion.py
 src/svg2ooxml/drawingml/animation/value_formatters.py
 src/svg2ooxml/drawingml/animation/value_processors.py
 src/svg2ooxml/drawingml/animation/writer.py
@@ -495,7 +494,6 @@ testing/fixtures/.gitkeep
 testing/golden/.gitkeep
 testing/visual/.gitkeep
 testing/visual/baseline/.gitkeep
-tests/W3C_SVG_11_TestSuite.tar.gz
 tests/__init__.py
 tests/conftest.py
 tests/fixtures/geometry/polygon_simple.json

@@ -15,7 +15,7 @@ from svg2ooxml.color import (
 
 def _approx_tuple(actual: tuple[float, ...], expected: tuple[float, ...], *, tol: float = 1e-6) -> None:
     assert len(actual) == len(expected)
-    for act, exp in zip(actual, expected):
+    for act, exp in zip(actual, expected, strict=True):
         assert math.isclose(act, exp, rel_tol=tol, abs_tol=tol)
 
 
@@ -28,7 +28,7 @@ def test_rgb_oklab_round_trip() -> None:
 
 def test_rgb_oklch_round_trip() -> None:
     original = (0.8, 0.3, 0.6)
-    l, c, h = rgb_to_oklch(*original)
+    l, c, h = rgb_to_oklch(*original)  # noqa: E741 -- OKLCh spec notation for lightness
     converted = oklch_to_rgb(l, c, h)
     _approx_tuple(converted, original, tol=1e-4)
 

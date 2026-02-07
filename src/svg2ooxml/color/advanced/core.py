@@ -9,15 +9,17 @@ and leverages colorspacious for accurate color science operations.
 from __future__ import annotations
 
 import threading
-from typing import Any, Dict, Tuple, Union
+from typing import Any
 
 import colorspacious
 import numpy as np
 
-from .color_spaces import ColorSpaceConverter
+from svg2ooxml.common.conversions.opacity import opacity_to_ppt
 
 # Import centralized XML builders for safe DrawingML generation
 from svg2ooxml.drawingml.xml_builder import a_elem, a_sub, to_string
+
+from .color_spaces import ColorSpaceConverter
 
 # Global cache for color conversions to improve performance
 _conversion_cache = {}
@@ -131,7 +133,7 @@ class Color:
             try:
                 self._rgb = tuple(int(hex_val[i:i+2], 16) for i in (0, 2, 4))
             except ValueError:
-                raise ValueError(f"Invalid hex color format: {value}")
+                raise ValueError(f"Invalid hex color format: {value}") from None
 
         elif value.startswith('rgb'):
             # RGB/RGBA functional notation
@@ -169,8 +171,8 @@ class Color:
                 pattern = r'hsla\s*\(\s*([\d.]+)\s*,\s*([\d.]+)%\s*,\s*([\d.]+)%\s*,\s*([\d.]+)\s*\)'
                 match = re.match(pattern, value)
                 if match:
-                    h, s, l, a = match.groups()
-                    h, s, l = float(h), float(s), float(l)
+                    h, s, l, a = match.groups()  # noqa: E741 -- HSL spec notation for lightness
+                    h, s, l = float(h), float(s), float(l)  # noqa: E741 -- HSL spec notation for lightness
                     # Validate HSL ranges
                     if not (0 <= h <= 360 and 0 <= s <= 100 and 0 <= l <= 100):
                         raise ValueError(f"Invalid hsl format: {value}")
@@ -182,8 +184,8 @@ class Color:
                 pattern = r'hsl\s*\(\s*([\d.]+)\s*,\s*([\d.]+)%\s*,\s*([\d.]+)%\s*\)'
                 match = re.match(pattern, value)
                 if match:
-                    h, s, l = match.groups()
-                    h, s, l = float(h), float(s), float(l)
+                    h, s, l = match.groups()  # noqa: E741 -- HSL spec notation for lightness
+                    h, s, l = float(h), float(s), float(l)  # noqa: E741 -- HSL spec notation for lightness
                     # Validate HSL ranges
                     if not (0 <= h <= 360 and 0 <= s <= 100 and 0 <= l <= 100):
                         raise ValueError(f"Invalid hsl format: {value}")
@@ -232,7 +234,7 @@ class Color:
             # HSL format
             h = value.get('h', 0)
             s = value.get('s', 0) / 100.0 if value.get('s', 0) > 1 else value.get('s', 0)
-            l = value.get('l', 0) / 100.0 if value.get('l', 0) > 1 else value.get('l', 0)
+            l = value.get('l', 0) / 100.0 if value.get('l', 0) > 1 else value.get('l', 0)  # noqa: E741 -- HSL spec notation for lightness
             self._rgb = self._hsl_to_rgb(h, s, l)
             self._alpha = value.get('a', 1.0)
         elif 'r' in value and 'g' in value and 'b' in value:
@@ -253,7 +255,7 @@ class Color:
         if value.shape[-1] > 3:
             self._alpha = float(value.flatten()[3])
 
-    def _hsl_to_rgb(self, h: float, s: float, l: float) -> tuple:
+    def _hsl_to_rgb(self, h: float, s: float, l: float) -> tuple:  # noqa: E741 -- HSL spec notation for lightness
         """Convert HSL to RGB."""
         h = h % 360 / 360.0  # Normalize hue to 0-1
 
@@ -262,11 +264,16 @@ class Color:
             r = g = b = l
         else:
             def hue_to_rgb(p, q, t):
-                if t < 0: t += 1
-                if t > 1: t -= 1
-                if t < 1/6: return p + (q - p) * 6 * t
-                if t < 1/2: return q
-                if t < 2/3: return p + (q - p) * (2/3 - t) * 6
+                if t < 0:
+                    t += 1
+                if t > 1:
+                    t -= 1
+                if t < 1 / 6:
+                    return p + (q - p) * 6 * t
+                if t < 1 / 2:
+                    return q
+                if t < 2 / 3:
+                    return p + (q - p) * (2 / 3 - t) * 6
                 return p
 
             q = l * (1 + s) if l < 0.5 else l + s - l * s
@@ -426,7 +433,7 @@ class Color:
         diff = max_val - min_val
 
         # Lightness
-        l = (max_val + min_val) / 2.0
+        l = (max_val + min_val) / 2.0  # noqa: E741 -- HSL spec notation for lightness
 
         if diff == 0:
             # Achromatic
@@ -651,7 +658,7 @@ class Color:
         srgbClr = a_elem("srgbClr", val=color_hex)
 
         if self._alpha < 1.0:
-            alpha_val = int(self._alpha * 100000)
+            alpha_val = opacity_to_ppt(self._alpha)
             a_sub(srgbClr, "alpha", val=alpha_val)
 
         return to_string(srgbClr)
@@ -678,7 +685,7 @@ class Color:
 
             if method.lower() == 'cie76':
                 # Simple Euclidean distance in Lab space
-                return float(np.sqrt(sum((a - b) ** 2 for a, b in zip(color1_lab, color2_lab))))
+                return float(np.sqrt(sum((a - b) ** 2 for a, b in zip(color1_lab, color2_lab, strict=True))))
 
             elif method.lower() == 'cie2000':
                 # Use colorspacious's Delta E 2000 implementation
@@ -689,7 +696,7 @@ class Color:
 
         except Exception:
             # Fallback to simple RGB distance
-            rgb_diff = sum((a - b) ** 2 for a, b in zip(self._rgb, other._rgb))
+            rgb_diff = sum((a - b) ** 2 for a, b in zip(self._rgb, other._rgb, strict=True))
             return float(np.sqrt(rgb_diff) / np.sqrt(3 * 255 * 255) * 100)  # Normalize to ~0-100 scale
 
     # Utility Methods
@@ -712,7 +719,7 @@ class Color:
         return f"Color({self.hex(include_hash=True)}, alpha={self._alpha})"
 
     @classmethod
-    def from_lab(cls, l: float, a: float, b: float, alpha: float = 1.0) -> Color:
+    def from_lab(cls, l: float, a: float, b: float, alpha: float = 1.0) -> Color:  # noqa: E741 -- CIE Lab spec notation for lightness
         """
         Create Color from Lab values using colorspacious.
 
@@ -740,10 +747,10 @@ class Color:
             return color
 
         except Exception as e:
-            raise ValueError(f"Invalid Lab values ({l}, {a}, {b}): {e}")
+            raise ValueError(f"Invalid Lab values ({l}, {a}, {b}): {e}") from e
 
     @classmethod
-    def from_lch(cls, l: float, c: float, h: float, alpha: float = 1.0) -> Color:
+    def from_lch(cls, l: float, c: float, h: float, alpha: float = 1.0) -> Color:  # noqa: E741 -- CIE LCH spec notation for lightness
         """
         Create Color from LCH values using colorspacious.
 
@@ -771,10 +778,10 @@ class Color:
             return color
 
         except Exception as e:
-            raise ValueError(f"Invalid LCH values ({l}, {c}, {h}): {e}")
+            raise ValueError(f"Invalid LCH values ({l}, {c}, {h}): {e}") from e
 
     @classmethod
-    def from_hsl(cls, h: float, s: float, l: float, alpha: float = 1.0) -> Color:
+    def from_hsl(cls, h: float, s: float, l: float, alpha: float = 1.0) -> Color:  # noqa: E741 -- HSL spec notation for lightness
         """
         Create Color from HSL values.
 
@@ -800,7 +807,7 @@ class Color:
         return color
 
     @classmethod
-    def from_oklab(cls, l: float, a: float, b: float, alpha: float = 1.0) -> Color:
+    def from_oklab(cls, l: float, a: float, b: float, alpha: float = 1.0) -> Color:  # noqa: E741 -- OKLab spec notation for lightness
         """
         Create Color from OKLab values.
 
@@ -827,7 +834,7 @@ class Color:
         return color
 
     @classmethod
-    def from_oklch(cls, l: float, c: float, h: float, alpha: float = 1.0) -> Color:
+    def from_oklch(cls, l: float, c: float, h: float, alpha: float = 1.0) -> Color:  # noqa: E741 -- OKLCh spec notation for lightness
         """
         Create Color from OKLCh values.
 

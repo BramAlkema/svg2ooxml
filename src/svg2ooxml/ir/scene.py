@@ -2,15 +2,16 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Literal, Mapping, Union
+from typing import Any, Literal
 
 from .effects import Effect
 from .geometry import Point, Rect, SegmentType
 from .numpy_compat import np
 from .paint import Paint, Stroke
-from .shapes import Circle, Ellipse, Rectangle, Line, Polyline, Polygon
+from .shapes import Circle, Ellipse, Line, Polygon, Polyline, Rectangle
 from .text import TextFrame
 
 
@@ -179,7 +180,7 @@ class Path:
 @dataclass(frozen=True)
 class Group:
     children: list[
-        Union["Path", Circle, Ellipse, Rectangle, Line, Polyline, Polygon, TextFrame, "Group", "Image"]
+        Path | Circle | Ellipse | Rectangle | Line | Polyline | Polygon | TextFrame | Group | Image
     ]
     clip: ClipRef | None = None
     mask: MaskRef | None = None
@@ -241,7 +242,7 @@ class Image:
         return Rect(self.origin.x, self.origin.y, self.size.width, self.size.height)
 
 
-IRElement = Union[Path, Circle, Ellipse, Rectangle, TextFrame, Group, Image]
+IRElement = Path | Circle | Ellipse | Rectangle | TextFrame | Group | Image
 SceneGraph = list[IRElement]
 
 

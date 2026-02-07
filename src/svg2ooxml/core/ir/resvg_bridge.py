@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from lxml import etree
 
 from svg2ooxml.clipmask.types import ClipDefinition, MaskInfo
-from svg2ooxml.core.traversal.bridges import collect_resvg_clip_definitions, collect_resvg_mask_info
+from svg2ooxml.core.traversal.bridges import (
+    collect_resvg_clip_definitions,
+    collect_resvg_mask_info,
+)
 from svg2ooxml.drawingml.bridges import (
     describe_linear_gradient,
     describe_pattern,
@@ -16,10 +19,18 @@ from svg2ooxml.drawingml.bridges import (
 )
 
 try:  # pragma: no cover - resvg bridge optional while port completes
-    from svg2ooxml.core.resvg.normalizer import normalize_svg_element as resvg_normalize_element
-    from svg2ooxml.core.resvg.usvg_tree import BaseNode as ResvgBaseNode, Tree as ResvgTree, PatternNode
+    from svg2ooxml.core.resvg.normalizer import (
+        normalize_svg_element as resvg_normalize_element,
+    )
+    from svg2ooxml.core.resvg.painting.gradients import (
+        LinearGradient,
+        PatternPaint,
+        RadialGradient,
+    )
     from svg2ooxml.core.resvg.painting.paint import PaintReference
-    from svg2ooxml.core.resvg.painting.gradients import LinearGradient, RadialGradient, PatternPaint
+    from svg2ooxml.core.resvg.usvg_tree import BaseNode as ResvgBaseNode
+    from svg2ooxml.core.resvg.usvg_tree import PatternNode
+    from svg2ooxml.core.resvg.usvg_tree import Tree as ResvgTree
     from svg2ooxml.filters.resvg_bridge import resolve_filter_node
 except Exception:  # pragma: no cover - defensive fallback when bridge missing
     resvg_normalize_element = None  # type: ignore
@@ -39,7 +50,7 @@ if TYPE_CHECKING:  # pragma: no cover - type checking only
 class ResvgBridge:
     """Build resvg lookup tables and register resvg assets."""
 
-    def __init__(self, context: "IRConverterContext") -> None:
+    def __init__(self, context: IRConverterContext) -> None:
         self._context = context
         self.tree: ResvgTree | None = None
         self.element_lookup: dict[etree._Element, ResvgBaseNode] = {}
@@ -62,7 +73,7 @@ class ResvgBridge:
 
         try:
             result = resvg_normalize_element(svg_root)
-        except Exception as e:
+        except Exception:
             self._context.trace_stage(
                 "normalization_failed",
                 stage="resvg",

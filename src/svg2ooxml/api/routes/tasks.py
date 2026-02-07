@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel
 
 from ..services.export_service import ExportService
@@ -87,7 +87,7 @@ async def process_export_task(request: TaskRequest) -> dict:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to process job: {str(e)}",
-        )
+        ) from e
 
 
 __all__ = ["router"]

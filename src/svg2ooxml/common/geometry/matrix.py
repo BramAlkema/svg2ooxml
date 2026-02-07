@@ -33,10 +33,10 @@ class Matrix2D:
         d: float,
         e: float,
         f: float,
-    ) -> "Matrix2D":
+    ) -> Matrix2D:
         return cls(a, b, c, d, e, f)
 
-    def multiply(self, other: "Matrix2D") -> "Matrix2D":
+    def multiply(self, other: Matrix2D) -> Matrix2D:
         return Matrix2D(
             a=self.a * other.a + self.c * other.b,
             b=self.b * other.a + self.d * other.b,
@@ -46,13 +46,13 @@ class Matrix2D:
             f=self.b * other.e + self.d * other.f + self.f,
         )
 
-    def __matmul__(self, other: "Matrix2D") -> "Matrix2D":
+    def __matmul__(self, other: Matrix2D) -> Matrix2D:
         return self.multiply(other)
 
     def determinant(self) -> float:
         return self.a * self.d - self.b * self.c
 
-    def inverse(self) -> "Matrix2D":
+    def inverse(self) -> Matrix2D:
         det = self.determinant()
         if abs(det) < 1e-12:
             raise ValueError("Matrix is not invertible")
@@ -103,23 +103,23 @@ class Matrix2D:
         )
 
     @classmethod
-    def identity(cls) -> "Matrix2D":
+    def identity(cls) -> Matrix2D:
         return cls()
 
     @classmethod
-    def translation(cls, tx: float, ty: float) -> "Matrix2D":
+    def translation(cls, tx: float, ty: float) -> Matrix2D:
         return cls(e=tx, f=ty)
 
     @classmethod
-    def translate(cls, tx: float, ty: float = 0.0) -> "Matrix2D":
+    def translate(cls, tx: float, ty: float = 0.0) -> Matrix2D:
         return cls.translation(tx, ty)
 
     @classmethod
-    def scale(cls, sx: float, sy: float | None = None) -> "Matrix2D":
+    def scale(cls, sx: float, sy: float | None = None) -> Matrix2D:
         return cls(a=sx, d=sy if sy is not None else sx)
 
     @classmethod
-    def rotation(cls, angle_deg: float, cx: float = 0.0, cy: float = 0.0) -> "Matrix2D":
+    def rotation(cls, angle_deg: float, cx: float = 0.0, cy: float = 0.0) -> Matrix2D:
         angle = radians(angle_deg)
         cos_a = cos(angle)
         sin_a = sin(angle)
@@ -133,15 +133,15 @@ class Matrix2D:
         )
 
     @classmethod
-    def skew_x(cls, angle_deg: float) -> "Matrix2D":
+    def skew_x(cls, angle_deg: float) -> Matrix2D:
         return cls(c=sin(radians(angle_deg)))
 
     @classmethod
-    def skew_y(cls, angle_deg: float) -> "Matrix2D":
+    def skew_y(cls, angle_deg: float) -> Matrix2D:
         return cls(b=sin(radians(angle_deg)))
 
     @classmethod
-    def from_transform(cls, name: str, values: Iterable[float]) -> "Matrix2D":
+    def from_transform(cls, name: str, values: Iterable[float]) -> Matrix2D:
         vals = list(values)
         if name == "matrix" and len(vals) >= 6:
             return cls(*vals[:6])
@@ -177,7 +177,7 @@ class Matrix2D:
         return cls.identity()
 
     @classmethod
-    def rotate(cls, angle_deg: float, cx: float = 0.0, cy: float = 0.0) -> "Matrix2D":
+    def rotate(cls, angle_deg: float, cx: float = 0.0, cy: float = 0.0) -> Matrix2D:
         return cls.rotation(angle_deg, cx, cy)
 
     def as_tuple(self) -> tuple[float, float, float, float, float, float]:

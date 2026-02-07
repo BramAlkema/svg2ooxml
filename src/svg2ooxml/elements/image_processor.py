@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """
 Image Processor
 
@@ -14,12 +12,14 @@ Features:
 - Performance optimization for complex images
 """
 
+from __future__ import annotations
+
 import hashlib
 import logging
 import re
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any
 from urllib.parse import urlparse
 
 from lxml import etree as ET

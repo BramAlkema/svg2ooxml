@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import math
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Iterable, Optional
 
 from ..parser.presentation import TransformCommand
 
@@ -19,10 +19,10 @@ class Matrix:
     f: float
 
     @classmethod
-    def identity(cls) -> "Matrix":
+    def identity(cls) -> Matrix:
         return cls(1.0, 0.0, 0.0, 1.0, 0.0, 0.0)
 
-    def multiply(self, other: "Matrix") -> "Matrix":
+    def multiply(self, other: Matrix) -> Matrix:
         return Matrix(
             a=self.a * other.a + self.c * other.b,
             b=self.b * other.a + self.d * other.b,
@@ -71,7 +71,7 @@ def _matrix_from_command(command: TransformCommand) -> Matrix:
     return Matrix.identity()
 
 
-def matrix_from_commands(commands: Optional[Iterable[TransformCommand]]) -> Matrix:
+def matrix_from_commands(commands: Iterable[TransformCommand] | None) -> Matrix:
     matrix = Matrix.identity()
     if not commands:
         return matrix

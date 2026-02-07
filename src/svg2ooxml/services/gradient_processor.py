@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import hashlib
-import math
+from collections.abc import Iterable
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Dict, Iterable, Tuple
+from typing import Any
 
 from lxml import etree
 
@@ -50,7 +50,7 @@ class GradientOptimisationPlan:
     flatten_transform: bool
     normalise_spread: bool
     sanitise_color_space: bool
-    notes: Tuple[str, ...] = ()
+    notes: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -67,8 +67,8 @@ class GradientProcessor:
     """Inspect SVG gradient definitions and recommend transformations."""
 
     def __init__(self) -> None:
-        self._cache: Dict[str, GradientAnalysis] = {}
-        self.stats: Dict[str, int] = {
+        self._cache: dict[str, GradientAnalysis] = {}
+        self.stats: dict[str, int] = {
             "analysed": 0,
             "cache_hits": 0,
             "simplified": 0,

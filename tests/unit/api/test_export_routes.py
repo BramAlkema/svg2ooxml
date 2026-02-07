@@ -8,16 +8,16 @@ pytest.importorskip("huey")
 
 from datetime import datetime
 
+
 @pytest.fixture()
 def client_with_service(monkeypatch):
-    from fastapi import FastAPI
+    from svg2ooxml.api.services import subscription_repository as repo_module
     from svg2ooxml.api.services.dependencies import ExportServiceDependencies
     from svg2ooxml.api.services.fakes import (
         FakeFirestoreClient,
         FakeStorageClient,
         OfflineFontFetcher,
     )
-    from svg2ooxml.api.services import subscription_repository as repo_module
 
     # Mock google.auth.default()
     monkeypatch.setattr("google.auth.default", lambda scopes=None: (None, None))

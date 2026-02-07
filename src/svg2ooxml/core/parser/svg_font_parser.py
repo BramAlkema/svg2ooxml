@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterable
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import Iterable, Tuple
 
 from lxml import etree  # type: ignore[import-untyped]
 

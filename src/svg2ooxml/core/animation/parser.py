@@ -1,10 +1,10 @@
-from __future__ import annotations
-
 """SMIL animation parser that converts SVG elements into animation IR."""
 
-from dataclasses import dataclass
+from __future__ import annotations
+
 import re
-from typing import Iterable
+from collections.abc import Iterable
+from dataclasses import dataclass
 
 from lxml import etree
 

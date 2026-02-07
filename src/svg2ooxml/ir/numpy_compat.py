@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import math
-from typing import Iterable, Sequence
+from collections.abc import Iterable
 
 try:  # pragma: no cover - real numpy branch exercised in integration
     import numpy as _np
@@ -53,7 +53,7 @@ except ImportError:  # pragma: no cover - fallback is simple deterministic code
         if isinstance(a, (list, tuple)) and a and isinstance(a[0], (list, tuple)):
             result = []
             for row in a:
-                result.append(sum(float(r) * float(c) for r, c in zip(row, vector)))
+                result.append(sum(float(r) * float(c) for r, c in zip(row, vector, strict=True)))
             return tuple(result)
 
         raise TypeError("Fallback matmul expects 2-D matrix and 1-D vector")

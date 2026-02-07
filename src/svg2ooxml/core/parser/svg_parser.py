@@ -6,7 +6,7 @@ import logging
 import os
 import time
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Dict
+from typing import TYPE_CHECKING, Any
 
 from lxml import etree
 
@@ -18,20 +18,21 @@ from svg2ooxml.core.conversion_context import (
 from svg2ooxml.performance.metrics import record_metric
 from svg2ooxml.services import ConversionServices
 
-from .preprocess.services import ParserServices
 from .colors.parsing import parse_color
 from .content_cleaner import prepare_svg_content
 from .css_font_parser import CSSFontFaceParser
 from .dom_loader import ParserOptions, XMLParser
 from .normalization import SafeSVGNormalizer
+from .preprocess.services import ParserServices
 from .reference_collector import collect_references
 from .references import collect_namespaces, has_external_references
 from .result import ParseResult
 from .statistics import compute_statistics
-from .style_context import StyleContext as ParserStyleContext, resolve_viewport
+from .style_context import StyleContext as ParserStyleContext
+from .style_context import resolve_viewport
+from .svg_font_parser import SVGFontParser
 from .units import viewbox_to_px
 from .validators import has_basic_dimensions
-from .svg_font_parser import SVGFontParser
 
 
 @dataclass(slots=True)
@@ -81,7 +82,7 @@ class SVGParser:
         self,
         svg_content: str,
         *,
-        tracer: "ConversionTracer | None" = None,
+        tracer: ConversionTracer | None = None,
         source_path: str | None = None,
     ) -> ParseResult:
         """Parse the provided SVG content into an XML tree."""
@@ -399,10 +400,10 @@ class SVGParser:
 
     @staticmethod
     def _trace(
-        tracer: "ConversionTracer | None",
+        tracer: ConversionTracer | None,
         action: str,
         *,
-        metadata: Dict[str, Any] | None = None,
+        metadata: dict[str, Any] | None = None,
         subject: str | None = None,
     ) -> None:
         if tracer is None:
@@ -586,7 +587,7 @@ def parse_svg(
     *,
     config: ParserConfig | None = None,
     services: ConversionServices | ParserServices | ConversionContextBundle | None = None,
-    tracer: "ConversionTracer | None" = None,
+    tracer: ConversionTracer | None = None,
     source_path: str | None = None,
 ) -> ParseResult:
     """Convenience helper that parses ``svg_content`` into a :class:`ParseResult`."""

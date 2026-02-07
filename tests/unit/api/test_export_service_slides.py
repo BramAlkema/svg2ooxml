@@ -7,8 +7,15 @@ from svg2ooxml.api.services import export_service as export_service_module
 from svg2ooxml.api.services.converter import ConversionArtifacts, FontDiagnostics
 from svg2ooxml.api.services.dependencies import ExportServiceDependencies
 from svg2ooxml.api.services.export_service import ExportService, ExportStatus
-from svg2ooxml.api.services.fakes import FakeFirestoreClient, FakeStorageClient, OfflineFontFetcher
-from svg2ooxml.api.services.slides_publisher import SlidesPublishResult, SlidesPublishingError
+from svg2ooxml.api.services.fakes import (
+    FakeFirestoreClient,
+    FakeStorageClient,
+    OfflineFontFetcher,
+)
+from svg2ooxml.api.services.slides_publisher import (
+    SlidesPublishingError,
+    SlidesPublishResult,
+)
 
 
 @pytest.fixture()

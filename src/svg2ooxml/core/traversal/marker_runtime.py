@@ -3,19 +3,19 @@
 from __future__ import annotations
 
 import math
-from typing import Any, Iterable, Mapping
+from collections.abc import Mapping
+from typing import Any
 
 from lxml import etree
 
 from svg2ooxml.common.geometry import Matrix2D
+from svg2ooxml.common.geometry.paths import parse_path_data
 from svg2ooxml.core.styling.style_runtime import extract_style
 from svg2ooxml.core.traversal.markers import (
     MarkerInstance,
     apply_local_transform,
     build_marker_transform,
-    flatten_points,
 )
-from svg2ooxml.common.geometry.paths import parse_path_data
 from svg2ooxml.ir.geometry import BezierSegment, LineSegment, Point, SegmentType
 from svg2ooxml.ir.paint import GradientPaintRef, PatternPaint, SolidPaint, Stroke
 from svg2ooxml.ir.scene import Path
@@ -487,7 +487,7 @@ def _marker_segments_for_element(element: etree._Element, local_name: str) -> li
         if local_name == "polygon" and points:
             points.append(points[0])
         segments: list[SegmentType] = []
-        for start, end in zip(points[:-1], points[1:]):
+        for start, end in zip(points[:-1], points[1:], strict=True):
             segments.append(LineSegment(start, end))
         return segments
 
@@ -616,7 +616,7 @@ def _compute_mid_markers(
     anchors: list[tuple[Point, float]] = []
     if len(segments) < 2:
         return anchors
-    for first, second in zip(segments[:-1], segments[1:]):
+    for first, second in zip(segments[:-1], segments[1:], strict=True):
         join_point = first.end
         angle_in = _segment_angle(first, forward=False, tolerance=tolerance)
         angle_out = _segment_angle(second, forward=True, tolerance=tolerance)

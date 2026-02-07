@@ -5,15 +5,15 @@ from __future__ import annotations
 from lxml import etree
 
 from svg2ooxml.color.spaces import ColorSpaceResult
-from svg2ooxml.core.traversal.coordinate_space import CoordinateSpace
 from svg2ooxml.core.ir.policy_hooks import PolicyHooksMixin
 from svg2ooxml.core.ir.shape_converters import ShapeConversionMixin
-from svg2ooxml.core.styling.style_extractor import StyleExtractor
-from svg2ooxml.policy.constants import FALLBACK_EMF, FALLBACK_RASTERIZE
+from svg2ooxml.core.styling.style_extractor import StyleExtractor, StyleResult
+from svg2ooxml.core.traversal.coordinate_space import CoordinateSpace
 from svg2ooxml.drawingml.bridges import describe_gradient_element
-from svg2ooxml.services.setup import configure_services
+from svg2ooxml.policy.constants import FALLBACK_EMF, FALLBACK_RASTERIZE
 from svg2ooxml.services.color_service import ColorNormalizedImage
 from svg2ooxml.services.image_service import ImageResource
+from svg2ooxml.services.setup import configure_services
 
 
 def _extractor() -> StyleExtractor:
@@ -111,10 +111,20 @@ class _DummyServices:
         self.color_space_service = _StubColorSpaceService()
 
 
+class _StubStyleExtractor:
+    """Minimal stub that returns a default StyleResult."""
+
+    def extract(self, element, services, *, context=None):
+        return StyleResult(fill=None, stroke=None, opacity=1.0, effects=[], metadata={})
+
+
 class _DummyConverter(ShapeConversionMixin, PolicyHooksMixin):
     def __init__(self, services: _DummyServices, policy: dict[str, object]) -> None:
         self._services = services
         self._policy_context = {"image": policy}
+        self._style_extractor = _StubStyleExtractor()
+        self._css_context = None
+        self._resvg_tree = None
 
     def _resolve_clip_ref(self, _element):  # pragma: no cover - simple stub
         return None

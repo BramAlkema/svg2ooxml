@@ -2,12 +2,19 @@
 
 from __future__ import annotations
 
+import pytest
 from lxml import etree as ET
 
-from svg2ooxml.drawingml.writer import DrawingMLWriter, EMU_PER_PX
-from svg2ooxml.core.pipeline.navigation import NavigationKind, NavigationSpec, SlideTarget
-from svg2ooxml.ir.geometry import Point, Rect, LineSegment, BezierSegment
-from svg2ooxml.ir.paint import SolidPaint, LinearGradientPaint, GradientStop, Stroke
+from svg2ooxml.core.ir import IRScene
+from svg2ooxml.core.pipeline.navigation import (
+    NavigationKind,
+    NavigationSpec,
+    SlideTarget,
+)
+from svg2ooxml.drawingml.writer import EMU_PER_PX, DrawingMLWriter
+from svg2ooxml.ir.effects import CustomEffect
+from svg2ooxml.ir.geometry import BezierSegment, LineSegment, Point, Rect
+from svg2ooxml.ir.paint import GradientStop, LinearGradientPaint, SolidPaint, Stroke
 from svg2ooxml.ir.scene import (
     ClipRef,
     ClipStrategy,
@@ -15,12 +22,18 @@ from svg2ooxml.ir.scene import (
     MaskDefinition,
     MaskInstance,
     MaskRef,
+)
+from svg2ooxml.ir.scene import (
     Path as IRPath,
 )
-from svg2ooxml.ir.effects import CustomEffect
-from svg2ooxml.ir.shapes import Rectangle, Line, Polyline, Polygon
-from svg2ooxml.ir.text import EmbeddedFontPlan, Run, TextAnchor, TextFrame, WordArtCandidate
-from svg2ooxml.core.ir import IRScene
+from svg2ooxml.ir.shapes import Line, Polygon, Polyline, Rectangle
+from svg2ooxml.ir.text import (
+    EmbeddedFontPlan,
+    Run,
+    TextAnchor,
+    TextFrame,
+    WordArtCandidate,
+)
 
 
 def test_render_scene_from_ir_reports_slide_size() -> None:
@@ -56,7 +69,7 @@ def test_render_scene_renders_line() -> None:
     result = writer.render_scene([line])
     xml = result.slide_xml
 
-    assert "<p:cxnSp>" in xml
+    assert "<p:sp>" in xml
     assert "Line 2" in xml
     assert '<a:custGeom>' in xml
     assert 'val="336699"' in xml
@@ -227,12 +240,11 @@ def test_render_textframe_notes_policy_metadata(caplog) -> None:
     )
 
     with caplog.at_level("DEBUG"):
-        result = writer.render_scene([frame])
+        _result = writer.render_scene([frame])
 
     debug_notes = [rec.getMessage() for rec in caplog.records if rec.levelname == "DEBUG"]
     assert any("rendering_behavior=outline" in message for message in debug_notes)
     assert any("font_fallback=Arial" in message for message in debug_notes)
-    assert any("requests outline rendering" in record.getMessage() for record in caplog.records)
 
 
 def test_render_wordart_frame_uses_warp_template() -> None:

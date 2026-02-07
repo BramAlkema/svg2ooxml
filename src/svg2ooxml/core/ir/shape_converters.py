@@ -4,24 +4,24 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import replace
-from typing import Any, Callable, Iterable, Mapping, Sequence
+from typing import Any
 
 from lxml import etree
 
-from svg2ooxml.common.geometry.paths import PathParseError, normalize_path_to_segments, parse_path_data
-from svg2ooxml.ir.geometry import BezierSegment, LineSegment, Point, Rect, SegmentType
-from svg2ooxml.ir.paint import SolidPaint, Stroke, StrokeCap, StrokeJoin
-from svg2ooxml.ir.scene import ClipRef, Group, Image, MaskInstance, MaskRef, Path
-from svg2ooxml.ir.shapes import Circle, Ellipse, Line, Polygon, Polyline, Rectangle
-from svg2ooxml.ir.text import Run, TextAnchor, TextFrame
 from svg2ooxml.common.geometry import Matrix2D
-from svg2ooxml.policy.constants import FALLBACK_BITMAP, FALLBACK_EMF
-from svg2ooxml.policy.geometry import apply_geometry_policy
-
+from svg2ooxml.common.geometry.paths import (
+    PathParseError,
+    normalize_path_to_segments,
+    parse_path_data,
+)
 from svg2ooxml.core.ir import fallbacks
-from svg2ooxml.core.traversal import marker_runtime
+from svg2ooxml.core.ir.rectangles import convert_rect as convert_rectangle
+from svg2ooxml.core.masks.baker import try_bake_mask
 from svg2ooxml.core.styling import style_runtime as styles_runtime
+from svg2ooxml.core.styling.style_extractor import StyleResult
+from svg2ooxml.core.traversal import marker_runtime
 from svg2ooxml.core.traversal.constants import DEFAULT_TOLERANCE
 from svg2ooxml.core.traversal.coordinate_space import CoordinateSpace
 from svg2ooxml.core.traversal.geometry_utils import (
@@ -29,9 +29,13 @@ from svg2ooxml.core.traversal.geometry_utils import (
     scaled_corner_radius,
     transform_axis_aligned_rect,
 )
-from svg2ooxml.core.ir.rectangles import convert_rect as convert_rectangle
-from svg2ooxml.core.styling.style_extractor import StyleResult
-from svg2ooxml.core.masks.baker import try_bake_mask
+from svg2ooxml.ir.geometry import BezierSegment, LineSegment, Point, Rect, SegmentType
+from svg2ooxml.ir.paint import SolidPaint, Stroke, StrokeCap, StrokeJoin
+from svg2ooxml.ir.scene import ClipRef, Group, Image, MaskInstance, MaskRef, Path
+from svg2ooxml.ir.shapes import Circle, Ellipse, Line, Polygon, Polyline, Rectangle
+from svg2ooxml.ir.text import Run, TextAnchor, TextFrame
+from svg2ooxml.policy.constants import FALLBACK_BITMAP, FALLBACK_EMF
+from svg2ooxml.policy.geometry import apply_geometry_policy
 
 
 def _clamp01(value: float) -> float:
@@ -1764,7 +1768,7 @@ def _ellipse_segments(cx: float, cy: float, rx: float, ry: float) -> list[Segmen
 
 def _points_to_segments(points: Sequence[Point], *, closed: bool) -> list[SegmentType]:
     segments: list[SegmentType] = []
-    for start, end in zip(points, points[1:]):
+    for start, end in zip(points, points[1:], strict=False):
         segments.append(LineSegment(start, end))
     if closed and points:
         segments.append(LineSegment(points[-1], points[0]))
@@ -1797,7 +1801,7 @@ def _parse_points(value: str | None) -> list[Point]:
         parts = parts[:-1]
     points: list[Point] = []
     it = iter(parts)
-    for x_str, y_str in zip(it, it):
+    for x_str, y_str in zip(it, it, strict=False):
         x = _parse_float(x_str)
         y = _parse_float(y_str)
         if x is None or y is None:

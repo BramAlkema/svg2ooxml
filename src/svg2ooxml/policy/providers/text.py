@@ -7,8 +7,8 @@ from collections.abc import Mapping
 from typing import Any
 
 from ..engine import PolicyProvider
-from ..text_policy import TextPolicyDecision, resolve_text_policy
 from ..targets import PolicyTarget
+from ..text_policy import TextPolicyDecision, resolve_text_policy
 
 
 class TextPolicyProvider(PolicyProvider):

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Dict, Optional
 
 
 class NavigationKind(Enum):
@@ -41,13 +40,13 @@ class CustomShowTarget:
 @dataclass
 class NavigationSpec:
     kind: NavigationKind
-    tooltip: Optional[str] = None
+    tooltip: str | None = None
     visited: bool = True
-    href: Optional[str] = None
-    slide: Optional[SlideTarget] = None
-    action: Optional[NavigationAction] = None
-    bookmark: Optional[BookmarkTarget] = None
-    custom_show: Optional[CustomShowTarget] = None
+    href: str | None = None
+    slide: SlideTarget | None = None
+    action: NavigationAction | None = None
+    bookmark: BookmarkTarget | None = None
+    custom_show: CustomShowTarget | None = None
 
     def __post_init__(self) -> None:
         validators = {
@@ -60,8 +59,8 @@ class NavigationSpec:
         if not validators.get(self.kind, False):
             raise ValueError(f"NavigationSpec kind '{self.kind.value}' requires matching target data")
 
-    def as_dict(self) -> Dict[str, object]:
-        payload: Dict[str, object] = {
+    def as_dict(self) -> dict[str, object]:
+        payload: dict[str, object] = {
             "kind": self.kind.value,
             "tooltip": self.tooltip,
             "visited": self.visited,
@@ -80,10 +79,10 @@ class NavigationSpec:
 
 
 def parse_svg_navigation(
-    href: Optional[str],
-    attrs: Dict[str, str],
-    tooltip: Optional[str] = None,
-) -> Optional[NavigationSpec]:
+    href: str | None,
+    attrs: dict[str, str],
+    tooltip: str | None = None,
+) -> NavigationSpec | None:
     visited = _coerce_bool(attrs.get("data-visited"), default=True)
 
     slide_attr = attrs.get("data-slide")
@@ -164,7 +163,7 @@ def _parse_positive_int(value: str, name: str) -> int:
     return parsed
 
 
-def _coerce_bool(value: Optional[str], *, default: bool) -> bool:
+def _coerce_bool(value: str | None, *, default: bool) -> bool:
     if value is None:
         return default
     token = value.strip().lower()

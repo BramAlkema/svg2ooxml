@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import math
 import re
-from typing import List
 
 from svg2ooxml.ir.geometry import BezierSegment, LineSegment, Point, SegmentType
 
@@ -104,7 +103,7 @@ def _parse_moveto(
     index: int,
     command: str,
     cursor: Point,
-    segments: List[SegmentType],
+    segments: list[SegmentType],
 ) -> tuple[Point, Point, int]:
     is_relative = command == "m"
     numbers, index = _take_numbers(tokens, index, 2, allow_multiple=True)
@@ -132,7 +131,7 @@ def _parse_lineto(
     index: int,
     command: str,
     cursor: Point,
-    segments: List[SegmentType],
+    segments: list[SegmentType],
 ) -> tuple[Point, int]:
     is_relative = command == "l"
     numbers, index = _take_numbers(tokens, index, 2, allow_multiple=True)
@@ -152,7 +151,7 @@ def _parse_smooth_cubic(
     index: int,
     command: str,
     cursor: Point,
-    segments: List[SegmentType],
+    segments: list[SegmentType],
     last_cubic_control: Point | None,
 ) -> tuple[Point, Point | None, int]:
     is_relative = command == "s"
@@ -180,7 +179,7 @@ def _parse_quadratic(
     index: int,
     command: str,
     cursor: Point,
-    segments: List[SegmentType],
+    segments: list[SegmentType],
 ) -> tuple[Point, Point | None, int]:
     is_relative = command == "q"
     numbers, index = _take_numbers(tokens, index, 4, allow_multiple=True)
@@ -203,7 +202,7 @@ def _parse_smooth_quadratic(
     index: int,
     command: str,
     cursor: Point,
-    segments: List[SegmentType],
+    segments: list[SegmentType],
     last_quadratic_control: Point | None,
 ) -> tuple[Point, Point | None, int]:
     is_relative = command == "t"
@@ -230,7 +229,7 @@ def _parse_cubic(
     index: int,
     command: str,
     cursor: Point,
-    segments: List[SegmentType],
+    segments: list[SegmentType],
 ) -> tuple[Point, Point | None, int]:
     is_relative = command == "c"
     numbers, index = _take_numbers(tokens, index, 6, allow_multiple=True)
@@ -254,7 +253,7 @@ def _parse_horizontal(
     index: int,
     command: str,
     cursor: Point,
-    segments: List[SegmentType],
+    segments: list[SegmentType],
 ) -> tuple[Point, int]:
     is_relative = command == "h"
     numbers, index = _take_numbers(tokens, index, 1, allow_multiple=True)
@@ -272,7 +271,7 @@ def _parse_vertical(
     index: int,
     command: str,
     cursor: Point,
-    segments: List[SegmentType],
+    segments: list[SegmentType],
 ) -> tuple[Point, int]:
     is_relative = command == "v"
     numbers, index = _take_numbers(tokens, index, 1, allow_multiple=True)
@@ -290,7 +289,7 @@ def _parse_arc(
     index: int,
     command: str,
     cursor: Point,
-    segments: List[SegmentType],
+    segments: list[SegmentType],
 ) -> tuple[Point, int]:
     is_relative = command == "a"
     numbers, index = _take_numbers(tokens, index, 7, allow_multiple=True)

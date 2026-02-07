@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Iterable
 
 from .conversion import ConversionContext, UnitConverter
 
@@ -15,7 +15,7 @@ class LengthConverter:
     unit_converter: UnitConverter
 
     @classmethod
-    def default(cls) -> "LengthConverter":
+    def default(cls) -> LengthConverter:
         return cls(UnitConverter())
 
     def to_emus(

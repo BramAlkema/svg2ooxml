@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+from tests.unit.map.test_ir_converter import _build_parse_result
+
 from svg2ooxml.core.ir import IRConverter
 from svg2ooxml.core.tracing import ConversionTracer
 from svg2ooxml.policy.engine import PolicyContext
 from svg2ooxml.services.setup import configure_services
-from tests.unit.map.test_ir_converter import _build_parse_result
 
 
 def _convert_with_tracer(
