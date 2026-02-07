@@ -14,6 +14,7 @@ __pycache__/
 # Editor / OS artefacts
 .DS_Store
 *.swp
+**/*.bak
 
 # Local build and temp dirs
 tmp/
@@ -32,7 +33,8 @@ test_emf3inclusion.pptx
 thisiswhatitshouldlooklike.pptx
 whatisshouldlooklike.pptx
 
-# Cloud credentials (never commit!)
+# Cloud credentials and secrets (never commit!)
+secrets/
 service-account*.json
 credentials.json
 *-key.json
@@ -42,5 +44,5 @@ credentials.json
 .env.local
 .envrc
 
-# Documentation (local notes)
-docs/adr/*.md
+# Documentation (local scratch)
+docs/scratch/
