@@ -11,6 +11,10 @@ __pycache__/
 .benchmarks/
 .mypy_cache/
 
+# Claude Code agent config and memory
+.claude/agents/
+.claude/agent-memory/
+
 # Editor / OS artefacts
 .DS_Store
 *.swp
