@@ -1,16 +1,59 @@
 # SVG → DrawingML Feature Map
 
-Exhaustive catalog of every SVG feature that has no direct DrawingML (OOXML)
-equivalent, with the closest possible substitute strategy for each. This is the
-reference document for deciding how to handle any SVG construct in svg2ooxml.
+Exhaustive catalog of every SVG feature, its DrawingML equivalent or closest
+substitute, and which fallback tier applies when native DrawingML is insufficient.
+This is the reference document for deciding how to handle any SVG construct in
+svg2ooxml.
 
-Status key:
-- **Done** — implemented in svg2ooxml
+---
+
+## Fallback Ladder
+
+Every SVG feature is resolved through this ladder, top to bottom. We never skip
+to a lower tier without exhausting all higher tiers first.
+
+| Tier | Format | Scalable | Editable | When to use |
+|------|--------|----------|----------|-------------|
+| **1. Native DrawingML** | OOXML elements | Yes | Yes | Direct mapping exists |
+| **2. DrawingML mimic** | OOXML elements (creative use) | Yes | Yes | No direct mapping, but a combination of DrawingML constructs can approximate the visual result |
+| **3. EMF vector** | Enhanced Metafile records | Yes | Limited | DrawingML cannot represent it at all, but EMF's GDI primitives can |
+| **4. PNG raster** | Embedded bitmap | No | No | Neither DrawingML nor EMF can represent it |
+
+### EMF Capabilities & Limitations
+
+Our EMF path (`io/emf/blob.py`) is procedurally generated — no external renderer
+needed. It supports:
+
+**EMF can do:**
+- Full 2D affine transforms including skew (`SetWorldTransform`)
+- Arbitrary clip paths with combine modes (`SelectClipPath`, intersect/union/XOR)
+- Fill rules: even-odd (alternate) and non-zero (winding)
+- Complex paths: polygons, polylines, polypolylines, bezier curves
+- Custom dash patterns with offset
+- Hatch brushes (6 patterns) and DIB pattern brushes (embedded bitmap tiles)
+- Save/restore graphics state (`SaveDC`/`RestoreDC`)
+- Stroke styles: width, cap, join, miter limit, dash array
+
+**EMF cannot do:**
+- Gradients (no `LinearGradientBrush` in our EMF records — would need GDI+ EMF+ extension or tesselation)
+- Per-shape opacity / alpha blending (brushes are opaque)
+- Blend modes (no compositing operators beyond basic ROP codes)
+- Text rendering (supported by EMF spec but we convert text→paths)
+
+This means EMF is the right fallback for **geometry, clipping, and transform**
+problems, but not for **paint, compositing, or gradient** problems.
+
+---
+
+## Status Key
+
 - **Direct** — direct DrawingML equivalent exists, implemented
+- **Done** — mimic or fallback implemented in svg2ooxml
 - **Planned** — substitute identified, not yet implemented
 - **Investigate** — may work but needs testing/verification
-- **Rasterize** — no native substitute; must fall back to EMF or PNG
 - **Ignore** — not relevant for static PPTX output
+
+Each non-Direct entry specifies which fallback tier(s) apply.
 
 ---
 
@@ -18,139 +61,138 @@ Status key:
 
 ### 1.1 Fill
 
-| SVG | DrawingML | Status | Notes |
-|-----|-----------|--------|-------|
-| `fill` solid color | `solidFill` | Direct | |
-| `fill` linear gradient | `gradFill` with `lin` | Direct | |
-| `fill` radial gradient | `gradFill` with `path` | Direct | |
-| `fill` pattern (preset) | `pattFill` | Done | Matches DrawingML preset patterns |
-| `fill` pattern (complex) | `blipFill` with `<a:tile>` | Done | Rasterize pattern tile to PNG, tile across shape |
-| `fill: none` | No fill element | Direct | |
-| `fill-opacity` | `<a:alpha>` on fill color | Direct | |
-| `fill-rule: nonzero` | Default winding in custGeom | Direct | |
-| `fill-rule: evenodd` | Compound subpaths in single `<a:path>` | Investigate | DrawingML compound paths should use alternate fill (evenodd). PPT drops this but the spec supports it. Verify with custGeom containing subpaths. |
-| `color` / `currentColor` | Resolved at parse time | Direct | Substituted before DrawingML emission |
+| SVG | DrawingML | Status | Fallback | Notes |
+|-----|-----------|--------|----------|-------|
+| `fill` solid color | `solidFill` | Direct | — | |
+| `fill` linear gradient | `gradFill` with `lin` | Direct | — | |
+| `fill` radial gradient | `gradFill` with `path` | Direct | — | |
+| `fill` pattern (preset) | `pattFill` | Done | — | Matches DrawingML preset patterns |
+| `fill` pattern (complex) | `blipFill` with `<a:tile>` | Done | Tier 2 | Rasterize pattern tile to PNG, tile across shape |
+| `fill: none` | No fill element | Direct | — | |
+| `fill-opacity` | `<a:alpha>` on fill color | Direct | — | |
+| `fill-rule: nonzero` | Default winding in custGeom | Direct | — | |
+| `fill-rule: evenodd` | Compound subpaths in single `<a:path>` | Investigate | Tier 1→3 | DrawingML compound paths should use alternate fill. If PPT/GSlides don't honor it, EMF supports `SetPolyFillMode(ALTERNATE)` natively. |
+| `color` / `currentColor` | Resolved at parse time | Direct | — | Substituted before DrawingML emission |
 
 ### 1.2 Stroke
 
-| SVG | DrawingML | Status | Notes |
-|-----|-----------|--------|-------|
-| `stroke` solid | `<a:ln>` with `solidFill` | Direct | |
-| `stroke` gradient | `<a:ln>` with `gradFill` | Investigate | DrawingML spec allows `gradFill` inside `<a:ln>`. Need to verify PowerPoint/Google Slides actually render it. If not, expand stroke to filled path and apply gradient to fill. |
-| `stroke` pattern | `<a:ln>` with `pattFill` or `blipFill` | Investigate | Likely unsupported in renderers. Fallback: stroke-to-fill expansion, then apply pattern to resulting shape. |
-| `stroke-width` | `<a:ln w="...">` (EMUs) | Direct | |
-| `stroke-linecap: butt` | `cap="flat"` | Direct | |
-| `stroke-linecap: round` | `cap="rnd"` | Direct | |
-| `stroke-linecap: square` | `cap="sq"` | Direct | |
-| `stroke-linejoin: miter` | `<a:miter>` child of `<a:ln>` | Direct | |
-| `stroke-linejoin: round` | `<a:round>` child of `<a:ln>` | Direct | |
-| `stroke-linejoin: bevel` | `<a:bevel>` child of `<a:ln>` | Direct | |
-| `stroke-miterlimit` | `<a:miter lim="...">` | Direct | Value × 100,000 |
-| `stroke-dasharray` | `<a:custDash>` with `<a:ds d="..." sp="...">` | Direct | |
-| `stroke-dashoffset` | **No DrawingML equivalent** | Planned | Rotate the dash/gap array: consume the offset from the first dash length, shift remaining entries. Pure arithmetic on `d`/`sp` values. Zero visual loss. |
-| `stroke-opacity` | `<a:alpha>` on stroke fill | Direct | |
-| `paint-order: stroke fill markers` | **No DrawingML equivalent** — always fill-then-stroke | Planned | When `paint-order` puts stroke before fill: emit stroke as a separate shape behind the fill shape (two shapes instead of one). Rare in practice. |
-| `vector-effect: non-scaling-stroke` | **No DrawingML equivalent** | Planned | Compute effective transform scale at the element, divide `stroke-width` by that scale factor. Exact at the authored zoom level; diverges if user zooms in PowerPoint. Acceptable for static output. |
+| SVG | DrawingML | Status | Fallback | Notes |
+|-----|-----------|--------|----------|-------|
+| `stroke` solid | `<a:ln>` with `solidFill` | Direct | — | |
+| `stroke` gradient | `<a:ln>` with `gradFill` | Investigate | Tier 1→2→3 | DrawingML spec allows `gradFill` inside `<a:ln>`. If renderers ignore it: **Tier 2** — expand stroke to filled custGeom path, apply gradient to the resulting shape's fill. If that's too complex: **Tier 3** — EMF doesn't support gradients either, so stroke-to-fill expansion is the only vector path. |
+| `stroke` pattern | `<a:ln>` with `pattFill`/`blipFill` | Investigate | Tier 2→3 | Likely unsupported in renderers. **Tier 2** — stroke-to-fill expansion, apply pattern to resulting shape. **Tier 3** — EMF supports DIB pattern brushes on pens natively. |
+| `stroke-width` | `<a:ln w="...">` (EMUs) | Direct | — | |
+| `stroke-linecap: butt` | `cap="flat"` | Direct | — | |
+| `stroke-linecap: round` | `cap="rnd"` | Direct | — | |
+| `stroke-linecap: square` | `cap="sq"` | Direct | — | |
+| `stroke-linejoin: miter` | `<a:miter>` child of `<a:ln>` | Direct | — | |
+| `stroke-linejoin: round` | `<a:round>` child of `<a:ln>` | Direct | — | |
+| `stroke-linejoin: bevel` | `<a:bevel>` child of `<a:ln>` | Direct | — | |
+| `stroke-miterlimit` | `<a:miter lim="...">` | Direct | — | Value × 100,000 |
+| `stroke-dasharray` | `<a:custDash>` with `<a:ds d="..." sp="...">` | Direct | — | |
+| `stroke-dashoffset` | **No DrawingML equivalent** | Planned | Tier 2→3 | **Tier 2** — rotate the dash/gap array: consume offset from first dash length, shift remaining entries. Pure arithmetic, zero visual loss. **Tier 3** — EMF custom dash patterns support offset natively. |
+| `stroke-opacity` | `<a:alpha>` on stroke fill | Direct | — | |
+| `paint-order: stroke fill markers` | **No DrawingML equivalent** — always fill-then-stroke | Planned | Tier 2 | Emit stroke as a separate shape behind the fill shape (two shapes). |
+| `vector-effect: non-scaling-stroke` | **No DrawingML equivalent** | Planned | Tier 2 | Divide `stroke-width` by effective transform scale. Exact at authored zoom. |
 
 ### 1.3 Opacity
 
-| SVG | DrawingML | Status | Notes |
-|-----|-----------|--------|-------|
-| `opacity` on element | `<a:alpha>` on fill AND stroke | Direct | Both fill and stroke alpha multiplied |
-| `opacity` on `<g>` (no overlap) | Individual child `<a:alpha>` | Planned | Detect non-overlapping children via bbox intersection test. Apply alpha to each child individually. Visually identical. |
-| `opacity` on `<g>` (overlap) | **No DrawingML group alpha** | Planned | Detect overlapping children. Rasterize the group to a single PNG via resvg/Skia, wrap in `blipFill` with alpha. Loses editability for that group only. |
-| `isolation: isolate` | **No equivalent** | Planned | Creates compositing boundary. Only matters when `mix-blend-mode` is also used. Rasterize the isolated group, or ignore when no blend modes present. |
+| SVG | DrawingML | Status | Fallback | Notes |
+|-----|-----------|--------|----------|-------|
+| `opacity` on element | `<a:alpha>` on fill AND stroke | Direct | — | |
+| `opacity` on `<g>` (no child overlap) | Individual child `<a:alpha>` | Planned | Tier 2 | Detect non-overlapping children via bbox intersection. Apply alpha to each child. Visually identical when no overlap. |
+| `opacity` on `<g>` (children overlap) | **No DrawingML or EMF group alpha** | Planned | Tier 4 | EMF has no per-shape opacity either. Must render group to PNG via resvg/Skia, embed as `blipFill` with `<a:alpha>`. Loses editability for that group. |
+| `isolation: isolate` | **No equivalent** | Planned | Tier 2→4 | Only matters with blend modes. If no blend modes present, ignore. Otherwise, rasterize the isolated group (Tier 4). |
 
 ### 1.4 Blend Modes
 
-| SVG | DrawingML | Status | Notes |
-|-----|-----------|--------|-------|
-| `mix-blend-mode: multiply` | **No DrawingML support** | Rasterize | Pre-composite the blended result as a PNG image. |
-| `mix-blend-mode: screen` | **No DrawingML support** | Rasterize | Same. |
-| `mix-blend-mode: overlay` | **No DrawingML support** | Rasterize | Same. |
-| All other blend modes | **No DrawingML support** | Rasterize | DrawingML has zero blend mode capability. The only option is to rasterize the composited result. Applies to: `darken`, `lighten`, `color-dodge`, `color-burn`, `hard-light`, `soft-light`, `difference`, `exclusion`, `hue`, `saturation`, `color`, `luminosity`. |
+| SVG | DrawingML | Status | Fallback | Notes |
+|-----|-----------|--------|----------|-------|
+| `mix-blend-mode` (all values) | **No DrawingML or EMF support** | Planned | Tier 4 | Neither DrawingML nor EMF supports CSS blend modes. Pre-composite the blended result as PNG. Applies to: `multiply`, `screen`, `overlay`, `darken`, `lighten`, `color-dodge`, `color-burn`, `hard-light`, `soft-light`, `difference`, `exclusion`, `hue`, `saturation`, `color`, `luminosity`. |
 
 ---
 
 ## 2. Gradients
 
-| SVG | DrawingML | Status | Notes |
-|-----|-----------|--------|-------|
-| `<linearGradient>` | `<a:gradFill>` with `<a:lin>` | Direct | |
-| `<radialGradient>` | `<a:gradFill>` with `<a:path>` | Direct | |
-| `<stop stop-color="..." offset="...">` | `<a:gs pos="...">` in `<a:gsLst>` | Direct | |
-| `stop-opacity` | `<a:alpha>` on gradient stop color | Direct | |
-| `gradientUnits="objectBoundingBox"` | Default DrawingML behavior | Direct | Gradient coordinates are bbox-relative. |
-| `gradientUnits="userSpaceOnUse"` | **No direct mapping** | Planned | Transform gradient coordinates from absolute userSpace to bbox-relative [0,1] range using the shape's bounding box. Exact when gradient extent covers the shape. |
-| `gradientTransform` (pure rotation) | `<a:lin ang="...">` | Planned | Decompose transform matrix → extract rotation angle → set `ang` attribute. Exact for pure rotations. |
-| `gradientTransform` (uniform scale) | Adjust stop positions | Planned | Scale gradient stop `offset` values proportionally. Exact. |
-| `gradientTransform` (non-uniform scale) | Adjust stop positions + direction | Planned | Scale stop positions and adjust gradient angle to account for aspect ratio change. Close approximation. |
-| `gradientTransform` (skew) | **No DrawingML equivalent** | Planned | Approximate: decompose to closest rotation + adjusted stop positions. Lossy for strong skews. |
-| `spreadMethod="pad"` | Default DrawingML behavior | Direct | |
-| `spreadMethod="reflect"` | Expand stops in `gsLst` | Done | Mirror gradient stops to fill [0,1] range. |
-| `spreadMethod="repeat"` | Expand stops in `gsLst` | Done | Duplicate gradient stops N times to fill [0,1] range. |
-| `fx`/`fy` (radial focal point ≠ center) | **Limited mapping** | Planned | DrawingML `<a:path>` gradient has `fillToRect` for center positioning but no focal offset. Approximate by shifting `fillToRect` `l`/`t`/`r`/`b` values. Lossy for extreme off-center focal points. |
-| `fr` (focal radius, SVG2) | **No DrawingML concept** | Planned | Add a flat-color region from center to `fr` as a zero-width gradient stop, then gradient from `fr` to `r`. Approximate. |
-| `color-interpolation: linearRGB` | **DrawingML interpolates in sRGB** | Planned | Pre-compute intermediate gradient stops by sampling in linearRGB space, then convert each sample to sRGB and add as explicit stops. More stops = closer approximation. 10–20 extra stops should be visually indistinguishable. |
+| SVG | DrawingML | Status | Fallback | Notes |
+|-----|-----------|--------|----------|-------|
+| `<linearGradient>` | `<a:gradFill>` with `<a:lin>` | Direct | — | |
+| `<radialGradient>` | `<a:gradFill>` with `<a:path>` | Direct | — | |
+| `<stop stop-color="..." offset="...">` | `<a:gs pos="...">` in `<a:gsLst>` | Direct | — | |
+| `stop-opacity` | `<a:alpha>` on gradient stop color | Direct | — | |
+| `gradientUnits="objectBoundingBox"` | Default DrawingML behavior | Direct | — | |
+| `gradientUnits="userSpaceOnUse"` | **No direct mapping** | Planned | Tier 2 | Transform coordinates from userSpace to bbox-relative [0,1] range. Exact when gradient covers the shape. EMF has no gradients so Tier 3 is not useful here. |
+| `gradientTransform` (pure rotation) | `<a:lin ang="...">` | Planned | Tier 2 | Decompose matrix → extract rotation → set `ang`. Exact. |
+| `gradientTransform` (uniform scale) | Adjust stop positions | Planned | Tier 2 | Scale stop `offset` values proportionally. Exact. |
+| `gradientTransform` (non-uniform scale) | Adjust stops + direction | Planned | Tier 2 | Scale positions and adjust angle for aspect ratio. Close approximation. |
+| `gradientTransform` (skew) | **No DrawingML or EMF equivalent** | Planned | Tier 2→4 | **Tier 2** — decompose to closest rotation + adjusted stops. Lossy for strong skews. **Tier 4** — for extreme skews, rasterize the gradient region as PNG. EMF has no gradients so Tier 3 doesn't help. |
+| `spreadMethod="pad"` | Default DrawingML behavior | Direct | — | |
+| `spreadMethod="reflect"` | Expand stops in `gsLst` | Done | Tier 2 | Mirror gradient stops to fill [0,1]. |
+| `spreadMethod="repeat"` | Expand stops in `gsLst` | Done | Tier 2 | Duplicate stops N times to fill [0,1]. |
+| `fx`/`fy` (focal point ≠ center) | **Limited mapping** | Planned | Tier 2 | Approximate by shifting `fillToRect` values. Lossy for extreme off-center. EMF has no gradients. |
+| `fr` (focal radius, SVG2) | **No DrawingML concept** | Planned | Tier 2 | Add flat-color stop from center to `fr`, then gradient from `fr` to `r`. |
+| `color-interpolation: linearRGB` | **DrawingML uses sRGB** | Planned | Tier 2 | Pre-compute intermediate stops by sampling in linearRGB, convert to sRGB, insert as explicit stops. 10–20 extra stops ≈ indistinguishable. |
 
 ---
 
 ## 3. Transforms
 
-| SVG | DrawingML | Status | Notes |
-|-----|-----------|--------|-------|
-| `translate(tx, ty)` | `<a:off x="..." y="...">` | Direct | |
-| `rotate(angle)` | `<a:xfrm rot="...">` | Direct | Degrees × 60,000 |
-| `scale(sx, sy)` | `<a:ext cx="..." cy="...">` (adjust size) | Direct | |
-| `skewX(angle)` | **No `xfrm` skew** | Planned | Bake skew into custGeom path coordinates by multiplying each point by the skew matrix. Exact for paths. For text: convert to outlines first, then skew. For images: apply CSS-style skew to blipFill xfrm (needs testing). |
-| `skewY(angle)` | **No `xfrm` skew** | Planned | Same approach as `skewX`. |
-| `matrix(a,b,c,d,e,f)` (no skew component) | Decompose to `translate` + `rotate` + `scale` | Direct | Standard matrix decomposition. |
-| `matrix(a,b,c,d,e,f)` (with skew) | Decompose + bake residual | Planned | Extract translate+rotate+scale into `xfrm`, bake residual skew into geometry. Exact for paths. |
-| Nested transforms with accumulated skew | Skew compounds non-linearly | Planned | Flatten the full transform matrix at each leaf element, then decompose once. |
+| SVG | DrawingML | Status | Fallback | Notes |
+|-----|-----------|--------|----------|-------|
+| `translate(tx, ty)` | `<a:off x="..." y="...">` | Direct | — | |
+| `rotate(angle)` | `<a:xfrm rot="...">` | Direct | — | Degrees × 60,000 |
+| `scale(sx, sy)` | `<a:ext cx="..." cy="...">` | Direct | — | |
+| `skewX(angle)` | **No `xfrm` skew** | Planned | Tier 2→3 | **Tier 2** — bake skew into custGeom path coordinates (multiply each point by skew matrix). Exact for paths. **Tier 3** — EMF supports `SetWorldTransform` with full affine matrix including skew. Use for complex cases (images, groups). |
+| `skewY(angle)` | **No `xfrm` skew** | Planned | Tier 2→3 | Same as `skewX`. |
+| `matrix(a,b,c,d,e,f)` (no skew) | Decompose to translate+rotate+scale | Direct | — | |
+| `matrix(a,b,c,d,e,f)` (with skew) | Decompose + bake residual | Planned | Tier 2→3 | **Tier 2** — extract translate+rotate+scale into `xfrm`, bake residual skew into geometry. **Tier 3** — EMF `SetWorldTransform` handles full matrix natively for complex element types. |
+| Nested transforms with accumulated skew | Skew compounds non-linearly | Planned | Tier 2→3 | Flatten full transform matrix at each leaf, then decompose. |
 
 ---
 
 ## 4. Clipping
 
-| SVG | DrawingML | Status | Notes |
-|-----|-----------|--------|-------|
-| `clip-path` (rectangle) | DrawingML shape clipping | Direct | |
-| `clip-path` (simple path) | DrawingML `custGeom` clip | Done | |
-| `clip-path` (complex/self-intersecting) | **Limited** | Planned | Boolean path intersection: intersect clip path with shape geometry to produce a new custGeom that is the clipped result. Computationally heavy but exact. Libraries like Clipper2 can do this. |
-| `clip-path` on `<g>` (group) | **DrawingML clips individual shapes** | Planned | Apply clip to each child shape individually. Or: if DrawingML `<p:grpSp>` supports clip (needs testing), apply at group level. |
-| Nested `clip-path` | **DrawingML: one clip per shape** | Planned | Intersect nested clip paths into a single compound clip using boolean path intersection. |
-| `clip-rule: evenodd` | Winding rule on clip geometry | Planned | Set correct winding on the custGeom clip path. Should work if geometry subpaths are emitted correctly. |
-| `clip-rule: nonzero` | Default winding on clip geometry | Direct | |
-| `clipPathUnits="objectBoundingBox"` | Coordinates in [0,1] range | Planned | Transform clip path coordinates from [0,1] to absolute shape bbox coordinates before applying. |
-| `clipPathUnits="userSpaceOnUse"` | Default behavior | Direct | Clip coordinates in same space as content. |
+| SVG | DrawingML | Status | Fallback | Notes |
+|-----|-----------|--------|----------|-------|
+| `clip-path` (rectangle) | DrawingML shape clipping | Direct | — | |
+| `clip-path` (simple path) | DrawingML `custGeom` clip | Done | — | |
+| `clip-path` (complex/self-intersecting) | **Limited in DrawingML** | Planned | Tier 2→3 | **Tier 2** — boolean path intersection (Clipper2): intersect clip with shape geometry → new custGeom. **Tier 3** — EMF `SelectClipPath` handles arbitrary paths natively including self-intersecting and complex topology. |
+| `clip-path` on `<g>` (group) | **DrawingML clips individual shapes** | Planned | Tier 2→3 | **Tier 2** — apply clip to each child individually. **Tier 3** — EMF supports clip on graphics state, affecting all subsequent drawing. Group-level clip is natural in EMF. |
+| Nested `clip-path` | **DrawingML: one clip per shape** | Planned | Tier 2→3 | **Tier 2** — intersect nested clips into single compound clip (boolean intersection). **Tier 3** — EMF supports `IntersectClipRect` and `SelectClipPath` with combine modes: can intersect, union, XOR clip regions. Native nested clips. |
+| `clip-rule: evenodd` | Winding rule on clip geometry | Planned | Tier 1→3 | **Tier 1** — set correct winding on custGeom subpaths. **Tier 3** — EMF `SetPolyFillMode(ALTERNATE)` for the clip path. |
+| `clip-rule: nonzero` | Default winding | Direct | — | |
+| `clipPathUnits="objectBoundingBox"` | Coordinates in [0,1] | Planned | Tier 2 | Transform clip coordinates from [0,1] to shape bbox. |
+| `clipPathUnits="userSpaceOnUse"` | Default | Direct | — | |
 
 ---
 
 ## 5. Masking
 
-| SVG | DrawingML | Status | Notes |
-|-----|-----------|--------|-------|
-| `<mask>` uniform opacity (solid rect) | Multiply alpha onto shape fill | Done | Detect single-rect mask with uniform opacity → apply as `<a:alpha>` on fill. |
-| `<mask>` luminance (gradient content) | **No DrawingML mask** | Planned | For linear gradient masks: approximate with DrawingML alpha gradient on fill (`gradFill` with varying `<a:alpha>` stops). For complex masks: rasterize. |
-| `<mask>` alpha mode | **No DrawingML mask** | Planned | Same strategy as luminance — alpha gradient approximation where possible, rasterize otherwise. |
-| `<mask>` with complex content | **No DrawingML mask** | Rasterize | Render mask × content composited result as PNG. |
-| `mask-type: luminance` vs `alpha` | Affects which channel is used | Planned | Handled in mask analysis — luminance converts RGB to grayscale alpha, alpha uses alpha channel directly. |
-| `maskContentUnits="objectBoundingBox"` | Coordinates in [0,1] range | Planned | Transform mask content coordinates to shape bbox, then apply chosen fallback. |
+| SVG | DrawingML | Status | Fallback | Notes |
+|-----|-----------|--------|----------|-------|
+| `<mask>` uniform opacity (solid rect) | Multiply alpha onto shape fill | Done | Tier 2 | Detect single-rect uniform opacity → `<a:alpha>`. |
+| `<mask>` gradient (linear alpha fade) | **No DrawingML mask** | Planned | Tier 2→4 | **Tier 2** — approximate with DrawingML alpha gradient: `gradFill` with varying `<a:alpha>` on stops. Works when mask is a simple linear gradient. **Tier 3** — EMF has no alpha/opacity. **Tier 4** — rasterize composited result for complex gradient masks. |
+| `<mask>` alpha mode | **No DrawingML mask** | Planned | Tier 2→4 | Same strategy as luminance — alpha gradient approximation where possible (Tier 2), rasterize otherwise (Tier 4). EMF can't help (no alpha). |
+| `<mask>` with complex vector content | **No DrawingML mask** | Planned | Tier 3→4 | **Tier 3** — EMF can represent the masked vector content using clip paths as an approximation (clip to mask boundary). Lossy for soft-edged masks. **Tier 4** — rasterize for pixel-accurate mask compositing. |
+| `<mask>` with mixed content | **No DrawingML mask** | Done | Tier 3→4 | Current mask_writer routes through EMF (Tier 3) then raster (Tier 4) based on policy. |
+| `mask-type: luminance` vs `alpha` | Affects compositing channel | Planned | — | Handled in mask analysis: luminance converts RGB→grayscale alpha, alpha uses alpha channel directly. Affects which rasterization approach is used. |
+| `maskContentUnits="objectBoundingBox"` | Coordinates in [0,1] | Planned | — | Transform mask content coordinates to shape bbox before applying chosen fallback. |
 
 ---
 
 ## 6. Patterns
 
-| SVG | DrawingML | Status | Notes |
-|-----|-----------|--------|-------|
-| `<pattern>` matching preset | `<a:pattFill>` | Done | Map to DrawingML preset patterns (dots, lines, diagonal). |
-| `<pattern>` complex content | `<a:blipFill>` with `<a:tile>` | Done | Rasterize pattern tile to PNG, embed as media, tile across shape. |
-| `patternUnits="objectBoundingBox"` | Tile size relative to shape | Planned | Scale rasterized tile dimensions based on shape bbox. |
-| `patternUnits="userSpaceOnUse"` | Tile size in absolute units | Planned | Convert tile px dimensions to EMU, set `sx`/`sy` on `<a:tile>`. |
-| `patternContentUnits="objectBoundingBox"` | Pattern content scaled to bbox | Planned | Scale rasterized tile content dimensions to shape bbox proportionally. |
-| `patternTransform` (scale) | `<a:tile sx="..." sy="...">` | Planned | Map scale factors to tile `sx`/`sy` values (× 100,000). |
-| `patternTransform` (rotation) | **No tile rotation in `blipFill`** | Planned | Pre-rotate the rasterized tile image before embedding. Or test if `<a:xfrm rot="...">` inside `blipFill` works. |
-| `patternTransform` (skew) | **No tile skew** | Planned | Pre-apply skew to rasterized tile image. Approximate. |
+| SVG | DrawingML | Status | Fallback | Notes |
+|-----|-----------|--------|----------|-------|
+| `<pattern>` matching preset | `<a:pattFill>` | Done | Tier 1 | |
+| `<pattern>` complex content | `<a:blipFill>` with `<a:tile>` | Done | Tier 2 | Rasterize tile to PNG, embed as media, tile. |
+| `<pattern>` with vector-only content | EMF DIB pattern brush | Planned | Tier 3 | **Tier 3** — EMF supports `CreateDIBPatternBrushPt` with embedded bitmap tiles AND hatch brushes for simple patterns. Could render pattern tile → small bitmap → EMF DIB brush. Preserves vector wrapper. |
+| `patternUnits="objectBoundingBox"` | Tile size relative to shape | Planned | Tier 2 | Scale tile dimensions based on shape bbox. |
+| `patternUnits="userSpaceOnUse"` | Tile size in absolute units | Planned | Tier 2 | Convert tile px → EMU, set `sx`/`sy` on `<a:tile>`. |
+| `patternContentUnits="objectBoundingBox"` | Content scaled to bbox | Planned | Tier 2 | Scale tile content to shape bbox proportionally. |
+| `patternTransform` (scale) | `<a:tile sx="..." sy="...">` | Planned | Tier 2 | Map scale to tile `sx`/`sy` (× 100,000). |
+| `patternTransform` (rotation) | **No tile rotation in DrawingML** | Planned | Tier 2→3 | **Tier 2** — pre-rotate the rasterized tile image before embedding. **Tier 3** — EMF `SetWorldTransform` can rotate the pattern brush coordinate system. |
+| `patternTransform` (skew) | **No tile skew** | Planned | Tier 2→3 | **Tier 2** — pre-skew tile image. **Tier 3** — EMF affine transform on brush. |
 
 ---
 
@@ -158,224 +200,250 @@ Status key:
 
 ### 7.1 Font & Style Properties
 
-| SVG | DrawingML | Status | Notes |
-|-----|-----------|--------|-------|
-| `font-family` | `<a:latin typeface="...">`, `<a:ea>`, `<a:cs>` | Direct | |
-| `font-size` | `sz` on `<a:rPr>` (hundredths of pt) | Direct | |
-| `font-weight: bold` | `b="1"` on `<a:rPr>` | Direct | |
-| `font-weight` (numeric 100–900) | `b="1"` for ≥600, else `b="0"` | Direct | DrawingML is binary bold. Intermediate weights need font variant selection. |
-| `font-style: italic` | `i="1"` on `<a:rPr>` | Direct | |
-| `font-style: oblique` | `i="1"` on `<a:rPr>` | Direct | No oblique vs italic distinction in DrawingML. |
-| `font-variant: small-caps` | `cap="small"` on `<a:rPr>` | Investigate | DrawingML has `cap` attribute. Verify rendering. |
-| `font-stretch` (condensed/expanded) | **No DrawingML font width** | Planned | Select a condensed/expanded font variant if available in the family. Otherwise ignore — no runtime font stretching in DrawingML. |
-| `text-decoration: underline` | `u="sng"` on `<a:rPr>` | Done | |
-| `text-decoration: line-through` | `strike="sngStrike"` on `<a:rPr>` | Done | |
-| `text-decoration: overline` | **No DrawingML overline** | Planned | Draw a separate thin line shape positioned above the text baseline. Or ignore (rare in SVG content). |
-| `letter-spacing` | `spc` on `<a:rPr>` | Done | Value in hundredths of a point. |
-| `word-spacing` | **No DrawingML attribute** | Planned | Insert extra space characters between words, or apply `spc` selectively on space-character runs. Approximate. PPT also ignores this. |
+| SVG | DrawingML | Status | Fallback | Notes |
+|-----|-----------|--------|----------|-------|
+| `font-family` | `<a:latin typeface="...">`, `<a:ea>`, `<a:cs>` | Direct | — | |
+| `font-size` | `sz` on `<a:rPr>` (hundredths of pt) | Direct | — | |
+| `font-weight: bold` | `b="1"` on `<a:rPr>` | Direct | — | |
+| `font-weight` (numeric 100–900) | `b="1"` for ≥600 | Direct | — | Binary bold. Intermediate weights → font variant selection. |
+| `font-style: italic` | `i="1"` on `<a:rPr>` | Direct | — | |
+| `font-style: oblique` | `i="1"` on `<a:rPr>` | Direct | — | No oblique vs italic distinction. |
+| `font-variant: small-caps` | `cap="small"` on `<a:rPr>` | Investigate | Tier 1 | Verify rendering in PPT/GSlides. |
+| `font-stretch` | **No DrawingML font width** | Planned | Tier 2 | Select condensed/expanded font variant if available. Otherwise no substitute. |
+| `text-decoration: underline` | `u="sng"` on `<a:rPr>` | Done | — | |
+| `text-decoration: line-through` | `strike="sngStrike"` on `<a:rPr>` | Done | — | |
+| `text-decoration: overline` | **No DrawingML overline** | Planned | Tier 2→3 | **Tier 2** — draw separate thin line shape above baseline. **Tier 3** — EMF `Polyline` positioned above text. |
+| `letter-spacing` | `spc` on `<a:rPr>` | Done | — | |
+| `word-spacing` | **No DrawingML attribute** | Planned | Tier 2 | Insert extra space chars or apply `spc` on space-character runs. |
 
 ### 7.2 Text Layout & Positioning
 
-| SVG | DrawingML | Status | Notes |
-|-----|-----------|--------|-------|
-| `text-anchor: start/middle/end` | `algn` on `<a:pPr>` | Direct | |
-| `direction: rtl` | `rtl="1"` on `<a:pPr>` | Done | |
-| `writing-mode: vertical-rl` | `vert="vert"` on `<a:bodyPr>` | Investigate | DrawingML supports vertical text via `vert` attribute. Verify CJK rendering. |
-| `writing-mode: vertical-lr` | `vert="vert270"` on `<a:bodyPr>` | Investigate | Left-to-right vertical. Less common. |
-| `dominant-baseline` | **Limited vertical alignment** | Planned | Adjust vertical offset on text position. Map `central`, `middle`, `hanging` to appropriate `anchor` values on `<a:bodyPr>`. Approximate. |
-| `alignment-baseline` | **Limited** | Planned | Same approach as `dominant-baseline`. |
-| `baseline-shift: super` | `baseline` on `<a:rPr>` | Investigate | DrawingML has `baseline` attribute (percentage of font size). Map `super` → positive %, `sub` → negative %. |
-| `baseline-shift: sub` | `baseline` on `<a:rPr>` | Investigate | Same. |
-| Per-character `dx`/`dy` arrays | **No per-character offset in DrawingML** | Planned | Split into individual single-character text boxes, each absolutely positioned. Preserves visual appearance but loses text editability and reflow. |
-| Per-character `x`/`y` absolute arrays | **No per-character absolute positioning** | Planned | Same as `dx`/`dy` — individual positioned text boxes. |
-| Per-character `rotate` | **No per-glyph rotation** | Planned | Convert each rotated character to a separate rotated text box. Or convert to custGeom glyph outlines with rotation. Both lose editability. |
-| `textLength` + `lengthAdjust="spacing"` | **No text length forcing** | Planned | Compute effective `letter-spacing` to achieve target text length → emit as `spc`. Approximate. |
-| `textLength` + `lengthAdjust="spacingAndGlyphs"` | **No glyph scaling** | Planned | Approximate with `spc` adjustment + font size tweaking. Lossy. |
+| SVG | DrawingML | Status | Fallback | Notes |
+|-----|-----------|--------|----------|-------|
+| `text-anchor: start/middle/end` | `algn` on `<a:pPr>` | Direct | — | |
+| `direction: rtl` | `rtl="1"` on `<a:pPr>` | Done | — | |
+| `writing-mode: vertical-rl` | `vert="vert"` on `<a:bodyPr>` | Investigate | Tier 1 | Verify CJK rendering. |
+| `writing-mode: vertical-lr` | `vert="vert270"` on `<a:bodyPr>` | Investigate | Tier 1 | |
+| `dominant-baseline` | **Limited vertical alignment** | Planned | Tier 2 | Map to vertical offset on text position. Approximate. |
+| `alignment-baseline` | **Limited** | Planned | Tier 2 | Same. |
+| `baseline-shift: super` | `baseline` on `<a:rPr>` | Investigate | Tier 1 | DrawingML `baseline` attribute (% of font size). |
+| `baseline-shift: sub` | `baseline` on `<a:rPr>` | Investigate | Tier 1 | Same. |
+| Per-character `dx`/`dy` arrays | **No per-char offset in DrawingML** | Planned | Tier 2→3 | **Tier 2** — split into individual single-character text boxes, absolutely positioned. Preserves appearance, loses text editability. **Tier 3** — EMF can record text with per-character `dx` array via `ExtTextOut` with character widths. Native per-character positioning. |
+| Per-character `x`/`y` absolute arrays | **No per-char absolute positioning** | Planned | Tier 2→3 | Same as `dx`/`dy`. **Tier 3** — EMF `ExtTextOut` calls per character with absolute positions. |
+| Per-character `rotate` | **No per-glyph rotation** | Planned | Tier 2→3 | **Tier 2** — individual rotated text boxes. **Tier 3** — EMF `SetWorldTransform` rotation per character + `ExtTextOut`. Or convert to custGeom outlines (Tier 2) / EMF path outlines (Tier 3). |
+| `textLength` + `lengthAdjust="spacing"` | **No text length forcing** | Planned | Tier 2 | Compute effective `letter-spacing` → `spc`. |
+| `textLength` + `lengthAdjust="spacingAndGlyphs"` | **No glyph scaling** | Planned | Tier 2→3 | **Tier 2** — approximate with `spc` + font size adjustment. **Tier 3** — EMF `SetWorldTransform` with non-uniform scale on text. |
 
 ### 7.3 Text Path
 
-| SVG | DrawingML | Status | Notes |
-|-----|-----------|--------|-------|
-| `<textPath>` on simple curve | `prstTxWarp` on `<a:bodyPr>` | Planned | Classify the path against WordArt presets (wave, arch, circle, etc.). If confidence exceeds threshold → editable text with warp. Beats PPT (which converts to outlines). |
-| `<textPath>` on arbitrary curve | **No arbitrary text path** | Planned | Convert text glyphs to custGeom outlines, position along path with rotation. Loses editability. Matches PPT behavior. |
-| `<textPath startOffset="...">` | Offset along path | Planned | When using WordArt: no equivalent. When using custGeom outlines: adjust glyph start position along path. |
-| `<textPath method="stretch">` | Glyph distortion along path | Planned | When using custGeom outlines: warp glyph geometry to follow path curvature. Complex but feasible. |
+| SVG | DrawingML | Status | Fallback | Notes |
+|-----|-----------|--------|----------|-------|
+| `<textPath>` on simple curve | `prstTxWarp` on `<a:bodyPr>` | Planned | Tier 2 | Classify path against WordArt presets. If match → editable text with warp. Beats PPT. |
+| `<textPath>` on arbitrary curve | **No arbitrary text path** | Planned | Tier 2→3 | **Tier 2** — convert text glyphs to custGeom outlines positioned along path. **Tier 3** — EMF path with glyph outlines, benefits from affine transforms for rotation per glyph. |
+| `<textPath startOffset="...">` | Offset along path | Planned | Tier 2→3 | Adjust glyph start position along path. |
+| `<textPath method="stretch">` | Glyph distortion along path | Planned | Tier 2→3 | **Tier 2** — warp custGeom glyph geometry along path curvature. **Tier 3** — EMF with warped glyph outlines. |
 
 ### 7.4 BiDi & Internationalization
 
-| SVG | DrawingML | Status | Notes |
-|-----|-----------|--------|-------|
-| `direction: rtl` | `rtl="1"` on `<a:pPr>` | Done | |
-| `direction: ltr` | Default (no attribute) | Done | |
-| Auto-detect RTL from content | `rtl="1"` based on Unicode BiDi | Done | Uses bidirectional character category analysis |
-| `unicode-bidi: bidi-override` | **No fine-grained BiDi control** | Planned | DrawingML BiDi is paragraph-level only. For mixed-direction runs within a paragraph, split into separate paragraphs or accept paragraph-level direction. |
-| `xml:lang` / `lang` | `lang` on `<a:rPr>` | Planned | Map BCP-47 language tags. Auto-detect from Unicode script for Arabic → `ar-SA`, Hebrew → `he-IL`, etc. |
+| SVG | DrawingML | Status | Fallback | Notes |
+|-----|-----------|--------|----------|-------|
+| `direction: rtl` | `rtl="1"` on `<a:pPr>` | Done | — | |
+| `direction: ltr` | Default | Done | — | |
+| Auto-detect RTL from content | `rtl="1"` based on Unicode BiDi | Done | — | |
+| `unicode-bidi: bidi-override` | **Paragraph-level only** | Planned | Tier 2→3 | **Tier 2** — split mixed-direction runs into separate paragraphs. **Tier 3** — EMF text with explicit character order. |
+| `xml:lang` / `lang` | `lang` on `<a:rPr>` | Planned | Tier 1 | Map BCP-47 tags. Auto-detect from Unicode script. |
 
 ---
 
 ## 8. Filters
 
-### 8.1 Mappable to Native DrawingML Effects
+### 8.1 Mappable to Native DrawingML Effects (Tier 1–2)
 
-| SVG Filter | DrawingML Effect | Status | Notes |
-|------------|-----------------|--------|-------|
-| `feGaussianBlur` (standalone) | `<a:softEdge rad="...">` | Done | Approximate — `softEdge` fades edges rather than uniform blur. Radius mapping: SVG stdDeviation → EMU radius. |
-| `feDropShadow` | `<a:outerShdw>` | Done | Map: `dx`→`dist`+`dir`, `dy`→`dist`+`dir`, `stdDeviation`→`blurRad`, `flood-color`→shadow color. Close match. |
-| `feOffset` + `feFlood` + `feComposite` (shadow pattern) | `<a:outerShdw>` | Done | Detect the common drop-shadow filter chain and emit as single shadow effect. |
-| `feGaussianBlur` + `feMerge` (glow pattern) | `<a:glow rad="..." >` | Planned | Detect glow pattern: blur + merge with original. Map blur radius to glow radius. |
-| `feColorMatrix(type="saturate")` | `<a:satMod>` on color | Planned | Map saturation value to `satMod` percentage (× 100,000). Partial — only works on solid fills. |
-| `feColorMatrix(type="hueRotate")` | `<a:hueOff>` on color | Planned | Map rotation angle to `hueOff` degrees. Very approximate — SVG applies to rendered pixels, DrawingML to fill colors. |
-| `feFlood` + `feBlend(mode="multiply")` | `<a:duotone>` | Investigate | DrawingML duotone may approximate some color overlay effects. |
+| SVG Filter | DrawingML Effect | Status | Fallback | Notes |
+|------------|-----------------|--------|----------|-------|
+| `feGaussianBlur` (standalone) | `<a:softEdge rad="...">` | Done | Tier 2 | Approximate — softEdge fades edges vs uniform blur. |
+| `feDropShadow` | `<a:outerShdw>` | Done | Tier 1 | Close match for standard drop shadows. |
+| `feOffset`+`feFlood`+`feComposite` (shadow) | `<a:outerShdw>` | Done | Tier 2 | Detect shadow pattern → single shadow effect. |
+| `feGaussianBlur`+`feMerge` (glow) | `<a:glow rad="...">` | Planned | Tier 2 | Detect glow pattern: blur + merge with original. |
+| `feColorMatrix(saturate)` | `<a:satMod>` | Planned | Tier 2 | Partial — only works on solid fills. |
+| `feColorMatrix(hueRotate)` | `<a:hueOff>` | Planned | Tier 2 | Very approximate. |
+| `feFlood`+`feBlend(multiply)` | `<a:duotone>` | Investigate | Tier 2 | DrawingML duotone may approximate some overlays. |
 
-### 8.2 Must Rasterize
+### 8.2 EMF Vector Fallback (Tier 3)
 
-| SVG Filter | Why | Notes |
-|------------|-----|-------|
-| `feColorMatrix(type="luminanceToAlpha")` | No DrawingML equivalent | Converts color to alpha mask. Rasterize. |
-| `feMorphology(erode)` | No equivalent | Shrinks/thickens shapes. Rasterize. |
-| `feMorphology(dilate)` | No equivalent | Same. |
-| `feDisplacementMap` | No equivalent | Pixel-level displacement. Rasterize. |
-| `feTurbulence` | No equivalent | Procedural noise generation. Rasterize. |
-| `feConvolveMatrix` | No equivalent | Arbitrary kernel convolution. Rasterize. |
-| `feDiffuseLighting` | Fundamentally different from DrawingML 3D | Could explore `<a:scene3d>` + `<a:sp3d>` with light rigs for simple cases. Mostly rasterize. |
-| `feSpecularLighting` | Same | Same. |
-| `feComponentTransfer(type="gamma")` | No per-channel gamma | Pre-apply gamma to color values for solid fills. Must rasterize for gradients/images. |
-| `feComponentTransfer(type="table")` | No lookup table | Rasterize. |
-| `feImage` | External image in filter chain | Could emit as separate blipFill shape in simple cases. Context-dependent. |
-| Complex multi-primitive chains | DrawingML effects are not composable | EMF or rasterize the entire filter result. |
+For filters that cannot map to DrawingML effects but where the underlying
+geometry is still vector-representable:
+
+| SVG Filter | EMF Strategy | Status | Notes |
+|------------|-------------|--------|-------|
+| `feColorMatrix(luminanceToAlpha)` | EMF path with computed alpha fill | Planned | Pre-compute luminance → alpha for each shape's fill color, emit as EMF with adjusted fills. Only works for simple (non-gradient) fills. |
+| `feDiffuseLighting` (simple) | EMF + `scene3d`/`sp3d` hybrid | Investigate | Simple top-down lighting → try DrawingML 3D lighting first (Tier 2). If too different, EMF with pre-shaded fills. |
+| `feSpecularLighting` (simple) | EMF + 3D hybrid | Investigate | Same as diffuse. |
+| `feComponentTransfer(gamma)` on solid fills | EMF with pre-computed colors | Planned | Apply gamma to each shape's fill color before emission. Exact for solid fills. |
+| Filter on pure-geometry shapes (no gradients) | EMF with geometry + adjusted fills | Planned | When filtered content has no gradients/images, compute filter effect on fill colors and emit geometry as EMF with modified colors. |
+| Filter EMF diagnostic icons | Current schematic visualizations | Done | Present behavior: symbolic EMF icons (96×64px) showing filter type. Not pixel-accurate but vector. ADR-018 plans enrichment. |
+
+### 8.3 Must Rasterize (Tier 4)
+
+Only when both DrawingML mimic AND EMF vector are insufficient:
+
+| SVG Filter | Why Tier 4 | Notes |
+|------------|-----------|-------|
+| `feMorphology(erode/dilate)` | Pixel-level shape expansion/contraction — requires sampling | No vector representation of morphological operations on arbitrary content. |
+| `feDisplacementMap` | Per-pixel displacement — fundamentally raster | Displaces pixels by sampling another image. No vector equivalent. |
+| `feTurbulence` | Procedural Perlin noise — fundamentally raster | Generates noise texture. Could embed as DIB in EMF (Tier 3 hybrid) per ADR-018, but the noise itself must be rasterized. |
+| `feConvolveMatrix` | Arbitrary kernel — fundamentally raster | Pixel neighborhood sampling. No vector equivalent. |
+| `feComponentTransfer(table/discrete)` on gradients/images | Lookup table on pixel values | Cannot pre-compute for continuous gradient content. |
+| `feImage` (complex context) | External image in filter chain | Could emit as blipFill for simple cases; rasterize when used in composite filter chains. |
+| Complex multi-primitive chains with pixel operations | DrawingML effects are not composable, EMF can't compute | When a filter chain mixes vector-representable and pixel operations, the entire chain must be rasterized. |
+| `feTurbulence` → hybrid EMF | Embed rasterized noise tile in EMF DIB brush | Planned (ADR-018) | Intermediate: noise is rasterized but wrapped in vector EMF container with DIB pattern brush. Better than pure PNG. |
 
 ---
 
 ## 9. Markers
 
-| SVG | DrawingML | Status | Notes |
-|-----|-----------|--------|-------|
-| `marker-start` (simple arrow) | `<a:headEnd>` | Done | Maps to DrawingML line ending presets. |
-| `marker-end` (simple arrow) | `<a:tailEnd>` | Done | Same. |
-| `marker-start` (complex shape) | Expand to separate custGeom | Done | Create a new shape with marker geometry, positioned and rotated at path start. |
-| `marker-end` (complex shape) | Expand to separate custGeom | Done | Same at path end. |
-| `marker-mid` | Expand to separate custGeom per vertex | Done | One marker shape per interior vertex. Increases shape count. Could batch identical markers in a group. |
-| `orient="auto"` | Rotation computed per vertex | Done | Rotate marker to match path tangent at attachment point. |
-| `orient="auto-start-reverse"` | Start marker flipped 180° | Planned | Reverse rotation for start marker. Simple addition. |
-| `markerUnits="strokeWidth"` | Scale marker by stroke width | Done | Marker size multiplied by element's stroke-width. |
-| `markerUnits="userSpaceOnUse"` | Absolute marker size | Done | Marker size independent of stroke-width. |
-| `refX`/`refY` anchor offsets | Translate marker origin | Done | Offset marker position by reference point. |
-| `overflow="visible"` on marker | Marker content can exceed marker viewport | Planned | Default is hidden. When visible, don't clip marker content to `markerWidth`/`markerHeight`. |
+| SVG | DrawingML | Status | Fallback | Notes |
+|-----|-----------|--------|----------|-------|
+| `marker-start` (simple arrow) | `<a:headEnd>` | Done | Tier 1 | |
+| `marker-end` (simple arrow) | `<a:tailEnd>` | Done | Tier 1 | |
+| `marker-start` (complex shape) | Expand to separate custGeom | Done | Tier 2 | |
+| `marker-end` (complex shape) | Expand to separate custGeom | Done | Tier 2 | |
+| `marker-mid` | Expand to custGeom per vertex | Done | Tier 2 | |
+| `orient="auto"` | Rotation per vertex tangent | Done | — | |
+| `orient="auto-start-reverse"` | Start marker flipped 180° | Planned | Tier 2 | |
+| `markerUnits="strokeWidth"` | Scale marker by stroke width | Done | — | |
+| `markerUnits="userSpaceOnUse"` | Absolute marker size | Done | — | |
+| `refX`/`refY` anchor offsets | Translate marker origin | Done | — | |
+| `overflow="visible"` on marker | Content exceeds marker viewport | Planned | Tier 2→3 | **Tier 2** — don't clip marker custGeom to markerWidth/Height. **Tier 3** — EMF save/restore clip state around marker. |
+| Marker with gradient fill | Marker shape needs gradient | Planned | Tier 2 | Expanded marker custGeom inherits fill from marker definition → emit with `gradFill`. DrawingML handles this. |
+| Marker with filter effect | Marker shape needs filter | Planned | Tier 2→3→4 | Route marker content through the same filter fallback ladder. |
 
 ---
 
 ## 10. Document Structure
 
-| SVG | DrawingML | Status | Notes |
-|-----|-----------|--------|-------|
-| `<svg>` viewBox | Viewport mapping | Done | Full viewBox + preserveAspectRatio support. |
-| `preserveAspectRatio` (all 9 alignments + meet/slice) | Viewport engine | Done | |
-| `<g>` (group) | `<p:grpSp>` | Direct | |
-| `<defs>` | Resolved inline | Direct | Referenced elements (gradients, patterns, clips) resolved at point of use. |
-| `<use>` | Expanded inline | Done | Style inheritance, viewBox, preserveAspectRatio handled. |
-| `<symbol>` | Expanded inline (like `<use>`) | Done | |
-| `<switch>` with `systemLanguage` | Resolve at parse time | Planned | Pick best language match. |
-| `<switch>` with `requiredFeatures` | Resolve at parse time | Planned | Check against supported feature set. |
-| `<foreignObject>` | **No equivalent** | Rasterize | Render HTML content via headless browser, embed as PNG. |
-| `<a xlink:href="...">` (hyperlinks) | `<a:hlinkClick r:id="...">` | Planned | Map SVG hyperlinks to DrawingML click actions with relationship to URL. |
-| `<title>` / `<desc>` | `<p:cNvPr descr="...">` | Planned | Map accessibility text to shape alt text. |
-| `<metadata>` | Ignored | Ignore | No DrawingML equivalent for arbitrary metadata. |
-| `overflow: hidden` on `<svg>` | Viewport clipping | Done | Clip content to SVG viewport bounds. |
-| `overflow: visible` on nested `<svg>` | No clipping | Planned | Allow content to extend beyond nested SVG viewport. |
+| SVG | DrawingML | Status | Fallback | Notes |
+|-----|-----------|--------|----------|-------|
+| `<svg>` viewBox | Viewport mapping | Done | — | |
+| `preserveAspectRatio` (all 9 + meet/slice) | Viewport engine | Done | — | |
+| `<g>` (group) | `<p:grpSp>` | Direct | — | |
+| `<defs>` | Resolved inline | Direct | — | |
+| `<use>` | Expanded inline | Done | — | |
+| `<symbol>` | Expanded inline | Done | — | |
+| `<switch>` with `systemLanguage` | Resolve at parse time | Planned | — | |
+| `<switch>` with `requiredFeatures` | Resolve at parse time | Planned | — | |
+| `<foreignObject>` | **No DrawingML or EMF equivalent** | Planned | Tier 3→4 | **Tier 3** — render HTML via headless browser, embed result in EMF as `StretchDIBits` (bitmap inside vector container — preserves EMF wrapper, scalable container). **Tier 4** — embed as PNG `blipFill`. Either way the HTML content itself is rasterized, but EMF wrapper is preferable. |
+| `<a xlink:href="...">` (hyperlinks) | `<a:hlinkClick r:id="...">` | Planned | Tier 1 | |
+| `<title>` / `<desc>` | `<p:cNvPr descr="...">` | Planned | Tier 1 | |
+| `<metadata>` | Ignored | Ignore | — | |
+| `overflow: hidden` on `<svg>` | Viewport clipping | Done | — | |
+| `overflow: visible` on nested `<svg>` | No clipping | Planned | Tier 2 | |
 
 ---
 
 ## 11. CSS & Styling
 
-| SVG | DrawingML | Status | Notes |
-|-----|-----------|--------|-------|
-| `<style>` blocks | Full CSS cascade | Done | Resolved via tinycss2 at parse time. |
-| Class selectors (`.foo`) | Resolved at parse time | Done | |
-| ID selectors (`#bar`) | Resolved at parse time | Done | |
-| Attribute selectors | Resolved at parse time | Done | |
-| `@font-face` web fonts | Font embedding in PPTX | Done | Download and embed referenced fonts. |
-| `@media` queries | Resolved at fixed viewport | Planned | Evaluate media queries at the SVG's viewport dimensions. |
-| `@import` | Follow imports at parse time | Planned | Fetch and merge imported stylesheets. |
-| CSS custom properties (`var()`) | Resolved at parse time | Planned | Substitute variable values during CSS cascade. |
-| `calc()` | Resolved at parse time | Planned | Evaluate calc expressions during property resolution. |
-| `inherit` | Resolved by CSS cascade | Direct | |
-| `initial` / `unset` | Resolved by CSS cascade | Planned | Reset to initial or inherited value. |
-| Inline `style` attributes | Resolved at parse time | Direct | Highest specificity in cascade. |
-| Presentation attributes | Resolved at parse time | Direct | Lowest specificity, overridden by CSS. |
+All CSS features are resolved at parse time and do not need DrawingML or EMF
+fallbacks. They affect how SVG properties are resolved, not how they are emitted.
+
+| SVG | Status | Notes |
+|-----|--------|-------|
+| `<style>` blocks / class/ID/attribute selectors | Done | Full CSS cascade via tinycss2. |
+| `@font-face` web fonts | Done | Download and embed in PPTX. |
+| `@media` queries | Planned | Evaluate at SVG viewport dimensions. |
+| `@import` | Planned | Fetch and merge imported stylesheets. |
+| CSS custom properties (`var()`) | Planned | Substitute during cascade. |
+| `calc()` | Planned | Evaluate during property resolution. |
+| `inherit` / `initial` / `unset` | Done/Planned | Resolved by cascade. |
+| Inline `style` + presentation attributes | Done | |
 
 ---
 
 ## 12. Color
 
-| SVG | DrawingML | Status | Notes |
-|-----|-----------|--------|-------|
-| Named colors (`red`, `blue`, etc.) | `srgbClr` | Direct | Resolved to hex at parse time. |
-| `#rrggbb` / `#rgb` | `srgbClr val="RRGGBB"` | Direct | |
-| `#rrggbbaa` / `#rgba` | `srgbClr` + `<a:alpha>` | Direct | |
-| `rgb()` / `rgba()` | `srgbClr` + `<a:alpha>` | Direct | |
-| `hsl()` / `hsla()` | Convert to sRGB → `srgbClr` | Direct | Converted at parse time. |
-| `currentColor` | Resolved at parse time | Direct | Inherits from `color` property. |
-| `color-interpolation: linearRGB` | **DrawingML uses sRGB** | Planned | See gradient section (§2). Pre-compute intermediate stops. |
-| `color-profile` / ICC colors | **No DrawingML ICC** | Ignore | Convert to sRGB. Lossy for wide-gamut content. |
-| `oklab()` / `oklch()` (CSS Color 4) | Convert to sRGB | Planned | Parse and convert to sRGB hex at parse time. |
-| System colors (`Canvas`, `CanvasText`) | Map to defaults | Planned | Use sensible defaults (white, black). |
+All color values are resolved at parse time to sRGB + alpha. No fallback tiers
+needed — conversion happens before DrawingML emission.
+
+| SVG | Status | Notes |
+|-----|--------|-------|
+| Named colors, `#hex`, `rgb()`, `rgba()`, `hsl()`, `hsla()` | Direct | |
+| `currentColor` | Direct | Resolved from `color` property. |
+| `color-interpolation: linearRGB` | Planned | See §2 gradients — extra interpolated stops. |
+| `color-profile` / ICC | Ignore | Convert to sRGB. Lossy for wide-gamut. |
+| `oklab()` / `oklch()` (CSS Color 4) | Planned | Convert to sRGB at parse time. |
+| System colors | Planned | Map to sensible defaults. |
 
 ---
 
 ## 13. Rendering Hints
 
-| SVG | DrawingML | Status | Notes |
-|-----|-----------|--------|-------|
-| `image-rendering: pixelated` | **No equivalent** | Ignore | DrawingML always interpolates images. Cannot control. |
-| `image-rendering: crisp-edges` | **No equivalent** | Ignore | Same. |
-| `shape-rendering: crispEdges` | **No equivalent** | Ignore | Renderer decides anti-aliasing. |
-| `shape-rendering: geometricPrecision` | **No equivalent** | Ignore | Default rendering. |
-| `text-rendering: optimizeLegibility` | **No equivalent** | Ignore | Font renderer decides. |
-| `color-interpolation-filters` | **Affects filter math** | Planned | When rasterizing filters, use the correct color space for intermediate computations. |
+Not applicable to OOXML output — rendering decisions are made by the viewer
+(PowerPoint, Google Slides). No fallback tiers.
+
+| SVG | Status | Notes |
+|-----|--------|-------|
+| `image-rendering` | Ignore | Viewer controls interpolation. |
+| `shape-rendering` | Ignore | Viewer controls anti-aliasing. |
+| `text-rendering` | Ignore | Viewer controls font hinting. |
+| `color-interpolation-filters` | Planned | Affects filter rasterization color space, not output format. |
 
 ---
 
 ## 14. Images
 
-| SVG | DrawingML | Status | Notes |
-|-----|-----------|--------|-------|
-| `<image>` with raster (PNG/JPEG) | `<a:blipFill>` | Direct | |
-| `<image>` with SVG | Recursive conversion or `blipFill` | Planned | Could recursively convert nested SVG, or rasterize and embed. |
-| `<image>` with data URI | Extract and embed | Done | Decode base64 data URI, embed as media. |
-| `preserveAspectRatio` on `<image>` | `<a:stretch>` / `<a:tile>` + offset | Done | Map alignment and meet/slice to blipFill crop/stretch. |
-| `image-rendering` | See §13 | Ignore | |
+| SVG | DrawingML | Status | Fallback | Notes |
+|-----|-----------|--------|----------|-------|
+| `<image>` raster (PNG/JPEG) | `<a:blipFill>` | Direct | — | |
+| `<image>` SVG | Recursive conversion | Planned | Tier 1→4 | **Tier 1** — recursively convert nested SVG to DrawingML shapes. **Tier 4** — rasterize and embed as PNG if recursion fails. |
+| `<image>` data URI | Extract and embed | Done | — | |
+| `preserveAspectRatio` on `<image>` | `<a:stretch>` / crop | Done | — | |
 
 ---
 
-## Summary: Substitute Complexity Tiers
+## Summary: Fallback Tier Map
 
-### Tier A — Arithmetic only (no visual loss)
+### Tier 1 — Native DrawingML (editable, scalable)
+Everything with "Direct" status plus simple mimics that use standard DrawingML
+attributes in their intended way.
+
+### Tier 2 — DrawingML Mimic (editable, scalable, creative use of spec)
 - `stroke-dashoffset` → rotate dash array
-- `gradientTransform` (rotation) → `lin ang`
+- `gradientTransform` → decompose to `lin ang` / stop adjustment
 - `gradientUnits="userSpaceOnUse"` → coordinate transform
 - `spreadMethod reflect/repeat` → stop expansion (done)
 - Uniform opacity mask → alpha shortcut (done)
-
-### Tier B — Structural changes (minor visual differences possible)
-- `opacity` on `<g>` → per-child alpha (non-overlapping) or selective rasterization
+- Group opacity (no overlap) → per-child alpha
 - `paint-order` → duplicate shape
-- `vector-effect: non-scaling-stroke` → adjust stroke-width by transform scale
-- `gradientTransform` (scale) → stop position adjustment
-- Gradient masks → alpha gradient approximation
+- `vector-effect: non-scaling-stroke` → adjust width by transform scale
+- Gradient masks (simple) → alpha gradient approximation
 - `word-spacing` → extra space characters
-- Radial focal point → `fillToRect` adjustment
+- `textPath` (preset match) → WordArt `prstTxWarp`
+- Per-character positioning → individual text boxes
+- Simple filter patterns → native effects (shadow, glow, softEdge)
 - `color-interpolation: linearRGB` → extra interpolated stops
+- Pattern tiles → `blipFill` + `<a:tile>` (done)
 
-### Tier C — Geometry transformation (exact but computationally heavy)
-- `skewX`/`skewY` → bake into custGeom coordinates
-- Complex clip-path → boolean path intersection
-- Nested clip-paths → intersect to single clip
-- `textPath` → custGeom glyph outlines
-- Per-character `dx`/`dy`/`rotate` → individual text boxes
+### Tier 3 — EMF Vector (scalable, limited editability)
+Use when DrawingML mimics are insufficient but vector quality must be preserved:
+- `skewX`/`skewY` transforms on complex elements (images, groups)
+- Complex/self-intersecting clip paths → EMF `SelectClipPath`
+- Nested clip paths → EMF clip combine modes (intersect)
+- Group-level clip paths → EMF graphics state clipping
+- `fill-rule: evenodd` (if DrawingML renderers don't honor it) → EMF `SetPolyFillMode`
+- Per-character `dx`/`dy`/`rotate` → EMF `ExtTextOut` with per-char positioning
+- `textPath` on arbitrary curves → EMF glyph outlines
+- Text with complex layout (overline, bidi-override) → EMF text records
+- Pattern with rotation/skew transforms → EMF affine on brush
+- Masks on vector content → EMF clip-path approximation
+- Filter on geometry-only content → EMF with pre-computed fill colors
+- `<foreignObject>` → EMF `StretchDIBits` wrapper (raster content in vector container)
+- `feTurbulence` hybrid → EMF with DIB pattern brush (ADR-018)
 
-### Tier D — Must rasterize (loses editability)
-- `mix-blend-mode` → pre-composite to PNG
-- Complex filter chains → EMF or PNG
-- `opacity` on `<g>` with overlapping children → group rasterization
-- `<foreignObject>` → headless browser render
-- Luminance masks with complex content → composited PNG
+### Tier 4 — PNG Raster (last resort, not scalable)
+Only when the visual result fundamentally requires pixel composition:
+- `mix-blend-mode` (all values) — no vector compositing operators anywhere
+- `opacity` on `<g>` with overlapping children — neither DrawingML nor EMF has group alpha
+- Complex filter chains with pixel operations (`feDisplacementMap`, `feMorphology`, `feConvolveMatrix`)
+- `feTurbulence` (pure noise, unless hybrid EMF per ADR-018)
+- Luminance/alpha masks with complex gradient content
+- Nested `<image>` SVG when recursive conversion fails
