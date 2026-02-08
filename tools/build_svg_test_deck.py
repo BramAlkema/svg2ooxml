@@ -1,5 +1,11 @@
 """Build a PPTX with embedded SVG images (one per slide) for manual testing.
 
+.. deprecated::
+    Use ``tools/pptx_builder.py`` instead, which uses PPTXPackageBuilder
+    from the svg2ooxml pipeline rather than hand-rolling XML.
+
+    Example: ``python tools/pptx_builder.py embed --deck 1 -o tmp/svg_test_deck.pptx``
+
 Each slide contains an SVG via the Office 2016+ svgBlip extension, with a
 small PNG fallback for older versions. Open in PowerPoint and use
 "Convert to Shape" / Ungroup to test PowerPoint's SVG conversion quality.
