@@ -14,7 +14,7 @@ from svg2ooxml.core.pipeline.navigation import (
 from svg2ooxml.drawingml.writer import EMU_PER_PX, DrawingMLWriter
 from svg2ooxml.ir.effects import CustomEffect
 from svg2ooxml.ir.geometry import BezierSegment, LineSegment, Point, Rect
-from svg2ooxml.ir.paint import GradientStop, LinearGradientPaint, SolidPaint, Stroke
+from svg2ooxml.ir.paint import GradientStop, LinearGradientPaint, PatternPaint, SolidPaint, Stroke
 from svg2ooxml.ir.scene import (
     ClipRef,
     ClipStrategy,
@@ -56,6 +56,48 @@ def test_render_scene_renders_rectangle() -> None:
     assert "Rectangle 2" in xml
     assert f'x="{int(10 * EMU_PER_PX)}"' in xml
     assert "FF0000" in xml
+
+
+def test_render_rectangle_with_pattern_tile_registers_media() -> None:
+    """Rectangle with PatternPaint tile_image gets blipFill with registered media."""
+    writer = DrawingMLWriter()
+    tile_data = b"\x89PNG\r\n\x1a\n" + b"\x00" * 50  # fake PNG header + padding
+    paint = PatternPaint(
+        pattern_id="tile_pat",
+        tile_image=tile_data,
+        tile_width_px=8,
+        tile_height_px=8,
+    )
+    rect = Rectangle(bounds=Rect(x=0, y=0, width=50, height=50), fill=paint)
+
+    result = writer.render_scene([rect])
+    xml = result.slide_xml
+
+    # blipFill should be present with r:embed referencing registered media
+    assert "<a:blipFill" in xml
+    assert "<a:tile" in xml
+    # media should be registered
+    assert len(result.assets.media) == 1
+
+
+def test_render_rectangle_with_pattern_preset_no_media() -> None:
+    """Rectangle with PatternPaint preset (no tile) uses pattFill, no media."""
+    writer = DrawingMLWriter()
+    paint = PatternPaint(
+        pattern_id="preset_pat",
+        preset="horz",
+        foreground="FF0000",
+        background="FFFFFF",
+    )
+    rect = Rectangle(bounds=Rect(x=0, y=0, width=50, height=50), fill=paint)
+
+    result = writer.render_scene([rect])
+    xml = result.slide_xml
+
+    assert "<a:pattFill" in xml
+    assert 'prst="horz"' in xml
+    assert "blipFill" not in xml
+    assert not result.assets.media
 
 
 def test_render_scene_renders_line() -> None:
@@ -134,6 +176,78 @@ def test_render_scene_renders_textframe() -> None:
     assert "Hello" in xml
     assert "00AAFF" in xml
     assert not result.assets.fonts
+
+
+def test_render_textframe_rtl_explicit_direction() -> None:
+    """TextFrame with direction='rtl' emits rtl='1' on pPr."""
+    writer = DrawingMLWriter()
+    frame = TextFrame(
+        origin=Point(0, 0),
+        anchor=TextAnchor.START,
+        bbox=Rect(0, 0, 100, 20),
+        runs=[Run(text="مرحبا", font_family="Arial", font_size_pt=12, rgb="000000")],
+        direction="rtl",
+    )
+
+    result = writer.render_scene([frame])
+    xml = result.slide_xml
+
+    assert 'rtl="1"' in xml
+    # START anchor in RTL should become right-aligned
+    assert 'algn="r"' in xml
+
+
+def test_render_textframe_ltr_no_rtl_attr() -> None:
+    """TextFrame with direction='ltr' does not emit rtl attribute."""
+    writer = DrawingMLWriter()
+    frame = TextFrame(
+        origin=Point(0, 0),
+        anchor=TextAnchor.START,
+        bbox=Rect(0, 0, 100, 20),
+        runs=[Run(text="Hello", font_family="Arial", font_size_pt=12, rgb="000000")],
+        direction="ltr",
+    )
+
+    result = writer.render_scene([frame])
+    xml = result.slide_xml
+
+    assert 'rtl="1"' not in xml
+    assert 'algn="l"' in xml
+
+
+def test_render_textframe_arabic_auto_detects_rtl() -> None:
+    """TextFrame with Arabic text auto-detects RTL when no direction set."""
+    writer = DrawingMLWriter()
+    frame = TextFrame(
+        origin=Point(0, 0),
+        anchor=TextAnchor.START,
+        bbox=Rect(0, 0, 100, 20),
+        runs=[Run(text="مرحبا بالعالم", font_family="Arial", font_size_pt=12, rgb="000000")],
+    )
+
+    result = writer.render_scene([frame])
+    xml = result.slide_xml
+
+    assert 'rtl="1"' in xml
+    assert 'algn="r"' in xml
+
+
+def test_render_textframe_rtl_end_anchor_becomes_left_align() -> None:
+    """In RTL, END anchor maps to left alignment."""
+    writer = DrawingMLWriter()
+    frame = TextFrame(
+        origin=Point(0, 0),
+        anchor=TextAnchor.END,
+        bbox=Rect(0, 0, 100, 20),
+        runs=[Run(text="مرحبا", font_family="Arial", font_size_pt=12, rgb="000000")],
+        direction="rtl",
+    )
+
+    result = writer.render_scene([frame])
+    xml = result.slide_xml
+
+    assert 'rtl="1"' in xml
+    assert 'algn="l"' in xml
 
 
 def test_render_textframe_renders_multiple_runs() -> None:
@@ -645,6 +759,65 @@ def test_mask_policy_prefers_mimic_before_emf() -> None:
     assert '<a:custGeom>' in result.slide_xml
     assert not list(result.assets.iter_masks())
     assert any("mimic fallback emitted" in msg for msg in result.assets.diagnostics)
+def test_apply_mask_alpha_scales_solid_fill_opacity() -> None:
+    """_apply_mask_alpha multiplies alpha into SolidPaint opacity."""
+    from svg2ooxml.drawingml.writer import _apply_mask_alpha
+
+    path = IRPath(
+        segments=[LineSegment(Point(0, 0), Point(10, 10))],
+        fill=SolidPaint(rgb="FF0000", opacity=0.8),
+        stroke=Stroke(paint=SolidPaint(rgb="00FF00", opacity=1.0), width=2.0),
+    )
+
+    result = _apply_mask_alpha(path, 0.5)
+
+    # Fill opacity: 0.8 * 0.5 = 0.4
+    assert abs(result.fill.opacity - 0.4) < 0.001
+    # Stroke paint opacity: 1.0 * 0.5 = 0.5
+    assert abs(result.stroke.paint.opacity - 0.5) < 0.001
+
+
+def test_apply_mask_alpha_scales_gradient_stop_opacities() -> None:
+    """_apply_mask_alpha multiplies alpha into each gradient stop's opacity."""
+    from svg2ooxml.drawingml.writer import _apply_mask_alpha
+
+    gradient = LinearGradientPaint(
+        stops=[
+            GradientStop(0.0, "FF0000", opacity=1.0),
+            GradientStop(1.0, "00FF00", opacity=0.6),
+        ],
+        start=(0.0, 0.0),
+        end=(1.0, 0.0),
+    )
+    path = IRPath(
+        segments=[LineSegment(Point(0, 0), Point(10, 10))],
+        fill=gradient,
+    )
+
+    result = _apply_mask_alpha(path, 0.5)
+
+    assert abs(result.fill.stops[0].opacity - 0.5) < 0.001  # 1.0 * 0.5
+    assert abs(result.fill.stops[1].opacity - 0.3) < 0.001  # 0.6 * 0.5
+
+
+def test_apply_mask_alpha_removes_mask_ref() -> None:
+    """_apply_mask_alpha clears mask and mask_instance after applying alpha."""
+    from svg2ooxml.drawingml.writer import _apply_mask_alpha
+
+    mask_ref = MaskRef(mask_id="m1")
+    path = IRPath(
+        segments=[LineSegment(Point(0, 0), Point(10, 10))],
+        fill=SolidPaint(rgb="FF0000", opacity=1.0),
+        mask=mask_ref,
+    )
+
+    result = _apply_mask_alpha(path, 0.5)
+
+    assert result.mask is None
+    assert result.mask_instance is None
+    assert abs(result.fill.opacity - 0.5) < 0.001
+
+
 TEST_FONT = "TestSans"
 RUN_TEXT_EXTERNAL = "label-external"
 RUN_TEXT_SLIDE = "label-slide"

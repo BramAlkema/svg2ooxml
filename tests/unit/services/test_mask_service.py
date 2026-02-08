@@ -133,3 +133,66 @@ def test_mask_service_can_select_mimic() -> None:
     assert result.metadata["strategy"] == "mimic"
     assert result.metadata.get("mimic_supported") is True
     assert result.geometry is not None and result.geometry.geometry is not None
+
+
+def test_mask_service_uniform_opacity_uses_alpha_shortcut() -> None:
+    """Mask with opacity < 1.0 and vector content uses alpha shortcut."""
+    service = StructuredMaskService()
+    definition = MaskDefinition(
+        mask_id="mask-opacity",
+        bounding_box=Rect(0, 0, 5, 5),
+        opacity=0.5,
+        segments=(
+            LineSegment(Point(0, 0), Point(5, 0)),
+            LineSegment(Point(5, 0), Point(5, 5)),
+            LineSegment(Point(5, 5), Point(0, 5)),
+            LineSegment(Point(0, 5), Point(0, 0)),
+        ),
+    )
+    result = service.compute(MaskRef(mask_id="mask-opacity", definition=definition))
+
+    assert result is not None
+    assert result.strategy == "alpha"
+    assert result.metadata["classification"] == "uniform_opacity"
+    assert result.metadata["alpha_value"] == 0.5
+    assert result.geometry is None
+
+
+def test_mask_service_full_opacity_stays_vector() -> None:
+    """Mask with opacity=1.0 is NOT treated as uniform opacity shortcut."""
+    service = StructuredMaskService()
+    definition = MaskDefinition(
+        mask_id="mask-full",
+        bounding_box=Rect(0, 0, 5, 5),
+        opacity=1.0,
+        segments=(
+            LineSegment(Point(0, 0), Point(5, 0)),
+            LineSegment(Point(5, 0), Point(5, 5)),
+        ),
+    )
+    result = service.compute(MaskRef(mask_id="mask-full", definition=definition))
+
+    assert result is not None
+    assert result.strategy == "native"
+    assert result.metadata["classification"] == "vector"
+
+
+def test_mask_service_opacity_with_raster_skips_shortcut() -> None:
+    """Mask with opacity < 1.0 but raster content does NOT use alpha shortcut."""
+    service = StructuredMaskService()
+    definition = MaskDefinition(
+        mask_id="mask-raster-opacity",
+        bounding_box=Rect(0, 0, 5, 5),
+        opacity=0.5,
+        segments=(
+            LineSegment(Point(0, 0), Point(5, 0)),
+            LineSegment(Point(5, 0), Point(5, 5)),
+        ),
+        content_xml=("<image href='texture.png' width='10' height='10'/>",),
+    )
+    result = service.compute(MaskRef(mask_id="mask-raster-opacity", definition=definition))
+
+    assert result is not None
+    # Should fall back to raster, not alpha shortcut
+    assert result.strategy != "alpha"
+    assert result.metadata["classification"] in {"raster", "mixed"}

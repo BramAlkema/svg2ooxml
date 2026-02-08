@@ -27,12 +27,22 @@ class MockFillStyle:
 
 
 @dataclass
+class MockStrokeStyle:
+    """Mock stroke style for testing."""
+    color: MockColor | None = None
+    width: float | None = None
+    opacity: float = 1.0
+
+
+@dataclass
 class MockTextStyle:
     """Mock text style for testing."""
     font_families: tuple[str, ...] = ("Arial",)
     font_size: float | None = 12.0
     font_style: str | None = None
     font_weight: str | None = None
+    text_decoration: str | None = None
+    letter_spacing: float | None = None
 
 
 @dataclass
@@ -41,16 +51,21 @@ class MockTextNode:
     text_content: str | None = "Test"
     text_style: MockTextStyle | None = None
     fill: MockFillStyle | None = None
+    stroke: MockStrokeStyle | None = None
     transform: object | None = None
     attributes: dict = None
     children: list = None
+    styles: dict = None
     tag: str = "text"
+    source: object = None
 
     def __post_init__(self):
         if self.attributes is None:
             self.attributes = {}
         if self.children is None:
             self.children = []
+        if self.styles is None:
+            self.styles = {}
         if self.text_style is None:
             self.text_style = MockTextStyle()
         if self.fill is None:

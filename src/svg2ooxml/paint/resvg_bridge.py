@@ -133,18 +133,26 @@ def resolve_stroke_style(stroke: StrokeStyle | None, tree: Tree) -> Stroke | Non
     if paint is None and width <= 0.0:
         return None
 
+    # Map stroke line join
+    join_map = {"miter": StrokeJoin.MITER, "round": StrokeJoin.ROUND, "bevel": StrokeJoin.BEVEL}
+    join = join_map.get(getattr(stroke, "linejoin", None) or "", StrokeJoin.MITER)
+
+    # Map stroke line cap
+    cap_map = {"butt": StrokeCap.BUTT, "round": StrokeCap.ROUND, "square": StrokeCap.SQUARE}
+    cap = cap_map.get(getattr(stroke, "linecap", None) or "", StrokeCap.BUTT)
+
+    miter_limit = _coerce_float(getattr(stroke, "miterlimit", None), 4.0)
+
     result = Stroke(
         paint=paint,
         width=width,
-        join=StrokeJoin.MITER,
-        cap=StrokeCap.BUTT,
-        miter_limit=4.0,
-        dash_array=None,
-        dash_offset=0.0,
+        join=join,
+        cap=cap,
+        miter_limit=miter_limit,
+        dash_array=getattr(stroke, "dash_array", None),
+        dash_offset=_coerce_float(getattr(stroke, "dash_offset", None), 0.0),
         opacity=_clamp01(_coerce_float(getattr(stroke, "opacity", 1.0), 1.0)),
     )
-
-
 
     return result
 

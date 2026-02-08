@@ -573,6 +573,11 @@ def _convert_node(node: SvgNode, parent: BaseNode | None = None, options: Option
         presentation.stroke_width,
         presentation.stroke_opacity,
         presentation.opacity,
+        dasharray=presentation.stroke_dasharray,
+        dashoffset=presentation.stroke_dashoffset,
+        linecap=presentation.stroke_linecap,
+        linejoin=presentation.stroke_linejoin,
+        miterlimit=presentation.stroke_miterlimit,
     )
     if (
         stroke_style.color is None
@@ -586,6 +591,8 @@ def _convert_node(node: SvgNode, parent: BaseNode | None = None, options: Option
         presentation.font_size,
         presentation.font_style,
         presentation.font_weight,
+        text_decoration=getattr(presentation, "text_decoration", None),
+        letter_spacing=getattr(presentation, "letter_spacing", None),
     )
     if (
         not resolved_text_style.font_families
@@ -840,6 +847,11 @@ def _expand_use_nodes(root: BaseNode, ids: dict[str, BaseNode]) -> None:
                         clone.presentation.stroke_width,
                         clone.presentation.stroke_opacity,
                         clone.presentation.opacity,
+                        dasharray=clone.presentation.stroke_dasharray,
+                        dashoffset=clone.presentation.stroke_dashoffset,
+                        linecap=clone.presentation.stroke_linecap,
+                        linejoin=clone.presentation.stroke_linejoin,
+                        miterlimit=clone.presentation.stroke_miterlimit,
                     )
                     if not (
                         stroke_style.color is None
@@ -918,6 +930,8 @@ def _inherit_text(text_style: TextStyle | None, parent: BaseNode | None) -> Text
         font_size=text_style.font_size if text_style.font_size is not None else parent_style.font_size,
         font_style=text_style.font_style or parent_style.font_style,
         font_weight=text_style.font_weight or parent_style.font_weight,
+        text_decoration=text_style.text_decoration or parent_style.text_decoration,
+        letter_spacing=text_style.letter_spacing if text_style.letter_spacing is not None else parent_style.letter_spacing,
     )
 
 
@@ -948,6 +962,8 @@ def _inherit_text(text_style: TextStyle | None, parent: BaseNode | None) -> Text
         font_size=text_style.font_size if text_style.font_size is not None else parent_style.font_size,
         font_style=text_style.font_style or parent_style.font_style,
         font_weight=text_style.font_weight or parent_style.font_weight,
+        text_decoration=text_style.text_decoration or parent_style.text_decoration,
+        letter_spacing=text_style.letter_spacing if text_style.letter_spacing is not None else parent_style.letter_spacing,
     )
 @dataclass(slots=True)
 class TextSpan:

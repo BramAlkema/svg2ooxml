@@ -20,9 +20,12 @@ from typing import TYPE_CHECKING
 from lxml import etree  # For type annotations
 
 # Import centralized color model for hex conversion
+from collections.abc import Callable
+
 from svg2ooxml.color.models import Color as CentralizedColor
 
 # Import centralized unit conversion constants
+from svg2ooxml.common.conversions.bidi import is_rtl_text
 from svg2ooxml.common.conversions.opacity import opacity_to_ppt
 from svg2ooxml.common.units import px_to_emu
 
@@ -30,9 +33,15 @@ from svg2ooxml.common.units import px_to_emu
 from svg2ooxml.drawingml.xml_builder import a_elem, a_sub, p_elem, to_string
 
 if TYPE_CHECKING:
-    from svg2ooxml.core.resvg.painting.paint import Color as ResvgColor
-    from svg2ooxml.core.resvg.painting.paint import FillStyle, StrokeStyle, TextStyle
+    from svg2ooxml.core.resvg.painting.paint import (
+        Color as ResvgColor,
+        FillStyle,
+        PaintReference,
+        StrokeStyle,
+        TextStyle,
+    )
     from svg2ooxml.core.resvg.usvg_tree import TextNode
+    from svg2ooxml.ir.paint import Paint
     from svg2ooxml.services.fonts.embedding import (
         FontEmbeddingEngine,
         FontEmbeddingResult,
@@ -190,15 +199,53 @@ class DrawingMLTextGenerator:
         self,
         font_service: FontService | None = None,
         embedding_engine: FontEmbeddingEngine | None = None,
+        paint_resolver: Callable[[PaintReference], Paint | None] | None = None,
     ) -> None:
         """Initialize the DrawingML text generator.
 
         Args:
             font_service: Optional FontService for font resolution
             embedding_engine: Optional FontEmbeddingEngine for font subsetting
+            paint_resolver: Optional callback to resolve PaintReference (gradient/pattern)
+                to an IR Paint object (LinearGradientPaint, RadialGradientPaint, etc.)
         """
         self._font_service = font_service
         self._embedding_engine = embedding_engine
+        self._paint_resolver = paint_resolver
+
+    def generate_wordart_text_body(self, node: TextNode, preset: str) -> str:
+        """Generate <p:txBody> with prstTxWarp for WordArt rendering.
+
+        Creates a text body with the specified WordArt warp preset on <a:bodyPr>,
+        producing native editable text instead of EMF fallback.
+
+        Args:
+            node: TextNode from resvg tree
+            preset: DrawingML warp preset name (e.g. "textWave1", "textArchUp")
+
+        Returns:
+            Complete DrawingML XML string for <p:txBody> with prstTxWarp
+        """
+        txBody = p_elem("txBody")
+        bodyPr = a_sub(txBody, "bodyPr")
+        bodyPr.set("prstTxWarp", preset)
+        bodyPr.set("wrap", "none")
+        bodyPr.set("lIns", "0")
+        bodyPr.set("tIns", "0")
+        bodyPr.set("rIns", "0")
+        bodyPr.set("bIns", "0")
+        bodyPr.set("anchor", "t")
+        a_sub(bodyPr, "normAutofit")
+        a_sub(txBody, "lstStyle")
+        p = a_sub(txBody, "p")
+        pPr = a_sub(p, "pPr")
+        if self._is_node_rtl(node):
+            pPr.set("rtl", "1")
+
+        self._generate_runs_into_parent(node, p)
+
+        a_sub(p, "endParaRPr")
+        return to_string(txBody)
 
     def generate_text_body(self, node: TextNode) -> str:
         """Generate <p:txBody> DrawingML for a text node.
@@ -228,6 +275,11 @@ class DrawingMLTextGenerator:
         a_sub(txBody, "bodyPr")
         a_sub(txBody, "lstStyle")
         p = a_sub(txBody, "p")
+
+        # Add paragraph properties with RTL if detected
+        pPr = a_sub(p, "pPr")
+        if self._is_node_rtl(node):
+            pPr.set("rtl", "1")
 
         # Generate runs and append to paragraph
         self._generate_runs_into_parent(node, p)
@@ -310,26 +362,33 @@ class DrawingMLTextGenerator:
             fill_style: FillStyle with color information
             stroke_style: Optional StrokeStyle for outlines
         """
-        # 1. Outline (stroke) - MUST come before fill
+        # 1. Outline (stroke) - MUST come before fill per DrawingML spec
         if stroke_style and stroke_style.width is not None and stroke_style.width > 0:
-            stroke_color = stroke_style.color or getattr(fill_style, "color", None)
-            if stroke_color:
-                hex_color = _color_to_hex(stroke_color)
-                ln = a_sub(rPr, "ln", w=str(px_to_emu(stroke_style.width)))
-                strokeFill = a_sub(ln, "solidFill")
-                
-                stroke_alpha = opacity_to_ppt(stroke_style.opacity)
-                if stroke_alpha < 100000:
-                    srgbClr = a_sub(strokeFill, "srgbClr", val=hex_color)
-                    a_sub(srgbClr, "alpha", val=str(stroke_alpha))
-                else:
-                    a_sub(strokeFill, "srgbClr", val=hex_color)
+            ln = a_sub(rPr, "ln", w=str(round(px_to_emu(stroke_style.width))))
+            stroke_grad_elem = self._resolve_gradient_fill(stroke_style.reference)
+            if stroke_grad_elem is not None:
+                ln.append(stroke_grad_elem)
+            else:
+                stroke_color = stroke_style.color or getattr(fill_style, "color", None)
+                if stroke_color:
+                    hex_color = _color_to_hex(stroke_color)
+                    strokeFill = a_sub(ln, "solidFill")
+                    stroke_alpha = opacity_to_ppt(stroke_style.opacity)
+                    if stroke_alpha < 100000:
+                        srgbClr = a_sub(strokeFill, "srgbClr", val=hex_color)
+                        a_sub(srgbClr, "alpha", val=str(stroke_alpha))
+                    else:
+                        a_sub(strokeFill, "srgbClr", val=hex_color)
 
-        # 2. Fill color and opacity
-        if fill_style and fill_style.color:
+        # 2. Fill — gradient or solid color
+        fill_grad_elem = self._resolve_gradient_fill(
+            fill_style.reference if fill_style else None
+        )
+        if fill_grad_elem is not None:
+            rPr.append(fill_grad_elem)
+        elif fill_style and fill_style.color:
             hex_color = _color_to_hex(fill_style.color)
             solidFill = a_sub(rPr, "solidFill")
-            
             fill_alpha = opacity_to_ppt(fill_style.opacity)
             if fill_alpha < 100000:
                 srgbClr = a_sub(solidFill, "srgbClr", val=hex_color)
@@ -356,9 +415,36 @@ class DrawingMLTextGenerator:
             if _map_font_style(text_style.font_style):
                 rPr.set("i", "1")
 
+            # Text decorations (underline, strikethrough)
+            if text_style.text_decoration:
+                deco = text_style.text_decoration.lower()
+                if "underline" in deco:
+                    rPr.set("u", "sng")
+                if "line-through" in deco:
+                    rPr.set("strike", "sngStrike")
+
+            # Letter-spacing → spc (hundredths of a point)
+            if text_style.letter_spacing is not None:
+                # Convert px to hundredths of a point: px * (72/96) * 100
+                spc = round(text_style.letter_spacing * 75)
+                rPr.set("spc", str(spc))
+
             # Font family (lxml handles special characters like & automatically)
             if text_style.font_families:
                 a_sub(rPr, "latin", typeface=text_style.font_families[0])
+
+    @staticmethod
+    def _is_node_rtl(node: TextNode) -> bool:
+        """Detect if a text node should use RTL paragraph direction."""
+        attrs = getattr(node, "attributes", {}) or {}
+        styles = getattr(node, "styles", {}) or {}
+        direction = styles.get("direction") or attrs.get("direction")
+        if direction == "rtl":
+            return True
+        if direction == "ltr":
+            return False
+        text = node.text_content or ""
+        return bool(text) and is_rtl_text(text)
 
     def _collect_text_segments(
         self,
@@ -525,6 +611,47 @@ class DrawingMLTextGenerator:
 
         # Subset font (embedding engine uses font_data if present)
         return self._embedding_engine.subset_font(request)
+
+    def _resolve_gradient_fill(
+        self,
+        reference: PaintReference | None,
+    ) -> etree._Element | None:
+        """Resolve a PaintReference to a DrawingML gradient fill element.
+
+        Uses the paint_resolver callback (if configured) to convert a
+        PaintReference into an IR Paint, then builds the corresponding
+        <a:gradFill> element.
+
+        Args:
+            reference: PaintReference with href to gradient/pattern definition
+
+        Returns:
+            <a:gradFill> lxml Element, or None if not resolvable
+        """
+        if reference is None or self._paint_resolver is None:
+            return None
+
+        paint = self._paint_resolver(reference)
+        if paint is None:
+            return None
+
+        from svg2ooxml.ir.paint import LinearGradientPaint, RadialGradientPaint
+
+        if isinstance(paint, LinearGradientPaint):
+            from svg2ooxml.drawingml.paint_runtime import (
+                _linear_gradient_to_fill_elem,
+            )
+
+            return _linear_gradient_to_fill_elem(paint)
+
+        if isinstance(paint, RadialGradientPaint):
+            from svg2ooxml.drawingml.paint_runtime import (
+                _radial_gradient_to_fill_elem,
+            )
+
+            return _radial_gradient_to_fill_elem(paint)
+
+        return None
 
 
 __all__ = [

@@ -204,6 +204,7 @@ class TextFrame:
     runs: list[Run] | None = None
     line_height: float | None = None
     baseline_shift: float = 0.0
+    direction: str | None = None  # "rtl" or "ltr" or None (auto-detect)
     metadata: dict[str, Any] = field(default_factory=dict, compare=False)
     wordart_candidate: WordArtCandidate | None = None
     embedding_plan: EmbeddedFontPlan | None = None

@@ -60,6 +60,7 @@ class IRConverterContext:
         self.conversion_context = None
         self.element_index: dict[str, Any] = {}
         self.viewport_engine = ViewportEngine()
+        self.resvg_tree: Any = None
         self._preloaded_stage_events: list[tuple[str, str, str | None, dict[str, Any]]] = []
 
         mask_processor = None

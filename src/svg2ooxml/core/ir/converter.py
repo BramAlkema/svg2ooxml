@@ -129,6 +129,7 @@ class IRConverter:
 
         self._resvg_bridge.build(result.svg_root)
         self._resvg_tree = self._resvg_bridge.tree
+        self._context.resvg_tree = self._resvg_tree
         self._shape_pipeline._svg_root = result.svg_root # Store root for baking
         self._context.prepare_style_context(result)
         self._css_context = self._context.css_context
@@ -241,6 +242,7 @@ class IRConverter:
     def _build_resvg_lookup(self, svg_root: etree._Element) -> None:
         self._resvg_bridge.build(svg_root)
         self._resvg_tree = self._resvg_bridge.tree
+        self._context.resvg_tree = self._resvg_tree
         self._shape_pipeline.refresh_state()
 
     def _prepare_context(self, result: ParseResult) -> None:

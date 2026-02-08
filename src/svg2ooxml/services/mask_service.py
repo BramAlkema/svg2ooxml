@@ -44,6 +44,7 @@ class MaskClassification(str, Enum):
     MIXED = "mixed"
     UNSUPPORTED = "unsupported"
     EMPTY = "empty"
+    UNIFORM_OPACITY = "uniform_opacity"
 
 
 class StructuredMaskService:
@@ -72,6 +73,15 @@ class StructuredMaskService:
         metadata["fallback_order"] = tuple(policy_info["fallback_order"])
         if policy_info["policy_snapshot"]:
             metadata.setdefault("policy", {}).update(policy_info["policy_snapshot"])
+
+        if classification == MaskClassification.UNIFORM_OPACITY:
+            alpha_value = base_metadata.get("alpha_value", 1.0)
+            diagnostics.append(
+                f"Uniform opacity mask detected (alpha={alpha_value:.3f}); using alpha shortcut."
+            )
+            metadata["strategy"] = "alpha"
+            metadata["alpha_value"] = alpha_value
+            return MaskComputeResult(strategy="alpha", geometry=None, diagnostics=diagnostics, metadata=metadata)
 
         if classification == MaskClassification.MISSING:
             diagnostics.append("Mask definition missing; skipping mask emission.")
@@ -212,6 +222,15 @@ class StructuredMaskService:
             diagnostics.append("Mask contains raster-only content.")
             return MaskClassification.RASTER, metadata, diagnostics
         if has_vector:
+            # Check for uniform opacity shortcut: mask has explicit opacity < 1.0
+            # and only vector content (no raster/gradient features).
+            mask_opacity = getattr(definition, "opacity", None)
+            if mask_opacity is not None and 0.0 < mask_opacity < 1.0:
+                metadata["alpha_value"] = mask_opacity
+                diagnostics.append(
+                    f"Mask has uniform opacity={mask_opacity:.3f} with vector content; eligible for alpha shortcut."
+                )
+                return MaskClassification.UNIFORM_OPACITY, metadata, diagnostics
             return MaskClassification.VECTOR, metadata, diagnostics
 
         diagnostics.append("Mask definition contains no drawable primitives.")

@@ -21,7 +21,7 @@
 {BODY_EXTRA}        </a:bodyPr>
         <a:lstStyle/>
         <a:p>
-            <a:pPr algn="{TEXT_ALIGN}"/>
+            <a:pPr algn="{TEXT_ALIGN}"{RTL_ATTR}/>
             {RUNS_XML}
             <a:endParaRPr/>
         </a:p>

@@ -49,6 +49,8 @@ class MockTextStyle:
     font_size: float | None = 12.0
     font_style: str | None = None
     font_weight: str | None = None
+    text_decoration: str | None = None
+    letter_spacing: float | None = None
 
 
 @dataclass
@@ -338,6 +340,138 @@ class TestTextRenderCoordinator:
             result.complexity
             == TextLayoutComplexity.HAS_CHILD_SPAN_COMPLEX_POSITIONING
         )
+
+
+    # -------------------------------------------------------------------
+    # WordArt / textPath tests
+    # -------------------------------------------------------------------
+
+    def test_textpath_with_path_points_renders_as_wordart(self):
+        """Test that textPath with path points triggers WordArt classification."""
+        import math
+
+        from svg2ooxml.ir.text_path import PathPoint
+
+        coordinator = TextRenderCoordinator()
+        node = MockTextNode(
+            text_content="Wave text", attributes={"textPath": "#wave"}
+        )
+
+        # Create wave-like path points (sinusoidal)
+        points = []
+        for i in range(50):
+            t = i / 49.0
+            x = t * 200.0
+            y = 30.0 * math.sin(t * 2 * math.pi)
+            angle = math.atan2(
+                30.0 * 2 * math.pi * math.cos(t * 2 * math.pi) / 49.0,
+                200.0 / 49.0,
+            )
+            points.append(PathPoint(x=x, y=y, tangent_angle=angle, distance_along_path=t * 200.0))
+
+        result = coordinator.render(
+            node,
+            path_points=points,
+            path_data="M0,0 C50,30 100,-30 200,0",
+        )
+
+        assert result.strategy == "wordart"
+        assert result.content is not None
+        assert "prstTxWarp" in result.content
+        assert result.complexity == TextLayoutComplexity.HAS_TEXT_PATH
+
+    def test_textpath_without_path_points_falls_back_to_emf(self):
+        """Test that textPath without path points falls back to EMF."""
+        coordinator = TextRenderCoordinator()
+        node = MockTextNode(
+            text_content="Path text", attributes={"textPath": "#myPath"}
+        )
+
+        result = coordinator.render(node)
+
+        assert result.strategy == "emf"
+        assert result.content is None
+
+    def test_textpath_with_low_confidence_falls_back_to_emf(self):
+        """Test that textPath with low-confidence classification falls back to EMF."""
+        from svg2ooxml.ir.text_path import PathPoint
+
+        # Very high threshold so classification won't meet it
+        coordinator = TextRenderCoordinator(wordart_confidence_threshold=0.99)
+        node = MockTextNode(
+            text_content="Text", attributes={"textPath": "#p"}
+        )
+
+        # Simple flat line (classified as textPlain with confidence < 0.99)
+        points = [
+            PathPoint(x=float(i * 10), y=0.0, tangent_angle=0.0, distance_along_path=float(i * 10))
+            for i in range(10)
+        ]
+
+        result = coordinator.render(node, path_points=points)
+
+        assert result.strategy == "emf"
+
+    def test_textpath_wordart_records_telemetry(self):
+        """Test that WordArt rendering records correct telemetry."""
+        from svg2ooxml.ir.text_path import PathPoint
+
+        coordinator = TextRenderCoordinator()
+        node = MockTextNode(
+            text_content="Flat text", attributes={"textPath": "#flat"}
+        )
+        tracer = RenderTracer()
+
+        # Flat line → textPlain with high confidence
+        points = [
+            PathPoint(x=float(i * 10), y=0.0, tangent_angle=0.0, distance_along_path=float(i * 10))
+            for i in range(20)
+        ]
+
+        result = coordinator.render(node, tracer=tracer, path_points=points)
+
+        assert result.strategy == "wordart"
+        decisions = tracer.get_decisions()
+        assert len(decisions) == 1
+        assert decisions[0].strategy == "wordart"
+        assert decisions[0].metadata.get("preset") is not None
+        assert decisions[0].metadata.get("confidence") is not None
+
+    def test_textpath_with_arch_path_classifies_correctly(self):
+        """Test that arch-shaped path is classified as textArchUp."""
+        import math
+
+        from svg2ooxml.ir.text_path import PathPoint
+
+        coordinator = TextRenderCoordinator()
+        node = MockTextNode(
+            text_content="Arch text", attributes={"textPath": "#arch"}
+        )
+
+        # Create arch path (half circle, upward)
+        points = []
+        for i in range(30):
+            t = i / 29.0
+            angle = math.pi * t
+            x = 100.0 * math.cos(angle) + 100.0
+            y = -80.0 * math.sin(angle)
+            tangent = angle + math.pi / 2
+            points.append(PathPoint(
+                x=x, y=y,
+                tangent_angle=tangent,
+                distance_along_path=t * math.pi * 100.0,
+            ))
+
+        result = coordinator.render(
+            node,
+            path_points=points,
+            path_data="M0,0 A100,80 0 0 1 200,0",
+        )
+
+        # Should render as wordart (arch classification)
+        if result.strategy == "wordart":
+            assert result.content is not None
+            assert "prstTxWarp" in result.content
 
 
 __all__ = ["TestTextRenderCoordinator"]

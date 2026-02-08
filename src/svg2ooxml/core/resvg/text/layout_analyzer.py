@@ -545,9 +545,7 @@ class TextLayoutAnalyzer:
         return False
 
     def _has_spacing_adjustments(self, node: TextNode) -> bool:
-        letter_spacing = self._style_value(node, "letter-spacing")
-        if letter_spacing and letter_spacing.strip().lower() not in {"normal", "0", "0px", "0%"}:
-            return True
+        # letter-spacing is supported via DrawingML spc attribute — allow it through
         word_spacing = self._style_value(node, "word-spacing")
         if word_spacing and word_spacing.strip().lower() not in {"normal", "0", "0px", "0%"}:
             return True

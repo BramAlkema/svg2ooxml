@@ -83,7 +83,18 @@ class MaskWriter:
 
         if strategy == "hide":
             return "<!-- HIDDEN -->", diagnostics
-            
+
+        if strategy == "alpha":
+            # Uniform opacity mask: store alpha on element metadata for the
+            # writer to multiply into fill/stroke opacities directly.
+            alpha_value = mask_meta.get("alpha_value", 1.0)
+            if isinstance(metadata, dict):
+                metadata["_mask_alpha"] = alpha_value
+            diagnostics.append(
+                f"Mask {mask_ref.mask_id} applied as alpha shortcut ({alpha_value:.3f})."
+            )
+            return "", diagnostics
+
         if strategy == "none":
             return "", diagnostics
 

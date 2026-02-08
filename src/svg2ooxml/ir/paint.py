@@ -18,7 +18,7 @@ class SolidPaint:
         if len(self.rgb) != 6:
             raise ValueError("rgb must be 6 hex characters")
         if not (0.0 <= self.opacity <= 1.0):
-            raise ValueError("opacity must be between 0.0 and 1.0")
+            object.__setattr__(self, "opacity", max(0.0, min(1.0, self.opacity)))
 
 
 @dataclass(frozen=True)
@@ -70,6 +70,12 @@ class PatternPaint:
     preset: str | None = None
     foreground: str | None = None
     background: str | None = None
+    # Rasterized tile image for non-preset patterns
+    tile_image: bytes | None = None
+    tile_width_px: int | None = None
+    tile_height_px: int | None = None
+    # Populated by shape_renderer after media registration
+    tile_relationship_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -109,7 +115,7 @@ class Stroke:
         if self.width < 0:
             raise ValueError("stroke width must be non-negative")
         if not (0.0 <= self.opacity <= 1.0):
-            raise ValueError("stroke opacity must be between 0.0 and 1.0")
+            object.__setattr__(self, "opacity", max(0.0, min(1.0, self.opacity)))
 
     @property
     def is_dashed(self) -> bool:

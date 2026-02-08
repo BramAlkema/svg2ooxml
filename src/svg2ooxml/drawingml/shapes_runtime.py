@@ -6,6 +6,7 @@ import html
 import logging
 from collections.abc import Iterable
 
+from svg2ooxml.common.conversions.bidi import is_rtl_text
 from svg2ooxml.common.conversions.opacity import opacity_to_ppt
 from svg2ooxml.drawingml.generator import DrawingMLPathGenerator, px_to_emu
 from svg2ooxml.drawingml.paint_runtime import clip_rect_to_xml
@@ -324,6 +325,33 @@ def render_polygon(
     )
 
 
+def _is_frame_rtl(frame: TextFrame) -> bool:
+    """Determine if a text frame should use RTL paragraph direction."""
+    direction = getattr(frame, "direction", None)
+    if direction == "rtl":
+        return True
+    if direction == "ltr":
+        return False
+    # Auto-detect from text content
+    text = frame.text_content
+    return bool(text) and is_rtl_text(text)
+
+
+def _resolve_alignment(anchor: TextAnchor, *, rtl: bool) -> str:
+    """Map text-anchor to DrawingML alignment, flipping for RTL."""
+    if rtl:
+        return {
+            TextAnchor.START: "r",
+            TextAnchor.MIDDLE: "ctr",
+            TextAnchor.END: "l",
+        }.get(anchor, "r")
+    return {
+        TextAnchor.START: "l",
+        TextAnchor.MIDDLE: "ctr",
+        TextAnchor.END: "r",
+    }.get(anchor, "l")
+
+
 def render_textframe(
     frame: TextFrame,
     shape_id: int,
@@ -337,11 +365,8 @@ def render_textframe(
     register_run_navigation=None,
 ) -> str:
     bbox = frame.bbox
-    align = {
-        TextAnchor.START: "l",
-        TextAnchor.MIDDLE: "ctr",
-        TextAnchor.END: "r",
-    }.get(frame.anchor, "l")
+    rtl = _is_frame_rtl(frame)
+    align = _resolve_alignment(frame.anchor, rtl=rtl)
 
     policy_text = policy_for(getattr(frame, "metadata", None), "text")
     note_parts: list[str] = []
@@ -374,6 +399,7 @@ def render_textframe(
         WIDTH_EMU=px_to_emu(bbox.width),
         HEIGHT_EMU=px_to_emu(bbox.height),
         TEXT_ALIGN=align,
+        RTL_ATTR=' rtl="1"' if rtl else "",
         BODY_EXTRA=body_extra,
         RUNS_XML=runs_xml,
         HYPERLINK_XML=hyperlink_xml,
@@ -396,11 +422,8 @@ def render_wordart(
     register_run_navigation=None,
 ) -> str:
     bbox = frame.bbox
-    align = {
-        TextAnchor.START: "l",
-        TextAnchor.MIDDLE: "ctr",
-        TextAnchor.END: "r",
-    }.get(frame.anchor, "l")
+    rtl = _is_frame_rtl(frame)
+    align = _resolve_alignment(frame.anchor, rtl=rtl)
 
     policy_text = policy_for(getattr(frame, "metadata", None), "text")
     note_parts: list[str] = []
@@ -436,6 +459,7 @@ def render_wordart(
         WIDTH_EMU=px_to_emu(bbox.width),
         HEIGHT_EMU=px_to_emu(bbox.height),
         TEXT_ALIGN=align,
+        RTL_ATTR=' rtl="1"' if rtl else "",
         WARP_PRESET=candidate.preset,
         BODY_EXTRA=body_extra,
         RUNS_XML=runs_xml,
