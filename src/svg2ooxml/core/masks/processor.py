@@ -100,6 +100,9 @@ class MaskProcessor:
             if service_result.strategy == "native" and service_result.geometry is not None:
                 requires_emf = False
                 xml_fragment = service_result.geometry.geometry.xml
+            elif service_result.strategy == "alpha":
+                # Uniform opacity mask: handled as alpha shortcut, no EMF needed.
+                requires_emf = False
             else:
                 requires_emf = True
         else:

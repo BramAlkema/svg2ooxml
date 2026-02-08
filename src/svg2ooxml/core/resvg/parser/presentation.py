@@ -14,6 +14,11 @@ PRESENTATION_KEYS = {
     "fill",
     "stroke",
     "stroke-width",
+    "stroke-dasharray",
+    "stroke-dashoffset",
+    "stroke-linecap",
+    "stroke-linejoin",
+    "stroke-miterlimit",
     "fill-opacity",
     "stroke-opacity",
     "opacity",
@@ -22,6 +27,8 @@ PRESENTATION_KEYS = {
     "font-size",
     "font-style",
     "font-weight",
+    "text-decoration",
+    "letter-spacing",
 }
 
 
@@ -42,6 +49,11 @@ class Presentation:
     fill: str | None
     stroke: str | None
     stroke_width: float | None
+    stroke_dasharray: str | None
+    stroke_dashoffset: float | None
+    stroke_linecap: str | None
+    stroke_linejoin: str | None
+    stroke_miterlimit: float | None
     fill_opacity: float | None
     stroke_opacity: float | None
     opacity: float | None
@@ -50,6 +62,8 @@ class Presentation:
     font_size: float | None
     font_style: str | None
     font_weight: str | None
+    text_decoration: str | None = None
+    letter_spacing: float | None = None
 
 
 def _parse_float(value: str) -> float | None:
@@ -85,6 +99,22 @@ def _parse_opacity(value: str | None) -> float | None:
     if number > 1:
         number = 1.0
     return number
+
+
+def _parse_letter_spacing(value: str | None) -> float | None:
+    """Parse letter-spacing value to px. Handles 'normal', '0', '3px', '-1'."""
+    if value is None:
+        return None
+    value = value.strip().lower()
+    if value in {"normal", "inherit", "initial"}:
+        return None
+    # Strip 'px' suffix if present
+    if value.endswith("px"):
+        value = value[:-2].strip()
+    try:
+        return float(value)
+    except ValueError:
+        return None
 
 
 def _parse_paint(value: str | None) -> str | None:
@@ -130,6 +160,11 @@ def collect_presentation(node: SvgNode) -> Presentation:
         fill=_parse_paint(attrs.get("fill")),
         stroke=_parse_paint(attrs.get("stroke")),
         stroke_width=_parse_optional_positive(attrs.get("stroke-width")),
+        stroke_dasharray=attrs.get("stroke-dasharray"),
+        stroke_dashoffset=_parse_float(attrs.get("stroke-dashoffset") or ""),
+        stroke_linecap=attrs.get("stroke-linecap"),
+        stroke_linejoin=attrs.get("stroke-linejoin"),
+        stroke_miterlimit=_parse_optional_positive(attrs.get("stroke-miterlimit")),
         fill_opacity=_parse_opacity(attrs.get("fill-opacity")),
         stroke_opacity=_parse_opacity(attrs.get("stroke-opacity")),
         opacity=_parse_opacity(attrs.get("opacity")),
@@ -138,4 +173,6 @@ def collect_presentation(node: SvgNode) -> Presentation:
         font_size=_parse_font_size(attrs.get("font-size")),
         font_style=attrs.get("font-style"),
         font_weight=attrs.get("font-weight"),
+        text_decoration=attrs.get("text-decoration"),
+        letter_spacing=_parse_letter_spacing(attrs.get("letter-spacing")),
     )

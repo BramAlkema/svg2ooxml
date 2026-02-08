@@ -60,11 +60,11 @@ def test_process_with_mask_records_metadata() -> None:
     assert result.metadata["definition_id"] == "mask1"
     assert result.metadata["mask_mode"] == "auto"
     assert result.metadata["target_bounds"] == mask_def.bounding_box
-    assert result.metadata["classification"] == "vector"
-    assert result.metadata["strategy"] == "native"
+    assert result.metadata["classification"] == "uniform_opacity"
+    assert result.metadata["strategy"] == "alpha"
+    assert result.metadata["alpha_value"] == 0.5
     assert result.metadata["element_type"] == "Path"
     assert result.metadata.get("requires_emf") is False
-    assert result.xml_fragment.strip().startswith("<a:custGeom>")
 
 
 def test_process_with_policy_attaches_summary() -> None:

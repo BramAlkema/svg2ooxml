@@ -36,6 +36,8 @@ class MockTextStyle:
     font_size: float | None
     font_style: str | None
     font_weight: str | None
+    text_decoration: str | None = None
+    letter_spacing: float | None = None
 
 
 @dataclass
@@ -636,6 +638,72 @@ class TestDrawingMLTextGenerator:
         assert '<a:latin typeface=' in xml
 
 
+class TestWordArtTextBody:
+    """Test suite for generate_wordart_text_body."""
+
+    def test_wordart_body_includes_prst_tx_warp(self):
+        """Test that wordart body includes prstTxWarp on bodyPr."""
+        generator = DrawingMLTextGenerator()
+        node = MockTextNode(text_content="Wave text")
+
+        xml = generator.generate_wordart_text_body(node, "textWave1")
+
+        assert "prstTxWarp" in xml
+        assert "textWave1" in xml
+
+    def test_wordart_body_has_text_content(self):
+        """Test that wordart body contains the text runs."""
+        generator = DrawingMLTextGenerator()
+        node = MockTextNode(text_content="Hello Arc")
+
+        xml = generator.generate_wordart_text_body(node, "textArchUp")
+
+        assert "<a:t>Hello Arc</a:t>" in xml
+
+    def test_wordart_body_has_no_insets(self):
+        """Test that wordart body has zero insets."""
+        generator = DrawingMLTextGenerator()
+        node = MockTextNode(text_content="Test")
+
+        xml = generator.generate_wordart_text_body(node, "textCircle")
+
+        assert 'lIns="0"' in xml
+        assert 'tIns="0"' in xml
+        assert 'rIns="0"' in xml
+        assert 'bIns="0"' in xml
+
+    def test_wordart_body_has_end_para_rpr(self):
+        """Test that wordart body includes endParaRPr."""
+        generator = DrawingMLTextGenerator()
+        node = MockTextNode(text_content="Test")
+
+        xml = generator.generate_wordart_text_body(node, "textPlain")
+
+        assert "<a:endParaRPr/>" in xml
+
+    def test_wordart_body_has_norm_autofit(self):
+        """Test that wordart body includes normAutofit."""
+        generator = DrawingMLTextGenerator()
+        node = MockTextNode(text_content="Test")
+
+        xml = generator.generate_wordart_text_body(node, "textWave1")
+
+        assert "<a:normAutofit/>" in xml
+
+    def test_wordart_body_structure(self):
+        """Test complete structure of wordart body."""
+        generator = DrawingMLTextGenerator()
+        node = MockTextNode(text_content="Structured")
+
+        xml = generator.generate_wordart_text_body(node, "textSlantUp")
+
+        assert "<p:txBody>" in xml
+        assert "</p:txBody>" in xml
+        assert "<a:lstStyle/>" in xml
+        assert "<a:p>" in xml
+        assert "<a:pPr/>" in xml
+
+
 class TestParseFontWeight:
     """Test suite for _parse_font_weight helper function."""
 
@@ -995,3 +1063,256 @@ class TestFontServiceIntegration:
         assert result is mock_result
         assert result.glyph_count == 5
         assert result.bytes_written == 12345
+
+
+class TestGradientFillOnText:
+    """Test gradient fill and stroke resolution on text run properties."""
+
+    def test_linear_gradient_fill_on_text(self):
+        """Gradient reference on fill produces <a:gradFill> in run properties."""
+        from svg2ooxml.ir.paint import GradientStop, LinearGradientPaint
+
+        gradient = LinearGradientPaint(
+            stops=[GradientStop(0.0, "FF0000"), GradientStop(1.0, "0000FF")],
+            start=(0.0, 0.0),
+            end=(1.0, 0.0),
+        )
+        resolver = lambda ref: gradient  # noqa: E731
+
+        ref = type("PaintRef", (), {"href": "#grad1"})()
+        node = MockTextNode(
+            text_content="Hello",
+            text_style=MockTextStyle(("Arial",), 12.0, None, None),
+            fill=MockFillStyle(color=None, opacity=1.0, reference=ref),
+        )
+        generator = DrawingMLTextGenerator(paint_resolver=resolver)
+        xml = generator.generate_text_body(node)
+        assert "<a:gradFill" in xml
+        assert "<a:gsLst" in xml
+
+    def test_radial_gradient_fill_on_text(self):
+        """Radial gradient reference on fill produces <a:gradFill path=circle>."""
+        from svg2ooxml.ir.paint import GradientStop, RadialGradientPaint
+
+        gradient = RadialGradientPaint(
+            stops=[GradientStop(0.0, "FFFFFF"), GradientStop(1.0, "000000")],
+            center=(0.5, 0.5),
+            radius=0.5,
+        )
+        resolver = lambda ref: gradient  # noqa: E731
+
+        ref = type("PaintRef", (), {"href": "#radGrad"})()
+        node = MockTextNode(
+            text_content="World",
+            text_style=MockTextStyle(("Arial",), 12.0, None, None),
+            fill=MockFillStyle(color=None, opacity=1.0, reference=ref),
+        )
+        generator = DrawingMLTextGenerator(paint_resolver=resolver)
+        xml = generator.generate_text_body(node)
+        assert "<a:gradFill" in xml
+        assert 'path="circle"' in xml
+
+    def test_gradient_stroke_on_text(self):
+        """Gradient reference on stroke produces <a:gradFill> inside <a:ln>."""
+        from svg2ooxml.ir.paint import GradientStop, LinearGradientPaint
+
+        gradient = LinearGradientPaint(
+            stops=[GradientStop(0.0, "00FF00"), GradientStop(1.0, "FF00FF")],
+            start=(0.0, 0.0),
+            end=(0.0, 1.0),
+        )
+        resolver = lambda ref: gradient  # noqa: E731
+
+        ref = type("PaintRef", (), {"href": "#strokeGrad"})()
+
+        @dataclass
+        class MockStrokeStyle:
+            color: MockColor | None = None
+            width: float | None = 2.0
+            opacity: float = 1.0
+            reference: object | None = None
+
+        node = MockTextNode(
+            text_content="Stroked",
+            text_style=MockTextStyle(("Arial",), 12.0, None, None),
+            fill=MockFillStyle(color=MockColor(0.0, 0.0, 0.0), opacity=1.0),
+            stroke=MockStrokeStyle(reference=ref),
+        )
+        generator = DrawingMLTextGenerator(paint_resolver=resolver)
+        xml = generator.generate_text_body(node)
+        assert "<a:ln" in xml
+        assert "<a:gradFill" in xml
+
+    def test_no_resolver_falls_back_to_solid(self):
+        """Without paint_resolver, reference is ignored and solid fill used."""
+        ref = type("PaintRef", (), {"href": "#grad1"})()
+        node = MockTextNode(
+            text_content="Plain",
+            text_style=MockTextStyle(("Arial",), 12.0, None, None),
+            fill=MockFillStyle(color=MockColor(1.0, 0.0, 0.0), opacity=1.0, reference=ref),
+        )
+        generator = DrawingMLTextGenerator()  # no paint_resolver
+        xml = generator.generate_text_body(node)
+        assert "<a:solidFill" in xml
+        assert "<a:gradFill" not in xml
+
+    def test_resolver_returns_none_falls_back_to_solid(self):
+        """When resolver returns None, fall back to solid fill."""
+        resolver = lambda ref: None  # noqa: E731
+
+        ref = type("PaintRef", (), {"href": "#missing"})()
+        node = MockTextNode(
+            text_content="Fallback",
+            text_style=MockTextStyle(("Arial",), 12.0, None, None),
+            fill=MockFillStyle(color=MockColor(0.0, 0.0, 1.0), opacity=1.0, reference=ref),
+        )
+        generator = DrawingMLTextGenerator(paint_resolver=resolver)
+        xml = generator.generate_text_body(node)
+        assert "<a:solidFill" in xml
+        assert "<a:gradFill" not in xml
+
+
+class TestTextDecorations:
+    """Test text decoration (underline, strikethrough) emission."""
+
+    def test_underline_emits_u_attribute(self):
+        """text-decoration: underline → u="sng" on rPr."""
+        node = MockTextNode(
+            text_content="Underlined",
+            text_style=MockTextStyle(("Arial",), 12.0, None, None, text_decoration="underline"),
+            fill=MockFillStyle(color=MockColor(0.0, 0.0, 0.0)),
+        )
+        generator = DrawingMLTextGenerator()
+        xml = generator.generate_text_body(node)
+        assert 'u="sng"' in xml
+
+    def test_strikethrough_emits_strike_attribute(self):
+        """text-decoration: line-through → strike="sngStrike" on rPr."""
+        node = MockTextNode(
+            text_content="Struck",
+            text_style=MockTextStyle(("Arial",), 12.0, None, None, text_decoration="line-through"),
+            fill=MockFillStyle(color=MockColor(0.0, 0.0, 0.0)),
+        )
+        generator = DrawingMLTextGenerator()
+        xml = generator.generate_text_body(node)
+        assert 'strike="sngStrike"' in xml
+
+    def test_both_underline_and_strikethrough(self):
+        """text-decoration: underline line-through → both attributes."""
+        node = MockTextNode(
+            text_content="Both",
+            text_style=MockTextStyle(("Arial",), 12.0, None, None, text_decoration="underline line-through"),
+            fill=MockFillStyle(color=MockColor(0.0, 0.0, 0.0)),
+        )
+        generator = DrawingMLTextGenerator()
+        xml = generator.generate_text_body(node)
+        assert 'u="sng"' in xml
+        assert 'strike="sngStrike"' in xml
+
+    def test_no_decoration_no_attributes(self):
+        """No text-decoration → no u or strike attributes."""
+        node = MockTextNode(
+            text_content="Plain",
+            text_style=MockTextStyle(("Arial",), 12.0, None, None),
+            fill=MockFillStyle(color=MockColor(0.0, 0.0, 0.0)),
+        )
+        generator = DrawingMLTextGenerator()
+        xml = generator.generate_text_body(node)
+        assert 'u="sng"' not in xml
+        assert 'strike=' not in xml
+
+
+class TestLetterSpacing:
+    """Test letter-spacing → spc attribute emission."""
+
+    def test_positive_letter_spacing(self):
+        """letter-spacing: 0.3px → spc="23" (rounded 0.3 * 75 = 22.5 → 23)."""
+        node = MockTextNode(
+            text_content="Spaced",
+            text_style=MockTextStyle(("Arial",), 12.0, None, None, letter_spacing=0.3),
+            fill=MockFillStyle(color=MockColor(0.0, 0.0, 0.0)),
+        )
+        generator = DrawingMLTextGenerator()
+        xml = generator.generate_text_body(node)
+        assert 'spc="22"' in xml or 'spc="23"' in xml  # round(0.3*75)=22 or 23
+
+    def test_negative_letter_spacing(self):
+        """letter-spacing: -1px → spc="-75"."""
+        node = MockTextNode(
+            text_content="Tight",
+            text_style=MockTextStyle(("Arial",), 12.0, None, None, letter_spacing=-1.0),
+            fill=MockFillStyle(color=MockColor(0.0, 0.0, 0.0)),
+        )
+        generator = DrawingMLTextGenerator()
+        xml = generator.generate_text_body(node)
+        assert 'spc="-75"' in xml
+
+    def test_zero_letter_spacing(self):
+        """letter-spacing: 0 → spc="0"."""
+        node = MockTextNode(
+            text_content="Normal",
+            text_style=MockTextStyle(("Arial",), 12.0, None, None, letter_spacing=0.0),
+            fill=MockFillStyle(color=MockColor(0.0, 0.0, 0.0)),
+        )
+        generator = DrawingMLTextGenerator()
+        xml = generator.generate_text_body(node)
+        assert 'spc="0"' in xml
+
+    def test_no_letter_spacing_no_spc(self):
+        """No letter-spacing → no spc attribute."""
+        node = MockTextNode(
+            text_content="Default",
+            text_style=MockTextStyle(("Arial",), 12.0, None, None),
+            fill=MockFillStyle(color=MockColor(0.0, 0.0, 0.0)),
+        )
+        generator = DrawingMLTextGenerator()
+        xml = generator.generate_text_body(node)
+        assert "spc=" not in xml
+
+
+class TestRtlDetection:
+    """Test suite for RTL text detection in resvg generator."""
+
+    def test_arabic_text_emits_rtl_on_ppr(self):
+        """Arabic text should emit rtl='1' on paragraph properties."""
+        node = MockTextNode(text_content="مرحبا بالعالم")
+        generator = DrawingMLTextGenerator()
+        xml = generator.generate_text_body(node)
+        assert 'rtl="1"' in xml
+
+    def test_english_text_no_rtl(self):
+        """English text should not emit rtl attribute."""
+        node = MockTextNode(text_content="Hello World")
+        generator = DrawingMLTextGenerator()
+        xml = generator.generate_text_body(node)
+        assert 'rtl="1"' not in xml
+
+    def test_direction_rtl_in_styles(self):
+        """Explicit direction:rtl in styles should emit rtl='1'."""
+        node = MockTextNode(text_content="Test")
+        node.styles = {"direction": "rtl"}
+        generator = DrawingMLTextGenerator()
+        xml = generator.generate_text_body(node)
+        assert 'rtl="1"' in xml
+
+    def test_direction_ltr_overrides_arabic(self):
+        """Explicit direction:ltr should prevent rtl even with Arabic text."""
+        node = MockTextNode(text_content="مرحبا بالعالم")
+        node.styles = {"direction": "ltr"}
+        generator = DrawingMLTextGenerator()
+        xml = generator.generate_text_body(node)
+        assert 'rtl="1"' not in xml
+
+    def test_wordart_arabic_emits_rtl(self):
+        """WordArt with Arabic text should emit rtl='1'."""
+        node = MockTextNode(text_content="مرحبا")
+        generator = DrawingMLTextGenerator()
+        xml = generator.generate_wordart_text_body(node, "textWave1")
+        assert 'rtl="1"' in xml
+
+    def test_wordart_english_no_rtl(self):
+        """WordArt with English text should not emit rtl."""
+        node = MockTextNode(text_content="Hello")
+        generator = DrawingMLTextGenerator()
+        xml = generator.generate_wordart_text_body(node, "textWave1")
+        assert 'rtl="1"' not in xml

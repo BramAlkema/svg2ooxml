@@ -243,6 +243,11 @@ class TextConverter:
             "end": TextAnchor.END,
         }.get(str(anchor_token).strip().lower(), TextAnchor.START)
 
+        # Extract text direction from CSS property or SVG attribute
+        direction = base_style.get("direction") or element.get("direction") or None
+        if isinstance(direction, str):
+            direction = direction.strip().lower() if direction.strip().lower() in ("rtl", "ltr") else None
+
         origin_x, origin_y = coord_space.apply_point(x, y)
         font_service = self._context.services.resolve("font")
         bbox = self._estimate_text_bbox(processed_runs, origin_x, origin_y, font_service=font_service)
@@ -262,6 +267,7 @@ class TextConverter:
             bbox=bbox,
             runs=processed_runs,
             baseline_shift=0.0,
+            direction=direction,
             metadata=metadata,
         )
         decision = self._resolve_policy_decision()
@@ -319,6 +325,11 @@ class TextConverter:
         policy_meta_accum: dict[str, Any] = {}
         decision = self._resolve_policy_decision()
 
+        # Extract text direction
+        direction = base_style.get("direction") or element.get("direction") or None
+        if isinstance(direction, str):
+            direction = direction.strip().lower() if direction.strip().lower() in ("rtl", "ltr") else None
+
         for text, style, x, y in segments:
             run = self._create_run_from_style(text, style)
             if not run.text:
@@ -342,6 +353,7 @@ class TextConverter:
                 bbox=bbox,
                 runs=[updated],
                 baseline_shift=0.0,
+                direction=direction,
                 metadata=metadata,
             )
             if self._pipeline is not None:
@@ -728,9 +740,17 @@ class TextConverter:
             resvg_meta["strategy"] = "emf"
             return
 
+        paint_resolver = None
+        tree = getattr(self._context, "resvg_tree", None)
+        if tree is not None:
+            from svg2ooxml.paint.resvg_bridge import _resolve_paint_reference
+
+            paint_resolver = lambda ref: _resolve_paint_reference(ref, tree)  # noqa: E731
+
         generator = DrawingMLTextGenerator(
             font_service=self._context.services.resolve("font"),
             embedding_engine=self._context.services.resolve("font_embedding"),
+            paint_resolver=paint_resolver,
         )
         try:
             runs_xml = generator.generate_runs_xml(resvg_node)

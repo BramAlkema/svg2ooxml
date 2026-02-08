@@ -50,6 +50,11 @@ class StrokeStyle:
     width: float | None
     opacity: float
     reference: PaintReference | None
+    dash_array: list[float] | None = None
+    dash_offset: float = 0.0
+    linecap: str | None = None
+    linejoin: str | None = None
+    miterlimit: float | None = None
 
 
 @dataclass(frozen=True)
@@ -58,6 +63,8 @@ class TextStyle:
     font_size: float | None
     font_style: str | None
     font_weight: str | None
+    text_decoration: str | None = None  # "underline", "line-through", "underline line-through", etc.
+    letter_spacing: float | None = None  # in px (SVG user units)
 
 
 def _clamp(value: float, minimum: float = 0.0, maximum: float = 1.0) -> float:
@@ -148,11 +155,34 @@ def resolve_fill(fill_value: str | None, fill_opacity: float | None, opacity: fl
     return FillStyle(color=color, opacity=effective_opacity, reference=reference)
 
 
+def _parse_dash_array(value: str | None) -> list[float] | None:
+    """Parse SVG stroke-dasharray into a list of floats."""
+    if not value:
+        return None
+    token = value.strip()
+    if not token or token.lower() == "none":
+        return None
+    parts = token.replace(",", " ").split()
+    numbers: list[float] = []
+    for part in parts:
+        try:
+            numbers.append(float(part))
+        except ValueError:
+            continue
+    return numbers or None
+
+
 def resolve_stroke(
     stroke_value: str | None,
     stroke_width: float | None,
     stroke_opacity: float | None,
     opacity: float | None,
+    *,
+    dasharray: str | None = None,
+    dashoffset: float | None = None,
+    linecap: str | None = None,
+    linejoin: str | None = None,
+    miterlimit: float | None = None,
 ) -> StrokeStyle:
     effective_opacity = (stroke_opacity if stroke_opacity is not None else 1.0) * (
         opacity if opacity is not None else 1.0
@@ -167,10 +197,27 @@ def resolve_stroke(
             color = parse_color(stroke_value, effective_opacity)
     else:
         color = None
-    return StrokeStyle(color=color, width=stroke_width, opacity=effective_opacity, reference=reference)
+    return StrokeStyle(
+        color=color,
+        width=stroke_width,
+        opacity=effective_opacity,
+        reference=reference,
+        dash_array=_parse_dash_array(dasharray),
+        dash_offset=dashoffset or 0.0,
+        linecap=linecap,
+        linejoin=linejoin,
+        miterlimit=miterlimit,
+    )
 
 
-def resolve_text_style(font_family: str | None, font_size: float | None, font_style: str | None, font_weight: str | None) -> TextStyle:
+def resolve_text_style(
+    font_family: str | None,
+    font_size: float | None,
+    font_style: str | None,
+    font_weight: str | None,
+    text_decoration: str | None = None,
+    letter_spacing: float | None = None,
+) -> TextStyle:
     families: tuple[str, ...]
     if font_family:
         normalized: list[str] = []
@@ -189,4 +236,6 @@ def resolve_text_style(font_family: str | None, font_size: float | None, font_st
         font_size=font_size,
         font_style=font_style.strip() if font_style else None,
         font_weight=font_weight.strip() if font_weight else None,
+        text_decoration=text_decoration.strip() if text_decoration else None,
+        letter_spacing=letter_spacing,
     )

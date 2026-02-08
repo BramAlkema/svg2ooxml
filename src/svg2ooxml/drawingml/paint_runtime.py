@@ -95,7 +95,7 @@ def stroke_to_xml(stroke, metadata: Mapping[str, Any] | None = None) -> str:
         a_sub(ln, "noFill")
 
     # Add dash pattern
-    dash_elem = _dash_elem(stroke.dash_array)
+    dash_elem = _dash_elem(stroke.dash_array, stroke.width)
     if dash_elem is not None:
         ln.append(dash_elem)
 
@@ -127,33 +127,52 @@ def stroke_to_xml(stroke, metadata: Mapping[str, Any] | None = None) -> str:
     return to_string(ln)
 
 
-def _dash_elem(dash_array: list[float] | None):
-    """Create dash pattern element, or None if no dash."""
+def _dash_elem(
+    dash_array: list[float] | None,
+    stroke_width: float = 1.0,
+    *,
+    ppt_compat: bool = False,
+):
+    """Create dash pattern element using custDash for precise rendering.
+
+    Converts SVG dash-array values (in user units) to DrawingML custDash
+    with ds (dash-stop) elements.
+
+    When ``ppt_compat`` is False (default, spec-compliant): ``d`` and ``sp``
+    are ST_PositivePercentage — percentage of line width (100000 = 100%).
+
+    When ``ppt_compat`` is True: uses absolute hundredths-of-a-point values,
+    matching PowerPoint's "Convert to Shape" behavior.
+    """
     if not dash_array:
         return None
     values = [abs(x) for x in dash_array if x > 0]
     if not values:
         return None
-    preset = "sysDash"
-    if len(values) == 2:
-        on, off = values[0], values[1]
-        if off == 0:
-            preset = "solid"
-        elif on <= off * 0.5:
-            preset = "dot"
-        elif on >= off * 1.5:
-            preset = "lgDash"
+
+    # SVG spec: odd-length arrays are doubled to make even pairs
+    if len(values) % 2 == 1:
+        values = values + values
+
+    width = max(stroke_width, 0.01)  # avoid division by zero
+
+    cust = a_elem("custDash")
+    for i in range(0, len(values), 2):
+        dash_px = values[i]
+        space_px = values[i + 1] if i + 1 < len(values) else 0
+        if ppt_compat:
+            # Absolute hundredths-of-a-point (px * 72/96 * 100000)
+            d_val = max(0, int(round(dash_px * 75000)))
+            sp_val = max(0, int(round(space_px * 75000)))
         else:
-            preset = "dash"
-    elif len(values) >= 4:
-        on1, off1, on2, off2 = values[:4]
-        if on2 <= off2 * 0.5:
-            preset = "dashDot"
-        elif on1 >= off1 * 1.5 and on2 >= off2 * 1.5:
-            preset = "lgDashDot"
-        else:
-            preset = "dashDot"
-    return a_elem("prstDash", val=preset)
+            # Spec-compliant: percentage of line width (100000 = 100%)
+            d_val = max(0, int(round(dash_px / width * 100000)))
+            sp_val = max(0, int(round(space_px / width * 100000)))
+        if d_val == 0 and sp_val == 0:
+            continue
+        a_sub(cust, "ds", d=d_val, sp=sp_val)
+
+    return cust if len(cust) > 0 else None
 
 
 def clip_rect_to_xml(clip_meta: Mapping[str, Any]) -> str:
@@ -193,6 +212,68 @@ def clip_rect_to_xml(clip_meta: Mapping[str, Any]) -> str:
     return to_string(clipPath)
 
 
+def _expand_stops_for_spread(stops, spread_method: str | None):
+    """Expand gradient stops for reflect/repeat spread methods.
+
+    DrawingML only supports 'pad' natively, so we simulate reflect/repeat
+    by duplicating stops across the [0, 1] range.  The original stops are
+    assumed to define one period of the gradient.
+
+    Returns a new list of GradientStop-like objects with expanded offsets.
+    """
+    if not spread_method or spread_method == "pad" or len(stops) < 2:
+        return stops
+
+    from svg2ooxml.ir.paint import GradientStop
+
+    # Determine the gradient extent from first to last stop
+    start_off = stops[0].offset
+    end_off = stops[-1].offset
+    extent = end_off - start_off
+    if extent < 1e-6:
+        return stops
+
+    # How many repetitions we need to fill [0, 1]
+    reps_needed = max(1, int(math.ceil(1.0 / extent)))
+    # Cap at a reasonable number to avoid huge stop lists
+    reps_needed = min(reps_needed, 10)
+
+    expanded = []
+    for rep in range(reps_needed):
+        if spread_method == "reflect" and rep % 2 == 1:
+            # Reversed stops for reflection
+            for stop in reversed(stops):
+                new_offset = rep * extent + (end_off - stop.offset)
+                if new_offset > 1.0 + 1e-6:
+                    continue
+                expanded.append(GradientStop(
+                    offset=min(1.0, max(0.0, new_offset)),
+                    rgb=stop.rgb,
+                    opacity=stop.opacity,
+                ))
+        else:
+            for stop in stops:
+                new_offset = rep * extent + (stop.offset - start_off)
+                if new_offset > 1.0 + 1e-6:
+                    continue
+                expanded.append(GradientStop(
+                    offset=min(1.0, max(0.0, new_offset)),
+                    rgb=stop.rgb,
+                    opacity=stop.opacity,
+                ))
+
+    # Deduplicate stops at same offset (keep first)
+    seen_offsets: set[int] = set()
+    deduped = []
+    for s in expanded:
+        key = round(s.offset * 100000)
+        if key not in seen_offsets:
+            seen_offsets.add(key)
+            deduped.append(s)
+
+    return deduped if deduped else stops
+
+
 def _linear_gradient_to_fill_elem(paint: LinearGradientPaint):
     """Create linear gradient fill element (internal helper)."""
     dx = paint.end[0] - paint.start[0]
@@ -204,12 +285,14 @@ def _linear_gradient_to_fill_elem(paint: LinearGradientPaint):
         angle = (450 - math.degrees(radians)) % 360
     ang_val = degrees_to_ppt(angle)
 
+    stops = _expand_stops_for_spread(paint.stops, paint.spread_method)
+
     # Build gradient fill element
     gradFill = a_elem("gradFill", rotWithShape="1")
 
     # Add gradient stop list
     gsLst = a_sub(gradFill, "gsLst")
-    for stop in paint.stops:
+    for stop in stops:
         gsLst.append(_gradient_stop_elem(stop))
 
     # Add linear gradient definition
@@ -232,12 +315,14 @@ def _radial_gradient_to_fill_elem(paint: RadialGradientPaint):
     right = position_to_ppt(max(0.0, 1.0 - (cx + radius)))
     bottom = position_to_ppt(max(0.0, 1.0 - (cy + radius)))
 
+    stops = _expand_stops_for_spread(paint.stops, paint.spread_method)
+
     # Build gradient fill element
     gradFill = a_elem("gradFill", rotWithShape="1")
 
     # Add gradient stop list
     gsLst = a_sub(gradFill, "gsLst")
-    for stop in paint.stops:
+    for stop in stops:
         gsLst.append(_gradient_stop_elem(stop))
 
     # Add radial gradient path
@@ -252,8 +337,28 @@ def radial_gradient_to_fill(paint: RadialGradientPaint) -> str:
     return to_string(_radial_gradient_to_fill_elem(paint))
 
 
+_RELS_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+
+
 def _pattern_to_fill_elem(paint: PatternPaint, *, opacity: float | None = None):
-    """Create pattern fill element (internal helper)."""
+    """Create pattern fill element (internal helper).
+
+    When the pattern has a rasterized tile image registered as media
+    (tile_relationship_id set), generates blipFill with tile mode.
+    Otherwise falls back to pattFill with preset or solidFill.
+    """
+    # Rasterized tile path: blipFill with tile mode
+    if paint.tile_relationship_id:
+        blipFill = a_elem("blipFill", dpi="0", rotWithShape="1")
+        blip = a_sub(blipFill, "blip")
+        blip.set(f"{{{_RELS_NS}}}embed", paint.tile_relationship_id)
+        if opacity is not None and opacity < 0.999:
+            alphaModFix = a_sub(blip, "alphaModFix")
+            alphaModFix.set("amt", str(opacity_to_ppt(opacity)))
+        # Tile with 100% scale (pattern tile repeats at original size)
+        a_sub(blipFill, "tile", tx="0", ty="0", sx="100000", sy="100000", flip="none", algn="tl")
+        return blipFill
+
     preset = (paint.preset or "pct5").strip()
     foreground = (paint.foreground or "000000").lstrip("#").upper()
     background = (paint.background or "FFFFFF").lstrip("#").upper()

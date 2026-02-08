@@ -41,6 +41,53 @@ def _assets_root() -> Path:
     return _project_root() / "assets" / "pptx_templates"
 
 
+def _apply_mask_alpha(element, alpha: float):
+    """Multiply mask alpha into an element's fill and stroke paint opacities.
+
+    Used for uniform-opacity masks where the mask is equivalent to reducing
+    the element's overall alpha.  This avoids complex mask geometry and matches
+    PowerPoint's "Convert to Shape" behavior for simple opacity masks.
+    """
+    from svg2ooxml.ir.paint import (
+        GradientStop,
+        LinearGradientPaint,
+        RadialGradientPaint,
+        SolidPaint,
+    )
+
+    def _scale_stops(stops, a: float):
+        return [
+            GradientStop(offset=s.offset, rgb=s.rgb, opacity=s.opacity * a)
+            for s in stops
+        ]
+
+    fill = getattr(element, "fill", None)
+    new_fill = fill
+    if isinstance(fill, SolidPaint):
+        new_fill = replace(fill, opacity=fill.opacity * alpha)
+    elif isinstance(fill, (LinearGradientPaint, RadialGradientPaint)):
+        new_fill = replace(fill, stops=_scale_stops(fill.stops, alpha))
+
+    stroke = getattr(element, "stroke", None)
+    new_stroke = stroke
+    if stroke is not None:
+        paint = getattr(stroke, "paint", None)
+        if isinstance(paint, SolidPaint):
+            new_stroke = replace(stroke, paint=replace(paint, opacity=paint.opacity * alpha))
+        elif isinstance(paint, (LinearGradientPaint, RadialGradientPaint)):
+            new_stroke = replace(stroke, paint=replace(paint, stops=_scale_stops(paint.stops, alpha)))
+
+    try:
+        element = replace(element, fill=new_fill, stroke=new_stroke, mask=None, mask_instance=None)
+    except TypeError:
+        # Element may not have all fields; try partial replacement.
+        try:
+            element = replace(element, fill=new_fill, stroke=new_stroke)
+        except TypeError:
+            pass
+    return element
+
+
 class DrawingMLWriter:
     """Render IR scene graphs into DrawingML shape fragments."""
 
@@ -469,6 +516,20 @@ class DrawingMLWriter:
             # If element is Group, we might need to handle children?
             # Group has opacity.
             
+        # Uniform opacity mask shortcut: multiply alpha into fill/stroke.
+        mask_alpha = metadata.pop("_mask_alpha", None) if isinstance(metadata, dict) else None
+        if mask_alpha is not None and 0.0 < mask_alpha < 1.0:
+            element = _apply_mask_alpha(element, mask_alpha)
+            self._trace_writer(
+                "mask_alpha_shortcut",
+                stage="mask",
+                metadata={
+                    "shape_id": shape_id,
+                    "alpha": mask_alpha,
+                    "element_type": type(element).__name__,
+                },
+            )
+
         if mask_xml:
             self._trace_writer(
                 "mask_applied",
