@@ -43,6 +43,115 @@ needed. It supports:
 This means EMF is the right fallback for **geometry, clipping, and transform**
 problems, but not for **paint, compositing, or gradient** problems.
 
+### Policy Controls Tier Switching
+
+The fallback ladder describes *what each tier can do*. The **policy engine**
+decides *when to switch* between tiers at runtime. Three policy domains control
+the three main fallback decision points:
+
+```
+User / API / preset
+    ↓
+PolicyEngine.evaluate()
+    ↓
+    ├── geometry policy  →  apply_geometry_policy()  →  render_mode ∈ {native, emf, bitmap}
+    ├── filter policy    →  _resolve_strategy()      →  strategy ∈ {auto, native, vector, emf, raster}
+    └── mask policy      →  _determine_vector_strategy() → fallback_order iteration
+```
+
+**Quality presets** set baseline behavior. Four presets are built in:
+
+| Preset | Geometry | Filters | Masks | Use case |
+|--------|----------|---------|-------|----------|
+| `high` | EMF+bitmap allowed, 2000 segment limit | `native` strategy, no raster preference | Full ladder (native→mimic→emf→raster), 8K segment limit | Maximum fidelity |
+| `balanced` (default) | EMF+bitmap allowed, 1000 segment limit | `auto` strategy | Full ladder, 6K segment limit | General use |
+| `low` | EMF+bitmap allowed, 500 segment limit | `raster` strategy preferred | Skip native/mimic, go EMF→raster, 4K segment limit | Speed / small files |
+| `compatibility` | EMF+bitmap allowed, 300 segment limit | `emf` strategy | Raster preferred | Maximum viewer support |
+
+**Per-domain policy keys** override presets for fine-grained control:
+
+#### Geometry policy (`policy/providers/path.py` → `policy/geometry.py`)
+
+Controls when paths fall from native DrawingML to EMF or bitmap.
+
+| Key | Type | Default | Controls |
+|-----|------|---------|----------|
+| `force_emf` | bool | `False` | Skip Tier 1–2, go straight to EMF for all geometry |
+| `force_bitmap` | bool | `False` | Skip Tier 1–3, go straight to raster for all geometry |
+| `allow_emf_fallback` | bool | `True` | Whether Tier 3 is available when complexity exceeds thresholds |
+| `allow_bitmap_fallback` | bool | `True` | Whether Tier 4 is available |
+| `max_segments` | int | `1000` | Path segment count before triggering fallback |
+| `max_complexity_ratio` | float | `0.8` | Complexity score ratio threshold |
+| `simplify_paths` | bool | `True` | Attempt path simplification before falling back |
+
+Decision flow in `apply_geometry_policy()`:
+1. Check force flags → immediate tier selection
+2. Count segments → if over threshold, try simplification, else fall to EMF
+3. Score complexity → if over ratio, fall to EMF
+4. Check allow flags → if target tier is disabled, revert to native
+
+#### Filter policy (`policy/providers/filter.py` → `services/filter_service.py`)
+
+Controls the rendering strategy for SVG filter effects.
+
+| Key | Type | Default | Controls |
+|-----|------|---------|----------|
+| `strategy` | str | `"auto"` | Master strategy: `auto`, `native`, `vector`, `emf`, `raster` |
+| `prefer_rasterization` | bool | `False` | In `auto` mode, prefer raster over vector attempts |
+| `native_blur` | bool | `True` | Allow `feGaussianBlur` → `softEdge` (Tier 2) |
+| `native_shadow` | bool | `True` | Allow `feDropShadow` → `outerShdw` (Tier 1) |
+| `approximation_allowed` | bool | `True` | Allow lossy DrawingML approximations |
+| `max_filter_primitives` | int | `5` | Primitive count before forcing fallback |
+
+Strategy meanings:
+- `auto` — try native → vector → EMF → raster, return first success
+- `native` — only Tier 1–2 DrawingML effects, skip if unmappable
+- `vector` — Tier 1–3, no raster
+- `emf` — prefer EMF (Tier 3)
+- `raster` — go directly to Tier 4
+
+#### Mask policy (`policy/providers/mask.py` → `services/mask_service.py`)
+
+Controls the fallback order for mask rendering.
+
+| Key | Type | Default | Controls |
+|-----|------|---------|----------|
+| `fallback_order` | tuple | `("native","mimic","emf","raster")` | Explicit tier order — iterated top to bottom |
+| `allow_vector_mask` | bool | `True` | Whether `native` and `mimic` tiers are available |
+| `force_emf` | bool | `False` | Jump to EMF tier |
+| `force_raster` | bool | `False` | Jump to raster tier |
+| `max_emf_segments` | int | `6000` | EMF complexity limit — exceeding falls through to next tier |
+| `max_emf_commands` | int | `9000` | EMF command count limit |
+
+The mask fallback order is the most explicit of the three — it is a literal
+tuple that the mask service iterates. Each tier is attempted and either succeeds
+(content fits within limits) or fails through to the next.
+
+#### Variant-based multi-tier rendering
+
+`slide_orchestrator.py:build_fidelity_tier_variants()` can produce multiple
+slides from the same SVG, each at a different quality tier:
+
+| Variant | Geometry | Filters | Result |
+|---------|----------|---------|--------|
+| Direct | No EMF, no bitmap | native only | Maximum editability, may lose complex content |
+| Mimic | EMF allowed, no bitmap | EMF strategy | Vector-quality fallback |
+| Bitmap | EMF + bitmap allowed | raster strategy | Maximum fidelity, least editable |
+
+This lets the user or downstream tooling pick the best trade-off per slide.
+
+#### Override format
+
+Policy overrides are passed as `dict[target_name, dict[key, value]]`:
+
+```python
+policy_overrides = {
+    "geometry": {"allow_emf_fallback": False, "max_segments": 500},
+    "filter":   {"strategy": "emf"},
+    "mask":     {"fallback_order": ("emf", "raster"), "force_emf": True},
+}
+```
+
 ---
 
 ## Status Key
