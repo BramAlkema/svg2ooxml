@@ -92,15 +92,14 @@ def _build_rels() -> bytes:
 
 
 def _build_presentation(slide_count: int) -> bytes:
-    root = _el(f"{{{NS['p']}}}presentation", {
-        f"{{{NS['r']}}}id": "",
-    })
+    root = _el(f"{{{NS['p']}}}presentation")
     sldMasterIdLst = _sub(root, f"{{{NS['p']}}}sldMasterIdLst")
     _sub(sldMasterIdLst, f"{{{NS['p']}}}sldMasterId", {"id": "2147483648", f"{{{NS['r']}}}id": "rId1"})
     sldIdLst = _sub(root, f"{{{NS['p']}}}sldIdLst")
     for i in range(slide_count):
         _sub(sldIdLst, f"{{{NS['p']}}}sldId", {"id": str(256 + i), f"{{{NS['r']}}}id": f"rId{i + 10}"})
-    sldSz = _sub(root, f"{{{NS['p']}}}sldSz", {"cx": str(SLIDE_W), "cy": str(SLIDE_H)})
+    _sub(root, f"{{{NS['p']}}}sldSz", {"cx": str(SLIDE_W), "cy": str(SLIDE_H)})
+    _sub(root, f"{{{NS['p']}}}notesSz", {"cx": str(SLIDE_H), "cy": str(SLIDE_W)})
     return _to_xml(root)
 
 
@@ -113,11 +112,33 @@ def _build_presentation_rels(slide_count: int) -> bytes:
     return _to_xml(root)
 
 
+def _spTree_boilerplate(spTree: ET.Element) -> None:
+    """Add required nvGrpSpPr + grpSpPr to a spTree element."""
+    nvGrpSpPr = _sub(spTree, f"{{{NS['p']}}}nvGrpSpPr")
+    _sub(nvGrpSpPr, f"{{{NS['p']}}}cNvPr", {"id": "1", "name": ""})
+    _sub(nvGrpSpPr, f"{{{NS['p']}}}cNvGrpSpPr")
+    _sub(nvGrpSpPr, f"{{{NS['p']}}}nvPr")
+    grpSpPr = _sub(spTree, f"{{{NS['p']}}}grpSpPr")
+    xfrm = _sub(grpSpPr, f"{{{NS['a']}}}xfrm")
+    _sub(xfrm, f"{{{NS['a']}}}off", {"x": "0", "y": "0"})
+    _sub(xfrm, f"{{{NS['a']}}}ext", {"cx": "0", "cy": "0"})
+    _sub(xfrm, f"{{{NS['a']}}}chOff", {"x": "0", "y": "0"})
+    _sub(xfrm, f"{{{NS['a']}}}chExt", {"cx": "0", "cy": "0"})
+
+
 def _build_slide_master() -> bytes:
     root = _el(f"{{{NS['p']}}}sldMaster")
     cSld = _sub(root, f"{{{NS['p']}}}cSld")
     _sub(cSld, f"{{{NS['p']}}}bg")
-    _sub(cSld, f"{{{NS['p']}}}spTree")
+    spTree = _sub(cSld, f"{{{NS['p']}}}spTree")
+    _spTree_boilerplate(spTree)
+    # clrMap is required on slide masters
+    _sub(root, f"{{{NS['p']}}}clrMap", {
+        "bg1": "lt1", "tx1": "dk1", "bg2": "lt2", "tx2": "dk2",
+        "accent1": "accent1", "accent2": "accent2", "accent3": "accent3",
+        "accent4": "accent4", "accent5": "accent5", "accent6": "accent6",
+        "hlink": "hlink", "folHlink": "folHlink",
+    })
     sldLayoutIdLst = _sub(root, f"{{{NS['p']}}}sldLayoutIdLst")
     _sub(sldLayoutIdLst, f"{{{NS['p']}}}sldLayoutId", {"id": "2147483649", f"{{{NS['r']}}}id": "rId1"})
     return _to_xml(root)
@@ -133,7 +154,8 @@ def _build_slide_master_rels() -> bytes:
 def _build_slide_layout() -> bytes:
     root = _el(f"{{{NS['p']}}}sldLayout", {"type": "blank"})
     cSld = _sub(root, f"{{{NS['p']}}}cSld")
-    _sub(cSld, f"{{{NS['p']}}}spTree")
+    spTree = _sub(cSld, f"{{{NS['p']}}}spTree")
+    _spTree_boilerplate(spTree)
     return _to_xml(root)
 
 
@@ -144,8 +166,53 @@ def _build_slide_layout_rels() -> bytes:
 
 
 def _build_theme() -> bytes:
-    root = _el(f"{{{NS['a']}}}theme", {"name": "SVG Test"})
-    _sub(root, f"{{{NS['a']}}}themeElements")
+    a = NS["a"]
+    root = _el(f"{{{a}}}theme", {"name": "SVG Test"})
+    themeElements = _sub(root, f"{{{a}}}themeElements")
+
+    # Color scheme (required)
+    clrScheme = _sub(themeElements, f"{{{a}}}clrScheme", {"name": "SVG Test"})
+    theme_colors = [
+        ("dk1", "000000"), ("lt1", "FFFFFF"), ("dk2", "44546A"), ("lt2", "E7E6E6"),
+        ("accent1", "4472C4"), ("accent2", "ED7D31"), ("accent3", "A5A5A5"),
+        ("accent4", "FFC000"), ("accent5", "5B9BD5"), ("accent6", "70AD47"),
+        ("hlink", "0563C1"), ("folHlink", "954F72"),
+    ]
+    for name, rgb in theme_colors:
+        elem = _sub(clrScheme, f"{{{a}}}{name}")
+        _sub(elem, f"{{{a}}}srgbClr", {"val": rgb})
+
+    # Font scheme (required)
+    fontScheme = _sub(themeElements, f"{{{a}}}fontScheme", {"name": "SVG Test"})
+    for category in ("majorFont", "minorFont"):
+        font = _sub(fontScheme, f"{{{a}}}{category}")
+        _sub(font, f"{{{a}}}latin", {"typeface": "Calibri"})
+        _sub(font, f"{{{a}}}ea", {"typeface": ""})
+        _sub(font, f"{{{a}}}cs", {"typeface": ""})
+
+    # Format scheme (required)
+    fmtScheme = _sub(themeElements, f"{{{a}}}fmtScheme", {"name": "SVG Test"})
+    # fillStyleLst — 3 entries required
+    fillStyleLst = _sub(fmtScheme, f"{{{a}}}fillStyleLst")
+    for _ in range(3):
+        fill = _sub(fillStyleLst, f"{{{a}}}solidFill")
+        _sub(fill, f"{{{a}}}schemeClr", {"val": "phClr"})
+    # lnStyleLst — 3 entries required
+    lnStyleLst = _sub(fmtScheme, f"{{{a}}}lnStyleLst")
+    for _ in range(3):
+        ln = _sub(lnStyleLst, f"{{{a}}}ln", {"w": "6350", "cap": "flat", "cmpd": "sng", "algn": "ctr"})
+        sf = _sub(ln, f"{{{a}}}solidFill")
+        _sub(sf, f"{{{a}}}schemeClr", {"val": "phClr"})
+    # effectStyleLst — 3 entries required
+    effectStyleLst = _sub(fmtScheme, f"{{{a}}}effectStyleLst")
+    for _ in range(3):
+        _sub(effectStyleLst, f"{{{a}}}effectStyle").append(_el(f"{{{a}}}effectLst"))
+    # bgFillStyleLst — 3 entries required
+    bgFillStyleLst = _sub(fmtScheme, f"{{{a}}}bgFillStyleLst")
+    for _ in range(3):
+        fill = _sub(bgFillStyleLst, f"{{{a}}}solidFill")
+        _sub(fill, f"{{{a}}}schemeClr", {"val": "phClr"})
+
     return _to_xml(root)
 
 
@@ -154,14 +221,7 @@ def _build_slide(svg_name: str, slide_index: int) -> bytes:
     root = _el(f"{{{NS['p']}}}sld")
     cSld = _sub(root, f"{{{NS['p']}}}cSld")
     spTree = _sub(cSld, f"{{{NS['p']}}}spTree")
-
-    # Group shape properties (required)
-    grpSpPr = _sub(spTree, f"{{{NS['p']}}}grpSpPr")
-    xfrm = _sub(grpSpPr, f"{{{NS['a']}}}xfrm")
-    _sub(xfrm, f"{{{NS['a']}}}off", {"x": "0", "y": "0"})
-    _sub(xfrm, f"{{{NS['a']}}}ext", {"cx": "0", "cy": "0"})
-    _sub(xfrm, f"{{{NS['a']}}}chOff", {"x": "0", "y": "0"})
-    _sub(xfrm, f"{{{NS['a']}}}chExt", {"cx": "0", "cy": "0"})
+    _spTree_boilerplate(spTree)
 
     # Title text box
     sp = _sub(spTree, f"{{{NS['p']}}}sp")
