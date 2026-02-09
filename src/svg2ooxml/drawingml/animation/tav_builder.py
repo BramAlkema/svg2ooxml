@@ -115,8 +115,9 @@ class TAVBuilder:
         splines = key_splines or []
 
         for index, (time_fraction, raw_value) in enumerate(zip(resolved_times, values, strict=True)):
-            # Compute time in milliseconds
-            tm = int(round(max(0.0, min(1.0, time_fraction)) * duration_ms))
+            # Compute time in thousandths-of-percent (0 = start, 100000 = end)
+            # per ECMA-376 ST_TLTimeAnimateValueTime
+            tm = int(round(max(0.0, min(1.0, time_fraction)) * 100000))
 
             # Format value
             value_elem = value_formatter(raw_value)

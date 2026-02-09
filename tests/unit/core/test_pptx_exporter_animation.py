@@ -110,6 +110,9 @@ def test_scale_animation_emits_segment_tavs() -> None:
     render_result, _, _ = _render(svg)
 
     assert render_result.slide_xml.count("<p:tav tm=") >= 3
+    assert 'tm="0"' in render_result.slide_xml
+    assert 'tm="40000"' in render_result.slide_xml   # 0.4 * 100000
+    assert 'tm="100000"' in render_result.slide_xml
     assert '<p:pt x="150000.0" y="200000.0"' in render_result.slide_xml
     assert '<p:pt x="50000.0" y="50000.0"' in render_result.slide_xml
     assert '<p:tavPr accel="' in render_result.slide_xml
@@ -142,6 +145,9 @@ def test_rotate_animation_emits_segment_tavs() -> None:
     render_result, _, _ = _render(svg)
 
     assert render_result.slide_xml.count("<p:tav tm=") >= 3
+    assert 'tm="0"' in render_result.slide_xml
+    assert 'tm="25000"' in render_result.slide_xml   # 0.25 * 100000
+    assert 'tm="100000"' in render_result.slide_xml
     assert '<p:fltVal val="0"/>' in render_result.slide_xml
     assert '<p:fltVal val="5400000"/>' in render_result.slide_xml
     assert '<p:fltVal val="10800000"/>' in render_result.slide_xml
@@ -306,8 +312,8 @@ def test_numeric_animation_tav_list_emitted() -> None:
 
     assert render_result.slide_xml.count("<p:tav tm=") >= 3
     assert '<p:tav tm="0"' in render_result.slide_xml
-    assert 'tm="500"' in render_result.slide_xml
-    assert 'tm="1000"' in render_result.slide_xml
+    assert 'tm="50000"' in render_result.slide_xml    # 0.5 * 100000
+    assert 'tm="100000"' in render_result.slide_xml
     assert 'val="0"' in render_result.slide_xml
     assert 'val="95250"' in render_result.slide_xml
     assert 'val="190500"' in render_result.slide_xml
@@ -330,8 +336,8 @@ def test_color_animation_tav_list_emitted() -> None:
 
     assert render_result.slide_xml.count("<p:tav tm=") >= 3
     assert '<p:tav tm="0"' in render_result.slide_xml
-    assert 'tm="500"' in render_result.slide_xml  # 0.25 * 2000ms
-    assert 'tm="2000"' in render_result.slide_xml
+    assert 'tm="25000"' in render_result.slide_xml  # 0.25 * 100000
+    assert 'tm="100000"' in render_result.slide_xml
     assert 'a:srgbClr val="FF0000"' in render_result.slide_xml
     assert 'a:srgbClr val="00FF00"' in render_result.slide_xml
     assert 'a:srgbClr val="0000FF"' in render_result.slide_xml

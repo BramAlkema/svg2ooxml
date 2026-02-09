@@ -55,7 +55,7 @@ class AnimationPipeline:
             if isinstance(element_id, str):
                 self._shape_map.setdefault(element_id, str(shape_id))
 
-    def build(self) -> str:
+    def build(self, *, max_shape_id: int = 0) -> str:
         if not self._payload:
             return ""
 
@@ -104,12 +104,15 @@ class AnimationPipeline:
             return ""
 
         # Build complete timing XML, including bldLst
+        # Start timing IDs after the last shape ID to avoid collisions
+        start_id = max(max_shape_id + 1, 1)
         animation_xml = self._writer.build(
-            remapped, 
-            timeline, 
-            tracer=self._tracer, 
+            remapped,
+            timeline,
+            tracer=self._tracer,
             options=self._policy,
-            animated_shape_ids=sorted(list(animated_shape_ids), key=int)
+            animated_shape_ids=sorted(list(animated_shape_ids), key=int),
+            start_id=start_id,
         )
         if animation_xml:
             self._trace(

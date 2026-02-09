@@ -24,22 +24,28 @@ __all__ = [
 
 
 def format_numeric_value(value: str) -> etree._Element:
-    """Format numeric value as <p:val><p:fltVal val="..."/></p:val>.
+    """Format value as <p:val><p:fltVal .../></p:val> or <p:val><p:strVal .../></p:val>.
 
-    Used for simple numeric animations (position, size, etc.).
+    Uses <p:fltVal> for numeric values and <p:strVal> for non-numeric strings.
 
     Args:
-        value: Numeric value as string (already normalized to PPT units)
+        value: Value as string (already normalized to PPT units)
 
     Returns:
-        lxml Element: <p:val> with <p:fltVal> child
+        lxml Element: <p:val> with appropriate child
 
     Example:
         >>> elem = format_numeric_value("914400")
         >>> # <p:val><p:fltVal val="914400"/></p:val>
+        >>> elem = format_numeric_value("visible")
+        >>> # <p:val><p:strVal val="visible"/></p:val>
     """
     val = p_elem("val")
-    p_sub(val, "fltVal", val=value)
+    try:
+        float(value)
+        p_sub(val, "fltVal", val=value)
+    except (ValueError, TypeError):
+        p_sub(val, "strVal", val=value)
     return val
 
 

@@ -245,9 +245,9 @@ class TestBuildTAVList:
         assert len(tav_list) == 2
         assert needs_ns is False  # No splines → no custom namespace
 
-        # Check timing
+        # Check timing (thousandths-of-percent: 0=start, 100000=end)
         assert tav_list[0].get("tm") == "0"
-        assert tav_list[1].get("tm") == "1000"
+        assert tav_list[1].get("tm") == "100000"
 
     def test_three_values_with_splines(self):
         builder = TAVBuilder(AnimationXMLBuilder())
@@ -262,10 +262,10 @@ class TestBuildTAVList:
         assert len(tav_list) == 3
         assert needs_ns is True  # Has splines → uses custom namespace
 
-        # Check timing (auto-distributed)
+        # Check timing (auto-distributed, thousandths-of-percent)
         assert tav_list[0].get("tm") == "0"
-        assert tav_list[1].get("tm") == "500"
-        assert tav_list[2].get("tm") == "1000"
+        assert tav_list[1].get("tm") == "50000"
+        assert tav_list[2].get("tm") == "100000"
 
     def test_explicit_key_times(self):
         builder = TAVBuilder(AnimationXMLBuilder())
@@ -278,10 +278,10 @@ class TestBuildTAVList:
         )
 
         assert len(tav_list) == 3
-        # Check explicit timing
+        # Check explicit timing (thousandths-of-percent)
         assert tav_list[0].get("tm") == "0"
-        assert tav_list[1].get("tm") == "300"
-        assert tav_list[2].get("tm") == "1000"
+        assert tav_list[1].get("tm") == "30000"
+        assert tav_list[2].get("tm") == "100000"
 
     def test_value_formatter_called(self):
         builder = TAVBuilder(AnimationXMLBuilder())
@@ -361,11 +361,11 @@ class TestIntegration:
         # Should use custom namespace for splines
         assert needs_ns is True
 
-        # Check timings
+        # Check timings (thousandths-of-percent)
         assert tav_list[0].get("tm") == "0"
-        assert tav_list[1].get("tm") == "400"   # 0.2 * 2000
-        assert tav_list[2].get("tm") == "1600"  # 0.8 * 2000
-        assert tav_list[3].get("tm") == "2000"
+        assert tav_list[1].get("tm") == "20000"   # 0.2 * 100000
+        assert tav_list[2].get("tm") == "80000"  # 0.8 * 100000
+        assert tav_list[3].get("tm") == "100000"
 
     def test_time_clamping(self):
         """Test that times are clamped to 0-duration."""
@@ -380,6 +380,6 @@ class TestIntegration:
             value_formatter=simple_numeric_formatter
         )
 
-        # Should clamp to 0 and 1000
+        # Should clamp to 0 and 100000
         assert tav_list[0].get("tm") == "0"
-        assert tav_list[1].get("tm") == "1000"
+        assert tav_list[1].get("tm") == "100000"

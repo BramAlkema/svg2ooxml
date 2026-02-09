@@ -178,7 +178,8 @@ class DrawingMLWriter:
         )
         self._trace_writer("render_start", metadata={"slide_size": slide_size})
         try:
-            fragments, _ = self._render_elements(scene, next_id=2)
+            fragments, next_shape_id = self._render_elements(scene, next_id=2)
+            self._max_shape_id = next_shape_id - 1
             placeholder = "<!-- SHAPES WILL BE INSERTED HERE -->"
             slide_width, slide_height = slide_size or DEFAULT_SLIDE_SIZE
 
@@ -632,7 +633,7 @@ class DrawingMLWriter:
         )
 
     def _build_animation_xml(self) -> str:
-        return self._animation_pipeline.build()
+        return self._animation_pipeline.build(max_shape_id=getattr(self, '_max_shape_id', 0))
 
     def _allocate_navigation_rid(self) -> str:
         rid = f"rIdNav{self._next_navigation_index}"
