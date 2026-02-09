@@ -83,4 +83,6 @@
             </a:bgFillStyleLst>
         </a:fmtScheme>
     </a:themeElements>
+    <a:objectDefaults/>
+    <a:extraClrSchemeLst/>
 </a:theme>

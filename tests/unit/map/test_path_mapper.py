@@ -24,7 +24,7 @@ def test_path_mapper_native_output() -> None:
     result = mapper.map(path)
 
     assert result.output_format == OutputFormat.NATIVE_DML
-    assert "<a:sp>" in result.xml_content
+    assert "<p:sp>" in result.xml_content
 
 
 def test_path_mapper_emf_fallback() -> None:

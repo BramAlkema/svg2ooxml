@@ -45,8 +45,8 @@ class ColorAnimationHandler(AnimationHandler):
         to_color = self._processor.parse_color(animation.values[-1])
         ppt_attribute = self._map_color_attribute(animation.target_attribute)
 
-        # Build <p:animClr>
-        anim_clr = p_elem("animClr")
+        # Build <p:animClr> — clrSpc and dir are required by ECMA-376
+        anim_clr = p_elem("animClr", clrSpc="rgb", dir="cw")
 
         # Behavior core with attribute name list
         cBhvr = self._xml.build_behavior_core_elem(
@@ -80,8 +80,8 @@ class ColorAnimationHandler(AnimationHandler):
             duration_ms=animation.duration_ms,
             delay_ms=animation.begin_ms,
             child_element=anim_clr,
-            preset_id=0,
-            preset_class="entr",
+            preset_id=7,
+            preset_class="emph",
         )
 
     def _map_color_attribute(self, attribute: str) -> str:

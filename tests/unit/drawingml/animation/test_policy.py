@@ -173,17 +173,22 @@ class TestEstimateSplineErrorPublic:
 
 
 class TestPolicySkipReason:
-    """Test _policy_skip_reason logic."""
+    """Test _policy_skip_reason logic.
+
+    After the timing-suppression refactor, _policy_skip_reason() always
+    returns None.  Policy violations are enforced via should_suppress_timing()
+    instead of skipping individual animations.
+    """
 
     def test_fallback_mode_not_native(self):
-        """Non-native fallback mode should skip."""
+        """Non-native fallback mode no longer causes per-animation skip."""
         policy = AnimationPolicy({"fallback_mode": "raster"})
 
         animation = Mock()
         animation.key_splines = []
 
         reason = policy._policy_skip_reason(animation, 0.0)
-        assert reason == "policy:fallback_mode=raster"
+        assert reason is None
 
     def test_fallback_mode_native_no_skip(self):
         """Native fallback mode should not skip."""
@@ -196,14 +201,14 @@ class TestPolicySkipReason:
         assert reason is None
 
     def test_native_splines_disabled(self):
-        """Disabled native splines should skip."""
+        """Disabled native splines no longer causes per-animation skip."""
         policy = AnimationPolicy({"allow_native_splines": False})
 
         animation = Mock()
         animation.key_splines = [[0.42, 0, 0.58, 1]]
 
         reason = policy._policy_skip_reason(animation, 0.05)
-        assert reason == "policy:native_splines_disabled"
+        assert reason is None
 
     def test_native_splines_enabled_no_skip(self):
         """Enabled native splines should not skip."""
@@ -216,15 +221,14 @@ class TestPolicySkipReason:
         assert reason is None
 
     def test_spline_error_exceeds_threshold(self):
-        """Error exceeding threshold should skip."""
+        """Error exceeding threshold no longer causes per-animation skip."""
         policy = AnimationPolicy({"max_spline_error": 0.01})
 
         animation = Mock()
         animation.key_splines = [[0.42, 0, 0.58, 1]]
 
-        reason = policy._policy_skip_reason(animation, 0.05)  # Error > threshold
-        assert reason is not None
-        assert "spline_error>" in reason
+        reason = policy._policy_skip_reason(animation, 0.05)
+        assert reason is None
 
     def test_spline_error_below_threshold_no_skip(self):
         """Error below threshold should not skip."""
@@ -233,11 +237,11 @@ class TestPolicySkipReason:
         animation = Mock()
         animation.key_splines = [[0.42, 0, 0.58, 1]]
 
-        reason = policy._policy_skip_reason(animation, 0.05)  # Error < threshold
+        reason = policy._policy_skip_reason(animation, 0.05)
         assert reason is None
 
     def test_no_splines_no_threshold_check(self):
-        """Animation without splines should skip threshold check."""
+        """Animation without splines should not skip."""
         policy = AnimationPolicy({"max_spline_error": 0.01})
 
         animation = Mock()
@@ -272,16 +276,50 @@ class TestShouldSkip:
         assert should_skip is False
         assert reason is None
 
-    def test_skip_with_reason(self):
-        """Should return (True, reason) when skipping."""
+    def test_skip_never_true_after_refactor(self):
+        """should_skip always returns (False, None) — suppression happens via should_suppress_timing."""
         policy = AnimationPolicy({"fallback_mode": "raster"})
 
         animation = Mock()
         animation.key_splines = []
 
         should_skip, reason = policy.should_skip(animation, 0.0)
-        assert should_skip is True
-        assert reason == "policy:fallback_mode=raster"
+        assert should_skip is False
+        assert reason is None
+
+
+class TestShouldSuppressTiming:
+    """Test should_suppress_timing logic."""
+
+    def test_default_no_suppression(self):
+        """Default options should not suppress timing."""
+        policy = AnimationPolicy({})
+        assert policy.should_suppress_timing() is False
+
+    def test_native_fallback_no_suppression(self):
+        """Native fallback mode should not suppress timing."""
+        policy = AnimationPolicy({"fallback_mode": "native"})
+        assert policy.should_suppress_timing() is False
+
+    def test_raster_fallback_suppresses(self):
+        """Non-native fallback mode should suppress timing."""
+        policy = AnimationPolicy({"fallback_mode": "raster"})
+        assert policy.should_suppress_timing() is True
+
+    def test_slide_fallback_suppresses(self):
+        """Slide fallback mode should suppress timing."""
+        policy = AnimationPolicy({"fallback_mode": "slide"})
+        assert policy.should_suppress_timing() is True
+
+    def test_native_splines_disabled_suppresses(self):
+        """Disabled native splines should suppress timing."""
+        policy = AnimationPolicy({"allow_native_splines": False})
+        assert policy.should_suppress_timing() is True
+
+    def test_native_splines_enabled_no_suppression(self):
+        """Enabled native splines should not suppress timing."""
+        policy = AnimationPolicy({"allow_native_splines": True})
+        assert policy.should_suppress_timing() is False
 
 
 class TestIntegration:
@@ -311,18 +349,20 @@ class TestIntegration:
         assert isinstance(should_skip, bool)
         assert isinstance(reason, (str, type(None)))
 
-    def test_multiple_skip_rules_first_wins(self):
-        """First matching skip rule should win."""
+    def test_multiple_constraints_suppresses_timing(self):
+        """Multiple policy constraints should suppress timing."""
         policy = AnimationPolicy({
-            "fallback_mode": "raster",  # This should trigger first
+            "fallback_mode": "raster",
             "allow_native_splines": False,
         })
 
         animation = Mock()
         animation.key_splines = [[0.42, 0, 0.58, 1]]
 
+        # Individual animations are never skipped
         should_skip, reason = policy.should_skip(animation, 0.05)
+        assert should_skip is False
+        assert reason is None
 
-        assert should_skip is True
-        # Should skip due to fallback mode, not splines
-        assert "fallback_mode" in reason
+        # But timing XML generation is suppressed
+        assert policy.should_suppress_timing() is True

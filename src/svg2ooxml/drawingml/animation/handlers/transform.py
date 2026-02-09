@@ -52,22 +52,28 @@ class TransformAnimationHandler(AnimationHandler):
         if transform_type is None:
             return None
 
-        preset_class = "entr"
+        preset_class: str | None = None
+        preset_id: int | None = None
 
         if transform_type == TransformType.SCALE:
             scale_pairs = [
                 self._processor.parse_scale_pair(v) for v in animation.values
             ]
             child = self._build_scale_element(animation, behavior_id, scale_pairs)
+            preset_class = "emph"
+            preset_id = 6  # Grow/Shrink
         elif transform_type == TransformType.ROTATE:
             angles = [self._processor.parse_angle(v) for v in animation.values]
             child = self._build_rotate_element(animation, behavior_id, angles)
+            preset_class = "emph"
+            preset_id = 8  # Spin
         elif transform_type == TransformType.TRANSLATE:
             translation_pairs = [
                 self._processor.parse_translation_pair(v) for v in animation.values
             ]
             child = self._build_translate_element(animation, behavior_id, translation_pairs)
             preset_class = "path"
+            preset_id = 0  # Custom Path
         elif transform_type == TransformType.MATRIX:
             child, preset_class = self._build_matrix_element(animation, behavior_id)
         else:
@@ -81,9 +87,9 @@ class TransformAnimationHandler(AnimationHandler):
             duration_ms=animation.duration_ms,
             delay_ms=animation.begin_ms,
             child_element=child,
-            preset_id=0,
+            preset_id=preset_id,
             preset_class=preset_class,
-            preset_subtype=0,
+            preset_subtype=None,
             node_type="withEffect",
         )
 

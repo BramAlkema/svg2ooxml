@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from lxml import etree
 
-from svg2ooxml.drawingml.xml_builder import a_elem, a_sub
+from svg2ooxml.drawingml.xml_builder import a_sub, p_elem, p_sub
 
 from .value_processors import ValueProcessor
 
@@ -24,7 +24,7 @@ __all__ = [
 
 
 def format_numeric_value(value: str) -> etree._Element:
-    """Format numeric value as <a:val val="..."/>.
+    """Format numeric value as <p:val><p:fltVal val="..."/></p:val>.
 
     Used for simple numeric animations (position, size, etc.).
 
@@ -32,17 +32,19 @@ def format_numeric_value(value: str) -> etree._Element:
         value: Numeric value as string (already normalized to PPT units)
 
     Returns:
-        lxml Element: <a:val val="..."/>
+        lxml Element: <p:val> with <p:fltVal> child
 
     Example:
         >>> elem = format_numeric_value("914400")
-        >>> # <a:val val="914400"/>
+        >>> # <p:val><p:fltVal val="914400"/></p:val>
     """
-    return a_elem("val", val=value)
+    val = p_elem("val")
+    p_sub(val, "fltVal", val=value)
+    return val
 
 
 def format_color_value(value: str) -> etree._Element:
-    """Format color as <a:val><a:srgbClr val="..."/></a:val>.
+    """Format color as <p:val><p:clrVal><a:srgbClr val="..."/></p:clrVal></p:val>.
 
     Used for color animations (fill, stroke, etc.).
 
@@ -50,18 +52,19 @@ def format_color_value(value: str) -> etree._Element:
         value: Color string (hex, rgb, named, etc.)
 
     Returns:
-        lxml Element: <a:val> with <a:srgbClr> child
+        lxml Element: <p:val> with <p:clrVal>/<a:srgbClr> children
 
     Example:
         >>> elem = format_color_value("#FF0000")
-        >>> # <a:val><a:srgbClr val="FF0000"/></a:val>
+        >>> # <p:val><p:clrVal><a:srgbClr val="FF0000"/></p:clrVal></p:val>
     """
     # Parse color to hex (without #)
     hex_color = ValueProcessor.parse_color(value)
 
-    # Build <a:val><a:srgbClr val="..."/></a:val>
-    val = a_elem("val")
-    a_sub(val, "srgbClr", val=hex_color)
+    # Build <p:val><p:clrVal><a:srgbClr val="..."/></p:clrVal></p:val>
+    val = p_elem("val")
+    clr_val = p_sub(val, "clrVal")
+    a_sub(clr_val, "srgbClr", val=hex_color)
 
     return val
 
@@ -99,15 +102,15 @@ def format_point_value(value: str) -> etree._Element:
     x_str = _fmt(x)
     y_str = _fmt(y)
 
-    # Build <a:val><a:pt x="..." y="..."/></a:val>
-    val = a_elem("val")
-    a_sub(val, "pt", x=x_str, y=y_str)
+    # Build <p:val><p:pt x="..." y="..."/></p:val>
+    val = p_elem("val")
+    p_sub(val, "pt", x=x_str, y=y_str)
 
     return val
 
 
 def format_angle_value(value: str) -> etree._Element:
-    """Format angle as <a:val val="..."/> (in 60000ths of a degree).
+    """Format angle as <p:val><p:fltVal val="..."/></p:val> (in 60000ths of a degree).
 
     Used for rotation animations. The value is converted from degrees
     to PowerPoint's angle units (60000ths).
@@ -116,11 +119,11 @@ def format_angle_value(value: str) -> etree._Element:
         value: Angle string in degrees (e.g., "45")
 
     Returns:
-        lxml Element: <a:val val="..."/> with angle in PPT units
+        lxml Element: <p:val> with <p:fltVal> child (angle in PPT units)
 
     Example:
         >>> elem = format_angle_value("45")
-        >>> # <a:val val="2700000"/>  (45 * 60000)
+        >>> # <p:val><p:fltVal val="2700000"/></p:val>  (45 * 60000)
     """
     # Parse angle in degrees
     degrees = ValueProcessor.parse_angle(value)
@@ -128,4 +131,6 @@ def format_angle_value(value: str) -> etree._Element:
     # Convert to PowerPoint units (60000ths)
     ppt_angle = ValueProcessor.format_ppt_angle(degrees)
 
-    return a_elem("val", val=ppt_angle)
+    val = p_elem("val")
+    p_sub(val, "fltVal", val=ppt_angle)
+    return val

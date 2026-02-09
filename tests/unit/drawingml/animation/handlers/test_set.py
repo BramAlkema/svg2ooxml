@@ -129,13 +129,15 @@ class TestBuild:
         str_val = par.find(f".//{{{NS_P}}}strVal")
         assert str_val is not None
 
-    def test_color_set_has_srgbclr(self, handler: SetAnimationHandler):
+    def test_color_set_has_srgbclr_in_clrval(self, handler: SetAnimationHandler):
         anim = make_set_animation(
             target_attribute="fill",
             values=["#ff0000"],
         )
         par = handler.build(anim, par_id=4, behavior_id=5)
-        srgb = par.find(f".//{{{NS_A}}}srgbClr")
+        clr_val = par.find(f".//{{{NS_P}}}to/{{{NS_P}}}clrVal")
+        assert clr_val is not None, "<p:to> must contain <p:clrVal> wrapper"
+        srgb = clr_val.find(f"{{{NS_A}}}srgbClr")
         assert srgb is not None
         # parse_color normalizes to uppercase hex without #
         assert len(srgb.get("val")) == 6

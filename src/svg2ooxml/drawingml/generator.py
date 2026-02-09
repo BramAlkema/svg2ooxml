@@ -64,10 +64,18 @@ class DrawingMLPathGenerator:
         a_sub(custGeom, "gdLst")
         a_sub(custGeom, "ahLst")
         a_sub(custGeom, "cxnLst")
+        a_sub(custGeom, "rect", l="0", t="0", r="0", b="0")
 
         # Add path list with path
         pathLst = a_sub(custGeom, "pathLst")
-        path = a_sub(pathLst, "path", w=width_emu, h=height_emu, fill=fill_mode, stroke=stroke_mode)
+        # stroke defaults to true, fill defaults to "norm" in OOXML —
+        # only emit non-default values to avoid triggering PowerPoint repair
+        path_attrs: dict[str, str] = {"w": width_emu, "h": height_emu}
+        if fill_mode != "norm":
+            path_attrs["fill"] = fill_mode
+        if stroke_mode in ("false", "0", "none"):
+            path_attrs["stroke"] = "0"
+        path = a_sub(pathLst, "path", **path_attrs)
 
         # Add all path commands
         for cmd in commands:

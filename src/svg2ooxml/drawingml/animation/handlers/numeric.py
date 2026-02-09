@@ -72,8 +72,8 @@ class NumericAnimationHandler(AnimationHandler):
             duration_ms=animation.duration_ms,
             delay_ms=animation.begin_ms,
             child_element=anim,
-            preset_id=0,
-            preset_class="entr",
+            preset_id=32,
+            preset_class="emph",
         )
 
     def _map_attribute_name(self, attribute: str) -> str:

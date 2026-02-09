@@ -232,14 +232,19 @@ def embed(svg_paths: list[Path], output: Path) -> Path:
 # -- Convert mode -------------------------------------------------------------
 
 
-def convert(svg_paths: list[Path], output: Path) -> Path:
+def convert(svg_paths: list[Path], output: Path, *, no_fonts: bool = False) -> Path:
     """Convert SVGs to native DrawingML via the full pipeline."""
     from svg2ooxml.core.pptx_exporter import SvgPageSource, SvgToPptxExporter
+
+    metadata: dict | None = None
+    if no_fonts:
+        metadata = {"policy_overrides": {"text": {"text.embed_fonts": False}}}
 
     pages = [
         SvgPageSource(
             svg_text=p.read_text(encoding="utf-8"),
             title=p.stem,
+            metadata=metadata,
         )
         for p in svg_paths
     ]
@@ -306,6 +311,7 @@ def main() -> None:
     )
     convert_parser.add_argument("files", nargs="+", help="SVG files to convert")
     convert_parser.add_argument("-o", "--output", required=True, help="Output PPTX path")
+    convert_parser.add_argument("--no-fonts", action="store_true", help="Disable font embedding")
 
     args = parser.parse_args()
 
@@ -322,7 +328,7 @@ def main() -> None:
         print(f"Created {result_path} with {len(svg_files)} slides (embed mode)")
         print("Open in PowerPoint → right-click SVG → 'Convert to Shape' to test")
     elif args.command == "convert":
-        result_path = convert(svg_files, output)
+        result_path = convert(svg_files, output, no_fonts=getattr(args, "no_fonts", False))
         print(f"Created {result_path} with {len(svg_files)} slides (convert mode)")
 
 

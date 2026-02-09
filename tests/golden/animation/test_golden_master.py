@@ -28,15 +28,6 @@ from .compare_xml import xml_strings_equal
 GOLDEN_DIR = pathlib.Path(__file__).parent
 
 
-def pytest_addoption(parser):
-    parser.addoption(
-        "--update-golden",
-        action="store_true",
-        default=False,
-        help="Update golden master files with current output",
-    )
-
-
 @pytest.fixture
 def update_golden(request):
     return request.config.getoption("--update-golden", default=False)

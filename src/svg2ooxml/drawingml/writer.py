@@ -231,13 +231,21 @@ class DrawingMLWriter:
             slide_size = default_slide_size
         else:
             slide_size = (px_to_emu(width_px), px_to_emu(height_px))
-        
+
         payload = animation_payload or {}
         if animations is not None:
             # If animations are explicitly passed, use them
-            payload = {"definitions": animations}
+            # but preserve policy from the original payload
+            new_payload: dict[str, Any] = {"definitions": animations}
+            if isinstance(animation_payload, dict) and "policy" in animation_payload:
+                new_payload["policy"] = animation_payload["policy"]
+            payload = new_payload
         elif scene.animations:
-            payload = {"definitions": scene.animations}
+            # Use scene animations, but preserve policy from animation_payload
+            new_payload = {"definitions": scene.animations}
+            if isinstance(animation_payload, dict) and "policy" in animation_payload:
+                new_payload["policy"] = animation_payload["policy"]
+            payload = new_payload
 
         return self.render_scene(
             scene.elements,
