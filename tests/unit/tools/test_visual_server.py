@@ -14,6 +14,8 @@ class StubBuildResult:
 
 
 class StubBuilder:
+    _slide_size_mode = "same"
+
     def build_from_svg(self, svg_text: str, output_path: Path) -> StubBuildResult:  # noqa: ARG002
         output_path.write_bytes(b"pptx")
         return StubBuildResult(output_path, slide_count=1)
