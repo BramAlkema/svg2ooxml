@@ -1,16 +1,8 @@
 name: Deploy Staging
 
-# on:
-#   workflow_dispatch:
-#   push:
-#     branches: ["develop", "staging"]
-#     paths:
-#       - 'src/**'
-#       - 'main.py'
-#       - 'requirements.txt'
-#       - 'Dockerfile'
-#       - 'cloudbuild-staging.yaml'
-#       - '.github/workflows/deploy-staging.yml'
+# GCP project deleted 2026-01-16 — disabled until new infra is set up
+on:
+  workflow_dispatch:
 
 jobs:
   deploy:
