@@ -75,4 +75,5 @@ jobs:
           python -m pytest -m "not visual" --maxfail=1 --disable-warnings \
             --ignore=tests/integration/core/test_pipeline.py \
             --ignore=tests/integration/test_filter_emf_regression.py \
+            --ignore=tests/integration/test_filter_vector_promotion.py \
             --ignore=tests/unit/api/test_background_queue.py

@@ -1,15 +1,8 @@
 name: Deploy Firebase
 
-# on:
-#   workflow_dispatch:
-#   # push:
-#   #   branches: ["main"]
-#   #   paths:
-#   #     - 'public/**'
-#   #     - 'firestore.rules'
-#   #     - 'firestore.indexes.json'
-#   #     - 'firebase.json'
-#   #     - '.github/workflows/deploy-firebase.yml'
+# GCP project deleted 2026-01-16 — disabled until new infra is set up
+on:
+  workflow_dispatch:
 
 jobs:
   deploy:

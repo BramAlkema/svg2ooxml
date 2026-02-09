@@ -1,16 +1,8 @@
 name: Deploy Cloud Run
 
-# on:
-#   workflow_dispatch:
-#   # push:
-#   #   branches: ["main"]
-#   #   paths:
-#   #     - 'src/**'
-#   #     - 'main.py'
-#   #     - 'requirements.txt'
-#   #     - 'Dockerfile'
-#   #     - 'cloudbuild.yaml'
-#   #     - '.github/workflows/deploy-cloud-run.yml'
+# GCP project deleted 2026-01-16 — disabled until new infra is set up
+on:
+  workflow_dispatch:
 
 jobs:
   deploy:
