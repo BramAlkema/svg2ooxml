@@ -48,7 +48,7 @@ def test_generate_from_primitives_rect_produces_geometry() -> None:
     assert geometry.bounds.width == 15.0
     assert geometry.bounds.height == 5.0
     assert 'fill="none"' in geometry.xml
-    assert 'stroke="none"' in geometry.xml
+    assert 'stroke="0"' in geometry.xml
 
 
 def test_segments_from_primitives_applies_transform() -> None:

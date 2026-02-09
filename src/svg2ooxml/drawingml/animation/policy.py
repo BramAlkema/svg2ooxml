@@ -76,6 +76,39 @@ class AnimationPolicy:
         should_skip = skip_reason is not None
         return (should_skip, skip_reason)
 
+    def should_suppress_timing(self) -> bool:
+        """Determine if timing XML generation should be suppressed.
+
+        Timing is suppressed when any policy constraint is violated:
+        - fallback_mode != native
+        - native_splines are disabled
+        - spline error exceeds max_spline_error threshold
+
+        Animations are still processed and emitted for tracking purposes
+        in all cases, but the timing XML is not included in the slide output.
+
+        Returns:
+            True if timing should be suppressed, False otherwise
+        """
+        # Check fallback mode
+        fallback_mode = str(self._options.get("fallback_mode", "native")).lower()
+        if fallback_mode != "native":
+            return True
+
+        # Check if native splines are disabled
+        allow_native_flag = self._coerce_bool_option(
+            self._options.get("allow_native_splines"),
+            True
+        )
+        if not allow_native_flag:
+            return True
+
+        # Note: We can't check spline error threshold here because we don't have
+        # access to the animation definitions. This will be checked when processing
+        # each animation in the writer.
+
+        return False
+
     def estimate_spline_error(
         self,
         animation: AnimationDefinition,
@@ -112,28 +145,14 @@ class AnimationPolicy:
         Returns:
             Skip reason string or None if should not skip
         """
-        # Check fallback mode
-        fallback_mode = str(self._options.get("fallback_mode", "native")).lower()
-        if fallback_mode != "native":
-            return f"policy:fallback_mode={fallback_mode}"
+        # NOTE: Policy violations (fallback_mode, native_splines disabled, spline_error)
+        # do NOT cause animations to be skipped. Instead, they cause timing XML generation
+        # to be suppressed later in the build() method via should_suppress_timing().
+        # This allows telemetry (fragment_emitted events) while preventing timing output
+        # in the slide, which is useful for tracking what would have been animated if
+        # policy constraints weren't in place.
 
-        # Check spline policy
-        if animation.key_splines:
-            # Check if native splines are disabled
-            allow_native_flag = self._coerce_bool_option(
-                self._options.get("allow_native_splines"),
-                True
-            )
-            if not allow_native_flag:
-                return "policy:native_splines_disabled"
-
-            # Check spline error threshold
-            threshold_value = self._options.get("max_spline_error")
-            if threshold_value is not None:
-                threshold = self._coerce_float_option(threshold_value, 0.0)
-                if max_error > threshold:
-                    return f"policy:spline_error>{threshold:.2f}"
-
+        # All animations are processed and emitted for tracking purposes
         return None
 
     # ------------------------------------------------------------------ #

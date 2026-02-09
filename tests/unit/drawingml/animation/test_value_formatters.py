@@ -9,39 +9,49 @@ from svg2ooxml.drawingml.animation.value_formatters import (
     format_point_value,
 )
 
+NS_A = "http://schemas.openxmlformats.org/drawingml/2006/main"
+NS_P = "http://schemas.openxmlformats.org/presentationml/2006/main"
+
+
+def _flt_val(elem: etree._Element) -> str | None:
+    """Extract val from <p:val><p:fltVal val="..."/></p:val>."""
+    flt = elem.find(f"{{{NS_P}}}fltVal")
+    return flt.get("val") if flt is not None else None
+
 
 class TestFormatNumericValue:
     """Test format_numeric_value formatter."""
 
     def test_basic_numeric(self):
         elem = format_numeric_value("100")
-        assert elem.tag.endswith("val")
-        assert elem.get("val") == "100"
+        assert elem.tag == f"{{{NS_P}}}val"
+        assert _flt_val(elem) == "100"
 
     def test_large_number(self):
         elem = format_numeric_value("914400")
-        assert elem.get("val") == "914400"
+        assert _flt_val(elem) == "914400"
 
     def test_zero(self):
         elem = format_numeric_value("0")
-        assert elem.get("val") == "0"
+        assert _flt_val(elem) == "0"
 
     def test_negative(self):
         elem = format_numeric_value("-100")
-        assert elem.get("val") == "-100"
+        assert _flt_val(elem) == "-100"
 
     def test_decimal(self):
         elem = format_numeric_value("123.456")
-        assert elem.get("val") == "123.456"
+        assert _flt_val(elem) == "123.456"
 
     def test_returns_element(self):
         elem = format_numeric_value("100")
         assert isinstance(elem, etree._Element)
 
-    def test_no_children(self):
-        """Numeric values should have no child elements."""
+    def test_has_fltval_child(self):
+        """Numeric values should have a <p:fltVal> child."""
         elem = format_numeric_value("100")
-        assert len(elem) == 0
+        assert len(elem) == 1
+        assert elem[0].tag == f"{{{NS_P}}}fltVal"
 
 
 class TestFormatColorValue:
@@ -49,28 +59,28 @@ class TestFormatColorValue:
 
     def test_hex_color(self):
         elem = format_color_value("#FF0000")
-        assert elem.tag.endswith("val")
+        assert elem.tag == f"{{{NS_P}}}val"
 
-        # Should have srgbClr child
-        srgb = elem.find(".//{http://schemas.openxmlformats.org/drawingml/2006/main}srgbClr")
+        # Should have srgbClr descendant
+        srgb = elem.find(f".//{{{NS_A}}}srgbClr")
         assert srgb is not None
         assert srgb.get("val") == "FF0000"
 
     def test_hex_without_hash(self):
         elem = format_color_value("00FF00")
-        srgb = elem.find(".//{http://schemas.openxmlformats.org/drawingml/2006/main}srgbClr")
+        srgb = elem.find(f".//{{{NS_A}}}srgbClr")
         assert srgb.get("val") == "00FF00"
 
     def test_lowercase_hex(self):
         elem = format_color_value("#ff0000")
-        srgb = elem.find(".//{http://schemas.openxmlformats.org/drawingml/2006/main}srgbClr")
+        srgb = elem.find(f".//{{{NS_A}}}srgbClr")
         # Should normalize to uppercase
         assert srgb.get("val") == "FF0000"
 
     def test_named_color(self):
         # Named colors should be converted to hex
         elem = format_color_value("red")
-        srgb = elem.find(".//{http://schemas.openxmlformats.org/drawingml/2006/main}srgbClr")
+        srgb = elem.find(f".//{{{NS_A}}}srgbClr")
         assert srgb is not None
         # Should have some hex value (exact value depends on color_to_hex)
         assert len(srgb.get("val")) == 6
@@ -78,7 +88,7 @@ class TestFormatColorValue:
     def test_rgb_color(self):
         # RGB colors should be converted to hex
         elem = format_color_value("rgb(255, 0, 0)")
-        srgb = elem.find(".//{http://schemas.openxmlformats.org/drawingml/2006/main}srgbClr")
+        srgb = elem.find(f".//{{{NS_A}}}srgbClr")
         assert srgb is not None
         assert len(srgb.get("val")) == 6
 
@@ -86,12 +96,14 @@ class TestFormatColorValue:
         elem = format_color_value("#FF0000")
         assert isinstance(elem, etree._Element)
 
-    def test_has_srgbClr_child(self):
-        """Color values should have exactly one srgbClr child."""
+    def test_has_clrval_with_srgbclr(self):
+        """Color values should have <p:clrVal><a:srgbClr/></p:clrVal>."""
         elem = format_color_value("#FF0000")
         children = list(elem)
         assert len(children) == 1
-        assert children[0].tag.endswith("srgbClr")
+        assert children[0].tag == f"{{{NS_P}}}clrVal"
+        srgb = children[0].find(f"{{{NS_A}}}srgbClr")
+        assert srgb is not None
 
 
 class TestFormatPointValue:
@@ -99,10 +111,10 @@ class TestFormatPointValue:
 
     def test_two_values(self):
         elem = format_point_value("1.5 2.0")
-        assert elem.tag.endswith("val")
+        assert elem.tag == f"{{{NS_P}}}val"
 
-        # Should have pt child
-        pt = elem.find(".//{http://schemas.openxmlformats.org/drawingml/2006/main}pt")
+        # Should have pt child in NS_P
+        pt = elem.find(f"{{{NS_P}}}pt")
         assert pt is not None
         assert pt.get("x") == "1.5"
         assert pt.get("y") == "2.0"
@@ -110,31 +122,31 @@ class TestFormatPointValue:
     def test_single_value_duplicated(self):
         """Single value should be duplicated to both x and y."""
         elem = format_point_value("2.0")
-        pt = elem.find(".//{http://schemas.openxmlformats.org/drawingml/2006/main}pt")
+        pt = elem.find(f"{{{NS_P}}}pt")
         assert pt.get("x") == "2.0"
         assert pt.get("y") == "2.0"
 
     def test_comma_separated(self):
         elem = format_point_value("1.5,2.0")
-        pt = elem.find(".//{http://schemas.openxmlformats.org/drawingml/2006/main}pt")
+        pt = elem.find(f"{{{NS_P}}}pt")
         assert pt.get("x") == "1.5"
         assert pt.get("y") == "2.0"
 
     def test_integer_values(self):
         elem = format_point_value("100 200")
-        pt = elem.find(".//{http://schemas.openxmlformats.org/drawingml/2006/main}pt")
+        pt = elem.find(f"{{{NS_P}}}pt")
         assert pt.get("x") == "100.0"
         assert pt.get("y") == "200.0"
 
     def test_zero_values(self):
         elem = format_point_value("0 0")
-        pt = elem.find(".//{http://schemas.openxmlformats.org/drawingml/2006/main}pt")
+        pt = elem.find(f"{{{NS_P}}}pt")
         assert pt.get("x") == "0.0"
         assert pt.get("y") == "0.0"
 
     def test_negative_values(self):
         elem = format_point_value("-1.5 2.0")
-        pt = elem.find(".//{http://schemas.openxmlformats.org/drawingml/2006/main}pt")
+        pt = elem.find(f"{{{NS_P}}}pt")
         assert pt.get("x") == "-1.5"
         assert pt.get("y") == "2.0"
 
@@ -147,7 +159,7 @@ class TestFormatPointValue:
         elem = format_point_value("1.5 2.0")
         children = list(elem)
         assert len(children) == 1
-        assert children[0].tag.endswith("pt")
+        assert children[0].tag == f"{{{NS_P}}}pt"
 
 
 class TestFormatAngleValue:
@@ -155,44 +167,45 @@ class TestFormatAngleValue:
 
     def test_zero_degrees(self):
         elem = format_angle_value("0")
-        assert elem.tag.endswith("val")
-        assert elem.get("val") == "0"
+        assert elem.tag == f"{{{NS_P}}}val"
+        assert _flt_val(elem) == "0"
 
     def test_common_angles(self):
         # 45 degrees = 2700000 (45 * 60000)
         elem = format_angle_value("45")
-        assert elem.get("val") == "2700000"
+        assert _flt_val(elem) == "2700000"
 
         # 90 degrees = 5400000
         elem = format_angle_value("90")
-        assert elem.get("val") == "5400000"
+        assert _flt_val(elem) == "5400000"
 
         # 180 degrees = 10800000
         elem = format_angle_value("180")
-        assert elem.get("val") == "10800000"
+        assert _flt_val(elem) == "10800000"
 
         # 360 degrees = 21600000
         elem = format_angle_value("360")
-        assert elem.get("val") == "21600000"
+        assert _flt_val(elem) == "21600000"
 
     def test_negative_angle(self):
         # -45 degrees = -2700000
         elem = format_angle_value("-45")
-        assert elem.get("val") == "-2700000"
+        assert _flt_val(elem) == "-2700000"
 
     def test_fractional_angle(self):
         # 45.5 degrees = 2730000
         elem = format_angle_value("45.5")
-        assert elem.get("val") == "2730000"
+        assert _flt_val(elem) == "2730000"
 
     def test_returns_element(self):
         elem = format_angle_value("45")
         assert isinstance(elem, etree._Element)
 
-    def test_no_children(self):
-        """Angle values should have no child elements."""
+    def test_has_fltval_child(self):
+        """Angle values should have a <p:fltVal> child."""
         elem = format_angle_value("45")
-        assert len(elem) == 0
+        assert len(elem) == 1
+        assert elem[0].tag == f"{{{NS_P}}}fltVal"
 
 
 class TestFormatterCompatibility:
@@ -231,9 +244,9 @@ class TestIntegration:
 
         assert len(elements) == 3
         assert all(isinstance(e, etree._Element) for e in elements)
-        assert elements[0].get("val") == "0"
-        assert elements[1].get("val") == "914400"
-        assert elements[2].get("val") == "1828800"
+        assert _flt_val(elements[0]) == "0"
+        assert _flt_val(elements[1]) == "914400"
+        assert _flt_val(elements[2]) == "1828800"
 
     def test_color_animation_workflow(self):
         """Test color formatter in complete workflow."""
@@ -243,9 +256,9 @@ class TestIntegration:
 
         assert len(elements) == 3
 
-        # Each should have srgbClr child
+        # Each should have srgbClr descendant
         for elem in elements:
-            srgb = elem.find(".//{http://schemas.openxmlformats.org/drawingml/2006/main}srgbClr")
+            srgb = elem.find(f".//{{{NS_A}}}srgbClr")
             assert srgb is not None
 
     def test_scale_animation_workflow(self):
@@ -256,8 +269,8 @@ class TestIntegration:
 
         assert len(elements) == 3
 
-        # Check scale values
-        pts = [e.find(".//{http://schemas.openxmlformats.org/drawingml/2006/main}pt") for e in elements]
+        # Check scale values (pt now in NS_P)
+        pts = [e.find(f"{{{NS_P}}}pt") for e in elements]
         assert pts[0].get("x") == "1.0"
         assert pts[1].get("x") == "1.5"
         assert pts[2].get("x") == "2.0"
@@ -269,10 +282,10 @@ class TestIntegration:
         elements = [format_angle_value(a) for a in angles]
 
         assert len(elements) == 4
-        assert elements[0].get("val") == "0"
-        assert elements[1].get("val") == "5400000"
-        assert elements[2].get("val") == "10800000"
-        assert elements[3].get("val") == "21600000"
+        assert _flt_val(elements[0]) == "0"
+        assert _flt_val(elements[1]) == "5400000"
+        assert _flt_val(elements[2]) == "10800000"
+        assert _flt_val(elements[3]) == "21600000"
 
 
 class TestEdgeCases:
@@ -286,19 +299,19 @@ class TestEdgeCases:
     def test_empty_string_color(self):
         """Empty color should use default."""
         elem = format_color_value("")
-        srgb = elem.find(".//{http://schemas.openxmlformats.org/drawingml/2006/main}srgbClr")
+        srgb = elem.find(f".//{{{NS_A}}}srgbClr")
         assert srgb is not None  # Should have default color
 
     def test_empty_string_point(self):
         """Empty point should default to (0, 0) or (1, 1)."""
         elem = format_point_value("")
-        pt = elem.find(".//{http://schemas.openxmlformats.org/drawingml/2006/main}pt")
+        pt = elem.find(f"{{{NS_P}}}pt")
         assert pt is not None
 
     def test_empty_string_angle(self):
         """Empty angle should default to 0."""
         elem = format_angle_value("")
-        assert elem.get("val") == "0"
+        assert _flt_val(elem) == "0"
 
     def test_whitespace_numeric(self):
         elem = format_numeric_value("  100  ")
@@ -307,8 +320,8 @@ class TestEdgeCases:
 
     def test_very_large_number(self):
         elem = format_numeric_value("99999999")
-        assert elem.get("val") == "99999999"
+        assert _flt_val(elem) == "99999999"
 
     def test_scientific_notation_angle(self):
         elem = format_angle_value("4.5e1")  # 45 in scientific notation
-        assert elem.get("val") == "2700000"
+        assert _flt_val(elem) == "2700000"

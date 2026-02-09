@@ -8,9 +8,11 @@ from svg2ooxml.drawingml.animation.xml_builders import AnimationXMLBuilder
 
 # Simple value formatter for testing
 def simple_numeric_formatter(value: str) -> etree._Element:
-    """Simple formatter that creates <a:val val="..."/>."""
-    from svg2ooxml.drawingml.xml_builder import a_elem
-    return a_elem("val", val=value)
+    """Simple formatter that creates <p:val><p:fltVal val="..."/></p:val>."""
+    from svg2ooxml.drawingml.xml_builder import p_elem, p_sub
+    val = p_elem("val")
+    p_sub(val, "fltVal", val=value)
+    return val
 
 
 class TestInit:
@@ -312,9 +314,9 @@ class TestBuildTAVList:
             value_formatter=simple_numeric_formatter
         )
 
-        # Each TAV should have a <a:val> child
+        # Each TAV should have a <p:val> child
         for tav in tav_list:
-            val_elem = tav.find(".//{http://schemas.openxmlformats.org/drawingml/2006/main}val")
+            val_elem = tav.find(".//{http://schemas.openxmlformats.org/presentationml/2006/main}val")
             assert val_elem is not None
 
     def test_spline_metadata_attached(self):

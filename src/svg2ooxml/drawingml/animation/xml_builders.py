@@ -17,6 +17,9 @@ from svg2ooxml.drawingml.xml_builder import (
 
 from .constants import SVG2_ANIMATION_NS
 
+# Register custom namespace for stable prefix in serialization
+etree.register_namespace("svg2", SVG2_ANIMATION_NS)
+
 if TYPE_CHECKING:
     from .id_allocator import TimingIDs
 
@@ -208,24 +211,33 @@ class AnimationXMLBuilder:
         duration_ms: int,
         delay_ms: int,
         child_element: etree._Element,
-        preset_id: int = 0,
-        preset_class: str = "entr",
-        preset_subtype: int = 0,
+        preset_id: int | None = None,
+        preset_class: str | None = None,
+        preset_subtype: int | None = None,
         node_type: str = "withEffect",
     ) -> etree._Element:
-        """Build ``<p:par>`` container accepting a child *element*."""
+        """Build ``<p:par>`` container accepting a child *element*.
+
+        When *preset_id* is ``None`` (or 0) the preset attributes are
+        omitted entirely so PowerPoint treats the effect as custom.
+        """
         par = p_elem("par")
-        ctn = p_sub(
-            par, "cTn",
-            id=str(par_id),
-            dur=str(duration_ms),
-            fill="hold",
-            nodeType=node_type,
-            presetID=str(preset_id),
-            presetClass=preset_class,
-            presetSubtype=str(preset_subtype),
-            grpId="0",
-        )
+
+        ctn_attrs: dict[str, str] = {
+            "id": str(par_id),
+            "dur": str(duration_ms),
+            "fill": "hold",
+            "nodeType": node_type,
+            "grpId": "0",
+        }
+        if preset_id:
+            ctn_attrs["presetID"] = str(preset_id)
+        if preset_class:
+            ctn_attrs["presetClass"] = preset_class
+        if preset_subtype is not None and preset_id:
+            ctn_attrs["presetSubtype"] = str(preset_subtype)
+
+        ctn = p_sub(par, "cTn", **ctn_attrs)
 
         st_cond_lst = p_sub(ctn, "stCondLst")
         p_sub(st_cond_lst, "cond", delay=str(delay_ms))
@@ -261,7 +273,7 @@ class AnimationXMLBuilder:
             ``<p:cBhvr>``.  ``"replace"`` or *None* omits the
             attribute (PowerPoint default).
         repeat_count:
-            SVG repeatCount: *None*/``1`` → ``repeatCount="0"``
+            SVG repeatCount: *None*/``1`` → omit attribute
             (PowerPoint default, play once), ``"indefinite"`` →
             ``repeatCount="indefinite"``, integer *N* →
             ``repeatCount="{N * 1000}"``.
@@ -277,8 +289,8 @@ class AnimationXMLBuilder:
         if fill_mode == "remove":
             ppt_fill = "remove"
 
-        # Map repeat_count
-        ppt_repeat = "0"
+        # Map repeat_count — omit for default (play once)
+        ppt_repeat: str | None = None
         if repeat_count == "indefinite":
             ppt_repeat = "indefinite"
         elif repeat_count is not None:
@@ -293,9 +305,10 @@ class AnimationXMLBuilder:
             "id": str(behavior_id),
             "dur": str(duration_ms),
             "fill": ppt_fill,
-            "repeatCount": ppt_repeat,
             "nodeType": "withEffect",
         }
+        if ppt_repeat is not None:
+            ctn_attrs["repeatCount"] = ppt_repeat
         if accel is not None:
             ctn_attrs["accel"] = str(accel)
         if decel is not None:

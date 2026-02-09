@@ -158,13 +158,15 @@ class TestBuildScale:
         assert to_elem.get("x") == "300000"
         assert to_elem.get("y") == "400000"
 
-    def test_preset_class_is_entr(self, handler: TransformAnimationHandler):
+    def test_preset_attrs_for_scale(self, handler: TransformAnimationHandler):
+        """Scale transforms use Grow/Shrink emphasis preset."""
         anim = make_transform_animation(
             transform_type=TransformType.SCALE, values=["1", "2"]
         )
         par = handler.build(anim, par_id=4, behavior_id=5)
         ctn = par.find(f"{{{NS_P}}}cTn")
-        assert ctn.get("presetClass") == "entr"
+        assert ctn.get("presetClass") == "emph"
+        assert ctn.get("presetID") == "6"
 
     def test_single_scale_value(self, handler: TransformAnimationHandler):
         anim = make_transform_animation(

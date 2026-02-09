@@ -496,7 +496,7 @@ class TestBuildBehaviorCoreElem:
         assert ctn.get("fill") == "hold"
 
     def test_repeat_count_default(self):
-        """Default repeat (None/1) → repeatCount='0' (PPT: play once)."""
+        """Default repeat (None/1) → omit repeatCount (PPT default: play once)."""
         builder = AnimationXMLBuilder()
         elem = builder.build_behavior_core_elem(
             behavior_id=5,
@@ -504,7 +504,7 @@ class TestBuildBehaviorCoreElem:
             target_shape="shape1",
         )
         ctn = elem.find(f"{{{NS_P}}}cTn")
-        assert ctn.get("repeatCount") == "0"
+        assert ctn.get("repeatCount") is None
 
     def test_repeat_count_indefinite(self):
         builder = AnimationXMLBuilder()
@@ -530,7 +530,7 @@ class TestBuildBehaviorCoreElem:
         assert ctn.get("repeatCount") == "3000"
 
     def test_repeat_count_one_is_default(self):
-        """repeat_count=1 → repeatCount='0' (same as default)."""
+        """repeat_count=1 → omit repeatCount (same as default)."""
         builder = AnimationXMLBuilder()
         elem = builder.build_behavior_core_elem(
             behavior_id=5,
@@ -539,4 +539,4 @@ class TestBuildBehaviorCoreElem:
             repeat_count=1,
         )
         ctn = elem.find(f"{{{NS_P}}}cTn")
-        assert ctn.get("repeatCount") == "0"
+        assert ctn.get("repeatCount") is None

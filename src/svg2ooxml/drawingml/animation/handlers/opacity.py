@@ -64,7 +64,7 @@ class OpacityAnimationHandler(AnimationHandler):
             duration_ms=animation.duration_ms,
             delay_ms=animation.begin_ms,
             child_element=anim_effect,
-            preset_id=1,
+            preset_id=10,
             preset_class="entr",
         )
 

@@ -24,6 +24,12 @@ NS_R = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
 # Namespace map for registration
 NSMAP = {"a": NS_A, "p": NS_P, "r": NS_R}
 
+# Register preferred prefixes so etree.tostring() uses a:/p:/r: directly
+# instead of auto-generated ns0:/ns1:/ns2: prefixes.
+etree.register_namespace("a", NS_A)
+etree.register_namespace("p", NS_P)
+etree.register_namespace("r", NS_R)
+
 
 def a_elem(tag: str, **attrs: str | int | float) -> etree._Element:
     """Create element with 'a:' namespace (DrawingML main).
@@ -111,6 +117,11 @@ def to_string(elem: etree._Element) -> str:
     Converts namespace URIs to a:/p: prefixes for Office compatibility.
     Strips namespace declarations for cleaner output.
 
+    Uses ``etree.register_namespace()`` so lxml emits the correct prefixes
+    directly, avoiding the fragile regex-based remapping that broke when
+    lxml redeclared the same ``nsX`` prefix for different URIs at different
+    tree depths.
+
     Args:
         elem: lxml Element to serialize
 
@@ -122,35 +133,17 @@ def to_string(elem: etree._Element) -> str:
         >>> to_string(elem)
         '<a:solidFill/>'
     """
-    # Serialize with namespaces
-    xml_str = etree.tostring(elem, encoding="unicode")
-
-    # lxml uses ns0:, ns1:, etc. for undefined prefixes
     import re
 
-    # Build a map of nsX: -> proper prefix (a:, p:, or r:)
-    # by parsing xmlns declarations before we strip them
-    ns_map = {}
-    xmlns_pattern = r'xmlns:(ns\d+)="([^"]+)"'
-    for match in re.finditer(xmlns_pattern, xml_str):
-        ns_prefix = match.group(1)  # e.g., "ns0"
-        uri = match.group(2)  # e.g., "http://schemas.openxmlformats.org/drawingml/2006/main"
+    # Consolidate redundant namespace declarations so lxml uses
+    # the registered prefixes (a:, p:, r:) consistently.
+    etree.cleanup_namespaces(elem)
 
-        if uri == NS_A:
-            ns_map[ns_prefix] = "a"
-        elif uri == NS_P:
-            ns_map[ns_prefix] = "p"
-        elif uri == NS_R:
-            ns_map[ns_prefix] = "r"
+    xml_str = etree.tostring(elem, encoding="unicode")
 
-    # Remove xmlns declarations
-    xml_str = re.sub(r'\s+xmlns:ns\d+="[^"]+"', '', xml_str)
-
-    # Replace nsX: prefixes with proper a:, p:, or r: prefixes
-    for ns_prefix, proper_prefix in ns_map.items():
-        xml_str = xml_str.replace(f'<{ns_prefix}:', f'<{proper_prefix}:')
-        xml_str = xml_str.replace(f'</{ns_prefix}:', f'</{proper_prefix}:')
-        xml_str = xml_str.replace(f' {ns_prefix}:', f' {proper_prefix}:')
+    # Strip all xmlns declarations — OOXML fragments are inserted into
+    # documents that already declare these namespaces.
+    xml_str = re.sub(r'\s+xmlns(?::\w+)?="[^"]+"', "", xml_str)
 
     return xml_str
 

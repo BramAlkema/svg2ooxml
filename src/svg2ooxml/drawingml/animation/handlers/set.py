@@ -57,21 +57,27 @@ class SetAnimationHandler(AnimationHandler):
         to_elem = p_sub(set_elem, "to")
         if is_color:
             hex_color = self._processor.parse_color(target_value)
-            a_sub(to_elem, "srgbClr", val=hex_color)
+            clr_val = p_sub(to_elem, "clrVal")
+            a_sub(clr_val, "srgbClr", val=hex_color)
         else:
             normalized = self._processor.normalize_numeric_value(
                 ppt_attribute, target_value, unit_converter=self._units
             )
             p_sub(to_elem, "strVal", val=normalized)
 
-        # Wrap in <p:par> container
+        # Wrap in <p:par> container — use appropriate preset for type
+        if is_color:
+            preset_id, preset_class = 7, "emph"  # Change Fill Color
+        else:
+            preset_id, preset_class = 1, "entr"  # Appear
+
         return self._xml.build_par_container_elem(
             par_id=par_id,
             duration_ms=animation.duration_ms,
             delay_ms=animation.begin_ms,
             child_element=set_elem,
-            preset_id=1,
-            preset_class="entr",
+            preset_id=preset_id,
+            preset_class=preset_class,
         )
 
     @staticmethod

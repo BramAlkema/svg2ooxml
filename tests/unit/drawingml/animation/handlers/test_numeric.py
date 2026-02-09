@@ -199,11 +199,13 @@ class TestBuild:
         ctn = par.find(f"{{{NS_P}}}cTn")
         assert ctn.get("dur") == "2500"
 
-    def test_preset_class(self, handler: NumericAnimationHandler):
+    def test_preset_attrs_emphasis(self, handler: NumericAnimationHandler):
+        """Numeric animations use emphasis preset for PowerPoint playback."""
         anim = make_numeric_animation()
         par = handler.build(anim, par_id=4, behavior_id=5)
         ctn = par.find(f"{{{NS_P}}}cTn")
-        assert ctn.get("presetClass") == "entr"
+        assert ctn.get("presetClass") == "emph"
+        assert ctn.get("presetID") == "32"
 
     def test_empty_values_rejected_by_ir(self):
         """AnimationDefinition validates values is non-empty at construction."""

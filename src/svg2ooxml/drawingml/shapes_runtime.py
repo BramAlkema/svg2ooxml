@@ -389,8 +389,6 @@ def render_textframe(
 
     runs_xml = _resolve_runs_xml(frame, register_run_navigation)
 
-    body_extra = ""
-
     return template.format(
         SHAPE_ID=shape_id,
         SHAPE_NAME=shape_name,
@@ -400,7 +398,6 @@ def render_textframe(
         HEIGHT_EMU=px_to_emu(bbox.height),
         TEXT_ALIGN=align,
         RTL_ATTR=' rtl="1"' if rtl else "",
-        BODY_EXTRA=body_extra,
         RUNS_XML=runs_xml,
         HYPERLINK_XML=hyperlink_xml,
         CLIP_PATH_XML=_format_block(clip_path_xml, "        ") if clip_path_xml else "",
