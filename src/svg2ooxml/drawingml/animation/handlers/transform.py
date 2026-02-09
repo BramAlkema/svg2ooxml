@@ -268,6 +268,9 @@ class TransformAnimationHandler(AnimationHandler):
         )
         anim_motion.append(cBhvr)
 
+        # ECMA-376 requires a choice element (by/from/to/rCtr) after cBhvr
+        p_sub(anim_motion, "rCtr", x="0", y="0")
+
         return anim_motion
 
     @staticmethod

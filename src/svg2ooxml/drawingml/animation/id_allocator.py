@@ -46,9 +46,15 @@ class TimingIDAllocator:
         # ids.animations == [(4,5), (6,7), (8,9)]
     """
 
-    def allocate(self, n_animations: int) -> TimingIDs:
-        """Pre-allocate all IDs for *n_animations* in one pass."""
-        counter = 0
+    def allocate(self, n_animations: int, *, start_id: int = 1) -> TimingIDs:
+        """Pre-allocate all IDs for *n_animations* in one pass.
+
+        Args:
+            n_animations: Number of animation elements to allocate IDs for.
+            start_id: First ID to assign (default 1). Set this higher
+                than the max shape ID on the slide to avoid collisions.
+        """
+        counter = start_id - 1
 
         def next_id() -> int:
             nonlocal counter

@@ -87,13 +87,14 @@ class DrawingMLAnimationWriter:
         tracer: ConversionTracer | None = None,
         options: Mapping[str, Any] | None = None,
         animated_shape_ids: list[str] | None = None,
+        start_id: int = 1,
     ) -> str:
         """Build PowerPoint timing XML for a sequence of animations."""
         options = dict(options or {})
         self._policy = AnimationPolicy(options)
 
-        # Pre-allocate IDs for the complete timing tree
-        ids = self._id_allocator.allocate(n_animations=len(animations))
+        # Pre-allocate IDs for the complete timing tree, starting after shape IDs
+        ids = self._id_allocator.allocate(n_animations=len(animations), start_id=start_id)
 
         animation_elements: list[etree._Element] = []
         id_index = 0
