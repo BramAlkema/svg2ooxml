@@ -9,7 +9,6 @@ from collections.abc import Iterable
 from svg2ooxml.common.conversions.bidi import is_rtl_text
 from svg2ooxml.common.conversions.opacity import opacity_to_ppt
 from svg2ooxml.drawingml.generator import DrawingMLPathGenerator, px_to_emu
-from svg2ooxml.drawingml.paint_runtime import clip_rect_to_xml
 
 # Import centralized XML builders for safe DrawingML generation
 from svg2ooxml.drawingml.xml_builder import (
@@ -48,8 +47,6 @@ def render_rectangle(
     paint_to_fill,
     stroke_to_xml,
     hyperlink_xml: str = "",
-    clip_path_xml: str = "",
-    mask_xml: str = "",
 ) -> str:
     bounds = rect.bounds
     preset = "roundRect" if rect.is_rounded else "rect"
@@ -65,8 +62,6 @@ def render_rectangle(
         FILL_XML=_format_block(paint_to_fill(rect.fill), "        "),
         STROKE_XML=_format_block(stroke_to_xml(rect.stroke, metadata=rect.metadata), "        "),
         HYPERLINK_XML=hyperlink_xml,
-        CLIP_PATH_XML=_format_block(clip_path_xml, "        ") if clip_path_xml else "",
-        MASK_XML=_format_block(mask_xml, "        ") if mask_xml else "",
         EFFECTS_XML=_effect_block(rect.effects),
     )
 
@@ -79,8 +74,6 @@ def render_circle(
     paint_to_fill,
     stroke_to_xml,
     hyperlink_xml: str = "",
-    clip_path_xml: str = "",
-    mask_xml: str = "",
 ) -> str:
     size = circle.radius * 2.0
     bounds = Rect(
@@ -98,8 +91,6 @@ def render_circle(
         stroke_xml=_format_block(stroke_to_xml(circle.stroke, metadata=circle.metadata), "        "),
         effects_xml=_effect_block(circle.effects),
         hyperlink_xml=hyperlink_xml,
-        clip_path_xml=clip_path_xml,
-        mask_xml=mask_xml,
     )
 
 
@@ -111,8 +102,6 @@ def render_ellipse(
     paint_to_fill,
     stroke_to_xml,
     hyperlink_xml: str = "",
-    clip_path_xml: str = "",
-    mask_xml: str = "",
 ) -> str:
     bounds = Rect(
         x=ellipse.center.x - ellipse.radius_x,
@@ -129,8 +118,6 @@ def render_ellipse(
         stroke_xml=_format_block(stroke_to_xml(ellipse.stroke, metadata=ellipse.metadata), "        "),
         effects_xml=_effect_block(ellipse.effects),
         hyperlink_xml=hyperlink_xml,
-        clip_path_xml=clip_path_xml,
-        mask_xml=mask_xml,
     )
 
 
@@ -144,8 +131,6 @@ def render_preset_shape(
     stroke_xml: str,
     effects_xml: str,
     hyperlink_xml: str = "",
-    clip_path_xml: str = "",
-    mask_xml: str = "",
 ) -> str:
     return template.format(
         SHAPE_ID=shape_id,
@@ -158,8 +143,6 @@ def render_preset_shape(
         STROKE_XML=stroke_xml,
         EFFECTS_XML=effects_xml,
         HYPERLINK_XML=hyperlink_xml,
-        CLIP_PATH_XML=_format_block(clip_path_xml, "        ") if clip_path_xml else "",
-        MASK_XML=_format_block(mask_xml, "        ") if mask_xml else "",
     )
 
 
@@ -174,8 +157,6 @@ def render_path(
     policy_for,
     logger: logging.Logger,
     hyperlink_xml: str = "",
-    clip_path_xml: str = "",
-    mask_xml: str = "",
 ) -> str:
     fill_xml = _format_block(paint_to_fill(path.fill), "        ")
     stroke_xml = _format_block(stroke_to_xml(path.stroke, metadata=path.metadata), "        ")
@@ -199,18 +180,6 @@ def render_path(
     )
     bounds = geometry.bounds
 
-    clip_fragments: list[str] = []
-    if isinstance(path.metadata, dict):
-        clip_meta = path.metadata.get("marker_clip")
-        overflow = path.metadata.get("marker_overflow")
-        if clip_meta and overflow == "hidden":
-            clip_fragments.append(_format_block(clip_rect_to_xml(clip_meta), "        "))
-    if clip_path_xml:
-        clip_fragments.append(_format_block(clip_path_xml, "        "))
-    clip_block = "".join(clip_fragments)
-
-    mask_block = _format_block(mask_xml, "        ") if mask_xml else ""
-
     return template.format(
         SHAPE_ID=shape_id,
         SHAPE_NAME=shape_name,
@@ -219,8 +188,6 @@ def render_path(
         WIDTH_EMU=geometry.width_emu,
         HEIGHT_EMU=geometry.height_emu,
         GEOMETRY_XML=_format_block(geometry.xml, "        "),
-        CLIP_PATH_XML=clip_block,
-        MASK_XML=mask_block,
         FILL_XML=fill_xml,
         STROKE_XML=stroke_xml,
         HYPERLINK_XML=hyperlink_xml,
@@ -238,8 +205,6 @@ def render_line(
     paint_to_fill,
     policy_for,
     hyperlink_xml: str = "",
-    clip_path_xml: str = "",
-    mask_xml: str = "",
 ) -> str:
     shape_name = f"Line {shape_id}"
 
@@ -260,8 +225,6 @@ def render_line(
         WIDTH_EMU=geometry.width_emu,
         HEIGHT_EMU=geometry.height_emu,
         GEOMETRY_XML=_format_block(geometry.xml, "        "),
-        CLIP_PATH_XML=_format_block(clip_path_xml, "        ") if clip_path_xml else "",
-        MASK_XML=_format_block(mask_xml, "        ") if mask_xml else "",
         FILL_XML=_format_block(paint_to_fill(None), "        "),
         STROKE_XML=_format_block(stroke_to_xml(line.stroke, metadata=line.metadata), "        "),
         EFFECTS_XML=_effect_block(line.effects),
@@ -279,8 +242,6 @@ def render_polyline(
     stroke_to_xml,
     policy_for,
     hyperlink_xml: str = "",
-    clip_path_xml: str = "",
-    mask_xml: str = "",
 ) -> str:
     return _render_polygonal_shape(
         polyline,
@@ -291,8 +252,6 @@ def render_polyline(
         stroke_to_xml=stroke_to_xml,
         policy_for=policy_for,
         hyperlink_xml=hyperlink_xml,
-        clip_path_xml=clip_path_xml,
-        mask_xml=mask_xml,
         closed=False,
     )
 
@@ -307,8 +266,6 @@ def render_polygon(
     stroke_to_xml,
     policy_for,
     hyperlink_xml: str = "",
-    clip_path_xml: str = "",
-    mask_xml: str = "",
 ) -> str:
     return _render_polygonal_shape(
         polygon,
@@ -319,8 +276,6 @@ def render_polygon(
         stroke_to_xml=stroke_to_xml,
         policy_for=policy_for,
         hyperlink_xml=hyperlink_xml,
-        clip_path_xml=clip_path_xml,
-        mask_xml=mask_xml,
         closed=True,
     )
 
@@ -360,8 +315,6 @@ def render_textframe(
     policy_for,
     logger: logging.Logger,
     hyperlink_xml: str = "",
-    clip_path_xml: str = "",
-    mask_xml: str = "",
     register_run_navigation=None,
 ) -> str:
     bbox = frame.bbox
@@ -400,8 +353,6 @@ def render_textframe(
         RTL_ATTR=' rtl="1"' if rtl else "",
         RUNS_XML=runs_xml,
         HYPERLINK_XML=hyperlink_xml,
-        CLIP_PATH_XML=_format_block(clip_path_xml, "        ") if clip_path_xml else "",
-        MASK_XML=_format_block(mask_xml, "        ") if mask_xml else "",
     )
 
 
@@ -414,8 +365,6 @@ def render_wordart(
     policy_for,
     logger: logging.Logger,
     hyperlink_xml: str = "",
-    clip_path_xml: str = "",
-    mask_xml: str = "",
     register_run_navigation=None,
 ) -> str:
     bbox = frame.bbox
@@ -461,8 +410,6 @@ def render_wordart(
         BODY_EXTRA=body_extra,
         RUNS_XML=runs_xml,
         HYPERLINK_XML=hyperlink_xml,
-        CLIP_PATH_XML=_format_block(clip_path_xml, "        ") if clip_path_xml else "",
-        MASK_XML=_format_block(mask_xml, "        ") if mask_xml else "",
     )
 
 
@@ -642,8 +589,6 @@ def _render_polygonal_shape(
     stroke_to_xml,
     policy_for,
     hyperlink_xml: str,
-    clip_path_xml: str,
-    mask_xml: str,
     closed: bool,
 ) -> str:
     points = getattr(shape, "points", [])
@@ -675,8 +620,6 @@ def _render_polygonal_shape(
         WIDTH_EMU=geometry.width_emu,
         HEIGHT_EMU=geometry.height_emu,
         GEOMETRY_XML=_format_block(geometry.xml, "        "),
-        CLIP_PATH_XML=_format_block(clip_path_xml, "        ") if clip_path_xml else "",
-        MASK_XML=_format_block(mask_xml, "        ") if mask_xml else "",
         FILL_XML=_format_block(fill_xml, "        "),
         STROKE_XML=_format_block(stroke_xml, "        "),
         EFFECTS_XML=_effect_block(getattr(shape, "effects", [])),

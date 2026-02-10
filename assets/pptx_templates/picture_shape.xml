@@ -8,7 +8,7 @@
     </p:nvPicPr>
     <p:blipFill>
         <a:blip r:embed="{R_ID}"/>
-        <a:stretch>
+{SRC_RECT_XML}        <a:stretch>
             <a:fillRect/>
         </a:stretch>
     </p:blipFill>
@@ -17,9 +17,7 @@
             <a:off x="{X_EMU}" y="{Y_EMU}"/>
             <a:ext cx="{WIDTH_EMU}" cy="{HEIGHT_EMU}"/>
         </a:xfrm>
-        <a:prstGeom prst="rect">
-            <a:avLst/>
-        </a:prstGeom>
-{CLIP_PATH_XML}{MASK_XML}{EFFECTS_XML}
+        {GEOMETRY_XML}
+{EFFECTS_XML}
     </p:spPr>
 </p:pic>

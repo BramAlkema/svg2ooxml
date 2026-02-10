@@ -14,8 +14,7 @@ def render_picture(
     policy_for,
     register_media,
     hyperlink_xml: str = "",
-    clip_path_xml: str = "",
-    mask_xml: str = "",
+    geometry_xml: str = "",
 ) -> str | None:
     """Render an IR image element into a picture shape."""
 
@@ -46,6 +45,20 @@ def render_picture(
 
         effects_xml = _indent_block(_effect_block(getattr(image, "effects", [])))
 
+    # srcRect from clip bounds (thousandths of percent).
+    src_rect = image.metadata.get("_src_rect")
+    if isinstance(src_rect, tuple) and len(src_rect) == 4:
+        src_rect_xml = (
+            f'        <a:srcRect l="{src_rect[0]}" t="{src_rect[1]}"'
+            f' r="{src_rect[2]}" b="{src_rect[3]}"/>\n'
+        )
+    else:
+        src_rect_xml = ""
+
+    # Geometry: clip shape or default rectangle.
+    if not geometry_xml:
+        geometry_xml = '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>'
+
     return template.format(
         SHAPE_ID=shape_id,
         SHAPE_NAME=shape_name,
@@ -56,8 +69,8 @@ def render_picture(
         HEIGHT_EMU=px_to_emu(height),
         EFFECTS_XML=effects_xml,
         HYPERLINK_XML=_indent_block(hyperlink_xml),
-        CLIP_PATH_XML=_indent_block(clip_path_xml),
-        MASK_XML=_indent_block(mask_xml),
+        SRC_RECT_XML=src_rect_xml,
+        GEOMETRY_XML=geometry_xml,
     )
 
 

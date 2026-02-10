@@ -5,14 +5,11 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from svg2ooxml.common.conversions.scale import position_to_ppt
 from svg2ooxml.common.units import UnitConverter
 from svg2ooxml.drawingml.bridges import EMFPathAdapter, PathStyle
 from svg2ooxml.drawingml.mask_generator import compute_mask_geometry
 from svg2ooxml.drawingml.raster_adapter import RasterAdapter
 
-# Import centralized XML builders for safe DrawingML generation
-from svg2ooxml.drawingml.xml_builder import a_elem, a_sub, graft_xml_fragment, to_string
 from svg2ooxml.ir.geometry import Rect
 from svg2ooxml.ir.paint import SolidPaint
 from svg2ooxml.ir.scene import MaskInstance, MaskRef
@@ -152,66 +149,6 @@ class MaskWriter:
             diagnostics.append("Mask could not be emitted; all fallbacks failed.")
         return "", diagnostics
 
-    def _build_vector_mask_fragment(
-        self,
-        mask_ref: MaskRef,
-        geometry_xml: str,
-        mask_meta: dict,
-        mask_instance: MaskInstance | None,
-    ) -> str:
-        # Build a:mask element with lxml
-        mask = a_elem("mask")
-
-        # Add unit attributes if present
-        mask_units = mask_meta.get("mask_units")
-        content_units = mask_meta.get("mask_content_units")
-        if isinstance(mask_units, str):
-            mask.set("maskUnits", mask_units)
-        if isinstance(content_units, str):
-            mask.set("maskContentUnits", content_units)
-
-        # Add srcRect if present
-        src_rect = self._src_rect(mask_meta, mask_instance)
-        if src_rect is not None:
-            a_sub(mask, "srcRect", l=src_rect[0], t=src_rect[1], r=src_rect[2], b=src_rect[3])
-
-        # Append geometry
-        if geometry_xml:
-            graft_xml_fragment(mask, geometry_xml)
-
-        return to_string(mask)
-
-    @staticmethod
-    def _src_rect(mask_meta: dict, mask_instance: MaskInstance | None) -> tuple[int, int, int, int] | None:
-        """Return srcRect tuple in thousandth percentages if available."""
-
-        bounds = _extract_rect(mask_meta.get("instance_bounds")) or _extract_rect(
-            mask_meta.get("target_bounds")
-        )
-        element_bounds = _extract_rect(mask_meta.get("element_bbox"))
-        if mask_instance and mask_instance.bounds is not None:
-            bounds = mask_instance.bounds
-        if bounds is None or element_bounds is None or element_bounds.width == 0 or element_bounds.height == 0:
-            return None
-
-        left = max(0.0, (bounds.x - element_bounds.x) / element_bounds.width)
-        top = max(0.0, (bounds.y - element_bounds.y) / element_bounds.height)
-        right = max(
-            0.0,
-            (element_bounds.x + element_bounds.width - (bounds.x + bounds.width)) / element_bounds.width,
-        )
-        bottom = max(
-            0.0,
-            (element_bounds.y + element_bounds.height - (bounds.y + bounds.height)) / element_bounds.height,
-        )
-
-        return (
-            _to_thousandth_percent(left),
-            _to_thousandth_percent(top),
-            _to_thousandth_percent(right),
-            _to_thousandth_percent(bottom),
-        )
-
     # ------------------------------------------------------------------ #
     # Fallback attempts
     # ------------------------------------------------------------------ #
@@ -231,8 +168,9 @@ class MaskWriter:
                 diagnostics.append("Mask missing native geometry.")
             return _MaskAttemptResult(False, diagnostics=diagnostics)
 
-        xml = self._build_vector_mask_fragment(mask_ref, geometry_xml, mask_meta, mask_instance)
-        return _MaskAttemptResult(True, xml=xml, diagnostics=diagnostics)
+        # Non-standard <a:mask> no longer emitted (not in ECMA-376).
+        diagnostics.append(_format_message(mask_ref, "native geometry available; mask effect not emitted (non-standard element)."))
+        return _MaskAttemptResult(True, xml="", diagnostics=diagnostics)
 
     def _attempt_mimic(
         self,
@@ -255,9 +193,9 @@ class MaskWriter:
         mask_meta.setdefault("geometry_xml", geometry_xml)
         bounds = geometry_result.geometry.bounds
         mask_meta.setdefault("bounds_px", (bounds.x, bounds.y, bounds.width, bounds.height))
+        # Non-standard <a:mask> no longer emitted (not in ECMA-376).
         diagnostics.append(_format_message(mask_ref, "mimic fallback emitted using custom geometry."))
-        xml = self._build_vector_mask_fragment(mask_ref, geometry_xml, mask_meta, mask_instance)
-        return _MaskAttemptResult(True, xml=xml, diagnostics=diagnostics)
+        return _MaskAttemptResult(True, xml="", diagnostics=diagnostics)
 
     def _attempt_emf(
         self,
@@ -328,9 +266,10 @@ class MaskWriter:
             subject=getattr(mask_ref, "mask_id", None),
         )
 
-        xml = self._build_blip_mask_fragment(handle.relationship_id, mask_meta, mask_instance)
+        # Non-standard <a:mask> no longer emitted (not in ECMA-376).
+        # Asset is still registered for potential future use.
         diagnostics.append(_format_message(mask_ref, f"EMF fallback emitted as {handle.part_name}."))
-        return _MaskAttemptResult(True, xml=xml, diagnostics=diagnostics)
+        return _MaskAttemptResult(True, xml="", diagnostics=diagnostics)
 
     def _attempt_raster(
         self,
@@ -386,52 +325,11 @@ class MaskWriter:
             subject=getattr(mask_ref, "mask_id", None),
         )
 
-        xml = self._build_blip_mask_fragment(handle.relationship_id, mask_meta, mask_instance)
+        # Non-standard <a:mask> no longer emitted (not in ECMA-376).
+        # Asset is still registered for potential future use.
         diagnostics.append(_format_message(mask_ref, f"Raster fallback emitted as {handle.part_name}."))
-        return _MaskAttemptResult(True, xml=xml, diagnostics=diagnostics)
+        return _MaskAttemptResult(True, xml="", diagnostics=diagnostics)
 
-    def _build_blip_mask_fragment(
-        self,
-        relationship_id: str,
-        mask_meta: dict,
-        mask_instance: MaskInstance | None,
-    ) -> str:
-        # Build a:mask element with lxml
-        mask = a_elem("mask")
-
-        # Add unit attributes if present
-        mask_units = mask_meta.get("mask_units")
-        content_units = mask_meta.get("mask_content_units")
-        if isinstance(mask_units, str):
-            mask.set("maskUnits", mask_units)
-        if isinstance(content_units, str):
-            mask.set("maskContentUnits", content_units)
-
-        # Build a:blipFill
-        blipFill = a_sub(mask, "blipFill", dpi="0", rotWithShape="0")
-        blip = a_sub(blipFill, "blip", cstate="print")
-        blip.set("{http://schemas.openxmlformats.org/officeDocument/2006/relationships}embed", relationship_id)
-
-        # Add srcRect if present
-        src_rect = self._src_rect(mask_meta, mask_instance)
-        if src_rect:
-            a_sub(blipFill, "srcRect", l=src_rect[0], t=src_rect[1], r=src_rect[2], b=src_rect[3])
-
-        # Build a:stretch
-        stretch = a_sub(blipFill, "stretch")
-        a_sub(stretch, "fillRect")
-
-        return to_string(mask)
-
-
-def _extract_rect(value) -> Rect | None:
-    if isinstance(value, Rect):
-        return value
-    return None
-
-
-def _to_thousandth_percent(value: float) -> int:
-    return position_to_ppt(value)
 
 
 def _fallback_sequence(mask_meta: dict) -> tuple[str, ...]:
