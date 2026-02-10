@@ -503,6 +503,7 @@ def test_render_path_with_arrow_markers() -> None:
 
 
 def test_render_path_applies_marker_clip_metadata() -> None:
+    """Non-standard <a:clipPath> is no longer emitted (ECMA-376 compliance)."""
     writer = DrawingMLWriter()
     segments = [LineSegment(Point(0, 0), Point(10, 0))]
     stroke = Stroke(paint=SolidPaint("000000"), width=1.0)
@@ -516,8 +517,10 @@ def test_render_path_applies_marker_clip_metadata() -> None:
 
     xml = writer.render_scene([path]).slide_xml
 
-    assert "<a:clipPath>" in xml
-    assert "<a:path clipFill=\"1\"" in xml
+    # Non-standard element must not appear in output.
+    assert "<a:clipPath>" not in xml
+    # Shape should still render.
+    assert "<p:sp>" in xml
 
 
 def test_shape_navigation_embeds_hyperlink_metadata() -> None:
@@ -569,6 +572,7 @@ def test_text_run_navigation_creates_relationships() -> None:
 
 
 def test_path_clip_path_serialisation() -> None:
+    """Non-standard <a:clipPath> is no longer emitted; clip bounds used for diagnostics."""
     writer = DrawingMLWriter()
     clip_segments = [
         LineSegment(Point(0, 0), Point(10, 0)),
@@ -594,13 +598,18 @@ def test_path_clip_path_serialisation() -> None:
         clip=clip_ref,
     )
 
-    xml = writer.render_scene([path]).slide_xml
+    result = writer.render_scene([path])
 
-    assert "<a:clipPath>" in xml
-    assert xml.count("<a:moveTo>") >= 1
+    # Non-standard element must not appear in output.
+    assert "<a:clipPath>" not in result.slide_xml
+    # Shape still renders.
+    assert "<p:sp>" in result.slide_xml
+    # Clip diagnostic is recorded.
+    assert any("clip1" in msg.lower() or "clip" in msg.lower() for msg in result.assets.diagnostics)
 
 
 def test_mask_approximated_to_clip_path() -> None:
+    """Non-standard <a:mask> no longer emitted; native geometry recorded in diagnostics."""
     writer = DrawingMLWriter()
     mask_def = MaskDefinition(
         mask_id="mask1",
@@ -628,11 +637,16 @@ def test_mask_approximated_to_clip_path() -> None:
 
     result = writer.render_scene([path])
 
-    assert "<a:mask>" in result.slide_xml
-    assert "<a:custGeom>" in result.slide_xml
+    # Non-standard elements must not appear.
+    assert "<a:mask>" not in result.slide_xml
+    # Shape still renders.
+    assert "<p:sp>" in result.slide_xml
+    # Mask diagnostic records the fallback.
+    assert any("mask1" in msg.lower() or "native geometry" in msg.lower() for msg in result.assets.diagnostics)
 
 
 def test_mask_raster_fallback_emits_asset() -> None:
+    """Raster mask asset is registered but non-standard <a:mask> is not emitted."""
     writer = DrawingMLWriter()
     mask_def = MaskDefinition(
         mask_id="mask-raster",
@@ -664,8 +678,9 @@ def test_mask_raster_fallback_emits_asset() -> None:
 
     result = writer.render_scene([path])
 
-    assert "<a:mask" in result.slide_xml
-    assert '<a:blip' in result.slide_xml
+    # Non-standard element must not appear.
+    assert "<a:mask" not in result.slide_xml
+    # Asset is still registered for potential future use.
     mask_assets = list(result.assets.iter_masks())
     assert len(mask_assets) == 1
     asset = mask_assets[0]
@@ -675,6 +690,7 @@ def test_mask_raster_fallback_emits_asset() -> None:
 
 
 def test_mask_policy_emf_emits_asset() -> None:
+    """EMF mask asset is registered but non-standard <a:mask> is not emitted."""
     writer = DrawingMLWriter()
     mask_def = MaskDefinition(
         mask_id="mask-emf",
@@ -712,8 +728,9 @@ def test_mask_policy_emf_emits_asset() -> None:
 
     result = writer.render_scene([path])
 
-    assert "<a:mask" in result.slide_xml
-    assert 'r:embed=' in result.slide_xml
+    # Non-standard element must not appear.
+    assert "<a:mask" not in result.slide_xml
+    # Asset is still registered for potential future use.
     mask_assets = list(result.assets.iter_masks())
     assert len(mask_assets) == 1
     asset = mask_assets[0]
@@ -722,6 +739,7 @@ def test_mask_policy_emf_emits_asset() -> None:
 
 
 def test_mask_policy_prefers_mimic_before_emf() -> None:
+    """Mimic strategy wins over EMF; no non-standard XML emitted, no assets registered."""
     writer = DrawingMLWriter()
     mask_def = MaskDefinition(
         mask_id="mask-mimic",
@@ -755,8 +773,9 @@ def test_mask_policy_prefers_mimic_before_emf() -> None:
 
     result = writer.render_scene([path])
 
-    assert "<a:mask" in result.slide_xml
-    assert '<a:custGeom>' in result.slide_xml
+    # Non-standard element must not appear.
+    assert "<a:mask" not in result.slide_xml
+    # Mimic doesn't register mask assets.
     assert not list(result.assets.iter_masks())
     assert any("mimic fallback emitted" in msg for msg in result.assets.diagnostics)
 def test_apply_mask_alpha_scales_solid_fill_opacity() -> None:
@@ -816,6 +835,124 @@ def test_apply_mask_alpha_removes_mask_ref() -> None:
     assert result.mask is None
     assert result.mask_instance is None
     assert abs(result.fill.opacity - 0.5) < 0.001
+
+
+def test_image_clip_produces_src_rect() -> None:
+    """Image (0,0,100,100) with clip (25,25,50,50) emits srcRect."""
+    writer = DrawingMLWriter()
+    clip_ref = ClipRef(
+        clip_id="clip-crop",
+        bounding_box=Rect(25, 25, 50, 50),
+        clip_rule="nonzero",
+        strategy=ClipStrategy.NATIVE,
+    )
+    image = Image(
+        origin=Point(0, 0),
+        size=Rect(0, 0, 100, 100),
+        data=b"PNG",
+        format="png",
+        clip=clip_ref,
+    )
+
+    result = writer.render_scene([image])
+
+    assert '<a:srcRect l="25000" t="25000" r="25000" b="25000"/>' in result.slide_xml
+
+
+def test_image_clip_applies_ellipse_geometry() -> None:
+    """ClipRef with custom ellipse geometry replaces default rect geometry."""
+    writer = DrawingMLWriter()
+    clip_ref = ClipRef(
+        clip_id="clip-ellipse",
+        bounding_box=Rect(0, 0, 50, 50),
+        clip_rule="nonzero",
+        strategy=ClipStrategy.NATIVE,
+        custom_geometry_xml='<a:prstGeom prst="ellipse"><a:avLst/></a:prstGeom>',
+    )
+    image = Image(
+        origin=Point(0, 0),
+        size=Rect(0, 0, 50, 50),
+        data=b"PNG",
+        format="png",
+        clip=clip_ref,
+    )
+
+    result = writer.render_scene([image])
+
+    assert 'prst="ellipse"' in result.slide_xml
+
+
+def test_image_no_clip_defaults_to_rect() -> None:
+    """Image without clip gets default rectangle geometry."""
+    writer = DrawingMLWriter()
+    image = Image(
+        origin=Point(0, 0),
+        size=Rect(0, 0, 50, 50),
+        data=b"PNG",
+        format="png",
+    )
+
+    result = writer.render_scene([image])
+
+    assert 'prst="rect"' in result.slide_xml
+    assert "<a:srcRect" not in result.slide_xml
+
+
+def test_clipped_path_gets_overlay_pic() -> None:
+    """Path with clip path_segments produces shape + EMF overlay picture."""
+    writer = DrawingMLWriter()
+    clip_segments = (
+        LineSegment(Point(2, 2), Point(8, 2)),
+        LineSegment(Point(8, 2), Point(8, 8)),
+        LineSegment(Point(8, 8), Point(2, 8)),
+        LineSegment(Point(2, 8), Point(2, 2)),
+    )
+    clip_ref = ClipRef(
+        clip_id="clip-overlay",
+        path_segments=clip_segments,
+        bounding_box=Rect(2, 2, 6, 6),
+        clip_rule="nonzero",
+        strategy=ClipStrategy.NATIVE,
+    )
+    path = IRPath(
+        segments=[
+            LineSegment(Point(0, 0), Point(10, 0)),
+            LineSegment(Point(10, 0), Point(10, 10)),
+            LineSegment(Point(10, 10), Point(0, 10)),
+            LineSegment(Point(0, 10), Point(0, 0)),
+        ],
+        fill=SolidPaint("00FF00"),
+        clip=clip_ref,
+    )
+
+    result = writer.render_scene([path])
+
+    # Path shape renders.
+    assert "<p:sp>" in result.slide_xml
+    # Overlay picture renders.
+    assert "<p:pic>" in result.slide_xml
+    # Overlay is an EMF media asset.
+    media = list(result.assets.media)
+    assert any(m.content_type == "image/x-emf" for m in media)
+
+
+def test_unclipped_path_no_overlay() -> None:
+    """Path without clip does not generate an overlay picture."""
+    writer = DrawingMLWriter()
+    path = IRPath(
+        segments=[
+            LineSegment(Point(0, 0), Point(10, 0)),
+            LineSegment(Point(10, 0), Point(10, 10)),
+            LineSegment(Point(10, 10), Point(0, 10)),
+            LineSegment(Point(0, 10), Point(0, 0)),
+        ],
+        fill=SolidPaint("FF0000"),
+    )
+
+    result = writer.render_scene([path])
+
+    assert "<p:sp>" in result.slide_xml
+    assert "<p:pic>" not in result.slide_xml
 
 
 TEST_FONT = "TestSans"

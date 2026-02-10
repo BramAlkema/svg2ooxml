@@ -1,40 +1,58 @@
-"""Tests for clip and mask XML helpers."""
+"""Tests for clip bounds helpers."""
 
 from __future__ import annotations
 
-from svg2ooxml.drawingml.clipmask import mask_xml_for
-from svg2ooxml.ir.geometry import LineSegment, Point, Rect
-from svg2ooxml.ir.scene import MaskDefinition, MaskRef
+from svg2ooxml.drawingml.clipmask import clip_bounds_for, clip_xml_for
+from svg2ooxml.ir.geometry import Rect
+from svg2ooxml.ir.scene import ClipRef, ClipStrategy
 
 
-def test_mask_xml_for_emits_clip_path_geometry() -> None:
-    mask_def = MaskDefinition(
-        mask_id="mask1",
-        bounding_box=Rect(0, 0, 4, 4),
-        segments=(
-            LineSegment(Point(0, 0), Point(4, 0)),
-            LineSegment(Point(4, 0), Point(4, 4)),
-            LineSegment(Point(4, 4), Point(0, 4)),
-            LineSegment(Point(0, 4), Point(0, 0)),
-        ),
+def test_clip_bounds_for_returns_custom_geometry_bounds() -> None:
+    clip_ref = ClipRef(
+        clip_id="clip1",
+        bounding_box=Rect(0, 0, 10, 10),
+        custom_geometry_bounds=Rect(1, 1, 8, 8),
+        clip_rule="nonzero",
+        strategy=ClipStrategy.NATIVE,
     )
-    mask_ref = MaskRef(mask_id="mask1", definition=mask_def)
 
-    xml, diagnostics = mask_xml_for(mask_ref)
+    bounds, diagnostics = clip_bounds_for(clip_ref)
 
-    assert "<a:clipPath>" in xml
-    assert any("clip path geometry" in message for message in diagnostics)
+    assert bounds == Rect(1, 1, 8, 8)
+    assert any("custom geometry" in msg for msg in diagnostics)
 
 
-def test_mask_xml_falls_back_to_bounding_box() -> None:
-    mask_def = MaskDefinition(
-        mask_id="mask2",
-        bounding_box=Rect(1, 2, 3, 4),
-        segments=(),
+def test_clip_bounds_for_falls_back_to_bounding_box() -> None:
+    clip_ref = ClipRef(
+        clip_id="clip2",
+        bounding_box=Rect(2, 3, 4, 5),
+        clip_rule="nonzero",
+        strategy=ClipStrategy.NATIVE,
     )
-    mask_ref = MaskRef(mask_id="mask2", definition=mask_def)
 
-    xml, diagnostics = mask_xml_for(mask_ref)
+    bounds, diagnostics = clip_bounds_for(clip_ref)
 
-    assert "<a:clipPath>" in xml
-    assert any("bounding box" in message for message in diagnostics)
+    assert bounds == Rect(2, 3, 4, 5)
+    assert any("bounding box" in msg for msg in diagnostics)
+
+
+def test_clip_bounds_for_none_returns_none() -> None:
+    bounds, diagnostics = clip_bounds_for(None)
+
+    assert bounds is None
+    assert diagnostics == []
+
+
+def test_clip_xml_for_returns_empty_string() -> None:
+    """Legacy API always returns empty XML string."""
+    clip_ref = ClipRef(
+        clip_id="clip3",
+        bounding_box=Rect(0, 0, 10, 10),
+        clip_rule="nonzero",
+        strategy=ClipStrategy.NATIVE,
+    )
+
+    xml, diagnostics = clip_xml_for(clip_ref)
+
+    assert xml == ""
+    assert len(diagnostics) > 0

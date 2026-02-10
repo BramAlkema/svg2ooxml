@@ -39,13 +39,11 @@ class DrawingMLTextRenderer:
         shape_id: int,
         *,
         hyperlink_xml: str,
-        clip_path_xml: str,
-        mask_xml: str,
     ) -> tuple[str, int]:
         candidate = getattr(element, "wordart_candidate", None)
         metadata = element.metadata if isinstance(element.metadata, dict) else {}
         wordart_meta = metadata.get("wordart") if isinstance(metadata, dict) else {}
-        
+
         # Determine confidence threshold from policy metadata
         policy_text = self._policy_for(metadata, "text")
         detection_meta = policy_text.get("wordart_detection")
@@ -75,8 +73,6 @@ class DrawingMLTextRenderer:
                 policy_for=self._policy_for,
                 logger=self._logger,
                 hyperlink_xml=hyperlink_xml,
-                clip_path_xml=clip_path_xml,
-                mask_xml=mask_xml,
                 register_run_navigation=self._register_run_navigation,
             )
         else:
@@ -87,8 +83,6 @@ class DrawingMLTextRenderer:
                 policy_for=self._policy_for,
                 logger=self._logger,
                 hyperlink_xml=hyperlink_xml,
-                clip_path_xml=clip_path_xml,
-                mask_xml=mask_xml,
                 register_run_navigation=self._register_run_navigation,
             )
 

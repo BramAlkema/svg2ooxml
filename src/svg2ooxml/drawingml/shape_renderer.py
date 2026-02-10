@@ -68,8 +68,6 @@ class DrawingMLShapeRenderer:
         metadata: dict[str, object],
         *,
         hyperlink_xml: str,
-        clip_path_xml: str,
-        mask_xml: str,
     ) -> tuple[str, int] | None:
         # Register pattern tile media before rendering
         element = self._register_pattern_tile(element)
@@ -79,24 +77,24 @@ class DrawingMLShapeRenderer:
             shape_id,
             metadata,
             hyperlink_xml=hyperlink_xml,
-            clip_path_xml=clip_path_xml,
-            mask_xml=mask_xml,
         )
         if filter_fallback is not None:
             return filter_fallback
         element = self._strip_invalid_filter_effects(element)
+
+        # Apply clip bounds approximation (xfrm intersection).
+        element = _apply_clip_bounds(element, metadata)
+
         if isinstance(element, Rectangle):
             rasterized = self._maybe_rasterize(
                 element,
                 shape_id,
                 metadata,
                 hyperlink_xml=hyperlink_xml,
-                clip_path_xml=clip_path_xml,
-                mask_xml=mask_xml,
             )
             if rasterized is not None:
                 return rasterized
-            
+
             # Register for animations
             element_ids = metadata.get("element_ids")
             if isinstance(element_ids, list):
@@ -109,8 +107,6 @@ class DrawingMLShapeRenderer:
                 paint_to_fill=paint_runtime.paint_to_fill,
                 stroke_to_xml=paint_runtime.stroke_to_xml,
                 hyperlink_xml=hyperlink_xml,
-                clip_path_xml=clip_path_xml,
-                mask_xml=mask_xml,
             )
             return xml, shape_id + 1
         if isinstance(element, Circle):
@@ -119,12 +115,10 @@ class DrawingMLShapeRenderer:
                 shape_id,
                 metadata,
                 hyperlink_xml=hyperlink_xml,
-                clip_path_xml=clip_path_xml,
-                mask_xml=mask_xml,
             )
             if rasterized is not None:
                 return rasterized
-            
+
             # Register for animations
             element_ids = metadata.get("element_ids")
             if isinstance(element_ids, list):
@@ -137,8 +131,6 @@ class DrawingMLShapeRenderer:
                 paint_to_fill=paint_runtime.paint_to_fill,
                 stroke_to_xml=paint_runtime.stroke_to_xml,
                 hyperlink_xml=hyperlink_xml,
-                clip_path_xml=clip_path_xml,
-                mask_xml=mask_xml,
             )
             return xml, shape_id + 1
         if isinstance(element, Ellipse):
@@ -147,12 +139,10 @@ class DrawingMLShapeRenderer:
                 shape_id,
                 metadata,
                 hyperlink_xml=hyperlink_xml,
-                clip_path_xml=clip_path_xml,
-                mask_xml=mask_xml,
             )
             if rasterized is not None:
                 return rasterized
-            
+
             # Register for animations
             element_ids = metadata.get("element_ids")
             if isinstance(element_ids, list):
@@ -165,8 +155,6 @@ class DrawingMLShapeRenderer:
                 paint_to_fill=paint_runtime.paint_to_fill,
                 stroke_to_xml=paint_runtime.stroke_to_xml,
                 hyperlink_xml=hyperlink_xml,
-                clip_path_xml=clip_path_xml,
-                mask_xml=mask_xml,
             )
             return xml, shape_id + 1
         if isinstance(element, Line):
@@ -184,8 +172,6 @@ class DrawingMLShapeRenderer:
                 paint_to_fill=paint_runtime.paint_to_fill,
                 policy_for=self._policy_for,
                 hyperlink_xml=hyperlink_xml,
-                clip_path_xml=clip_path_xml,
-                mask_xml=mask_xml,
             )
             return xml, shape_id + 1
         if isinstance(element, Polyline):
@@ -203,8 +189,6 @@ class DrawingMLShapeRenderer:
                 stroke_to_xml=paint_runtime.stroke_to_xml,
                 policy_for=self._policy_for,
                 hyperlink_xml=hyperlink_xml,
-                clip_path_xml=clip_path_xml,
-                mask_xml=mask_xml,
             )
             return xml, shape_id + 1
         if isinstance(element, Polygon):
@@ -222,8 +206,6 @@ class DrawingMLShapeRenderer:
                 stroke_to_xml=paint_runtime.stroke_to_xml,
                 policy_for=self._policy_for,
                 hyperlink_xml=hyperlink_xml,
-                clip_path_xml=clip_path_xml,
-                mask_xml=mask_xml,
             )
             return xml, shape_id + 1
         if isinstance(element, IRPath):
@@ -232,12 +214,10 @@ class DrawingMLShapeRenderer:
                 shape_id,
                 metadata,
                 hyperlink_xml=hyperlink_xml,
-                clip_path_xml=clip_path_xml,
-                mask_xml=mask_xml,
             )
             if rasterized is not None:
                 return rasterized
-            
+
             # Register for animations
             element_ids = metadata.get("element_ids")
             if isinstance(element_ids, list):
@@ -253,14 +233,21 @@ class DrawingMLShapeRenderer:
                 policy_for=self._policy_for,
                 logger=self._logger,
                 hyperlink_xml=hyperlink_xml,
-                clip_path_xml=clip_path_xml,
-                mask_xml=mask_xml,
             )
+            # Clip overlay — white EMF frame with even-odd cutout.
+            overlay = self._maybe_clip_overlay(element, shape_id + 1)
+            if overlay:
+                return xml + "\n" + overlay, shape_id + 2
             return xml, shape_id + 1
         if isinstance(element, Image):
             if element.data is None and element.href is None:
                 self._logger.warning("Image element missing data and href; skipping image")
                 return None
+            # Extract clip geometry for picture shape ("crop to shape").
+            clip_geometry = ""
+            clip = getattr(element, "clip", None)
+            if clip is not None and getattr(clip, "custom_geometry_xml", None):
+                clip_geometry = clip.custom_geometry_xml
             rendered = render_picture(
                 element,
                 shape_id,
@@ -268,8 +255,7 @@ class DrawingMLShapeRenderer:
                 policy_for=self._policy_for,
                 register_media=self._register_media,
                 hyperlink_xml=hyperlink_xml,
-                clip_path_xml=clip_path_xml,
-                mask_xml=mask_xml,
+                geometry_xml=clip_geometry,
             )
             if rendered is None:
                 return None
@@ -285,8 +271,6 @@ class DrawingMLShapeRenderer:
         metadata: dict[str, object],
         *,
         hyperlink_xml: str,
-        clip_path_xml: str,
-        mask_xml: str,
     ) -> tuple[str, int] | None:
         if not isinstance(metadata, dict):
             return None
@@ -390,8 +374,6 @@ class DrawingMLShapeRenderer:
                 policy_for=self._policy_for,
                 register_media=self._register_media,
                 hyperlink_xml=hyperlink_xml,
-                clip_path_xml=clip_path_xml,
-                mask_xml=mask_xml,
             )
             if xml is None:
                 return None
@@ -437,8 +419,6 @@ class DrawingMLShapeRenderer:
         metadata: dict[str, object],
         *,
         hyperlink_xml: str,
-        clip_path_xml: str,
-        mask_xml: str,
     ) -> tuple[str, int] | None:
         gradient_raster = self._needs_gradient_raster(element)
         if self._rasterizer is None:
@@ -485,8 +465,6 @@ class DrawingMLShapeRenderer:
             policy_for=self._policy_for,
             register_media=self._register_media,
             hyperlink_xml=hyperlink_xml,
-            clip_path_xml=clip_path_xml,
-            mask_xml=mask_xml,
         )
         if xml is None:
             return None
@@ -575,6 +553,40 @@ class DrawingMLShapeRenderer:
             if isinstance(paint, RadialGradientPaint) and paint.policy_decision == "rasterize_nonuniform":
                 element.stroke = replace(stroke, paint=self._average_gradient_paint(paint))
 
+    def _maybe_clip_overlay(self, element, overlay_shape_id: int) -> str | None:
+        """Generate a white EMF overlay with an even-odd cutout for clip paths."""
+        clip = getattr(element, "clip", None)
+        if clip is None:
+            return None
+        segments = getattr(clip, "path_segments", None)
+        if not segments:
+            return None
+        bbox = getattr(element, "bbox", None)
+        if bbox is None or bbox.width <= 0 or bbox.height <= 0:
+            return None
+
+        from .clip_overlay import build_clip_overlay_emf
+
+        emf_bytes = build_clip_overlay_emf(bbox, segments)
+        if emf_bytes is None:
+            return None
+
+        overlay_image = Image(
+            origin=Point(bbox.x, bbox.y),
+            size=Rect(0.0, 0.0, bbox.width, bbox.height),
+            data=emf_bytes,
+            format="emf",
+            metadata={"image_source": "clip_overlay"},
+        )
+        return render_picture(
+            overlay_image,
+            overlay_shape_id,
+            template=self._picture_template,
+            policy_for=self._policy_for,
+            register_media=self._register_media,
+            hyperlink_xml="",
+        )
+
     @staticmethod
     def _average_gradient_paint(paint: RadialGradientPaint) -> SolidPaint:
         if not paint.stops:
@@ -599,6 +611,67 @@ class DrawingMLShapeRenderer:
         avg_b = int(round(total_b / count))
         avg_opacity = total_a / count
         return SolidPaint(rgb=f"{avg_r:02X}{avg_g:02X}{avg_b:02X}", opacity=avg_opacity)
+
+
+def _intersect_rects(a: Rect, b: Rect) -> Rect | None:
+    """Return the intersection of two Rects, or None if they don't overlap."""
+    x1 = max(a.x, b.x)
+    y1 = max(a.y, b.y)
+    x2 = min(a.x + a.width, b.x + b.width)
+    y2 = min(a.y + a.height, b.y + b.height)
+    if x2 <= x1 or y2 <= y1:
+        return None
+    return Rect(x1, y1, x2 - x1, y2 - y1)
+
+
+def _apply_clip_bounds(element, metadata: dict[str, object]):
+    """Intersect element bounds with clip bounds for xfrm approximation.
+
+    Consumes ``_clip_bounds`` from *metadata* if present and returns a
+    replacement element with tighter bounds when the element type supports it.
+    """
+    if not isinstance(metadata, dict):
+        return element
+    clip = metadata.pop("_clip_bounds", None)
+    if not isinstance(clip, Rect):
+        return element
+
+    bbox = getattr(element, "bbox", None)
+    if not isinstance(bbox, Rect):
+        return element
+
+    clipped = _intersect_rects(bbox, clip)
+    if clipped is None or clipped == bbox:
+        return element
+
+    if isinstance(element, Rectangle):
+        return replace(element, bounds=clipped)
+
+    if isinstance(element, Image):
+        # Compute srcRect crop percentages (thousandths of percent).
+        w = max(bbox.width, 1e-9)
+        h = max(bbox.height, 1e-9)
+        l_pct = int(max(0.0, (clipped.x - bbox.x) / w) * 100_000)
+        t_pct = int(max(0.0, (clipped.y - bbox.y) / h) * 100_000)
+        r_pct = int(
+            max(0.0, ((bbox.x + bbox.width) - (clipped.x + clipped.width)) / w)
+            * 100_000
+        )
+        b_pct = int(
+            max(0.0, ((bbox.y + bbox.height) - (clipped.y + clipped.height)) / h)
+            * 100_000
+        )
+        new_elem = replace(
+            element,
+            origin=Point(clipped.x, clipped.y),
+            size=Rect(0.0, 0.0, clipped.width, clipped.height),
+        )
+        if any((l_pct, t_pct, r_pct, b_pct)):
+            new_elem.metadata["_src_rect"] = (l_pct, t_pct, r_pct, b_pct)
+        return new_elem
+
+    # Circle, Ellipse, Path — geometry-driven; clip approximation not applied.
+    return element
 
 
 __all__ = ["DrawingMLShapeRenderer"]

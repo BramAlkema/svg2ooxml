@@ -13,7 +13,7 @@
         </a:xfrm>
         <a:prstGeom prst="{PRESET}">
 {AV_LIST}    </a:prstGeom>
-{CLIP_PATH_XML}{MASK_XML}{FILL_XML}{STROKE_XML}{EFFECTS_XML}    </p:spPr>
+{FILL_XML}{STROKE_XML}{EFFECTS_XML}    </p:spPr>
     <p:txBody>
         <a:bodyPr/>
         <a:lstStyle/>

@@ -1,6 +1,6 @@
 # ADR-023: Fix Remaining OOXML Shape Schema Violations
 
-- **Status:** Proposed
+- **Status:** Implemented
 - **Date:** 2026-02-07
 - **Owners:** svg2ooxml team
 - **Depends on:** ADR-020 (animation writer rewrite — proved validation workflow)
@@ -280,3 +280,100 @@ infrastructure pattern.
 
 Phase 1 should be implemented immediately. Phase 2 requires design spikes for geometry
 intersection and rasterization fallback strategies.
+
+## 7. Implementation Notes
+
+### Phase 1C — Family C (9 errors) — Completed (commit `390b720`)
+
+Filter effect schema violations fixed:
+- `clrChange` — added required `<a:clrFrom>` child element
+- `hsl` — removed invalid element from `<a:effectLst>` (documented as known gap)
+- `outerShdw` — deduplicated and enforced CT_EffectList ordering
+
+### Phase 1A — Family B headEnd/tailEnd (10 errors) — Completed
+
+Swapped `headEnd`/`tailEnd` append order in both branches of
+`paint_runtime.py:stroke_to_xml()` to match ECMA-376 CT_LineProperties sequence.
+
+### Phase 2 — Family A clip/mask architecture (78 errors) — Completed
+
+**Strategy:** Remove non-standard `<a:clipPath>` and `<a:mask>` elements entirely.
+These elements are not defined in ECMA-376 and PowerPoint silently strips them during
+repair. Replaced with schema-compliant approximations:
+
+**Changes made:**
+
+1. **Templates** — Removed `{CLIP_PATH_XML}{MASK_XML}` placeholders from all 7 shape
+   templates (rectangle, preset, path, line, picture, text, wordart).
+
+2. **Render pipeline** — Removed `clip_path_xml` and `mask_xml` parameters from the
+   entire render chain: `writer.py` → `shape_renderer.py` → `shapes_runtime.py` →
+   `image.py` → `text_renderer.py`.
+
+3. **clipmask.py** — Replaced `clip_xml_for()` XML generation with `clip_bounds_for()`
+   which returns clip bounding box for xfrm approximation. Removed all `<a:clipPath>`
+   XML generation helpers. Legacy `clip_xml_for()` wrapper kept for backward
+   compatibility (always returns empty string).
+
+4. **mask_writer.py** — All fallback attempt methods (`_attempt_native`,
+   `_attempt_mimic`, `_attempt_emf`, `_attempt_raster`) now return empty XML instead of
+   `<a:mask>` fragments. EMF and raster assets are still registered for potential future
+   use. Removed dead code: `_build_vector_mask_fragment()`,
+   `_build_blip_mask_fragment()`, `_src_rect()`, `_to_thousandth_percent()`.
+
+5. **Clip bounds approximation** — `clip_bounds_for()` extracts clip bounding box from
+   `ClipRef.custom_geometry_bounds` or `ClipRef.bounding_box`. The bounds are stored in
+   element metadata as `_clip_bounds` and applied in `shape_renderer.py` via rectangle
+   intersection for `Rectangle` and `Image` elements using `dataclasses.replace()`.
+
+6. **Marker clip** — `render_path()` no longer generates `<a:clipPath>` for
+   `overflow:hidden` markers. The marker clipping visual effect is lost (documented
+   as known gap).
+
+**Schema-compliant strategies preserved:**
+- **Alpha mask shortcut** — Modifies fill/stroke opacity directly (no XML element)
+- **Hide strategy** — Sets element `opacity=0.0` (no XML element)
+
+### Phase 3 — Native Clip Fidelity (Tricks 4, 5, 6) — Completed
+
+Three ECMA-376 compliant mechanisms restore visual fidelity for clipped content
+without reintroducing any schema violations.
+
+**Trick 4: srcRect on pictures** — When an Image element has a rectangular clip,
+`_apply_clip_bounds()` computes crop percentages (thousandths of percent) and stores
+them as `_src_rect` in Image metadata. `render_picture()` formats these into
+`<a:srcRect l="..." t="..." r="..." b="..."/>` inside `<p:blipFill>`. This is the
+standard ECMA-376 mechanism for image cropping.
+
+**Trick 5: Clip geometry on pictures ("crop to shape")** — The picture template
+(`picture_shape.xml`) now uses `{GEOMETRY_XML}` instead of hardcoded `prst="rect"`.
+When a ClipRef provides `custom_geometry_xml` (preset or custom geometry), it replaces
+the default rectangle, enabling elliptical crops, rounded-rectangle crops, etc.
+
+**Trick 6: EMF cutout overlay** — For Path elements with non-rectangular clip paths,
+a white EMF overlay is generated using even-odd (ALTERNATE) polygon fill. Two contours
+(outer bbox rectangle + inner clip path) create a transparent cutout where the clip
+allows content and an opaque white frame elsewhere. The overlay is placed immediately
+after the original shape as an additional `<p:pic>`.
+
+**Files changed:**
+- `assets/pptx_templates/picture_shape.xml` — `{SRC_RECT_XML}` + `{GEOMETRY_XML}`
+- `src/svg2ooxml/drawingml/image.py` — `geometry_xml` param, srcRect formatting
+- `src/svg2ooxml/drawingml/shape_renderer.py` — srcRect computation, geometry
+  pass-through, `_maybe_clip_overlay()` method
+- `src/svg2ooxml/drawingml/clip_overlay.py` — **NEW** `build_clip_overlay_emf()`
+
+**Overlay limitations:**
+- White overlay only works on white/solid backgrounds
+- Overlay covers shapes behind the target (z-order)
+- Complex bezier paths produce large EMFs after flattening
+
+**Remaining visual gaps:**
+- Non-alpha masks lose visual effect (geometry/pattern masks)
+- Marker overflow clipping lost
+- EMF overlay assumes white background
+
+**Result:** 88 schema violations eliminated (78 clip/mask + 10 headEnd/tailEnd).
+Combined with Family C fix (9 errors), all 97 pre-existing violations resolved.
+Native clip fidelity restored for rectangular image crops, preset-geometry crops,
+and non-rectangular path clips (via overlay).

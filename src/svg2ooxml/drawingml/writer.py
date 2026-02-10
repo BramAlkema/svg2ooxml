@@ -15,7 +15,7 @@ from svg2ooxml.ir.text import TextFrame
 
 from .animation_pipeline import AnimationPipeline
 from .assets import AssetRegistry
-from .clipmask import clip_xml_for
+from .clipmask import clip_bounds_for
 from .generator import EMU_PER_PX, DrawingMLPathGenerator, px_to_emu
 from .mask_pipeline import MaskPipeline
 from .navigation import register_navigation
@@ -509,22 +509,21 @@ class DrawingMLWriter:
             metadata = {}
         self._animation_pipeline.register_mapping(metadata, shape_id)
 
-        clip_xml, clip_diags = clip_xml_for(getattr(element, "clip", None))
-        mask_xml, mask_diags = self._mask_pipeline.render(element)
-        
-        if mask_xml == "<!-- HIDDEN -->":
-            mask_xml = ""
+        # Collect clip bounds + diagnostics (non-standard XML no longer emitted).
+        clip_bounds, clip_diags = clip_bounds_for(getattr(element, "clip", None))
+        _mask_xml, mask_diags = self._mask_pipeline.render(element)
+
+        # Store clip bounds in metadata for xfrm approximation by renderers.
+        if clip_bounds is not None and isinstance(metadata, dict):
+            metadata["_clip_bounds"] = clip_bounds
+
+        if _mask_xml == "<!-- HIDDEN -->":
             if hasattr(element, "opacity"):
                 try:
                     element = replace(element, opacity=0.0)
                 except TypeError:
                     pass
-            # For TextFrame, we rely on mask_xml propagation or handling downstream, 
-            # but TextFrame doesn't support opacity override easily.
-            # However, ShapeRenderer handles other types.
-            # If element is Group, we might need to handle children?
-            # Group has opacity.
-            
+
         # Uniform opacity mask shortcut: multiply alpha into fill/stroke.
         mask_alpha = metadata.pop("_mask_alpha", None) if isinstance(metadata, dict) else None
         if mask_alpha is not None and 0.0 < mask_alpha < 1.0:
@@ -539,16 +538,6 @@ class DrawingMLWriter:
                 },
             )
 
-        if mask_xml:
-            self._trace_writer(
-                "mask_applied",
-                stage="mask",
-                metadata={
-                    "shape_id": shape_id,
-                    "length": len(mask_xml),
-                    "element_type": type(element).__name__,
-                },
-            )
         for message in clip_diags:
             self._assets.add_diagnostic(message)
         for message in mask_diags:
@@ -566,8 +555,6 @@ class DrawingMLWriter:
                 element,
                 shape_id,
                 hyperlink_xml=hyperlink_xml,
-                clip_path_xml=clip_xml,
-                mask_xml=mask_xml,
             )
         if isinstance(element, Group):
             if hyperlink_xml:
@@ -586,8 +573,6 @@ class DrawingMLWriter:
             shape_id,
             metadata,
             hyperlink_xml=hyperlink_xml,
-            clip_path_xml=clip_xml,
-            mask_xml=mask_xml,
         )
         if rendered is not None:
             return rendered

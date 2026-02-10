@@ -64,10 +64,10 @@ def stroke_to_xml(stroke, metadata: Mapping[str, Any] | None = None) -> str:
         # Create ln element with noFill
         ln = a_elem("ln")
         a_sub(ln, "noFill")
-        if tail_elem is not None:
-            ln.append(tail_elem)
         if head_elem is not None:
             ln.append(head_elem)
+        if tail_elem is not None:
+            ln.append(tail_elem)
         return to_string(ln)
 
     width_emu = max(1, px_to_emu(stroke.width))
@@ -118,11 +118,11 @@ def stroke_to_xml(stroke, metadata: Mapping[str, Any] | None = None) -> str:
         else:
             a_sub(ln, "miter")
 
-    # Add markers if present
-    if tail_elem is not None:
-        ln.append(tail_elem)
+    # Add markers if present — ECMA-376 requires headEnd before tailEnd
     if head_elem is not None:
         ln.append(head_elem)
+    if tail_elem is not None:
+        ln.append(tail_elem)
 
     return to_string(ln)
 
