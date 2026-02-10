@@ -15,7 +15,8 @@ def _make_service() -> FilterService:
     return service
 
 
-def test_color_matrix_saturate_produces_effect() -> None:
+def test_color_matrix_saturate_returns_empty_drawingml() -> None:
+    """feColorMatrix(saturate) has no valid effectLst equivalent — returns empty."""
     service = FilterService()
     filter_xml = etree.fromstring(
         "<filter id='cm'><feColorMatrix type='saturate' values='0.5'/></filter>"
@@ -29,7 +30,7 @@ def test_color_matrix_saturate_produces_effect() -> None:
     assert isinstance(first, FilterEffectResult)
     assert first.strategy == "native"
     assert isinstance(first.effect, CustomEffect)
-    assert "satMod" in first.effect.drawingml
+    assert first.effect.drawingml == ""
 
 
 def test_color_matrix_matrix_flags_fallback() -> None:

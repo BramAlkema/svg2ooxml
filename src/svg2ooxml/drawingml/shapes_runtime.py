@@ -701,25 +701,70 @@ def _effect_block(effects: Iterable[Effect]) -> str:
     if not effect_strings:
         return ""
 
-    if len(effect_strings) == 1:
+    # Single effect without effectLst wrapper — return as-is
+    if len(effect_strings) == 1 and "<a:effectLst" not in effect_strings[0]:
         return _format_block(effect_strings[0], "        ")
 
-    combined_parts: list[str] = []
-    for xml in effect_strings:
-        combined_parts.append(_strip_effect_list(xml))
-    combined = "".join(combined_parts)
-    return _format_block(f"<a:effectLst>{combined}</a:effectLst>", "        ")
+    # Merge all effectLst content into one, dedup, filter, and reorder
+    merged = _merge_effect_lists("".join(effect_strings))
+    if not merged:
+        return ""
+    return _format_block(merged, "        ")
 
 
-def _strip_effect_list(xml: str) -> str:
-    start = xml.find("<a:effectLst")
-    if start == -1:
+def _merge_effect_lists(xml: str) -> str:
+    """Merge all top-level effectLst elements into one, dedup and reorder.
+
+    ECMA-376 CT_EffectList (§20.1.8.26) allows only:
+    blur, fillOverlay, glow, innerShdw, outerShdw, prstShdw, reflection, softEdge
+    — each at most once.  Invalid children are dropped.
+    """
+    from lxml import etree
+
+    _NS = "http://schemas.openxmlformats.org/drawingml/2006/main"
+    _EFFLST_TAG = f"{{{_NS}}}effectLst"
+    _VALID_CHILDREN = {
+        f"{{{_NS}}}{local}"
+        for local in [
+            "blur", "fillOverlay", "glow", "innerShdw",
+            "outerShdw", "prstShdw", "reflection", "softEdge",
+        ]
+    }
+    _TAG_ORDER = {f"{{{_NS}}}{local}": i for i, local in enumerate(
+        ["blur", "fillOverlay", "glow", "innerShdw",
+         "outerShdw", "prstShdw", "reflection", "softEdge"]
+    )}
+
+    try:
+        root = etree.fromstring(f'<root xmlns:a="{_NS}">{xml}</root>')
+    except etree.XMLSyntaxError:
         return xml
-    open_end = xml.find(">", start)
-    close = xml.rfind("</a:effectLst>")
-    if open_end == -1 or close == -1:
-        return xml
-    return xml[open_end + 1 : close]
+
+    # Collect valid children from ALL top-level effectLst elements
+    # (keep last occurrence per tag; ignore non-effectLst children and
+    # non-standard effectLst children like alphaModFix)
+    seen: dict[str, etree._Element] = {}
+    for child in root:
+        if child.tag == _EFFLST_TAG:
+            for effect_child in child:
+                if effect_child.tag in _VALID_CHILDREN:
+                    seen[effect_child.tag] = effect_child
+        elif child.tag in _VALID_CHILDREN:
+            # Bare effects without effectLst wrapper
+            seen[child.tag] = child
+
+    if not seen:
+        return ""
+
+    ordered = sorted(seen.values(), key=lambda e: _TAG_ORDER.get(e.tag, 999))
+
+    parts: list[str] = []
+    for elem in ordered:
+        s = etree.tostring(elem, encoding="unicode")
+        s = s.replace(f' xmlns:a="{_NS}"', "")
+        parts.append(s)
+
+    return f"<a:effectLst>{''.join(parts)}</a:effectLst>"
 
 
 def _effect_to_drawingml(effect: Effect) -> str:
