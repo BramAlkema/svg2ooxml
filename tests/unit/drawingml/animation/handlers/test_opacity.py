@@ -111,33 +111,29 @@ class TestBuild:
         sp_tgt = par.find(f".//{{{NS_P}}}spTgt")
         assert sp_tgt.get("spid") == "shape42"
 
-    def test_transition_element(self, handler: OpacityAnimationHandler):
+    def test_transition_attribute(self, handler: OpacityAnimationHandler):
         anim = make_opacity_animation()
         par = handler.build(anim, par_id=4, behavior_id=5)
-        transition = par.find(f".//{{{NS_P}}}transition")
-        assert transition is not None
-        assert transition.get("in") == "1"
-        assert transition.get("out") == "0"
+        anim_effect = par.find(f".//{{{NS_P}}}animEffect")
+        assert anim_effect.get("transition") == "in"
 
     def test_fade_opacity_value(self, handler: OpacityAnimationHandler):
         anim = make_opacity_animation(values=["0", "0.75"])
         par = handler.build(anim, par_id=4, behavior_id=5)
-        fade = par.find(f".//{{{NS_P}}}fade")
-        assert fade is not None
-        # ValueProcessor.parse_opacity returns PPT units as string
-        assert fade.get("opacity") == "75000"
+        anim_effect = par.find(f".//{{{NS_P}}}animEffect")
+        assert "75000" in anim_effect.get("filter")
 
     def test_fade_in(self, handler: OpacityAnimationHandler):
         anim = make_opacity_animation(values=["0", "1"])
         par = handler.build(anim, par_id=4, behavior_id=5)
-        fade = par.find(f".//{{{NS_P}}}fade")
-        assert fade.get("opacity") == "100000"
+        anim_effect = par.find(f".//{{{NS_P}}}animEffect")
+        assert "100000" in anim_effect.get("filter")
 
     def test_fade_out(self, handler: OpacityAnimationHandler):
         anim = make_opacity_animation(values=["1", "0"])
         par = handler.build(anim, par_id=4, behavior_id=5)
-        fade = par.find(f".//{{{NS_P}}}fade")
-        assert fade.get("opacity") == "0"
+        anim_effect = par.find(f".//{{{NS_P}}}animEffect")
+        assert anim_effect.get("filter") == "fade(opacity=0)"
 
     def test_delay_from_begin(self, handler: OpacityAnimationHandler):
         anim = make_opacity_animation(

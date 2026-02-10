@@ -516,62 +516,6 @@ class TestBuildReturnsNone:
 # ------------------------------------------------------------------ #
 
 
-class TestBuildScaleTAVList:
-    def test_returns_empty_for_two_values(self, handler: TransformAnimationHandler):
-        anim = make_transform_animation(values=["1", "2"])
-        scale_pairs = [(1.0, 1.0), (2.0, 2.0)]
-        result = handler._build_scale_tav_list(anim, scale_pairs)
-        assert result == []
-
-    def test_builds_list_for_three_values(self, handler: TransformAnimationHandler):
-        anim = make_transform_animation(values=["1", "1.5", "2"])
-        scale_pairs = [(1.0, 1.0), (1.5, 1.5), (2.0, 2.0)]
-        result = handler._build_scale_tav_list(anim, scale_pairs)
-        assert len(result) == 3
-
-    def test_builds_list_with_explicit_key_times(self, handler: TransformAnimationHandler):
-        anim = make_transform_animation(
-            values=["1", "2"],
-            key_times=[0.0, 1.0],
-        )
-        scale_pairs = [(1.0, 1.0), (2.0, 2.0)]
-        result = handler._build_scale_tav_list(anim, scale_pairs)
-        assert len(result) == 2
-
-
-# ------------------------------------------------------------------ #
-# _build_rotate_tav_list                                              #
-# ------------------------------------------------------------------ #
-
-
-class TestBuildRotateTAVList:
-    def test_returns_empty_for_two_values(self, handler: TransformAnimationHandler):
-        anim = make_transform_animation(
-            transform_type=TransformType.ROTATE, values=["0", "360"]
-        )
-        angles = [0.0, 360.0]
-        result = handler._build_rotate_tav_list(anim, angles, 0.0)
-        assert result == []
-
-    def test_builds_list_for_three_values(self, handler: TransformAnimationHandler):
-        anim = make_transform_animation(
-            transform_type=TransformType.ROTATE, values=["0", "180", "360"]
-        )
-        angles = [0.0, 180.0, 360.0]
-        result = handler._build_rotate_tav_list(anim, angles, 0.0)
-        assert len(result) == 3
-
-    def test_builds_list_with_explicit_key_times(self, handler: TransformAnimationHandler):
-        anim = make_transform_animation(
-            transform_type=TransformType.ROTATE,
-            values=["0", "360"],
-            key_times=[0.0, 1.0],
-        )
-        angles = [0.0, 360.0]
-        result = handler._build_rotate_tav_list(anim, angles, 0.0)
-        assert len(result) == 2
-
-
 # ------------------------------------------------------------------ #
 # _classify_matrix                                                    #
 # ------------------------------------------------------------------ #

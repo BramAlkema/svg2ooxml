@@ -16,7 +16,6 @@ from svg2ooxml.common.conversions.scale import scale_to_ppt
 from svg2ooxml.drawingml.xml_builder import p_elem, p_sub
 from svg2ooxml.ir.animation import TransformType
 
-from ..value_formatters import format_angle_value, format_point_value
 from .base import AnimationHandler
 
 if TYPE_CHECKING:
@@ -132,12 +131,6 @@ class TransformAnimationHandler(AnimationHandler):
             y=str(scale_to_ppt(to_sy)),
         )
 
-        # TAV list for multi-keyframe
-        tav_elements = self._build_scale_tav_list(animation, scale_pairs)
-        if tav_elements:
-            tav_lst = self._xml.build_tav_list_container(tav_elements)
-            anim_scale.append(tav_lst)
-
         return anim_scale
 
     # ------------------------------------------------------------------ #
@@ -167,12 +160,6 @@ class TransformAnimationHandler(AnimationHandler):
             repeat_count=animation.repeat_count,
         )
         anim_rot.append(cBhvr)
-
-        # TAV list for multi-keyframe
-        tav_elements = self._build_rotate_tav_list(animation, angles, start_angle)
-        if tav_elements:
-            tav_lst = self._xml.build_tav_list_container(tav_elements)
-            anim_rot.append(tav_lst)
 
         return anim_rot
 
@@ -215,6 +202,8 @@ class TransformAnimationHandler(AnimationHandler):
         anim_motion.append(cBhvr)
 
         p_sub(anim_motion, "by", x=str(delta_x), y=str(delta_y))
+        # ECMA-376 requires a choice element (by/from/to/rCtr) after cBhvr
+        p_sub(anim_motion, "rCtr", x="0", y="0")
 
         return anim_motion
 
@@ -349,48 +338,6 @@ class TransformAnimationHandler(AnimationHandler):
             return self._build_rotate_element(animation, behavior_id, angles), "entr"
 
         return None, "entr"
-
-    # ------------------------------------------------------------------ #
-    # TAV list helpers                                                     #
-    # ------------------------------------------------------------------ #
-
-    def _build_scale_tav_list(
-        self,
-        animation: AnimationDefinition,
-        scale_pairs: list[tuple[float, float]],
-    ) -> list[etree._Element]:
-        if not scale_pairs or (len(scale_pairs) <= 2 and not animation.key_times):
-            return []
-        scale_strings = [
-            f"{scale_to_ppt(x)} {scale_to_ppt(y)}"
-            for x, y in scale_pairs
-        ]
-        tav_elements, _ = self._tav.build_tav_list(
-            values=scale_strings,
-            key_times=animation.key_times,
-            key_splines=animation.key_splines,
-            duration_ms=animation.duration_ms,
-            value_formatter=format_point_value,
-        )
-        return tav_elements
-
-    def _build_rotate_tav_list(
-        self,
-        animation: AnimationDefinition,
-        angles: list[float],
-        start_angle: float,
-    ) -> list[etree._Element]:
-        if not angles or (len(angles) <= 2 and not animation.key_times):
-            return []
-        angle_deltas = [str(angle - start_angle) for angle in angles]
-        tav_elements, _ = self._tav.build_tav_list(
-            values=angle_deltas,
-            key_times=animation.key_times,
-            key_splines=animation.key_splines,
-            duration_ms=animation.duration_ms,
-            value_formatter=format_angle_value,
-        )
-        return tav_elements
 
     # ------------------------------------------------------------------ #
     # Matrix classification                                                #
