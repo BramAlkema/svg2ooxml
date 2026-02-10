@@ -6,9 +6,6 @@ from dataclasses import dataclass
 
 from lxml import etree
 
-from svg2ooxml.common.conversions.angles import degrees_to_ppt
-from svg2ooxml.common.conversions.scale import scale_to_ppt
-
 # Import centralized XML builders for safe DrawingML generation
 from svg2ooxml.drawingml.xml_builder import a_elem, a_sub, to_string
 from svg2ooxml.filters.base import Filter, FilterContext, FilterResult
@@ -75,29 +72,19 @@ class ColorMatrixFilter(Filter):
 
     def _to_drawingml(self, params: ColorMatrixParams) -> str:
         if params.matrix_type == "saturate":
-            value = params.values[0] if params.values else 1.0
-            sat = max(0, min(scale_to_ppt(value), 200000))
-
-            effectLst = a_elem("effectLst")
-            clrChange = a_sub(effectLst, "clrChange")
-            clrTo = a_sub(clrChange, "clrTo")
-            srgbClr = a_sub(clrTo, "srgbClr", val="FFFFFF")
-            a_sub(srgbClr, "satMod", val=sat)
-            return to_string(effectLst)
+            # <a:clrChange> is valid in CT_Blip, not CT_EffectList.
+            # No valid effectLst equivalent for feColorMatrix(saturate).
+            return ""
 
         if params.matrix_type == "hueRotate":
-            degrees = params.values[0] if params.values else 0.0
-            hue = degrees_to_ppt(degrees % 360)
-
-            effectLst = a_elem("effectLst")
-            hsl = a_sub(effectLst, "hsl")
-            a_sub(hsl, "hue", val=hue)
-            return to_string(effectLst)
+            # No valid OOXML equivalent in effectLst — <a:hsl> is a color
+            # transform, not an effect.  Return empty to avoid schema violation.
+            return ""
 
         if params.matrix_type == "luminanceToAlpha":
-            effectLst = a_elem("effectLst")
-            a_sub(effectLst, "alpha", val="50000")
-            return to_string(effectLst)
+            # <a:alpha> is a color transform, not a valid effectLst child.
+            # No direct OOXML equivalent for luminanceToAlpha in effectLst.
+            return ""
 
         if params.matrix_type == "matrix":
             flattened = " ".join(f"{value:.6g}" for value in params.values[:20])
