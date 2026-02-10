@@ -84,7 +84,8 @@ def test_scale_animation_emits_animscale() -> None:
     assert "<p:animScale" in render_result.slide_xml
 
 
-def test_spline_easing_sets_accel() -> None:
+def test_spline_easing_on_scale_uses_from_to() -> None:
+    """animScale uses from/to attributes — tavLst is schema-invalid for animScale."""
     svg = """
     <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">
       <rect id="rect1" width="10" height="10" fill="#000">
@@ -95,10 +96,13 @@ def test_spline_easing_sets_accel() -> None:
 
     render_result, _, _ = _render(svg)
 
-    assert "accel=\"20000\"" in render_result.slide_xml
+    assert "<p:animScale" in render_result.slide_xml
+    assert "<p:from" in render_result.slide_xml
+    assert "<p:to" in render_result.slide_xml
 
 
-def test_scale_animation_emits_segment_tavs() -> None:
+def test_scale_animation_uses_from_to_not_tavlst() -> None:
+    """ECMA-376 CT_TLAnimateScaleBehavior only allows cBhvr/from/to/by — no tavLst."""
     svg = """
     <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">
       <rect id="rect1" width="10" height="10" fill="#000">
@@ -109,14 +113,12 @@ def test_scale_animation_emits_segment_tavs() -> None:
 
     render_result, _, _ = _render(svg)
 
-    assert render_result.slide_xml.count("<p:tav tm=") >= 3
-    assert 'tm="0"' in render_result.slide_xml
-    assert 'tm="40000"' in render_result.slide_xml   # 0.4 * 100000
-    assert 'tm="100000"' in render_result.slide_xml
-    assert '<p:pt x="150000.0" y="200000.0"' in render_result.slide_xml
-    assert '<p:pt x="50000.0" y="50000.0"' in render_result.slide_xml
-    assert '<p:tavPr accel="' in render_result.slide_xml
-    assert 'svg2:spline=' in render_result.slide_xml
+    # animScale uses first/last values for from/to
+    assert "<p:animScale" in render_result.slide_xml
+    assert "<p:from" in render_result.slide_xml
+    assert "<p:to" in render_result.slide_xml
+    # tavLst is NOT valid in animScale per ECMA-376
+    assert "<p:tavLst" not in render_result.slide_xml
 
 
 def test_rotate_animation_emits_animrot() -> None:
@@ -133,7 +135,8 @@ def test_rotate_animation_emits_animrot() -> None:
     assert "<p:animRot" in render_result.slide_xml
 
 
-def test_rotate_animation_emits_segment_tavs() -> None:
+def test_rotate_animation_uses_by_not_tavlst() -> None:
+    """ECMA-376 CT_TLAnimateRotationBehavior only allows cBhvr + by — no tavLst."""
     svg = """
     <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">
       <rect id="rect1" width="10" height="10" fill="#000">
@@ -144,15 +147,11 @@ def test_rotate_animation_emits_segment_tavs() -> None:
 
     render_result, _, _ = _render(svg)
 
-    assert render_result.slide_xml.count("<p:tav tm=") >= 3
-    assert 'tm="0"' in render_result.slide_xml
-    assert 'tm="25000"' in render_result.slide_xml   # 0.25 * 100000
-    assert 'tm="100000"' in render_result.slide_xml
-    assert '<p:fltVal val="0"/>' in render_result.slide_xml
-    assert '<p:fltVal val="5400000"/>' in render_result.slide_xml
-    assert '<p:fltVal val="10800000"/>' in render_result.slide_xml
-    assert '<p:tavPr accel="' in render_result.slide_xml
-    assert 'svg2:spline=' in render_result.slide_xml
+    assert "<p:animRot" in render_result.slide_xml
+    # animRot uses by= attribute for rotation delta
+    assert 'by="' in render_result.slide_xml
+    # tavLst is NOT valid in animRot per ECMA-376
+    assert "<p:tavLst" not in render_result.slide_xml
 
 
 def test_translate_animation_emits_anim_motion() -> None:
@@ -310,8 +309,8 @@ def test_numeric_animation_tav_list_emitted() -> None:
 
     render_result, _, _ = _render(svg)
 
-    assert render_result.slide_xml.count("<p:tav tm=") >= 3
-    assert '<p:tav tm="0"' in render_result.slide_xml
+    assert render_result.slide_xml.count('tm="') >= 3
+    assert 'tm="0"' in render_result.slide_xml
     assert 'tm="50000"' in render_result.slide_xml    # 0.5 * 100000
     assert 'tm="100000"' in render_result.slide_xml
     assert 'val="0"' in render_result.slide_xml
@@ -334,7 +333,7 @@ def test_color_animation_tav_list_emitted() -> None:
 
     render_result, _, _ = _render(svg)
 
-    assert render_result.slide_xml.count("<p:tav tm=") >= 3
+    assert render_result.slide_xml.count('tm="') >= 3
     assert '<p:tav tm="0"' in render_result.slide_xml
     assert 'tm="25000"' in render_result.slide_xml  # 0.25 * 100000
     assert 'tm="100000"' in render_result.slide_xml

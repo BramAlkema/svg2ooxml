@@ -53,10 +53,9 @@ class OpacityAnimationHandler(AnimationHandler):
         )
         anim_effect.append(cBhvr)
 
-        # Transition and filter
-        p_sub(anim_effect, "transition", **{"in": "1", "out": "0"})
-        filter_elem = p_sub(anim_effect, "filter")
-        p_sub(filter_elem, "fade", opacity=target_opacity)
+        # Filter (ECMA-376: animEffect allows only cBhvr + progress)
+        anim_effect.set("transition", "in")
+        anim_effect.set("filter", f"fade(opacity={target_opacity})")
 
         # Wrap in <p:par>
         return self._xml.build_par_container_elem(

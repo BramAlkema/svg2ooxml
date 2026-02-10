@@ -141,9 +141,19 @@ def to_string(elem: etree._Element) -> str:
 
     xml_str = etree.tostring(elem, encoding="unicode")
 
-    # Strip all xmlns declarations — OOXML fragments are inserted into
-    # documents that already declare these namespaces.
-    xml_str = re.sub(r'\s+xmlns(?::\w+)?="[^"]+"', "", xml_str)
+    # Strip standard OOXML xmlns declarations (a:, p:, r:) — these are
+    # already declared by the parent document.  Preserve custom namespaces
+    # like svg2: that may carry extension attributes.
+    _STANDARD_NS_URIS = {
+        "http://schemas.openxmlformats.org/drawingml/2006/main",
+        "http://schemas.openxmlformats.org/presentationml/2006/main",
+        "http://schemas.openxmlformats.org/officeDocument/2006/relationships",
+    }
+    xml_str = re.sub(
+        r'\s+xmlns(?::(\w+))?="([^"]+)"',
+        lambda m: "" if m.group(2) in _STANDARD_NS_URIS else m.group(0),
+        xml_str,
+    )
 
     return xml_str
 
