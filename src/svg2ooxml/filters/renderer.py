@@ -620,7 +620,7 @@ class FilterRenderer:
                         source = pipeline_state.get(input_name) if input_name else None
                         if source is None and input_name in {"SourceGraphic", "SourceAlpha"}:
                             source = pipeline_state.get(input_name)
-                    pipeline_state[primitive_plan.result_name] = source or promoted_result
+                        pipeline_state[primitive_plan.result_name] = source or promoted_result
                     continue
 
                 if entry_override and entry_override.get("allow_promotion") is False:
