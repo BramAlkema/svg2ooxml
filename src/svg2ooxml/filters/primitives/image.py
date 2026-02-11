@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import io
 import struct
+from pathlib import Path
 from dataclasses import dataclass
 
 from lxml import etree
 
 from svg2ooxml.filters.base import Filter, FilterContext, FilterResult
 from svg2ooxml.filters.utils import build_exporter_hook
+from svg2ooxml.services.image_service import ImageResource, ImageService
 
 XLINK_HREF = "{http://www.w3.org/1999/xlink}href"
 
@@ -81,9 +83,9 @@ class ImageFilter(Filter):
             return None
         services = getattr(context, "services", None)
         image_service = getattr(services, "image_service", None) if services is not None else None
-        if image_service is None:
-            return None
-        resource = image_service.resolve(href)
+        resource = image_service.resolve(href) if image_service is not None else None
+        if resource is None:
+            resource = self._resolve_from_context(href, context)
         if resource is None:
             return None
 
@@ -103,6 +105,59 @@ class ImageFilter(Filter):
         if resource.source:
             asset["source"] = resource.source
         return asset
+
+    def _resolve_from_context(self, href: str, context: FilterContext) -> ImageResource | None:
+        data_resource = ImageService._data_uri_resolver(href)
+        if data_resource is not None:
+            return data_resource
+
+        if self._is_external_href(href):
+            return None
+
+        base_dir = self._resolve_base_dir(context)
+        if base_dir is None:
+            return None
+
+        try:
+            target = Path(href).expanduser()
+            if not target.is_absolute():
+                target = (base_dir / target).resolve()
+            else:
+                target = target.resolve()
+            if not target.is_file():
+                return None
+            if str(target).startswith(str(base_dir)):
+                return ImageResource(data=target.read_bytes(), source="file")
+        except Exception:
+            return None
+        return None
+
+    @staticmethod
+    def _resolve_base_dir(context: FilterContext) -> Path | None:
+        options = context.options if isinstance(context.options, dict) else {}
+        for key in ("base_dir", "source_path", "svg_path", "svg_file"):
+            value = options.get(key)
+            if isinstance(value, str) and value:
+                path = Path(value).expanduser().resolve()
+                return path.parent if path.is_file() else path
+
+        services = getattr(context, "services", None)
+        if services is not None and hasattr(services, "resolve"):
+            for key in ("base_dir", "source_path"):
+                value = services.resolve(key)
+                if isinstance(value, str) and value:
+                    path = Path(value).expanduser().resolve()
+                    return path.parent if path.is_file() else path
+        return None
+
+    @staticmethod
+    def _is_external_href(href: str) -> bool:
+        token = href.strip().lower()
+        if token.startswith(("http://", "https://", "ftp://")):
+            return True
+        if token.startswith("#") or token.startswith("url("):
+            return True
+        return False
 
     def _resource_to_png(
         self,

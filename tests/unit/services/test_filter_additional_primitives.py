@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import base64
+
 from lxml import etree
 
 from svg2ooxml.common.units import px_to_emu
@@ -260,6 +262,35 @@ def test_image_with_href_uses_bitmap_fallback() -> None:
     effect = results[0]
     assert_fallback(effect, modern="bitmap", legacy=None)
     assert effect.effect.drawingml.startswith("<!-- svg2ooxml:image")
+
+
+def test_image_relative_href_resolves_from_source_path(tmp_path) -> None:
+    png_bytes = base64.b64decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNgYAAAAAMAASsJTYQAAAAASUVORK5CYII="
+    )
+    asset_path = tmp_path / "texture.png"
+    asset_path.write_bytes(png_bytes)
+    source_path = tmp_path / "source.svg"
+    source_path.write_text("<svg xmlns='http://www.w3.org/2000/svg'/>")
+
+    service = FilterService()
+    filter_xml = etree.fromstring(
+        "<filter id='f' xmlns:xlink='http://www.w3.org/1999/xlink'>"
+        "<feImage xlink:href='texture.png'/>"
+        "</filter>"
+    )
+    service.register_filter("f", filter_xml)
+
+    results = service.resolve_effects("f", context={"source_path": str(source_path)})
+
+    assert results
+    effect = results[0]
+    assert_fallback(effect, modern="bitmap")
+    assets = effect.metadata.get("fallback_assets")
+    assert assets and assets[0]["type"] == "raster"
+    assert assets[0].get("data") == png_bytes
+    assert effect.metadata.get("image_resolved") is True
+    assert effect.metadata.get("image_source") == "file"
 
 
 def test_composite_over_reuses_native_inputs() -> None:
