@@ -59,6 +59,30 @@ class ColorMatrixFilter(Filter):
                 warnings=["feColorMatrix(matrix) rendered via EMF fallback"],
             )
         if params.matrix_type in {"saturate", "hueRotate", "luminanceToAlpha"}:
+            if params.matrix_type == "saturate":
+                value = params.values[0] if params.values else 1.0
+                if abs(value - 1.0) <= 1e-6:
+                    metadata["native_support"] = True
+                    metadata["no_op"] = True
+                    metadata["reason"] = "identity_saturate"
+                    return FilterResult(
+                        success=True,
+                        drawingml="",
+                        fallback=None,
+                        metadata=metadata,
+                    )
+            if params.matrix_type == "hueRotate":
+                value = params.values[0] if params.values else 0.0
+                if abs(value) <= 1e-6:
+                    metadata["native_support"] = True
+                    metadata["no_op"] = True
+                    metadata["reason"] = "identity_huerotate"
+                    return FilterResult(
+                        success=True,
+                        drawingml="",
+                        fallback=None,
+                        metadata=metadata,
+                    )
             metadata["native_support"] = False
             metadata["fallback_reason"] = f"{params.matrix_type}_requires_raster"
             return FilterResult(

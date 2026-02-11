@@ -41,6 +41,9 @@ class BlendFilter(Filter):
         top_name = params.input_2 or "SourceGraphic"
         base_result = self._lookup_input(pipeline, base_name)
         top_result = self._lookup_input(pipeline, top_name)
+        policy = {}
+        if isinstance(context.options, dict):
+            policy = context.options.get("policy") or {}
 
         metadata = {
             "filter_type": self.filter_type,
@@ -100,19 +103,23 @@ class BlendFilter(Filter):
 
             metadata["native_support"] = False
             metadata["fallback_reason"] = "missing_overlay"
+            approximation_allowed = bool(policy.get("approximation_allowed", True))
+            prefer_rasterization = bool(policy.get("prefer_rasterization", False))
+            fallback = "bitmap" if (approximation_allowed or prefer_rasterization) else "emf"
+            metadata["approximation_allowed"] = approximation_allowed
             if context.tracer:
                 context.tracer.record_decision(
                     element_type="feBlend",
-                    strategy="raster",
-                    reason="Blend overlay not representable; raster fallback",
-                    metadata={"mode": params.mode},
+                    strategy="raster" if fallback == "bitmap" else "emf",
+                    reason=f"Blend overlay not representable; fallback={fallback}",
+                    metadata={"mode": params.mode, "fallback": fallback},
                 )
             return FilterResult(
                 success=True,
                 drawingml="",
-                fallback="bitmap",
+                fallback=fallback,
                 metadata=metadata,
-                warnings=[f"feBlend mode '{params.mode}' rendered via raster fallback"],
+                warnings=[f"feBlend mode '{params.mode}' rendered via {fallback} fallback"],
             )
 
         # Unsupported mode - fallback to EMF

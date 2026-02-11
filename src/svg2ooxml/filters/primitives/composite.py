@@ -413,7 +413,7 @@ class CompositeFilter(Filter):
         if not mask_fragment:
             return "", "mask_empty"
 
-        mask_children = extract_effect_children(mask_fragment) if is_effect_list(mask_fragment) else ""
+        mask_children = extract_effect_children(mask_fragment) if is_effect_list(mask_fragment) else mask_fragment
         if not mask_children:
             return "", "mask_missing_effects"
 

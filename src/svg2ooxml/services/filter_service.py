@@ -333,8 +333,12 @@ class FilterService:
         options: dict[str, Any] = {}
         if isinstance(extra, dict):
             options.update(extra)
-        viewport = None
         services = self._services
+        if "source_path" not in options and services is not None and hasattr(services, "resolve"):
+            source_path = services.resolve("source_path")
+            if isinstance(source_path, str) and source_path:
+                options["source_path"] = source_path
+        viewport = None
         if services is not None:
             width = getattr(services, "viewport_width", None)
             height = getattr(services, "viewport_height", None)

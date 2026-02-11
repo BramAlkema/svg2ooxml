@@ -119,6 +119,13 @@ class IRConverter:
         self._context.reset_tracer()
         self._resources.reset_usage()
 
+        source_path = None
+        if isinstance(result.metadata, dict):
+            source_path = result.metadata.get("source_path")
+        if isinstance(source_path, str) and source_path:
+            if self._services.resolve("source_path") is None:
+                self._services.register("source_path", source_path)
+
         if self._context.policy_context is None and self._context.policy_engine is not None:
             self._context.policy_context = self._context.policy_engine.evaluate()
             self._policy_context = self._context.policy_context
