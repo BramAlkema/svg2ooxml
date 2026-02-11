@@ -48,9 +48,14 @@ def test_visual_server_serves_fixture_listing(tmp_path) -> None:
 
     response = client.get("/")
     assert response.status_code == 200
+    assert 'data-testid="fixture-list"' in response.text
+    assert 'data-testid="fixture-item"' in response.text
     assert "sample.svg" in response.text
 
     compare = client.get("/compare", params={"name": "sample.svg"})
     assert compare.status_code == 200
-    assert "Download PPTX" in compare.text
-    assert "PPTX Render" in compare.text
+    assert 'data-testid="download-links"' in compare.text
+    assert 'data-testid="download-resvg"' in compare.text
+    assert 'data-testid="download-legacy"' in compare.text
+    assert 'data-testid="pane-resvg"' in compare.text
+    assert 'data-testid="pane-legacy"' in compare.text
