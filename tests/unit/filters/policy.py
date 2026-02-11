@@ -22,12 +22,8 @@ def _strict_mode() -> bool:
     return token not in {"0", "false", "no", "off"}
 
 
-POLICY_MODE = _policy_mode()
-STRICT_MODE = _strict_mode()
-
-
 def _select(modern, legacy):
-    if POLICY_MODE == "legacy" and legacy is not None:
+    if _policy_mode() == "legacy" and legacy is not None:
         return legacy
     return modern
 
@@ -40,7 +36,7 @@ def _as_set(value) -> set:
 
 def assert_fallback(obj, *, modern, legacy=None, allow=None) -> None:
     expected = _select(modern, legacy)
-    if allow is not None and not STRICT_MODE:
+    if allow is not None and not _strict_mode():
         expected = _as_set(expected) | _as_set(allow)
     if isinstance(expected, (set, list, tuple)):
         assert obj.fallback in expected
@@ -50,7 +46,7 @@ def assert_fallback(obj, *, modern, legacy=None, allow=None) -> None:
 
 def assert_strategy(obj, *, modern, legacy=None, allow=None) -> None:
     expected = _select(modern, legacy)
-    if allow is not None and not STRICT_MODE:
+    if allow is not None and not _strict_mode():
         expected = _as_set(expected) | _as_set(allow)
     if isinstance(expected, (set, list, tuple)):
         assert obj.strategy in expected
