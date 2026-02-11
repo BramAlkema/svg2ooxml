@@ -407,13 +407,17 @@ class CompositeFilter(Filter):
     ) -> tuple[str, str | None]:
         if mask is None:
             return "", "missing_mask"
+        if isinstance(mask.metadata, dict) and mask.metadata.get("native_support") is False:
+            return "", "mask_missing_effects"
 
         source_fragment = (source.drawingml or "").strip() if source else ""
         mask_fragment = (mask.drawingml or "").strip()
         if not mask_fragment:
             return "", "mask_empty"
 
-        mask_children = extract_effect_children(mask_fragment) if is_effect_list(mask_fragment) else mask_fragment
+        if not is_effect_list(mask_fragment):
+            return "", "mask_missing_effects"
+        mask_children = extract_effect_children(mask_fragment)
         if not mask_children:
             return "", "mask_missing_effects"
 

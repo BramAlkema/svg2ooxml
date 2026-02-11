@@ -419,6 +419,24 @@ class FontLoader:
             if data[:4] != b"wOF2":
                 self._logger.warning("Invalid WOFF2 signature")
                 return None
+            try:
+                reported_length = int.from_bytes(data[8:12], "big")
+                num_tables = int.from_bytes(data[12:14], "big")
+                total_sfnt_size = int.from_bytes(data[16:20], "big")
+                total_compressed_size = int.from_bytes(data[20:24], "big")
+            except Exception:
+                self._logger.warning("Invalid WOFF2 header fields")
+                return None
+
+            if reported_length and reported_length != len(data):
+                self._logger.warning("WOFF2 length mismatch")
+                return None
+            if num_tables == 0 or total_sfnt_size == 0 or total_compressed_size == 0:
+                self._logger.warning("WOFF2 header indicates empty payload")
+                return None
+            if total_compressed_size > len(data) - 48:
+                self._logger.warning("WOFF2 compressed payload size is invalid")
+                return None
 
             with open_font(data, suffix=".woff2") as font:
                 result = generate_font_bytes(font, suffix=".ttf")
