@@ -1,0 +1,2 @@
+# API/runtime dependencies (no heavy render stack).
+-e .[api,cloud,payments,slides]

@@ -12,9 +12,7 @@ from lxml import etree
 from svg2ooxml.drawingml.emf_adapter import PaletteResolver
 from svg2ooxml.drawingml.raster_adapter import RasterAdapter
 from svg2ooxml.filters.base import FilterContext, FilterResult
-from svg2ooxml.filters.planner import FilterPlanner
 from svg2ooxml.filters.registry import FilterRegistry
-from svg2ooxml.filters.renderer import FilterRenderer as FilterPipelineRenderer
 from svg2ooxml.filters.resvg_bridge import (
     ResolvedFilter,
     build_filter_element,
@@ -24,6 +22,8 @@ from svg2ooxml.services.filter_types import FilterEffectResult
 
 if TYPE_CHECKING:  # pragma: no cover - type checking only
     from .conversion import ConversionServices
+    from svg2ooxml.filters.planner import FilterPlanner
+    from svg2ooxml.filters.renderer import FilterRenderer as FilterPipelineRenderer
 
 
 ALLOWED_STRATEGIES = {
@@ -37,6 +37,21 @@ ALLOWED_STRATEGIES = {
     "resvg",
     "resvg-only",
 }
+
+
+def _load_filter_pipeline():
+    try:
+        from svg2ooxml.filters.planner import FilterPlanner
+        from svg2ooxml.filters.renderer import FilterRenderer as FilterPipelineRenderer
+    except Exception as exc:  # pragma: no cover - optional dependency missing
+        return None, None, exc
+    return FilterPlanner, FilterPipelineRenderer, None
+
+
+def _pipeline_warning_message(error: Exception | None) -> str:
+    if error is None:
+        return "optional filter pipeline dependencies are missing"
+    return f"{type(error).__name__}: {error}"
 
 
 
@@ -60,14 +75,11 @@ class FilterService:
         self._logger = logger or logging.getLogger(__name__)
         self._strategy: str = "auto"
         self._palette_resolver: PaletteResolver | None = palette_resolver
-        self._planner = FilterPlanner(logger=self._logger)
-        self._renderer = FilterPipelineRenderer(
-            registry=self._registry,
-            planner=self._planner,
-            logger=self._logger,
-            palette_resolver=palette_resolver,
-            raster_adapter=raster_adapter,
-        )
+        self._raster_adapter = raster_adapter
+        self._planner: FilterPlanner | None = None
+        self._renderer: FilterPipelineRenderer | None = None
+        self._pipeline_error: Exception | None = None
+        self._pipeline_warned = False
 
     # ------------------------------------------------------------------ #
     # Binding & cloning                                                  #
@@ -93,10 +105,16 @@ class FilterService:
         )
         clone._descriptors = dict(self._descriptors)
         clone._materialized_filters = dict(self._materialized_filters)
-        clone._renderer = self._renderer.clone(
-            registry=clone._registry,
-            planner=clone._planner,
-        )
+        clone._raster_adapter = self._raster_adapter
+        clone._pipeline_error = self._pipeline_error
+        clone._pipeline_warned = self._pipeline_warned
+        if self._planner is not None:
+            clone._planner = self._planner
+        if self._renderer is not None and clone._planner is not None:
+            clone._renderer = self._renderer.clone(
+                registry=clone._registry,
+                planner=clone._planner,
+            )
         return clone
 
     # ------------------------------------------------------------------ #
@@ -161,6 +179,9 @@ class FilterService:
 
     def resolve_effects(self, filter_ref: str, *, context: Any | None = None) -> list[FilterEffectResult]:
         """Resolve a filter reference into IR effect objects."""
+        if not self._ensure_pipeline():
+            return self._disabled_effects(filter_ref)
+
         descriptor = self.get(filter_ref)
         if descriptor is None:
             self._logger.debug("Filter %s is not defined; skipping effect resolution", filter_ref)
@@ -271,6 +292,8 @@ class FilterService:
         element: etree._Element,
         context: FilterContext,
     ) -> list[FilterEffectResult]:
+        if self._renderer is None:
+            return []
         return self._renderer.render_native(element, context)
 
     def _render_vector(
@@ -278,6 +301,8 @@ class FilterService:
         element: etree._Element,
         context: FilterContext,
     ) -> list[FilterEffectResult]:
+        if self._renderer is None:
+            return []
         return self._renderer.render_vector(element, context)
 
     def _render_raster(
@@ -288,6 +313,8 @@ class FilterService:
         *,
         strategy: str,
     ) -> list[FilterEffectResult]:
+        if self._renderer is None:
+            return []
         return self._renderer.render_raster(element, context, filter_id, strategy=strategy)
 
     def _render_resvg_filter(
@@ -297,6 +324,8 @@ class FilterService:
         filter_context: FilterContext,
         filter_id: str,
     ) -> FilterEffectResult | None:
+        if self._renderer is None:
+            return None
         options_map = getattr(filter_context, "options", {})
         tracer = options_map.get("tracer") if isinstance(options_map, dict) else None
 
@@ -364,7 +393,8 @@ class FilterService:
         """Install a palette resolver used for EMF fallback rendering."""
 
         self._palette_resolver = resolver
-        self._renderer.set_palette_resolver(resolver)
+        if self._renderer is not None:
+            self._renderer.set_palette_resolver(resolver)
 
     # ------------------------------------------------------------------ #
     # Strategy helpers                                                   #
@@ -374,7 +404,7 @@ class FilterService:
         resolver = self._extract_palette_resolver(services)
         if resolver is not None:
             self.set_palette_resolver(resolver)
-        elif self._palette_resolver is not None:
+        elif self._palette_resolver is not None and self._renderer is not None:
             self._renderer.set_palette_resolver(self._palette_resolver)
 
     def _extract_palette_resolver(self, services: ConversionServices) -> PaletteResolver | None:
@@ -447,14 +477,14 @@ class FilterService:
             normalized = policy_strategy.strip().lower()
             if normalized in ALLOWED_STRATEGIES:
                 if normalized == "native-if-neutral":
-                    if self._planner.descriptor_is_neutral(descriptor):
+                    if self._planner and self._planner.descriptor_is_neutral(descriptor):
                         return "native"
                     return "emf"
                 return normalized
 
         if self._strategy != "auto":
             if self._strategy == "native-if-neutral":
-                if self._planner.descriptor_is_neutral(descriptor):
+                if self._planner and self._planner.descriptor_is_neutral(descriptor):
                     return "native"
                 return "emf"
             return self._strategy
@@ -466,6 +496,8 @@ class FilterService:
         existing_results: list[FilterEffectResult],
         emf_results: list[FilterEffectResult],
     ) -> list[FilterEffectResult]:
+        if self._renderer is None:
+            return existing_results
         return self._renderer.attach_emf_metadata(existing_results, emf_results)
 
     def _attach_raster_metadata(
@@ -473,6 +505,8 @@ class FilterService:
         existing_results: list[FilterEffectResult],
         raster_results: list[FilterEffectResult],
     ) -> None:
+        if self._renderer is None:
+            return
         self._renderer.attach_raster_metadata(existing_results, raster_results)
 
     def _materialize_filter(self, filter_id: str, descriptor: ResolvedFilter) -> etree._Element:
@@ -523,6 +557,8 @@ class FilterService:
         *,
         strategy_hint: str,
     ) -> list[FilterEffectResult] | None:
+        if self._renderer is None:
+            return None
         return self._renderer.descriptor_fallback(
             dict(descriptor) if isinstance(descriptor, Mapping) else None,
             dict(bounds) if isinstance(bounds, Mapping) else None,
@@ -535,7 +571,48 @@ class FilterService:
         context: FilterContext,
         descriptor: ResolvedFilter | None,
     ) -> tuple[dict[str, Any] | None, dict[str, float | Any] | None]:
+        if self._planner is None:
+            return None, None
         return self._planner.descriptor_payload(context, descriptor)
+
+    def _ensure_pipeline(self) -> bool:
+        if self._renderer is not None and self._planner is not None:
+            return True
+        planner_cls, renderer_cls, error = _load_filter_pipeline()
+        if error or planner_cls is None or renderer_cls is None:
+            self._pipeline_error = error
+            if not self._pipeline_warned:
+                self._logger.warning(
+                    "Filter pipeline unavailable (%s). Install svg2ooxml[render] for full filter support.",
+                    _pipeline_warning_message(error),
+                )
+                self._pipeline_warned = True
+            return False
+        self._pipeline_error = None
+        self._planner = planner_cls(logger=self._logger)
+        self._renderer = renderer_cls(
+            registry=self._registry,
+            planner=self._planner,
+            logger=self._logger,
+            palette_resolver=self._palette_resolver,
+            raster_adapter=self._raster_adapter,
+        )
+        return True
+
+    def _disabled_effects(self, filter_ref: str) -> list[FilterEffectResult]:
+        metadata = {
+            "filter_id": filter_ref,
+            "disabled": True,
+            "reason": _pipeline_warning_message(self._pipeline_error),
+        }
+        return [
+            FilterEffectResult(
+                effect=None,
+                strategy="emf",
+                fallback="emf",
+                metadata=metadata,
+            )
+        ]
 
 
 __all__ = ["FilterService"]

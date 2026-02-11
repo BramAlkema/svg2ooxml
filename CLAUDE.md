@@ -9,7 +9,7 @@ svg2ooxml converts SVG markup into Office Open XML (PPTX) files. It parses SVG, 
 ## Build & Setup
 
 ```bash
-./tools/bootstrap_venv.sh          # creates Python 3.11 venv
+./tools/bootstrap_venv.sh          # creates Python 3.13 venv
 source .venv/bin/activate
 pip install -r requirements-dev.txt # editable install with all extras + tooling
 ```
@@ -87,7 +87,7 @@ Tests mirror production code: `tests/unit/`, `tests/integration/`, `tests/visual
 
 ## Project-Specific Notes
 
-- Python >=3.10, targets py310 for ruff/black/mypy.
+- Python >=3.13, targets py313 for ruff/black/mypy.
 - The GCP project (`powerful-layout-467812-p1`) was deleted 2026-01-16 — Cloud Run and related CI/CD are currently non-functional.
 - `SVG2OOXML_SOFFICE_PATH` env var overrides LibreOffice binary path; `SVG2OOXML_SOFFICE_USER_INSTALL` sets a custom profile dir if headless soffice crashes.
 - ADRs in `docs/adr/` document key architectural decisions (resvg strategy, EMF fallbacks, queue/cache, gcloud setup).

@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 
-# Ensure a Python 3.11 virtual environment exists and has dev dependencies.
+# Ensure a Python 3.13 virtual environment exists and has dev dependencies.
 # Usage: ./tools/bootstrap_venv.sh [--force]
 
 set -euo pipefail
 
-PYTHON_BIN=${PYTHON_BIN:-python3.11}
+PYTHON_BIN=${PYTHON_BIN:-python3.13}
 VENV_DIR=${VENV_DIR:-.venv}
 FORCE=0
 
@@ -25,7 +25,7 @@ done
 
 if ! command -v "$PYTHON_BIN" >/dev/null 2>&1; then
     echo "ERROR: $PYTHON_BIN is not available on PATH." >&2
-    echo "Install Python 3.11 or set PYTHON_BIN to the desired interpreter." >&2
+    echo "Install Python 3.13 or set PYTHON_BIN to the desired interpreter." >&2
     exit 1
 fi
 
@@ -36,18 +36,18 @@ verify_venv_python() {
     fi
     local version
     version=$(grep -E '^version = ' "$cfg" | awk '{print $3}')
-    [[ "$version" == 3.11.* ]]
+    [[ "$version" == 3.13.* ]]
 }
 
 if [[ -d "$VENV_DIR" ]]; then
     if verify_venv_python "$VENV_DIR"; then
-        echo "✔ Using existing Python 3.11 virtualenv at $VENV_DIR"
+        echo "✔ Using existing Python 3.13 virtualenv at $VENV_DIR"
     else
         if [[ "$FORCE" -eq 1 ]]; then
-            echo "ℹ Removing $VENV_DIR (not a Python 3.11 environment)"
+            echo "ℹ Removing $VENV_DIR (not a Python 3.13 environment)"
             rm -rf "$VENV_DIR"
         else
-            echo "ERROR: $VENV_DIR exists but is not a Python 3.11 environment." >&2
+            echo "ERROR: $VENV_DIR exists but is not a Python 3.13 environment." >&2
             echo "Re-run with --force or remove the directory manually." >&2
             exit 1
         fi

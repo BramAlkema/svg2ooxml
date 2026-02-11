@@ -2,7 +2,7 @@
 
 > **Note (2026-01-16):** GCP project `powerful-layout-467812-p1` was deleted to stop billing charges. The Cloud Run service is no longer available. Can be restored within 30 days via `gcloud projects undelete powerful-layout-467812-p1`.
 
-SVG → Office Open XML conversion toolkit. The project is an evolution of the
+SVG → Office Open XML conversion toolkit (requires Python 3.13+). The project is an evolution of the
 internal svg2pptx converter and is being rebuilt around a small, well-typed
 core that can run locally without GCP dependencies.
 
@@ -18,9 +18,15 @@ core that can run locally without GCP dependencies.
 source .venv/bin/activate
 ```
 
-The developer requirements install svg2ooxml in editable mode with all runtime
-extras (API, worker, cloud, rendering, colour, slides) plus linting and test
-tooling. For a lean runtime-only stack use `pip install -r requirements.txt`.
+The developer requirements install svg2ooxml in editable mode with the full
+runtime extras (API, cloud, render, color, slides, payments, visual-testing)
+plus linting and test tooling. For leaner installs, use:
+
+- `requirements.txt` for the Cloud Run API tier (same as `requirements-api.txt`).
+- `requirements-core.txt` for the core converter only.
+- `requirements-api.txt` for the API tier (no render stack).
+- `requirements-render.txt` for render/visual tooling.
+- `requirements-full.txt` for the complete stack.
 
 ## Local Development
 
@@ -103,8 +109,9 @@ and `slides_presentation_id` when the Slides promotion succeeds.
   deployment once you complete the steps in [ADR-016](docs/adr/ADR-016-gcloud-client-setup.md).
 
 The `pyproject.toml` declares optional extras—mix and match via
-`pip install -e .[api]`, `.[worker]`, `.[cloud]`, `.[render]`, `.[color]`, or
-`.[slides]` if you only need a subset of the runtime stack.
+`pip install -e .[api]`, `.[cloud]`, `.[render]`, `.[color]`, `.[slides]`,
+`.[payments]`, or `.[visual-testing]` if you only need a subset of the runtime
+stack.
 
 ## Project Layout
 

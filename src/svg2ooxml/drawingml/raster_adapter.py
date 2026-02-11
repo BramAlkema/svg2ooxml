@@ -9,13 +9,20 @@ from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any
 
-import numpy as np
 from lxml import etree
 
 try:  # pragma: no cover - skia optional during transition
     import skia  # type: ignore
 except Exception:  # pragma: no cover - gracefully degrade without skia
     skia = None
+
+try:  # pragma: no cover - numpy optional for lightweight deployments
+    import numpy as np
+
+    NUMPY_AVAILABLE = True
+except Exception:  # pragma: no cover - optional dependency
+    np = None  # type: ignore[assignment]
+    NUMPY_AVAILABLE = False
 
 
 @dataclass
@@ -74,7 +81,7 @@ class RasterAdapter:
         primitive_units = (descriptor or {}).get("primitive_units")
         complexity = max(1, len(primitive_tags)) if primitive_tags else 1
 
-        if skia is None:
+        if skia is None or not NUMPY_AVAILABLE:
             return self.generate_placeholder(
                 width_px=default_size[0],
                 height_px=default_size[1],
@@ -174,7 +181,7 @@ class RasterAdapter:
         height_px: int,
         context=None,
     ):
-        if skia is None:
+        if skia is None or not NUMPY_AVAILABLE:
             return None
         try:
             from svg2ooxml.core.resvg.normalizer import normalize_svg_string
@@ -671,6 +678,8 @@ class RasterAdapter:
 
 def _surface_to_png(surface) -> bytes:
     rgba = surface.to_rgba8()
+    if not NUMPY_AVAILABLE:
+        raise RuntimeError("numpy is required to encode raster surfaces")
     if rgba.dtype != np.uint8:
         rgba = rgba.astype(np.uint8, copy=False)
     height, width, _ = rgba.shape
