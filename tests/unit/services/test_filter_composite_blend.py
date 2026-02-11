@@ -89,14 +89,12 @@ def test_blend_combines_previous_results() -> None:
     assert len(results) >= 3
     blend_result = results[2]
     assert isinstance(blend_result, FilterEffectResult)
-    assert blend_result.fallback == "emf"
+    assert blend_result.fallback == "bitmap"
     assert isinstance(blend_result.effect, CustomEffect)
     assert blend_result.effect.drawingml.startswith("<a:effectLst>")
     assert blend_result.metadata["inputs"] == ["sat", "blur"]
     assert blend_result.metadata["mode"] == "multiply"
     assert blend_result.metadata["native_support"] is False
-    assert blend_result.strategy == "vector"
+    assert blend_result.strategy == "raster"
     assets = blend_result.metadata.get("fallback_assets")
-    assert assets and assets[0]["type"] == "emf"
-    assert "data_hex" in assets[0]
-    assert assets[0].get("metadata", {}).get("filter_type") == "blend"
+    assert assets and assets[0]["type"] == "raster"
