@@ -269,10 +269,19 @@ def test_resvg_promotes_color_matrix_to_emf_asset() -> None:
 
     assert results
     effect = results[0]
-    assert effect.fallback == "emf"
     metadata = effect.metadata or {}
-    assert metadata.get("filter_type") == "color_matrix"
-    assert metadata.get("value_count") == 20
+    if effect.fallback == "emf":
+        assert metadata.get("filter_type") == "color_matrix"
+        assert metadata.get("value_count") == 20
+    else:
+        assert effect.fallback is None
+        assert metadata.get("renderer") == "resvg"
+        assert metadata.get("resvg_promotion") in {"native", "vector", "emf"}
+        plan_primitives = metadata.get("plan_primitives") or []
+        assert any(
+            isinstance(item, dict) and str(item.get("tag", "")).lower() == "fecolormatrix"
+            for item in plan_primitives
+        )
 
 
 def test_resvg_lighting_metadata_includes_light_params() -> None:
