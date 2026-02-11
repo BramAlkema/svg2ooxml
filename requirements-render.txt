@@ -1,0 +1,2 @@
+# Rendering/visual tooling dependencies.
+-e .[render,color,visual-testing]

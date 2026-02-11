@@ -1,0 +1,2 @@
+# Minimal runtime dependencies (core conversion only).
+-e .

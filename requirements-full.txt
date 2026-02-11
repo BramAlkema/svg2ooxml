@@ -1,0 +1,2 @@
+# Full stack dependencies (API + render + visual tooling).
+-e .[api,cloud,payments,slides,render,color,visual-testing]
