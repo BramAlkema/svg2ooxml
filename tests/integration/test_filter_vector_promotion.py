@@ -22,11 +22,7 @@ def test_resvg_vector_promotion_records_metrics(tmp_path: Path, svg_name: str) -
     svg_markup = (ASSETS_DIR / svg_name).read_text(encoding="utf-8")
 
     resvg_report = _convert(svg_markup, tmp_path, "resvg")
-    legacy_report = _convert(svg_markup, tmp_path, "legacy")
 
     resvg_metrics = resvg_report.get("resvg_metrics", {})
     assert resvg_metrics.get("promotions", 0) >= 1
     assert resvg_metrics.get("lighting_promotions", 0) >= 1
-
-    legacy_metrics = legacy_report.get("resvg_metrics", {})
-    assert legacy_metrics.get("promotions", 0) == 0

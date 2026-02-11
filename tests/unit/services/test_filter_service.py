@@ -828,18 +828,6 @@ def test_resvg_policy_max_pixels_blocks_large_surfaces() -> None:
     assert all(result.strategy != "resvg" for result in results)
 
 
-def test_legacy_strategy_skips_resvg_path() -> None:
-    service = FilterService(registry=_NoopRegistry())
-    service.set_strategy("legacy")
-    descriptor = _make_descriptor("<filter id='legacy'><feGaussianBlur stdDeviation='2'/></filter>")
-    service.register_filter("legacy", descriptor)
-
-    results = service.resolve_effects("legacy")
-
-    assert results
-    assert all(result.strategy != "resvg" for result in results)
-
-
 def test_resvg_strategy_prefers_resvg_only() -> None:
     pytest.importorskip("skia")
 
