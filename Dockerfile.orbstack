@@ -4,7 +4,10 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PIP_NO_CACHE_DIR=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    SVG2OOXML_FONT_CACHE_DIR=/var/cache/svg2ooxml/fonts \
+    SVG2OOXML_TEMP_DIR=/var/tmp/svg2ooxml \
+    SVG2OOXML_REPORTS_DIR=/workspace/reports
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 \
