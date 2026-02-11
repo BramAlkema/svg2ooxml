@@ -15,8 +15,8 @@ def _make_service() -> FilterService:
     return service
 
 
-def test_color_matrix_saturate_returns_empty_drawingml() -> None:
-    """feColorMatrix(saturate) has no valid effectLst equivalent — returns empty."""
+def test_color_matrix_saturate_uses_raster_fallback() -> None:
+    """feColorMatrix(saturate) has no valid effectLst equivalent — uses raster fallback."""
     service = FilterService()
     filter_xml = etree.fromstring(
         "<filter id='cm'><feColorMatrix type='saturate' values='0.5'/></filter>"
@@ -28,9 +28,10 @@ def test_color_matrix_saturate_returns_empty_drawingml() -> None:
     assert results
     first = results[0]
     assert isinstance(first, FilterEffectResult)
-    assert first.strategy == "native"
+    assert first.fallback == "bitmap"
+    assert first.strategy == "raster"
     assert isinstance(first.effect, CustomEffect)
-    assert first.effect.drawingml == ""
+    assert first.effect.drawingml.startswith("<a:effectLst>")
 
 
 def test_color_matrix_matrix_flags_fallback() -> None:
