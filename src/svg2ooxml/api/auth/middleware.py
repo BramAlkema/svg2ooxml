@@ -5,7 +5,7 @@ import logging
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from .firebase import verify_id_token
+from .firebase import get_firestore_client, verify_id_token
 
 logger = logging.getLogger(__name__)
 
@@ -100,7 +100,41 @@ async def verify_firebase_token_with_scopes(
     """
     user_info = await verify_firebase_token(credentials)
 
-    # TODO: Implement scope checking if needed
-    # This requires storing granted scopes with the token
+    if not required_scopes:
+        return user_info
 
+    try:
+        db = get_firestore_client()
+        doc = db.collection("users").document(user_info["uid"]).get()
+    except Exception as e:
+        logger.warning("Failed to fetch user scopes: %s", e)
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="OAuth scopes unavailable for this user",
+        ) from e
+
+    if not getattr(doc, "exists", False):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="OAuth scopes not found for this user",
+        )
+
+    data = doc.to_dict() or {}
+    oauth = data.get("google_oauth") if isinstance(data, dict) else {}
+    scopes_raw = oauth.get("scopes") if isinstance(oauth, dict) else None
+    if isinstance(scopes_raw, str):
+        granted = {scope for scope in scopes_raw.split() if scope}
+    elif isinstance(scopes_raw, (list, tuple, set)):
+        granted = {str(scope) for scope in scopes_raw if scope}
+    else:
+        granted = set()
+
+    missing = [scope for scope in (required_scopes or []) if scope not in granted]
+    if missing:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Missing OAuth scopes: {', '.join(missing)}",
+        )
+
+    user_info["oauth_scopes"] = sorted(granted)
     return user_info

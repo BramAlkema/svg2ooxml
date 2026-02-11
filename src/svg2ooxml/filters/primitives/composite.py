@@ -116,7 +116,12 @@ class CompositeFilter(Filter):
             # Record telemetry for masking operators
             tracer = getattr(context, "tracer", None)
             if tracer:
-                strategy = "native" if drawingml else "emf"
+                if drawingml:
+                    strategy = "native"
+                elif fallback in {"mask_empty", "mask_missing_effects", "missing_mask"}:
+                    strategy = "raster"
+                else:
+                    strategy = "emf"
 
                 # Build reason string that clearly distinguishes success vs fallback
                 if drawingml:
@@ -148,12 +153,20 @@ class CompositeFilter(Filter):
                     },
                 )
 
+            fallback_mode = None
+            warnings: tuple[str, ...] = ()
+            if not drawingml:
+                if fallback in {"mask_empty", "mask_missing_effects", "missing_mask"}:
+                    fallback_mode = "bitmap"
+                    warnings = (f"feComposite mask fallback: {fallback}",)
+                else:
+                    fallback_mode = "emf"
             return FilterResult(
                 success=True,
                 drawingml=drawingml,
-                fallback=None if drawingml else "emf",
+                fallback=fallback_mode,
                 metadata=metadata,
-                warnings=(),
+                warnings=warnings,
             )
 
         if params.operator == "arithmetic":

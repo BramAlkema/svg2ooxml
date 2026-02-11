@@ -98,6 +98,23 @@ class BlendFilter(Filter):
                     warnings=warnings,
                 )
 
+            metadata["native_support"] = False
+            metadata["fallback_reason"] = "missing_overlay"
+            if context.tracer:
+                context.tracer.record_decision(
+                    element_type="feBlend",
+                    strategy="raster",
+                    reason="Blend overlay not representable; raster fallback",
+                    metadata={"mode": params.mode},
+                )
+            return FilterResult(
+                success=True,
+                drawingml="",
+                fallback="bitmap",
+                metadata=metadata,
+                warnings=[f"feBlend mode '{params.mode}' rendered via raster fallback"],
+            )
+
         # Unsupported mode - fallback to EMF
         metadata["native_support"] = False
         metadata["fallback_reason"] = f"mode:{params.mode}"

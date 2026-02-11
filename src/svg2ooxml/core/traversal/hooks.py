@@ -288,7 +288,7 @@ class TraversalHooksMixin:
                     },
                 )
 
-        selected_result = effect_results[-1]
+        selected_result = self._select_filter_result(effect_results)
         chosen_strategy = selected_result.strategy
         fallback_mode = selected_result.fallback
 
@@ -308,7 +308,9 @@ class TraversalHooksMixin:
         if len(effect_results) > 1:
             assets = selected_meta.setdefault("fallback_assets", [])
             if isinstance(assets, list):
-                for prior in effect_results[:-1]:
+                for prior in effect_results:
+                    if prior is selected_result:
+                        continue
                     prior_assets = (
                         prior.metadata.get("fallback_assets") if isinstance(prior.metadata, dict) else None
                     )
@@ -366,6 +368,36 @@ class TraversalHooksMixin:
             filter_entry.setdefault("bounds", bbox_dict)
         if descriptor_payload is not None:
             filter_entry.setdefault("descriptor", descriptor_payload)
+
+    def _select_filter_result(self, results: list[FilterEffectResult]) -> FilterEffectResult:
+        if not results:
+            return FilterEffectResult(
+                effect=CustomEffect(drawingml=""),
+                strategy="raster",
+                metadata={},
+                fallback="bitmap",
+            )
+
+        def _score(index: int, result: FilterEffectResult) -> tuple[int, int, int, int]:
+            meta = result.metadata if isinstance(result.metadata, dict) else {}
+            no_op = bool(meta.get("no_op"))
+            fallback = result.fallback
+            fallback_none = fallback is None
+            strategy = (result.strategy or "").lower()
+            rank_map = {
+                "native": 4,
+                "resvg": 3,
+                "vector": 2,
+                "emf": 2,
+                "raster": 1,
+                "legacy": 0,
+                "auto": 0,
+            }
+            rank = rank_map.get(strategy, 0)
+            return (0 if no_op else 1, 1 if fallback_none else 0, rank, index)
+
+        best_index, _ = max(enumerate(results), key=lambda item: _score(item[0], item[1]))
+        return results[best_index]
 
     def _collect_group_effect_targets(
         self,
