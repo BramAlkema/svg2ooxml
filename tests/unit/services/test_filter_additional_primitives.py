@@ -298,7 +298,10 @@ def test_diffuse_lighting_captures_light_source() -> None:
     assert results
     effect = results[0]
     assert effect.metadata.get("filter_type") == "diffuse_lighting"
-    assert effect.metadata.get("native_support") is False
+    if effect.metadata.get("approximation") == "glow" and effect.fallback is None:
+        assert effect.metadata.get("native_support") is True
+    else:
+        assert effect.metadata.get("native_support") is False
     assert effect.fallback == "raster"
     assert effect.strategy == "raster"
     assets = effect.metadata.get("fallback_assets")
