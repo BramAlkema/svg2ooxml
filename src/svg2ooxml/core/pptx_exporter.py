@@ -101,7 +101,7 @@ class SvgToPptxExporter:
             timeline_sampler: Optional timeline sampler
             timeline_config: Optional timeline config
             filter_strategy: Optional filter strategy
-            geometry_mode: Geometry extraction mode: "legacy" or "resvg".
+            geometry_mode: Geometry extraction mode: "legacy", "resvg", or "resvg-only".
                           Defaults to "resvg". Can also be set via
                           SVG2OOXML_GEOMETRY_MODE environment variable.
         """
@@ -123,10 +123,10 @@ class SvgToPptxExporter:
             self._geometry_mode = os.environ.get("SVG2OOXML_GEOMETRY_MODE", "resvg")
 
         # Validate geometry_mode
-        if self._geometry_mode not in ("legacy", "resvg"):
+        if self._geometry_mode not in ("legacy", "resvg", "resvg-only"):
             raise ValueError(
                 f"Invalid geometry_mode: {self._geometry_mode!r}. "
-                f"Must be 'legacy' or 'resvg'."
+                f"Must be 'legacy', 'resvg', or 'resvg-only'."
             )
 
         env_slide_mode = os.environ.get("SVG2OOXML_SLIDE_SIZE_MODE")

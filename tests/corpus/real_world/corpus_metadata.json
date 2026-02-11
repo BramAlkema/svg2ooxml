@@ -40,6 +40,11 @@
       "expected_native_rate": 0.90,
       "expected_emf_rate": 0.08,
       "expected_raster_rate": 0.02,
+      "policy_overrides": {
+        "geometry": {
+          "max_complexity": 1.0
+        }
+      },
       "notes": "Simple vector art should render mostly natively. Clip paths supported.",
       "features": ["complex_paths", "clip_paths", "stroke_styles", "fill_patterns"],
       "complexity": "low",

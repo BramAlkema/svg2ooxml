@@ -36,8 +36,9 @@ TEST_SVG = """<?xml version="1.0" encoding="UTF-8"?>
 class TestGeometryModePropagation:
     """Test suite for geometry_mode policy propagation."""
 
-    def test_default_geometry_mode_is_resvg(self):
+    def test_default_geometry_mode_is_resvg(self, monkeypatch: pytest.MonkeyPatch):
         """Test that the default geometry_mode is 'resvg'."""
+        monkeypatch.delenv("SVG2OOXML_GEOMETRY_MODE", raising=False)
         exporter = SvgToPptxExporter()
         assert exporter._geometry_mode == "resvg"
 
@@ -45,6 +46,11 @@ class TestGeometryModePropagation:
         """Test setting geometry_mode via parameter."""
         exporter = SvgToPptxExporter(geometry_mode="resvg")
         assert exporter._geometry_mode == "resvg"
+
+    def test_resvg_only_geometry_mode_parameter(self):
+        """Test setting geometry_mode to resvg-only via parameter."""
+        exporter = SvgToPptxExporter(geometry_mode="resvg-only")
+        assert exporter._geometry_mode == "resvg-only"
 
     def test_geometry_mode_from_environment_variable(self):
         """Test setting geometry_mode via environment variable."""
@@ -180,7 +186,7 @@ class TestGeometryModePropagation:
         assert geometry_options.get("geometry_mode") == "resvg"
         assert geometry_options.get("max_segments") == 2000
 
-    def test_end_to_end_policy_flow(self):
+    def test_end_to_end_policy_flow(self, monkeypatch: pytest.MonkeyPatch):
         """Test complete policy flow from exporter to IRConverter-like access.
 
         This verifies the complete flow:
@@ -191,8 +197,9 @@ class TestGeometryModePropagation:
         """
         from svg2ooxml.core.ir.policy_hooks import PolicyHooksMixin
         from svg2ooxml.policy.setup import build_policy_engine
-
+    
         # Step 1: Create exporter with default geometry_mode (should be "resvg")
+        monkeypatch.delenv("SVG2OOXML_GEOMETRY_MODE", raising=False)
         exporter = SvgToPptxExporter()
         assert exporter._geometry_mode == "resvg"
 
