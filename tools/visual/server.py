@@ -64,7 +64,8 @@ def create_app(
     async def index() -> HTMLResponse:
         fixtures = _discover_fixtures(fixture_root)
         fixture_items = "".join(
-            f'<li><a href="/compare?name={html.escape(item.name)}">{html.escape(item.name)}</a></li>'
+            f'<li data-testid="fixture-item"><a data-testid="fixture-link" '
+            f'href="/compare?name={html.escape(item.name)}">{html.escape(item.name)}</a></li>'
             for item in fixtures
         )
         renderer_status = (
@@ -92,7 +93,7 @@ def create_app(
               <button type="submit">Compare</button>
             </form>
             <h2>Fixture Library</h2>
-            <ul>{fixture_items or '<li>No fixtures found.</li>'}</ul>
+            <ul data-testid="fixture-list">{fixture_items or '<li data-testid="fixture-empty">No fixtures found.</li>'}</ul>
           </body>
         </html>
         """
@@ -191,7 +192,7 @@ def create_app(
         diff_tag = ""
         if diff_url:
             diff_tag = f"""
-              <section class="pane">
+              <section class="pane" data-testid="pane-diff">
                 <h2>Difference (Legacy vs Resvg)</h2>
                 <p>SSIM Score: <strong>{ssim_score:.4f}</strong></p>
                 <figure><img class="media diff-bg" src="{diff_url}" alt="Difference" />
@@ -264,17 +265,17 @@ def create_app(
 
         # Update the columns section to include traces
         columns_html = f"""
-            <div class="columns">
-              <section class="pane">
+            <div class="columns" data-testid="compare-columns">
+              <section class="pane" data-testid="pane-source">
                 <h2>Source SVG</h2>
                 <img class="media" src="data:image/svg+xml;base64,{svg_b64}" alt="SVG source" />
               </section>
-              <section class="pane">
+              <section class="pane" data-testid="pane-resvg">
                 <h2>Resvg Render</h2>
                 {resvg_tags}
                 {resvg_trace}
               </section>
-              <section class="pane">
+              <section class="pane" data-testid="pane-legacy">
                 <h2>Legacy Render</h2>
                 {legacy_tags}
                 {legacy_trace}
@@ -311,9 +312,13 @@ def create_app(
           <body>
             <p><a href="/">⟵ Back to library</a></p>
             <h1>{html.escape(svg_path.name)}</h1>
-            <div class="meta">
-              <a class="button" href="/artefacts/{token}/resvg/presentation.pptx">Download Resvg PPTX</a>
-              <a class="button" href="/artefacts/{token}/legacy/presentation.pptx">Download Legacy PPTX</a>
+            <div class="meta" data-testid="download-links">
+              <a class="button" data-testid="download-resvg" href="/artefacts/{token}/resvg/presentation.pptx">
+                Download Resvg PPTX
+              </a>
+              <a class="button" data-testid="download-legacy" href="/artefacts/{token}/legacy/presentation.pptx">
+                Download Legacy PPTX
+              </a>
             </div>
             {note_html}
             {columns_html}
