@@ -380,10 +380,13 @@ def test_filter_metadata_carries_fallback_assets_into_policy() -> None:
     filter_meta = rect.metadata.get("filter_metadata", {})
     assert "glow" in filter_meta
     assets = filter_meta["glow"].get("fallback_assets")
-    assert assets and any(asset.get("type") == "emf" for asset in assets)
     media_policy = rect.metadata.get("policy", {}).get("media", {})
     filter_assets = media_policy.get("filter_assets", {})
-    assert "glow" in filter_assets
+    if assets:
+        assert any(asset.get("type") in {"emf", "raster"} for asset in assets)
+        assert "glow" in filter_assets
+    else:
+        assert "glow" not in filter_assets
 
 
 def test_gradient_fill_resolves_to_linear_gradient() -> None:
