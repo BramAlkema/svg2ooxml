@@ -26,7 +26,17 @@ if TYPE_CHECKING:  # pragma: no cover - type checking only
     from .conversion import ConversionServices
 
 
-ALLOWED_STRATEGIES = {"auto", "native", "vector", "raster", "emf", "legacy", "resvg", "resvg-only"}
+ALLOWED_STRATEGIES = {
+    "auto",
+    "native",
+    "native-if-neutral",
+    "vector",
+    "raster",
+    "emf",
+    "legacy",
+    "resvg",
+    "resvg-only",
+}
 
 
 
@@ -163,7 +173,7 @@ class FilterService:
         emf_sources: list[FilterEffectResult] = []
         raster_results_cache: list[FilterEffectResult] = []
         descriptor_results: list[FilterEffectResult] | None = None
-        strategy = self._resolve_strategy(filter_context)
+        strategy = self._resolve_strategy(filter_context, descriptor)
 
         resvg_enabled = strategy not in {"legacy", "vector", "emf", "raster"}
         resvg_preferred = strategy in {"resvg", "resvg-only"}
@@ -422,7 +432,7 @@ class FilterService:
                 return cast(PaletteResolver, method)
         return None
 
-    def _resolve_strategy(self, context: FilterContext) -> str:
+    def _resolve_strategy(self, context: FilterContext, descriptor: ResolvedFilter | None) -> str:
         policy_options = {}
         if isinstance(context.options, dict):
             policy_options = context.options.get("policy") or {}
@@ -432,9 +442,17 @@ class FilterService:
         if isinstance(policy_strategy, str):
             normalized = policy_strategy.strip().lower()
             if normalized in ALLOWED_STRATEGIES:
+                if normalized == "native-if-neutral":
+                    if self._planner.descriptor_is_neutral(descriptor):
+                        return "native"
+                    return "emf"
                 return normalized
 
         if self._strategy != "auto":
+            if self._strategy == "native-if-neutral":
+                if self._planner.descriptor_is_neutral(descriptor):
+                    return "native"
+                return "emf"
             return self._strategy
 
         return self._strategy

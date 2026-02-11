@@ -194,12 +194,12 @@ class FilterPolicyProvider(PolicyProvider):
         explicit = options.get("filter_strategy")
         if isinstance(explicit, str):
             token = explicit.strip().lower()
-            if token in {"auto", "native", "vector", "emf", "raster"}:
+            if token in {"auto", "native", "native-if-neutral", "vector", "emf", "raster"}:
                 return token
         overrides = options.get("filter.strategy")
         if isinstance(overrides, str):
             token = overrides.strip().lower()
-            if token in {"auto", "native", "vector", "emf", "raster"}:
+            if token in {"auto", "native", "native-if-neutral", "vector", "emf", "raster"}:
                 return token
         return default or "auto"
 

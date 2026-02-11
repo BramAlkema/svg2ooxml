@@ -8,7 +8,7 @@ from collections.abc import Iterable, Mapping
 from typing import Any
 
 from svg2ooxml.filters.base import FilterContext, FilterResult
-from svg2ooxml.filters.resvg_bridge import ResolvedFilter, build_filter_node
+from svg2ooxml.filters.resvg_bridge import FilterPrimitiveDescriptor, ResolvedFilter, build_filter_node
 from svg2ooxml.render.filters import FilterPlan, plan_filter
 from svg2ooxml.render.rasterizer import Viewport
 
@@ -61,6 +61,11 @@ class FilterPlanner:
             for primitive_plan in plan.primitives
         ]
 
+    def descriptor_is_neutral(self, descriptor: ResolvedFilter | None) -> bool:
+        if descriptor is None or not descriptor.primitives:
+            return False
+        return all(self._primitive_is_neutral(primitive) for primitive in descriptor.primitives)
+
     def resvg_bounds(
         self,
         options: Mapping[str, Any] | None,
@@ -101,6 +106,29 @@ class FilterPlanner:
         width = max(width, 1.0)
         height = max(height, 1.0)
         return (x, y, x + width, y + height)
+
+    def _primitive_is_neutral(self, primitive: FilterPrimitiveDescriptor) -> bool:
+        tag = (primitive.tag or "").strip().lower()
+        attrs = primitive.attributes or {}
+        if tag == "fegaussianblur":
+            raw = self._attribute(attrs, "stdDeviation")
+            std_values = self._parse_float_list(raw)
+            if not std_values:
+                return True
+            return all(abs(value) <= 1e-6 for value in std_values[:2])
+        if tag == "feoffset":
+            dx = self._parse_float(self._attribute(attrs, "dx")) or 0.0
+            dy = self._parse_float(self._attribute(attrs, "dy")) or 0.0
+            return abs(dx) <= 1e-6 and abs(dy) <= 1e-6
+        if tag == "fecolormatrix":
+            matrix_type = (self._attribute(attrs, "type") or "matrix").strip().lower()
+            if matrix_type != "matrix":
+                return False
+            values = self._parse_float_list(self._attribute(attrs, "values"))
+            if not values:
+                return True
+            return self._is_identity_matrix(values)
+        return False
 
     @staticmethod
     def resvg_viewport(bounds: tuple[float, float, float, float]) -> Viewport:
@@ -235,6 +263,51 @@ class FilterPlanner:
             "filter_region": dict(descriptor.region or {}),
             "primitive_metadata": [dict(primitive.extras) for primitive in descriptor.primitives],
         }
+
+    @staticmethod
+    def _attribute(attributes: Mapping[str, Any], name: str) -> str | None:
+        if name in attributes:
+            return str(attributes[name])
+        lowered = name.lower()
+        for key, value in attributes.items():
+            if str(key).lower() == lowered:
+                return str(value)
+        return None
+
+    @staticmethod
+    def _parse_float(value: str | None) -> float | None:
+        if value is None:
+            return None
+        try:
+            return float(str(value).strip())
+        except (TypeError, ValueError):
+            return None
+
+    @staticmethod
+    def _parse_float_list(value: str | None) -> list[float]:
+        if value is None:
+            return []
+        cleaned = str(value).replace(",", " ").split()
+        values: list[float] = []
+        for token in cleaned:
+            try:
+                values.append(float(token))
+            except ValueError:
+                continue
+        return values
+
+    @staticmethod
+    def _is_identity_matrix(values: list[float]) -> bool:
+        if len(values) != 20:
+            return False
+        identity = [
+            1.0, 0.0, 0.0, 0.0, 0.0,
+            0.0, 1.0, 0.0, 0.0, 0.0,
+            0.0, 0.0, 1.0, 0.0, 0.0,
+            0.0, 0.0, 0.0, 1.0, 0.0,
+        ]
+        tol = 1e-6
+        return all(abs(a - b) <= tol for a, b in zip(values, identity, strict=True))
 
     @staticmethod
     def promotion_policy_violation(

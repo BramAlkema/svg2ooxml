@@ -330,7 +330,7 @@ _COMPATIBILITY_OPTIONS = _policy_template(
         "allow_custom_dash": False,
     },
     filter_overrides={
-        "strategy": "emf",
+        "strategy": "native-if-neutral",
         "allow_anisotropic_native": False,
         "max_bitmap_stddev": 28.0,
         "max_shadow_distance": 30.0,
