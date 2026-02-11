@@ -247,7 +247,7 @@ class TestCompositeAlphaCompositing:
         assert decisions[0].metadata["is_simple_mask"] is True
 
     def test_simple_mask_without_content_fallsback(self):
-        """Test that mask without content falls back to EMF."""
+        """Test that mask without content falls back to raster."""
         tracer = RenderTracer()
         svg = """<svg xmlns="http://www.w3.org/2000/svg">
             <filter id="f1">
@@ -277,15 +277,15 @@ class TestCompositeAlphaCompositing:
         composite_filter = CompositeFilter()
         result = composite_filter.apply(composite_elem, context)
 
-        # Should fall back to EMF
+        # Should fall back to bitmap
         assert result.drawingml == ""
-        assert result.fallback == "emf"
+        assert result.fallback == "bitmap"
         assert result.metadata["native_support"] is False
 
-        # Telemetry should record EMF fallback
+        # Telemetry should record raster fallback
         decisions = tracer.get_decisions()
         assert len(decisions) == 1
-        assert decisions[0].strategy == "emf"
+        assert decisions[0].strategy == "raster"
         assert decisions[0].metadata["fallback_reason"] == "mask_empty"
 
 
@@ -326,15 +326,15 @@ class TestCompositeDegenerateMasks:
         # Should NOT be detected as simple mask (mask isn't native)
         assert result.metadata["is_simple_mask"] is False
 
-        # Should fall back to EMF
+        # Should fall back to bitmap
         assert result.drawingml == ""
-        assert result.fallback == "emf"
+        assert result.fallback == "bitmap"
         assert result.metadata["native_support"] is False
 
         # Telemetry should record complex mask fallback
         decisions = tracer.get_decisions()
         assert len(decisions) == 1
-        assert decisions[0].strategy == "emf"
+        assert decisions[0].strategy == "raster"
         assert decisions[0].metadata["is_simple_mask"] is False
         assert "complex mask → fallback" in decisions[0].reason
 
@@ -372,9 +372,9 @@ class TestCompositeDegenerateMasks:
         # Should NOT be detected as simple mask (invalid structure)
         assert result.metadata["is_simple_mask"] is False
 
-        # Should fall back to EMF because _combine_masking won't find valid effects
+        # Should fall back to bitmap because _combine_masking won't find valid effects
         assert result.drawingml == ""
-        assert result.fallback == "emf"
+        assert result.fallback == "bitmap"
         assert result.metadata["native_support"] is False
 
     def test_mask_without_effect_list_fallsback(self):
@@ -413,7 +413,7 @@ class TestCompositeDegenerateMasks:
 
         # Should produce empty drawingml (no valid effects to extract)
         assert result.drawingml == ""
-        assert result.fallback == "emf"
+        assert result.fallback == "bitmap"
         assert result.metadata["native_support"] is False
         assert result.metadata["fallback_reason"] == "mask_missing_effects"
 
@@ -455,5 +455,5 @@ class TestCompositeDegenerateMasks:
         # But _combine_masking should return empty drawingml
         # (extract_effect_children will return empty string for empty list)
         assert result.drawingml == ""
-        assert result.fallback == "emf"
+        assert result.fallback == "bitmap"
         assert result.metadata["fallback_reason"] == "mask_missing_effects"
