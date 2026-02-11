@@ -25,7 +25,9 @@ import functools
 import json
 import logging
 import multiprocessing as mp
+import os
 import queue
+import subprocess
 import time
 import sys
 from dataclasses import asdict, dataclass
@@ -62,6 +64,46 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+def _resolve_openxml_validator(path_value: str | None) -> list[str] | None:
+    if not path_value:
+        return None
+    candidate = Path(path_value).expanduser()
+    if candidate.is_dir():
+        for name in ("openxml-validator", "openxml-validator.py", "openxml-audit", "openxml-audit.py"):
+            path = candidate / name
+            if path.exists():
+                candidate = path
+                break
+    if not candidate.exists():
+        return None
+    if candidate.suffix == ".py":
+        return [sys.executable, str(candidate)]
+    return [str(candidate)]
+
+
+def _run_openxml_audit(
+    pptx_path: Path,
+    validator_cmd: list[str] | None,
+    timeout_s: float | None,
+) -> tuple[bool | None, list[str] | None]:
+    if validator_cmd is None:
+        return None, None
+    try:
+        result = subprocess.run(
+            [*validator_cmd, str(pptx_path)],
+            capture_output=True,
+            text=True,
+            timeout=timeout_s,
+        )
+    except Exception as exc:  # pragma: no cover - defensive
+        return False, [str(exc)]
+    output = "\n".join([result.stdout.strip(), result.stderr.strip()]).strip()
+    messages = [line for line in output.splitlines() if line.strip()]
+    if len(messages) > 25:
+        messages = messages[:25]
+    return result.returncode == 0, messages or None
+
+
 @dataclass
 class DeckMetrics:
     """Metrics for a single corpus deck."""
@@ -87,6 +129,10 @@ class DeckMetrics:
     
     # Performance
     conversion_time_ms: float = 0.0
+
+    # OpenXML audit (optional)
+    openxml_valid: bool | None = None
+    openxml_messages: list[str] | None = None
     
     # Status
     success: bool = True
@@ -125,6 +171,9 @@ def _run_deck_worker(payload: dict[str, Any]) -> DeckMetrics:
     output_dir = Path(payload["output_dir"])
     mode = payload.get("mode", "resvg")
     enable_visual = bool(payload.get("enable_visual", False))
+    openxml_validator = payload.get("openxml_validator")
+    openxml_audit = bool(payload.get("openxml_audit", False))
+    openxml_timeout_s = payload.get("openxml_timeout_s")
 
     deck_name = deck_info["deck_name"]
     svg_file = deck_info["svg_file"]
@@ -149,7 +198,7 @@ def _run_deck_worker(payload: dict[str, Any]) -> DeckMetrics:
         writer = DrawingMLWriter()
         builder = PPTXPackageBuilder()
 
-        parse_result = parser.parse(svg_text)
+        parse_result = parser.parse(svg_text, source_path=str(svg_path))
         if not parse_result.success or parse_result.svg_root is None:
             raise ValueError(f"SVG parsing failed: {parse_result.error_message}")
 
@@ -171,6 +220,16 @@ def _run_deck_worker(payload: dict[str, Any]) -> DeckMetrics:
         render_result = writer.render_scene_from_ir(scene, tracer=tracer)
         pptx_path = output_dir / f"{deck_name}_{mode}.pptx"
         builder.build_from_results([render_result], pptx_path)
+
+        if openxml_audit:
+            validator_cmd = _resolve_openxml_validator(openxml_validator)
+            openxml_valid, openxml_messages = _run_openxml_audit(
+                pptx_path,
+                validator_cmd,
+                openxml_timeout_s,
+            )
+            metrics.openxml_valid = openxml_valid
+            metrics.openxml_messages = openxml_messages
 
         report = tracer.report()
         geom_totals = report.geometry_totals
@@ -310,6 +369,10 @@ class CorpusRunner:
         output_dir: Path,
         mode: str = "resvg",
         metadata_file: Path | None = None,
+        *,
+        openxml_validator: str | None = None,
+        openxml_timeout_s: float | None = None,
+        openxml_audit: bool = False,
     ):
         """Initialize corpus runner.
 
@@ -323,6 +386,12 @@ class CorpusRunner:
         self.output_dir = output_dir
         self.mode = mode
         self.metadata_file = metadata_file
+        self._openxml_validator = openxml_validator
+        self._openxml_timeout_s = openxml_timeout_s
+        self._openxml_audit = openxml_audit
+        self._openxml_cmd = _resolve_openxml_validator(openxml_validator) if openxml_audit else None
+        if openxml_audit and self._openxml_cmd is None:
+            logger.warning("OpenXML audit enabled but validator not found: %s", openxml_validator)
         
         self.output_dir.mkdir(parents=True, exist_ok=True)
         
@@ -376,7 +445,7 @@ class CorpusRunner:
             svg_text = svg_path.read_text(encoding="utf-8")
             
             # Parse SVG
-            parse_result = self._parser.parse(svg_text)
+            parse_result = self._parser.parse(svg_text, source_path=str(svg_path))
             if not parse_result.success or parse_result.svg_root is None:
                 raise ValueError(f"SVG parsing failed: {parse_result.error_message}")
             
@@ -404,6 +473,15 @@ class CorpusRunner:
             # Build PPTX
             pptx_path = self.output_dir / f"{deck_name}_{self.mode}.pptx"
             self._builder.build_from_results([render_result], pptx_path)
+
+            if self._openxml_cmd is not None:
+                openxml_valid, openxml_messages = _run_openxml_audit(
+                    pptx_path,
+                    self._openxml_cmd,
+                    self._openxml_timeout_s,
+                )
+                metrics.openxml_valid = openxml_valid
+                metrics.openxml_messages = openxml_messages
             
             # Collect telemetry metrics from tracer
             report = tracer.report()
@@ -504,7 +582,7 @@ class CorpusRunner:
 
             svg_text = svg_path.read_text(encoding="utf-8")
 
-            parse_result = self._parser.parse(svg_text)
+            parse_result = self._parser.parse(svg_text, source_path=str(svg_path))
             if not parse_result.success or parse_result.svg_root is None:
                 raise ValueError(f"SVG parsing failed: {parse_result.error_message}")
 
@@ -632,6 +710,17 @@ class CorpusRunner:
                     if slides_added > 0:
                         stream.finalize(output_path)
                         logger.info("Single-deck PPTX saved to: %s", output_path)
+                        if self._openxml_cmd is not None:
+                            openxml_valid, openxml_messages = _run_openxml_audit(
+                                output_path,
+                                self._openxml_cmd,
+                                self._openxml_timeout_s,
+                            )
+                            status = "PASS" if openxml_valid else "FAIL"
+                            logger.info("OpenXML audit (%s): %s", status, output_path)
+                            if openxml_messages:
+                                for line in openxml_messages:
+                                    logger.info("  %s", line)
             else:
                 for index, deck_info in enumerate(decks, start=1):
                     bar = self._progress_bar(index, total)
@@ -646,6 +735,9 @@ class CorpusRunner:
                             "output_dir": str(self.output_dir),
                             "mode": self.mode,
                             "enable_visual": bool(self._renderer and self._renderer.available),
+                            "openxml_audit": self._openxml_audit,
+                            "openxml_validator": self._openxml_validator,
+                            "openxml_timeout_s": self._openxml_timeout_s,
                         }
                         metrics = _run_deck_with_timeout(payload, timeout_s)
                     results.append(metrics)
@@ -722,6 +814,9 @@ class CorpusRunner:
                     "output_dir": str(self.output_dir),
                     "mode": self.mode,
                     "enable_visual": False,
+                    "openxml_audit": self._openxml_audit,
+                    "openxml_validator": self._openxml_validator,
+                    "openxml_timeout_s": self._openxml_timeout_s,
                 }
                 pending[executor.submit(worker_fn, payload)] = None
 
@@ -743,6 +838,9 @@ class CorpusRunner:
                         "output_dir": str(self.output_dir),
                         "mode": self.mode,
                         "enable_visual": False,
+                        "openxml_audit": self._openxml_audit,
+                        "openxml_validator": self._openxml_validator,
+                        "openxml_timeout_s": self._openxml_timeout_s,
                     }
                     result_queue: mp.Queue = ctx.Queue()
                     proc = ctx.Process(
@@ -981,6 +1079,13 @@ class CorpusRunner:
                 f"Visual fidelity (SSIM): {avg_ssim:.4f} (target: >{targets.get('visual_fidelity_min', 0.90)}) - "
                 f"{'✓ PASS' if targets_met.get('visual_fidelity', False) else '✗ FAIL'}"
             )
+        openxml_results = [r.openxml_valid for r in successful if r.openxml_valid is not None]
+        if openxml_results:
+            passed = sum(1 for value in openxml_results if value)
+            openxml_rate = passed / len(openxml_results)
+            summary_lines.append(
+                f"OpenXML audit pass rate: {openxml_rate:.1%} ({passed}/{len(openxml_results)})"
+            )
         summary = "\n".join(summary_lines)
         
         report = CorpusReport(
@@ -1037,6 +1142,22 @@ def main():
         help="Report output path (default: tests/corpus/corpus_report.json)",
     )
     parser.add_argument(
+        "--openxml-audit",
+        action="store_true",
+        help="Run OpenXML validator against generated PPTX files",
+    )
+    parser.add_argument(
+        "--openxml-validator",
+        type=str,
+        help="Path to OpenXML validator executable or directory (default: ../openxml-validator if present)",
+    )
+    parser.add_argument(
+        "--openxml-timeout",
+        type=float,
+        default=60.0,
+        help="Timeout (seconds) for OpenXML validation (default: 60)",
+    )
+    parser.add_argument(
         "--metadata",
         type=Path,
         help="Path to metadata file (default: corpus-dir/corpus_metadata.json)",
@@ -1080,13 +1201,23 @@ def main():
     if not VISUAL_AVAILABLE:
         logger.warning("Visual testing dependencies not available. SSIM metrics will be skipped.")
         logger.warning("Install with: pip install svg2ooxml[visual-testing]")
-    
+
+    openxml_validator = args.openxml_validator or os.getenv("OPENXML_VALIDATOR")
+    openxml_audit = args.openxml_audit or bool(openxml_validator)
+    if openxml_audit and openxml_validator is None:
+        default_validator_dir = project_root.parent / "openxml-validator"
+        if default_validator_dir.exists():
+            openxml_validator = str(default_validator_dir)
+
     # Run corpus tests
     runner = CorpusRunner(
         corpus_dir=args.corpus_dir,
         output_dir=args.output_dir,
         mode=args.mode,
         metadata_file=args.metadata,
+        openxml_validator=openxml_validator,
+        openxml_timeout_s=args.openxml_timeout,
+        openxml_audit=openxml_audit,
     )
     
     report = runner.run_all(
