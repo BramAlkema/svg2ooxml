@@ -9,6 +9,7 @@ and automatic accessible color generation following WCAG 2.1 guidelines.
 from __future__ import annotations
 
 from enum import Enum
+from typing import Any
 
 import colorspacious
 import numpy as np
@@ -279,7 +280,7 @@ class ColorAccessibility:
         return accessible_colors
 
     def analyze_palette_accessibility(self, colors: list[Color],
-                                    background: Color) -> dict[str, any]:
+                                    background: Color) -> dict[str, Any]:
         """
         Analyze accessibility of a color palette.
 

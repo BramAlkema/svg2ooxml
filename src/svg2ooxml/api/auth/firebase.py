@@ -1,6 +1,7 @@
 """Firebase Admin SDK initialization and token verification."""
 import logging
 import os
+from typing import Any
 
 import firebase_admin
 from firebase_admin import auth as firebase_auth
@@ -63,7 +64,7 @@ def get_firestore_client():
     return firestore.client()
 
 
-def verify_google_identity_token(token: str) -> dict[str, any]:
+def verify_google_identity_token(token: str) -> dict[str, Any]:
     """Verify Google Identity token (from gcloud auth print-identity-token).
 
     This is used for internal testing/development with gcloud CLI.
@@ -111,7 +112,7 @@ def verify_google_identity_token(token: str) -> dict[str, any]:
         raise ValueError(f"Invalid Google Identity token: {e}") from e
 
 
-def verify_id_token(token_str: str) -> dict[str, any]:
+def verify_id_token(token_str: str) -> dict[str, Any]:
     """Verify ID token - supports both Firebase and Google Identity tokens.
 
     Args:

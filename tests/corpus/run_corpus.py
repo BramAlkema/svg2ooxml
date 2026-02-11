@@ -31,7 +31,7 @@ import subprocess
 import time
 import sys
 from dataclasses import asdict, dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -174,6 +174,7 @@ def _run_deck_worker(payload: dict[str, Any]) -> DeckMetrics:
     openxml_validator = payload.get("openxml_validator")
     openxml_audit = bool(payload.get("openxml_audit", False))
     openxml_timeout_s = payload.get("openxml_timeout_s")
+    write_pptx = bool(payload.get("write_pptx", True))
 
     deck_name = deck_info["deck_name"]
     svg_file = deck_info["svg_file"]
@@ -218,18 +219,20 @@ def _run_deck_worker(payload: dict[str, Any]) -> DeckMetrics:
         metrics.conversion_time_ms = (time.time() - start_time) * 1000
 
         render_result = writer.render_scene_from_ir(scene, tracer=tracer)
-        pptx_path = output_dir / f"{deck_name}_{mode}.pptx"
-        builder.build_from_results([render_result], pptx_path)
+        pptx_path: Path | None = None
+        if write_pptx:
+            pptx_path = output_dir / f"{deck_name}_{mode}.pptx"
+            builder.build_from_results([render_result], pptx_path)
 
-        if openxml_audit:
-            validator_cmd = _resolve_openxml_validator(openxml_validator)
-            openxml_valid, openxml_messages = _run_openxml_audit(
-                pptx_path,
-                validator_cmd,
-                openxml_timeout_s,
-            )
-            metrics.openxml_valid = openxml_valid
-            metrics.openxml_messages = openxml_messages
+            if openxml_audit:
+                validator_cmd = _resolve_openxml_validator(openxml_validator)
+                openxml_valid, openxml_messages = _run_openxml_audit(
+                    pptx_path,
+                    validator_cmd,
+                    openxml_timeout_s,
+                )
+                metrics.openxml_valid = openxml_valid
+                metrics.openxml_messages = openxml_messages
 
         report = tracer.report()
         geom_totals = report.geometry_totals
@@ -260,7 +263,7 @@ def _run_deck_worker(payload: dict[str, Any]) -> DeckMetrics:
             metrics.emf_rate = metrics.emf_count / metrics.total_elements
             metrics.raster_rate = metrics.raster_count / metrics.total_elements
 
-        if enable_visual and VISUAL_AVAILABLE:
+        if write_pptx and enable_visual and VISUAL_AVAILABLE:
             renderer = LibreOfficeRenderer()
             differ = VisualDiffer(threshold=0.90)
             if renderer.available:
@@ -373,6 +376,7 @@ class CorpusRunner:
         openxml_validator: str | None = None,
         openxml_timeout_s: float | None = None,
         openxml_audit: bool = False,
+        write_pptx: bool = True,
     ):
         """Initialize corpus runner.
 
@@ -381,6 +385,7 @@ class CorpusRunner:
             output_dir: Directory for output PPTX files and reports
             mode: Rendering mode ("legacy" or "resvg")
             metadata_file: Path to metadata file (default: corpus_dir/corpus_metadata.json)
+            write_pptx: Whether to write PPTX outputs (metrics-only when False)
         """
         self.corpus_dir = corpus_dir
         self.output_dir = output_dir
@@ -389,8 +394,12 @@ class CorpusRunner:
         self._openxml_validator = openxml_validator
         self._openxml_timeout_s = openxml_timeout_s
         self._openxml_audit = openxml_audit
-        self._openxml_cmd = _resolve_openxml_validator(openxml_validator) if openxml_audit else None
-        if openxml_audit and self._openxml_cmd is None:
+        self._write_pptx = write_pptx
+        if self._openxml_audit and not self._write_pptx:
+            logger.warning("OpenXML audit disabled because PPTX output is disabled.")
+            self._openxml_audit = False
+        self._openxml_cmd = _resolve_openxml_validator(openxml_validator) if self._openxml_audit else None
+        if self._openxml_audit and self._openxml_cmd is None:
             logger.warning("OpenXML audit enabled but validator not found: %s", openxml_validator)
         
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -403,7 +412,7 @@ class CorpusRunner:
         # Initialize visual tools if available
         self._renderer = None
         self._differ = None
-        if VISUAL_AVAILABLE:
+        if VISUAL_AVAILABLE and self._write_pptx:
             self._renderer = LibreOfficeRenderer()
             self._differ = VisualDiffer(threshold=0.90)
     
@@ -413,7 +422,7 @@ class CorpusRunner:
         if not metadata_path.exists():
             raise FileNotFoundError(f"Metadata file not found: {metadata_path}")
 
-        with open(metadata_path) as f:
+        with open(metadata_path, encoding="utf-8") as f:
             return json.load(f)
     
     def run_deck(self, deck_info: dict[str, Any]) -> DeckMetrics:
@@ -470,18 +479,20 @@ class CorpusRunner:
             # Render to DrawingML
             render_result = self._writer.render_scene_from_ir(scene, tracer=tracer)
             
-            # Build PPTX
-            pptx_path = self.output_dir / f"{deck_name}_{self.mode}.pptx"
-            self._builder.build_from_results([render_result], pptx_path)
+            # Build PPTX (optional)
+            pptx_path: Path | None = None
+            if self._write_pptx:
+                pptx_path = self.output_dir / f"{deck_name}_{self.mode}.pptx"
+                self._builder.build_from_results([render_result], pptx_path)
 
-            if self._openxml_cmd is not None:
-                openxml_valid, openxml_messages = _run_openxml_audit(
-                    pptx_path,
-                    self._openxml_cmd,
-                    self._openxml_timeout_s,
-                )
-                metrics.openxml_valid = openxml_valid
-                metrics.openxml_messages = openxml_messages
+                if self._openxml_cmd is not None:
+                    openxml_valid, openxml_messages = _run_openxml_audit(
+                        pptx_path,
+                        self._openxml_cmd,
+                        self._openxml_timeout_s,
+                    )
+                    metrics.openxml_valid = openxml_valid
+                    metrics.openxml_messages = openxml_messages
             
             # Collect telemetry metrics from tracer
             report = tracer.report()
@@ -524,7 +535,7 @@ class CorpusRunner:
                 metrics.raster_rate = metrics.raster_count / metrics.total_elements
             
             # Visual fidelity check (if renderer available)
-            if self._renderer and self._renderer.available and self._differ:
+            if self._write_pptx and self._renderer and self._renderer.available and self._differ:
                 try:
                     baseline_path = self.corpus_dir / "baselines" / deck_name / "slide_1.png"
                     if baseline_path.exists():
@@ -564,6 +575,8 @@ class CorpusRunner:
         stream: Any,
     ) -> DeckMetrics:
         """Run a single corpus deck and add the rendered slide to a streaming writer."""
+        if not self._write_pptx:
+            raise RuntimeError("Streaming output requires PPTX output to be enabled.")
         deck_name = deck_info["deck_name"]
         svg_file = deck_info["svg_file"]
 
@@ -668,6 +681,8 @@ class CorpusRunner:
         targets = metadata.get("targets", {})
         
         planned_total = len(decks)
+        if not self._write_pptx and single_deck:
+            raise ValueError("Single-deck output requires PPTX output to be enabled.")
         if single_deck and timeout_s is not None:
             logger.warning(
                 "Per-deck timeouts are not supported in single-deck streaming mode; disabling timeout."
@@ -734,10 +749,11 @@ class CorpusRunner:
                             "corpus_dir": str(self.corpus_dir),
                             "output_dir": str(self.output_dir),
                             "mode": self.mode,
-                            "enable_visual": bool(self._renderer and self._renderer.available),
+                            "enable_visual": bool(self._renderer and self._renderer.available and self._write_pptx),
                             "openxml_audit": self._openxml_audit,
                             "openxml_validator": self._openxml_validator,
                             "openxml_timeout_s": self._openxml_timeout_s,
+                            "write_pptx": self._write_pptx,
                         }
                         metrics = _run_deck_with_timeout(payload, timeout_s)
                     results.append(metrics)
@@ -817,6 +833,7 @@ class CorpusRunner:
                     "openxml_audit": self._openxml_audit,
                     "openxml_validator": self._openxml_validator,
                     "openxml_timeout_s": self._openxml_timeout_s,
+                    "write_pptx": self._write_pptx,
                 }
                 pending[executor.submit(worker_fn, payload)] = None
 
@@ -841,6 +858,7 @@ class CorpusRunner:
                         "openxml_audit": self._openxml_audit,
                         "openxml_validator": self._openxml_validator,
                         "openxml_timeout_s": self._openxml_timeout_s,
+                        "write_pptx": self._write_pptx,
                     }
                     result_queue: mp.Queue = ctx.Queue()
                     proc = ctx.Process(
@@ -1089,7 +1107,7 @@ class CorpusRunner:
         summary = "\n".join(summary_lines)
         
         report = CorpusReport(
-            timestamp=datetime.utcnow().isoformat(),
+        timestamp=datetime.now(UTC).isoformat(),
             mode=self.mode,
             total_decks=total_decks,
             successful_decks=successful_decks,
@@ -1140,6 +1158,11 @@ def main():
         type=Path,
         default=Path(__file__).parent / "corpus_report.json",
         help="Report output path (default: tests/corpus/corpus_report.json)",
+    )
+    parser.add_argument(
+        "--skip-pptx",
+        action="store_true",
+        help="Skip writing PPTX files (metrics only; disables visual/OpenXML checks)",
     )
     parser.add_argument(
         "--openxml-audit",
@@ -1208,6 +1231,14 @@ def main():
         default_validator_dir = project_root.parent / "openxml-validator"
         if default_validator_dir.exists():
             openxml_validator = str(default_validator_dir)
+    if args.skip_pptx:
+        if openxml_audit:
+            logger.warning("OpenXML audit disabled because --skip-pptx is set.")
+            openxml_audit = False
+        if args.single_deck:
+            logger.warning("Single-deck output disabled because --skip-pptx is set.")
+            args.single_deck = False
+            args.single_deck_output = None
 
     # Run corpus tests
     runner = CorpusRunner(
@@ -1218,6 +1249,7 @@ def main():
         openxml_validator=openxml_validator,
         openxml_timeout_s=args.openxml_timeout,
         openxml_audit=openxml_audit,
+        write_pptx=not args.skip_pptx,
     )
     
     report = runner.run_all(
@@ -1231,7 +1263,7 @@ def main():
     
     # Save report
     report_dict = asdict(report)
-    with open(args.report, "w") as f:
+    with open(args.report, "w", encoding="utf-8") as f:
         json.dump(report_dict, f, indent=2)
     
     logger.info(f"\nReport saved to: {args.report}")

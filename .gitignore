@@ -27,6 +27,9 @@ tmp/
 .visual_server/
 .visual_tmp/
 reports/
+working_tmp/
+tests/corpus/output/
+tests/corpus/corpus_report.json
 
 # Misc generated files
 Untitled *.pptx

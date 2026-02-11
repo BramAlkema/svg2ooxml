@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from svg2ooxml.services.fonts.embedding import FontEmbeddingEngine, FontEmbeddingRequest
-from svg2ooxml.services.fonts.fontforge_utils import FONTFORGE_AVAILABLE
+from svg2ooxml.services.fonts.fontforge_utils import FONTFORGE_AVAILABLE, open_font
 
 
 def _resource_font_path() -> Path:
@@ -79,3 +79,49 @@ def test_can_embed_handles_missing_font(tmp_path) -> None:
     engine = FontEmbeddingEngine()
 
     assert engine.can_embed(str(tmp_path / "missing.ttf")) is False
+
+
+@pytest.mark.skipif(not FONTFORGE_AVAILABLE, reason="FontForge required for ligature subsetting")
+def test_subset_includes_ligature_glyph(tmp_path) -> None:
+    pytest.importorskip("fontforge")
+    import fontforge  # type: ignore[import-not-found]
+
+    font = fontforge.font()
+    font.encoding = "UnicodeFull"
+    font.familyname = "LigatureTest"
+    font.fullname = "LigatureTest Regular"
+    font.fontname = "LigatureTest-Regular"
+
+    font.createChar(ord("f"), "f").width = 500
+    font.createChar(ord("i"), "i").width = 500
+    lig = font.createChar(-1, "fi")
+    lig.width = 500
+
+    font.addLookup(
+        "liga",
+        "gsub_ligature",
+        (),
+        (("liga", (("latn", ("dflt",)),)),),
+    )
+    font.addLookupSubtable("liga", "liga_sub")
+    lig.addPosSub("liga_sub", ("f", "i"))
+
+    font_path = tmp_path / "ligature.ttf"
+    font.generate(str(font_path))
+    font.close()
+
+    engine = FontEmbeddingEngine()
+    request = FontEmbeddingRequest(
+        font_path=str(font_path),
+        characters=tuple("fi"),
+        metadata={"font_family": "LigatureTest"},
+    )
+    result = engine.subset_font(request)
+    assert result is not None
+
+    subset_bytes = result.packaging_metadata.get("subset_bytes")
+    assert isinstance(subset_bytes, (bytes, bytearray))
+
+    with open_font(bytes(subset_bytes), suffix=".ttf") as subset_font:
+        glyph_names = {glyph.glyphname for glyph in subset_font.glyphs()}
+    assert "fi" in glyph_names

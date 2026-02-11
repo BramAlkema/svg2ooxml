@@ -68,6 +68,10 @@ python tests/corpus/run_corpus.py \
   --corpus-dir tests/corpus/real_world \
   --output-dir tests/corpus/output \
   --report tests/corpus/corpus_report.json
+
+# Metrics-only run (skip writing PPTX files)
+python tests/corpus/run_corpus.py --skip-pptx
+# Note: --skip-pptx disables OpenXML audit and visual checks.
 ```
 
 ### 3. View Results
@@ -78,6 +82,15 @@ echo $?  # 0 if all targets met, 1 otherwise
 
 # View report
 cat tests/corpus/corpus_report.json
+```
+
+## OpenXML Audit
+
+If you have the `openxml-validator` tool available, you can run the OpenXML audit
+alongside the corpus run:
+
+```bash
+OPENXML_VALIDATOR=../openxml-validator python tests/corpus/run_corpus.py --openxml-audit
 ```
 
 ## Corpus Metadata Schema

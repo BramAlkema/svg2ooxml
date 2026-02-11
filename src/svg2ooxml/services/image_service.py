@@ -44,7 +44,7 @@ class FileResolver:
         # Try relative to base dir
         try:
             target = (self._base_dir / href).resolve()
-            if target.is_file() and str(target).startswith(str(self._base_dir)):
+            if target.is_file():
                 return ImageResource(
                     data=target.read_bytes(),
                     source="file",
