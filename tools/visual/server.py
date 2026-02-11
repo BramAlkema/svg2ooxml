@@ -125,7 +125,7 @@ def create_app(
         session_dir.mkdir(parents=True, exist_ok=False)
         (session_dir / "source.svg").write_text(svg_text, encoding="utf-8")
 
-        engines = ["resvg", "legacy"]
+        engines = ["resvg"]
         renders: dict[str, list[Path]] = {}
         notes: list[str] = []
 
@@ -142,7 +142,7 @@ def create_app(
                 filter_strategy=engine,
                 geometry_mode=engine,
                 slide_size_mode=pptx_builder._slide_size_mode,
-                allow_promotion=False if engine == "resvg" else True
+                allow_promotion=False if engine == "resvg" else True,
             )
 
             try:
@@ -158,25 +158,6 @@ def create_app(
                 notes.append(f"{engine.capitalize()} failed: {html.escape(str(exc))}")
                 renders[engine] = []
 
-        # Compute diff if both succeeded
-        diff_url = None
-        ssim_score = None
-        if len(renders.get("resvg", [])) == 1 and len(renders.get("legacy", [])) == 1:
-            try:
-                from PIL import Image
-                from tools.visual.diff import VisualDiffer
-                img_resvg = Image.open(renders["resvg"][0])
-                img_legacy = Image.open(renders["legacy"][0])
-                differ = VisualDiffer()
-                diff_result = differ.compare(img_legacy, img_resvg)
-                if diff_result.diff_image:
-                    diff_path = session_dir / "diff.png"
-                    diff_result.diff_image.save(diff_path)
-                    diff_url = f"/artefacts/{token}/diff.png"
-                    ssim_score = diff_result.ssim_score
-            except Exception as exc:
-                notes.append(f"Diff failed: {exc}")
-
         def _get_tags(engine: str):
             images = renders.get(engine, [])
             if not images:
@@ -188,17 +169,6 @@ def create_app(
             )
 
         resvg_tags = _get_tags("resvg")
-        legacy_tags = _get_tags("legacy")
-        diff_tag = ""
-        if diff_url:
-            diff_tag = f"""
-              <section class="pane" data-testid="pane-diff">
-                <h2>Difference (Legacy vs Resvg)</h2>
-                <p>SSIM Score: <strong>{ssim_score:.4f}</strong></p>
-                <figure><img class="media diff-bg" src="{diff_url}" alt="Difference" />
-                <figcaption>Pixel diff (Red = divergence)</figcaption></figure>
-              </section>
-            """
 
         def _format_trace(engine: str):
             report = trace_reports.get(engine)
@@ -261,8 +231,6 @@ def create_app(
             """
 
         resvg_trace = _format_trace("resvg")
-        legacy_trace = _format_trace("legacy")
-
         # Update the columns section to include traces
         columns_html = f"""
             <div class="columns" data-testid="compare-columns">
@@ -275,12 +243,6 @@ def create_app(
                 {resvg_tags}
                 {resvg_trace}
               </section>
-              <section class="pane" data-testid="pane-legacy">
-                <h2>Legacy Render</h2>
-                {legacy_tags}
-                {legacy_trace}
-              </section>
-              {diff_tag}
             </div>
         """
 
@@ -315,9 +277,6 @@ def create_app(
             <div class="meta" data-testid="download-links">
               <a class="button" data-testid="download-resvg" href="/artefacts/{token}/resvg/presentation.pptx">
                 Download Resvg PPTX
-              </a>
-              <a class="button" data-testid="download-legacy" href="/artefacts/{token}/legacy/presentation.pptx">
-                Download Legacy PPTX
               </a>
             </div>
             {note_html}

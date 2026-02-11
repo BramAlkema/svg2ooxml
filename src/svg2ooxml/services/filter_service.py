@@ -538,6 +538,8 @@ class FilterService:
         result: FilterResult,
         policy_entry: Mapping[str, Any],
     ) -> dict[str, Any] | None:
+        from svg2ooxml.filters.planner import FilterPlanner
+
         return FilterPlanner.promotion_policy_violation(tag, result, policy_entry)
 
     @staticmethod
@@ -546,6 +548,8 @@ class FilterService:
         result: FilterResult,
         policy_entry: Mapping[str, Any],
     ) -> bool:
+        from svg2ooxml.filters.planner import FilterPlanner
+
         return FilterPlanner.promotion_policy_allows(tag, result, policy_entry)
 
     def _descriptor_fallback(

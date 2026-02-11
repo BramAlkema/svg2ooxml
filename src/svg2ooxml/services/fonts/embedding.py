@@ -6,7 +6,7 @@ import logging
 import os
 import uuid
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import Enum
 from hashlib import sha1
 from pathlib import Path
@@ -163,10 +163,16 @@ class FontEmbeddingEngine:
             logger.debug("Font %s allows bitmap-only embedding; switching to copy", request.font_path)
             strategy = "none"
 
+        effective_request = request
+        if strategy != "none" and not FONTFORGE_AVAILABLE:
+            logger.debug("FontForge not available; falling back to direct embedding for %s", request.font_path)
+            strategy = "none"
+            effective_request = replace(request, subset_strategy="none")
+
         if strategy == "none":
-            result = self._subset_copy(request, permission)
+            result = self._subset_copy(effective_request, permission)
         else:
-            result = self._subset_with_fontforge(request, text_payload, permission)
+            result = self._subset_with_fontforge(effective_request, text_payload, permission)
 
         if result is None:
             self._stats["subset_failures"] += 1
