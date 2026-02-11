@@ -11,6 +11,15 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 MAX_FONT_SIZE = 10 * 1024 * 1024  # 10 MiB safety limit
+ENV_FONT_CACHE_DIR = "SVG2OOXML_FONT_CACHE_DIR"
+ENV_WEB_FONT_CACHE_DIR = "SVG2OOXML_WEB_FONT_CACHE"
+
+
+def _default_cache_directory() -> Path:
+    override = os.getenv(ENV_FONT_CACHE_DIR) or os.getenv(ENV_WEB_FONT_CACHE_DIR)
+    if override:
+        return Path(override).expanduser()
+    return Path.cwd() / ".cache" / "fonts"
 
 
 @dataclass(frozen=True)
@@ -33,7 +42,7 @@ class FontFetcher:
         allow_network: bool = True,
         max_download_size: int = MAX_FONT_SIZE,
     ) -> None:
-        self.cache_directory = Path(cache_directory or Path.cwd() / ".cache" / "fonts")
+        self.cache_directory = Path(cache_directory or _default_cache_directory())
         self.cache_directory.mkdir(parents=True, exist_ok=True)
         self.allow_network = allow_network
         self.max_download_size = max_download_size
