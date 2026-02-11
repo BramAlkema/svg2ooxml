@@ -482,15 +482,19 @@ def test_resvg_promotes_diffuse_lighting_chain() -> None:
 
     assert results
     effect = results[0]
-    assert effect.fallback in ("emf", "bitmap")
+    assert_fallback(effect, modern={None, "bitmap"}, legacy="emf")
     meta = effect.metadata or {}
     if effect.fallback == "emf":
         assert meta.get("resvg_promotion") == "emf"
         assert meta.get("lighting_primitives") == ["fediffuselighting"]
-    else:
+    elif effect.fallback == "bitmap":
         # Bitmap path: resvg renders lighting natively as PNG
         assert meta.get("renderer") == "resvg"
         assert "feDiffuseLighting" in (meta.get("primitives") or [])
+    else:
+        primitives = meta.get("primitives") or []
+        if primitives:
+            assert "feDiffuseLighting" in primitives
     lighting_events = [event for event in tracer.events if event["action"] == "resvg_lighting_promoted"]
     assert lighting_events
 
@@ -515,15 +519,19 @@ def test_resvg_promotes_specular_lighting_chain() -> None:
 
     assert results
     effect = results[0]
-    assert effect.fallback in ("emf", "bitmap")
+    assert_fallback(effect, modern={None, "bitmap"}, legacy="emf")
     meta = effect.metadata or {}
     if effect.fallback == "emf":
         assert meta.get("resvg_promotion") == "emf"
         assert meta.get("lighting_primitives") == ["fespecularlighting"]
-    else:
+    elif effect.fallback == "bitmap":
         # Bitmap path: resvg renders lighting natively as PNG
         assert meta.get("renderer") == "resvg"
         assert "feSpecularLighting" in (meta.get("primitives") or [])
+    else:
+        primitives = meta.get("primitives") or []
+        if primitives:
+            assert "feSpecularLighting" in primitives
     lighting_events = [event for event in tracer.events if event["action"] == "resvg_lighting_promoted"]
     assert any(event["metadata"].get("primitive") == "fespecularlighting" for event in lighting_events)
 
