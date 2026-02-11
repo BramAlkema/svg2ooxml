@@ -300,7 +300,7 @@ class IRConverter:
 
     def _can_use_resvg(self, element: etree._Element) -> bool:
         geometry_options = self._policy_options("geometry")
-        if not geometry_options or geometry_options.get("geometry_mode") != "resvg":
+        if not geometry_options or geometry_options.get("geometry_mode") not in {"resvg", "resvg-only"}:
             return False
         if self._resvg_tree is None:
             return False

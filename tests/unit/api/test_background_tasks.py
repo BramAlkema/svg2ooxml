@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import sys
+import types
 from unittest.mock import MagicMock
 
 import pytest
@@ -17,8 +19,43 @@ def mock_cloud_tasks(monkeypatch: pytest.MonkeyPatch):
     return mock_client
 
 
+@pytest.fixture
+def mock_firestore(monkeypatch: pytest.MonkeyPatch):
+    class _FakeDoc:
+        exists = False
+
+        def to_dict(self) -> dict[str, str]:
+            return {}
+
+    class _FakeDocument:
+        def get(self) -> _FakeDoc:
+            return _FakeDoc()
+
+    class _FakeCollection:
+        def document(self, _doc_id: str) -> _FakeDocument:
+            return _FakeDocument()
+
+    class _FakeFirestoreClient:
+        def collection(self, _name: str) -> _FakeCollection:
+            return _FakeCollection()
+
+    fake_module = types.SimpleNamespace(
+        Client=lambda *args, **kwargs: _FakeFirestoreClient()
+    )
+    try:
+        import google.cloud as google_cloud  # type: ignore
+    except Exception:  # pragma: no cover - defensive guard
+        google_cloud = None  # type: ignore
+    if google_cloud is not None:
+        monkeypatch.setattr(google_cloud, "firestore", fake_module, raising=False)
+    monkeypatch.setitem(sys.modules, "google.cloud.firestore", fake_module)
+    return fake_module
+
+
 def test_enqueue_job_cloud_tasks(
-    mock_cloud_tasks: MagicMock, monkeypatch: pytest.MonkeyPatch
+    mock_cloud_tasks: MagicMock,
+    mock_firestore: types.SimpleNamespace,
+    monkeypatch: pytest.MonkeyPatch,
 ):
     monkeypatch.setenv("GCP_PROJECT", "demo-project")
     monkeypatch.setenv("SERVICE_URL", "https://example.com")

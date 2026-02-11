@@ -74,18 +74,46 @@ class ShapeConversionMixin:
     # Resvg routing infrastructure                                       #
     # ------------------------------------------------------------------ #
 
+    def _geometry_mode(self) -> str:
+        options = self._policy_options("geometry") or {}
+        if not isinstance(options, Mapping):
+            return "legacy"
+        token = str(options.get("geometry_mode") or "legacy").strip().lower()
+        return token or "legacy"
+
+    def _resvg_only_geometry(self) -> bool:
+        return self._geometry_mode() == "resvg-only"
+
+    def _resvg_miss_reason(self, element: etree._Element) -> str:
+        mode = self._geometry_mode()
+        if mode not in {"resvg", "resvg-only"}:
+            return "resvg_disabled"
+        if getattr(self, "_resvg_tree", None) is None:
+            return "resvg_tree_missing"
+        resvg_lookup = getattr(self, "_resvg_element_lookup", {})
+        if element not in resvg_lookup:
+            return "resvg_node_missing"
+        return "resvg_conversion_failed"
+
+    def _trace_resvg_only_miss(self, element: etree._Element, reason: str) -> None:
+        self._trace_geometry_decision(
+            element,
+            "resvg_only_skip",
+            {"reason": reason, "geometry_mode": self._geometry_mode()},
+        )
+
     def _can_use_resvg(self, element: etree._Element) -> bool:
         """Check if resvg mode is available and enabled for this element.
 
         Returns:
             True if:
-            - geometry_mode policy is "resvg"
+            - geometry_mode policy is "resvg" or "resvg-only"
             - resvg tree exists on converter
             - element has corresponding resvg node in lookup table
         """
         # Check policy
         geometry_options = self._policy_options("geometry")
-        if not geometry_options or geometry_options.get("geometry_mode") != "resvg":
+        if not geometry_options or geometry_options.get("geometry_mode") not in {"resvg", "resvg-only"}:
             return False
 
         # Check resvg tree exists
@@ -581,6 +609,12 @@ class ShapeConversionMixin:
             resvg_result = self._convert_via_resvg(element, coord_space)
             if resvg_result is not None:
                 return resvg_result
+            if self._resvg_only_geometry():
+                self._trace_resvg_only_miss(element, "resvg_conversion_failed")
+                return None
+        elif self._resvg_only_geometry():
+            self._trace_resvg_only_miss(element, self._resvg_miss_reason(element))
+            return None
 
         return self.expand_use(
             element=element,
@@ -596,6 +630,12 @@ class ShapeConversionMixin:
             if resvg_result is not None:
                 return resvg_result
             # If resvg failed, fall through to legacy
+            if self._resvg_only_geometry():
+                self._trace_resvg_only_miss(element, "resvg_conversion_failed")
+                return None
+        elif self._resvg_only_geometry():
+            self._trace_resvg_only_miss(element, self._resvg_miss_reason(element))
+            return None
 
         # Legacy conversion path
         return convert_rectangle(self, element, coord_space, tolerance=DEFAULT_TOLERANCE)
@@ -607,6 +647,12 @@ class ShapeConversionMixin:
             if resvg_result is not None:
                 return resvg_result
             # If resvg failed, fall through to legacy
+            if self._resvg_only_geometry():
+                self._trace_resvg_only_miss(element, "resvg_conversion_failed")
+                return None
+        elif self._resvg_only_geometry():
+            self._trace_resvg_only_miss(element, self._resvg_miss_reason(element))
+            return None
 
         # Legacy conversion path
         return self._convert_circle_legacy(element=element, coord_space=coord_space)
@@ -669,6 +715,12 @@ class ShapeConversionMixin:
             if resvg_result is not None:
                 return resvg_result
             # If resvg failed, fall through to legacy
+            if self._resvg_only_geometry():
+                self._trace_resvg_only_miss(element, "resvg_conversion_failed")
+                return None
+        elif self._resvg_only_geometry():
+            self._trace_resvg_only_miss(element, self._resvg_miss_reason(element))
+            return None
 
         # Legacy conversion path
         return self._convert_ellipse_legacy(element=element, coord_space=coord_space)
@@ -729,6 +781,16 @@ class ShapeConversionMixin:
         return path
 
     def _convert_line(self, *, element: etree._Element, coord_space: CoordinateSpace):
+        if self._resvg_only_geometry():
+            if self._can_use_resvg(element):
+                resvg_result = self._convert_via_resvg(element, coord_space)
+                if resvg_result is not None:
+                    return resvg_result
+                self._trace_resvg_only_miss(element, "resvg_conversion_failed")
+                return None
+            self._trace_resvg_only_miss(element, self._resvg_miss_reason(element))
+            return None
+
         x1 = _parse_float(element.get("x1"))
         y1 = _parse_float(element.get("y1"))
         x2 = _parse_float(element.get("x2"))
@@ -789,6 +851,12 @@ class ShapeConversionMixin:
             if resvg_result is not None:
                 return resvg_result
             # If resvg failed, fall through to legacy
+            if self._resvg_only_geometry():
+                self._trace_resvg_only_miss(element, "resvg_conversion_failed")
+                return None
+        elif self._resvg_only_geometry():
+            self._trace_resvg_only_miss(element, self._resvg_miss_reason(element))
+            return None
 
         # Legacy path conversion (with optional resvg normalization as best-effort)
         segments: list[SegmentType] | None = None
@@ -911,6 +979,16 @@ class ShapeConversionMixin:
         return path_object
 
     def _convert_polygon(self, *, element: etree._Element, coord_space: CoordinateSpace):
+        if self._resvg_only_geometry():
+            if self._can_use_resvg(element):
+                resvg_result = self._convert_via_resvg(element, coord_space)
+                if resvg_result is not None:
+                    return resvg_result
+                self._trace_resvg_only_miss(element, "resvg_conversion_failed")
+                return None
+            self._trace_resvg_only_miss(element, self._resvg_miss_reason(element))
+            return None
+
         points = _parse_points(element.get("points"))
         if len(points) < 3:
             return None
@@ -1032,6 +1110,16 @@ class ShapeConversionMixin:
         return polygon
 
     def _convert_polyline(self, *, element: etree._Element, coord_space: CoordinateSpace):
+        if self._resvg_only_geometry():
+            if self._can_use_resvg(element):
+                resvg_result = self._convert_via_resvg(element, coord_space)
+                if resvg_result is not None:
+                    return resvg_result
+                self._trace_resvg_only_miss(element, "resvg_conversion_failed")
+                return None
+            self._trace_resvg_only_miss(element, self._resvg_miss_reason(element))
+            return None
+
         points = _parse_points(element.get("points"))
         if len(points) < 2:
             return None

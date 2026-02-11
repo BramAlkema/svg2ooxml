@@ -103,6 +103,50 @@ def _run_openxml_audit(
     return result.returncode == 0, messages or None
 
 
+def _extract_resvg_only_misses(report) -> dict[str, int]:
+    misses: dict[str, int] = {}
+    for event in getattr(report, "geometry_events", []) or []:
+        if getattr(event, "decision", None) != "resvg_only_skip":
+            continue
+        tag = getattr(event, "tag", None) or "unknown"
+        misses[tag] = misses.get(tag, 0) + 1
+    return misses
+
+
+def _merge_policy_overrides(*overrides: dict[str, Any] | None) -> dict[str, dict[str, Any]]:
+    merged: dict[str, dict[str, Any]] = {}
+    for override in overrides:
+        if not isinstance(override, dict):
+            continue
+        for target, values in override.items():
+            if not isinstance(values, dict):
+                continue
+            bucket = merged.setdefault(str(target), {})
+            for key, value in values.items():
+                bucket[str(key)] = value
+    return merged
+
+
+def _normalize_policy_overrides(
+    overrides: dict[str, dict[str, Any]] | None,
+) -> dict[str, dict[str, Any]] | None:
+    if not overrides:
+        return None
+    normalized: dict[str, dict[str, Any]] = {}
+    for target, values in overrides.items():
+        if not isinstance(values, dict):
+            continue
+        bucket = normalized.setdefault(str(target), {})
+        for key, value in values.items():
+            if not isinstance(key, str):
+                continue
+            if "." in key:
+                bucket[key] = value
+            else:
+                bucket[f"{target}.{key}"] = value
+    return normalized or None
+
+
 @dataclass
 class DeckMetrics:
     """Metrics for a single corpus deck."""
@@ -137,6 +181,10 @@ class DeckMetrics:
     success: bool = True
     error_message: str | None = None
 
+    # Resvg-only geometry misses
+    resvg_only_total: int = 0
+    resvg_only_misses: dict[str, int] | None = None
+
 
 @dataclass
 class CorpusReport:
@@ -158,9 +206,13 @@ class CorpusReport:
     
     # Target comparison
     targets_met: dict[str, bool]
-    
+
     # Summary
     summary: str
+
+    # Resvg-only geometry misses (aggregated)
+    resvg_only_total: int = 0
+    resvg_only_misses: dict[str, int] | None = None
 
 
 def _run_deck_worker(payload: dict[str, Any]) -> DeckMetrics:
@@ -214,7 +266,13 @@ def _run_deck_worker(payload: dict[str, Any]) -> DeckMetrics:
 
         import time
         start_time = time.time()
-        scene = convert_parser_output(parse_result, services=services, tracer=tracer)
+        policy_overrides = _normalize_policy_overrides(deck_info.get("policy_overrides"))
+        scene = convert_parser_output(
+            parse_result,
+            services=services,
+            tracer=tracer,
+            overrides=policy_overrides,
+        )
         metrics.conversion_time_ms = (time.time() - start_time) * 1000
 
         render_result = writer.render_scene_from_ir(scene, tracer=tracer)
@@ -236,6 +294,11 @@ def _run_deck_worker(payload: dict[str, Any]) -> DeckMetrics:
         report = tracer.report()
         geom_totals = report.geometry_totals
         paint_totals = report.paint_totals
+
+        misses = _extract_resvg_only_misses(report)
+        if misses:
+            metrics.resvg_only_misses = misses
+            metrics.resvg_only_total = sum(misses.values())
 
         metrics.native_count = (
             geom_totals.get("native", 0) +
@@ -471,7 +534,13 @@ class CorpusRunner:
             
             import time
             start_time = time.time()
-            scene = convert_parser_output(parse_result, services=services, tracer=tracer)
+            policy_overrides = _normalize_policy_overrides(deck_info.get("policy_overrides"))
+            scene = convert_parser_output(
+                parse_result,
+                services=services,
+                tracer=tracer,
+                overrides=policy_overrides,
+            )
             conversion_time_ms = (time.time() - start_time) * 1000
             metrics.conversion_time_ms = conversion_time_ms
             
@@ -497,6 +566,16 @@ class CorpusRunner:
             report = tracer.report()
             geom_totals = report.geometry_totals
             paint_totals = report.paint_totals
+
+            misses = _extract_resvg_only_misses(report)
+            if misses:
+                metrics.resvg_only_misses = misses
+                metrics.resvg_only_total = sum(misses.values())
+
+            misses = _extract_resvg_only_misses(report)
+            if misses:
+                metrics.resvg_only_misses = misses
+                metrics.resvg_only_total = sum(misses.values())
             
             # Basic counting logic:
             # Native: 'native', 'resvg' (if resvg produced vector), 'wordart'
@@ -610,7 +689,13 @@ class CorpusRunner:
 
             import time
             start_time = time.time()
-            scene = convert_parser_output(parse_result, services=services, tracer=tracer)
+            policy_overrides = _normalize_policy_overrides(deck_info.get("policy_overrides"))
+            scene = convert_parser_output(
+                parse_result,
+                services=services,
+                tracer=tracer,
+                overrides=policy_overrides,
+            )
             conversion_time_ms = (time.time() - start_time) * 1000
             metrics.conversion_time_ms = conversion_time_ms
 
@@ -677,6 +762,12 @@ class CorpusRunner:
         """
         metadata = self.load_metadata()
         decks = metadata.get("decks", [])
+        global_overrides = metadata.get("policy_overrides")
+        if global_overrides:
+            decks = [
+                dict(deck, policy_overrides=_merge_policy_overrides(global_overrides, deck.get("policy_overrides")))
+                for deck in decks
+            ]
         targets = metadata.get("targets", {})
         
         planned_total = len(decks)
@@ -1075,6 +1166,13 @@ class CorpusRunner:
         }
         if avg_ssim is not None:
             targets_met["visual_fidelity"] = avg_ssim >= targets.get("visual_fidelity_min", 0.90)
+
+        resvg_only_misses: dict[str, int] = {}
+        for result in results:
+            if result.resvg_only_misses:
+                for tag, count in result.resvg_only_misses.items():
+                    resvg_only_misses[tag] = resvg_only_misses.get(tag, 0) + int(count)
+        resvg_only_total = sum(resvg_only_misses.values())
         
         # Generate summary
         if total_decks < planned_total:
@@ -1103,10 +1201,16 @@ class CorpusRunner:
             summary_lines.append(
                 f"OpenXML audit pass rate: {openxml_rate:.1%} ({passed}/{len(openxml_results)})"
             )
+        if resvg_only_total:
+            top_tags = sorted(resvg_only_misses.items(), key=lambda item: item[1], reverse=True)[:8]
+            top_tags_str = ", ".join(f"{tag}={count}" for tag, count in top_tags)
+            summary_lines.append(
+                f"Resvg-only geometry skips: {resvg_only_total} (top: {top_tags_str})"
+            )
         summary = "\n".join(summary_lines)
         
         report = CorpusReport(
-        timestamp=datetime.now(UTC).isoformat(),
+            timestamp=datetime.now(UTC).isoformat(),
             mode=self.mode,
             total_decks=total_decks,
             successful_decks=successful_decks,
@@ -1117,6 +1221,8 @@ class CorpusRunner:
             avg_ssim_score=avg_ssim,
             decks=[asdict(r) for r in results],
             targets_met=targets_met,
+            resvg_only_total=resvg_only_total,
+            resvg_only_misses=resvg_only_misses or None,
             summary=summary,
         )
         
