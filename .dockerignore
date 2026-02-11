@@ -1,0 +1,9 @@
+.git
+.venv
+__pycache__
+reports
+tests/corpus/w3c/output
+*.pptx
+*.ppt
+*.tmp
+*.log

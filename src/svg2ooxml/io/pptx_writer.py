@@ -681,6 +681,17 @@ class _PackageWriterBase:
                 else:
                     font_attrs["charset"] = "0"
                 ET.SubElement(entry_elem, f"{{{P_NS}}}font", font_attrs)
+                font_guid = None
+                if representative and representative.guid:
+                    font_guid = representative.guid
+                else:
+                    for candidate in style_map.values():
+                        if candidate.guid:
+                            font_guid = candidate.guid
+                            break
+                if isinstance(font_guid, str) and font_guid:
+                    guid_value = font_guid if font_guid.startswith("{") else f"{{{font_guid}}}"
+                    ET.SubElement(entry_elem, f"{{{P_NS}}}fontKey", {"guid": guid_value})
                 for style_kind in FONT_STYLE_ORDER:
                     tagged = style_map.get(style_kind)
                     if tagged is None:
