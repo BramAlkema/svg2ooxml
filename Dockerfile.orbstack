@@ -26,14 +26,9 @@ WORKDIR /workspace
 COPY svg2ooxml /workspace
 COPY openxml-audit /workspace/openxml-audit
 
-RUN python3 -m venv --system-site-packages /workspace/.venv \
-  && . /workspace/.venv/bin/activate \
-  && python -m pip install --upgrade pip setuptools wheel \
-  && python -m pip install -r /workspace/requirements-dev.txt \
-  && python -m pip install -e /workspace/openxml-audit
+RUN python3 -m pip install -r /workspace/requirements-dev.txt --break-system-packages \
+  && python3 -m pip install -e /workspace/openxml-audit --break-system-packages
 
-ENV VIRTUAL_ENV=/workspace/.venv \
-    PATH="/workspace/.venv/bin:${PATH}" \
-    OPENXML_VALIDATOR="/workspace/.venv/bin"
+ENV OPENXML_VALIDATOR="/usr/local/bin"
 
 CMD ["/bin/bash"]
