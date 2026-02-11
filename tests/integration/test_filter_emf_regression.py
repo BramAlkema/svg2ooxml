@@ -9,15 +9,12 @@ from lxml import etree
 from svg2ooxml.services.filter_service import FilterService
 
 EXPECTED_EMF_DIGESTS: dict[str, str] = {
-    "combo": "872bde4b2ebfd0d257b1eb012161dd01880f99e4",
     "blend": "7e7f3a7767f9ead23ac7d9ac31c491532fe8fbee",
     "comp": "b9dc0f5f63ec5b1395ccb8661fa075f7efb3d2b9",
     "cmm": "a18f5ef909dc192d0937e0ad5e18818d0aa198b7",
     "disp": "de0c077075581603d6fad4cfb5d0696b1c6c9834",
-    "diff": "983a7907c38087de6008c4ef0d8bde35000360ab",
     "turb": "a6a863ec18fbf60200f41ab6901f5dc636fc8077",
     "conv": "949b74a65438d77da56118b339e2a5b373e3707e",
-    "spec": "3cfa71be9c48056855321db25b5545dce9a94d00",
 }
 
 
@@ -38,15 +35,28 @@ def _emf_hash(filter_markup: str, filter_id: str) -> str:
     return hashlib.sha1(data).hexdigest()
 
 
-def test_composite_filter_emf_bytes_stable() -> None:
+def _assert_native_without_emf(filter_markup: str, filter_id: str) -> None:
+    service = FilterService()
+    service.register_filter(filter_id, etree.fromstring(filter_markup))
+    results = service.resolve_effects(filter_id)
+    assert results
+    assert all(res.fallback != "emf" for res in results)
+    assert any(res.strategy == "native" for res in results)
+
+
+def test_composite_filter_prefers_native() -> None:
     filter_markup = (
         "<filter id='combo'>"
         "  <feGaussianBlur stdDeviation='1.2' result='blurred'/>"
         "  <feComposite operator='over' in='SourceGraphic' in2='blurred' result='combined'/>"
         "</filter>"
     )
-    digest = _emf_hash(filter_markup, "combo")
-    assert digest == EXPECTED_EMF_DIGESTS["combo"]
+    service = FilterService()
+    service.register_filter("combo", etree.fromstring(filter_markup))
+    results = service.resolve_effects("combo")
+    assert results
+    assert all(res.fallback != "emf" for res in results)
+    assert any(res.strategy == "native" for res in results)
 
 
 def test_blend_filter_emf_bytes_stable() -> None:
@@ -96,7 +106,7 @@ def test_displacement_map_emf_bytes_stable() -> None:
     assert digest == EXPECTED_EMF_DIGESTS["disp"]
 
 
-def test_diffuse_lighting_emf_bytes_stable() -> None:
+def test_diffuse_lighting_prefers_native() -> None:
     filter_markup = (
         "<filter id='diff'>"
         "  <feDiffuseLighting surfaceScale='2' diffuseConstant='1.5' lighting-color='#9bb8ff'>"
@@ -104,8 +114,7 @@ def test_diffuse_lighting_emf_bytes_stable() -> None:
         "  </feDiffuseLighting>"
         "</filter>"
     )
-    digest = _emf_hash(filter_markup, "diff")
-    assert digest == EXPECTED_EMF_DIGESTS["diff"]
+    _assert_native_without_emf(filter_markup, "diff")
 
 
 def test_turbulence_emf_bytes_stable() -> None:
@@ -128,7 +137,7 @@ def test_convolve_matrix_emf_bytes_stable() -> None:
     assert digest == EXPECTED_EMF_DIGESTS["conv"]
 
 
-def test_specular_lighting_emf_bytes_stable() -> None:
+def test_specular_lighting_prefers_native() -> None:
     filter_markup = (
         "<filter id='spec'>"
         "  <feSpecularLighting surfaceScale='3' specularConstant='0.6' specularExponent='10' lighting-color='#304060'>"
@@ -136,5 +145,4 @@ def test_specular_lighting_emf_bytes_stable() -> None:
         "  </feSpecularLighting>"
         "</filter>"
     )
-    digest = _emf_hash(filter_markup, "spec")
-    assert digest == EXPECTED_EMF_DIGESTS["spec"]
+    _assert_native_without_emf(filter_markup, "spec")

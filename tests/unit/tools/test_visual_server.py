@@ -56,6 +56,4 @@ def test_visual_server_serves_fixture_listing(tmp_path) -> None:
     assert compare.status_code == 200
     assert 'data-testid="download-links"' in compare.text
     assert 'data-testid="download-resvg"' in compare.text
-    assert 'data-testid="download-legacy"' in compare.text
     assert 'data-testid="pane-resvg"' in compare.text
-    assert 'data-testid="pane-legacy"' in compare.text

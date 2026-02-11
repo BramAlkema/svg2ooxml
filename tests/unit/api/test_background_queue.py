@@ -6,6 +6,7 @@ import pytest
 
 
 def test_enqueue_export_job_huey(monkeypatch: pytest.MonkeyPatch):
+    pytest.importorskip("huey")
     called: list[str] = []
 
     def fake_process_export_job(job_id: str) -> None:
