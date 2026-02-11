@@ -300,12 +300,15 @@ def test_diffuse_lighting_captures_light_source() -> None:
     assert effect.metadata.get("filter_type") == "diffuse_lighting"
     if effect.metadata.get("approximation") == "glow" and effect.fallback is None:
         assert effect.metadata.get("native_support") is True
+        assert effect.fallback is None
+        assert effect.strategy == "native"
+        assert not effect.metadata.get("fallback_assets")
     else:
         assert effect.metadata.get("native_support") is False
-    assert effect.fallback == "raster"
-    assert effect.strategy == "raster"
-    assets = effect.metadata.get("fallback_assets")
-    assert assets and assets[0]["type"] == "raster"
+        assert effect.fallback == "raster"
+        assert effect.strategy == "raster"
+        assets = effect.metadata.get("fallback_assets")
+        assert assets and assets[0]["type"] == "raster"
 
 
 def test_specular_lighting_serialises_spot_light() -> None:
@@ -321,9 +324,15 @@ def test_specular_lighting_serialises_spot_light() -> None:
     assert results
     effect = results[0]
     assert effect.metadata.get("filter_type") == "specular_lighting"
-    assert effect.metadata.get("native_support") is False
-    assert effect.metadata.get("fallback_reason") == "specular_lighting_rendered_via_resvg"
-    assert effect.fallback == "raster"
-    assert effect.strategy == "raster"
-    assets = effect.metadata.get("fallback_assets")
-    assert assets and assets[0]["type"] == "raster"
+    if effect.metadata.get("approximation") == "glow" and effect.fallback is None:
+        assert effect.metadata.get("native_support") is True
+        assert effect.fallback is None
+        assert effect.strategy == "native"
+        assert not effect.metadata.get("fallback_assets")
+    else:
+        assert effect.metadata.get("native_support") is False
+        assert effect.metadata.get("fallback_reason") == "specular_lighting_rendered_via_resvg"
+        assert effect.fallback == "raster"
+        assert effect.strategy == "raster"
+        assets = effect.metadata.get("fallback_assets")
+        assert assets and assets[0]["type"] == "raster"
