@@ -242,7 +242,7 @@ def test_image_without_href_warns_and_falls_back() -> None:
     assert effect.fallback == "bitmap"
 
 
-def test_image_with_href_avoids_fallback() -> None:
+def test_image_with_href_uses_bitmap_fallback() -> None:
     service = FilterService()
     results = _resolve(
         service,
@@ -252,7 +252,7 @@ def test_image_with_href_avoids_fallback() -> None:
     )
     assert results
     effect = results[0]
-    assert effect.fallback is None
+    assert effect.fallback == "bitmap"
     assert effect.effect.drawingml.startswith("<!-- svg2ooxml:image")
 
 
