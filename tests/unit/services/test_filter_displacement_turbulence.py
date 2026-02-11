@@ -11,6 +11,7 @@ from svg2ooxml.ir.effects import CustomEffect
 from svg2ooxml.services import ConversionServices
 from svg2ooxml.services.filter_service import FilterService
 from svg2ooxml.services.filter_types import FilterEffectResult
+from tests.unit.filters.policy import assert_assets, assert_fallback, assert_strategy
 
 
 def _service_with_filter(filter_xml: str) -> FilterService:
@@ -45,11 +46,11 @@ def test_displacement_map_filter_uses_emf_fallback() -> None:
     assert results
     first = results[0]
     assert isinstance(first, FilterEffectResult)
-    assert first.strategy == "vector"
+    assert_strategy(first, modern="vector")
     assert isinstance(first.effect, CustomEffect)
-    assert first.fallback == "emf"
-    assets = first.metadata.get("fallback_assets")
-    assert assets and assets[0]["type"] == "emf"
+    assert_fallback(first, modern="emf")
+    assert_assets(first, modern="emf")
+    assets = first.metadata.get("fallback_assets") or []
     assert "data_hex" in assets[0]
 
 
@@ -65,12 +66,12 @@ def test_turbulence_filter_uses_emf_fallback() -> None:
     assert results
     first = results[0]
     assert isinstance(first, FilterEffectResult)
-    assert first.strategy == "vector"
+    assert_strategy(first, modern="vector")
     assert isinstance(first.effect, CustomEffect)
-    assert first.fallback == "emf"
+    assert_fallback(first, modern="emf")
     assert first.metadata["native_support"] is False
-    assets = first.metadata.get("fallback_assets")
-    assert assets and assets[0]["type"] == "emf"
+    assert_assets(first, modern="emf")
+    assets = first.metadata.get("fallback_assets") or []
     assert "data_hex" in assets[0]
 
 

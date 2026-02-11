@@ -18,6 +18,7 @@ from svg2ooxml.filters.resvg_bridge import (
 from svg2ooxml.render.filters import plan_filter
 from svg2ooxml.services.conversion import ConversionServices
 from svg2ooxml.services.filter_service import FilterService
+from tests.unit.filters.policy import assert_fallback
 
 ASSETS_DIR = Path(__file__).resolve().parents[2] / "assets"
 
@@ -269,12 +270,12 @@ def test_resvg_promotes_color_matrix_to_emf_asset() -> None:
 
     assert results
     effect = results[0]
+    assert_fallback(effect, modern=None, legacy="emf")
     metadata = effect.metadata or {}
     if effect.fallback == "emf":
         assert metadata.get("filter_type") == "color_matrix"
         assert metadata.get("value_count") == 20
     else:
-        assert effect.fallback is None
         assert metadata.get("renderer") == "resvg"
         assert metadata.get("resvg_promotion") in {"native", "vector", "emf"}
         plan_primitives = metadata.get("plan_primitives") or []

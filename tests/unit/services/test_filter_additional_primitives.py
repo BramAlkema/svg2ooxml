@@ -7,6 +7,12 @@ from lxml import etree
 from svg2ooxml.common.units import px_to_emu
 from svg2ooxml.services.filter_service import FilterService
 from svg2ooxml.services.filter_types import FilterEffectResult
+from tests.unit.filters.policy import (
+    assert_assets,
+    assert_fallback,
+    assert_no_assets,
+    assert_strategy,
+)
 
 
 def _resolve(service: FilterService, markup: str) -> list[FilterEffectResult]:
@@ -21,7 +27,7 @@ def test_flood_produces_extension_payload() -> None:
     results = _resolve(service, "<filter id='f'><feFlood flood-color='#123456' flood-opacity='0.4'/></filter>")
     assert results
     effect = results[0]
-    assert effect.fallback is None
+    assert_fallback(effect, modern=None)
     assert effect.effect.drawingml.startswith("<a:effectLst>")
     assert "<a:solidFill>" in effect.effect.drawingml
     assert "svg2ooxml:flood" not in effect.effect.drawingml
@@ -49,7 +55,7 @@ def test_morphology_dilate_emits_glow_with_colour_strategy() -> None:
     )
     assert results
     effect = results[1]
-    assert effect.fallback is None
+    assert_fallback(effect, modern=None)
     assert effect.metadata["filter_type"] == "morphology"
     assert effect.metadata["radius_x"] == 2.0
     assert effect.metadata["radius_y"] == 4.0
@@ -80,7 +86,7 @@ def test_morphology_erode_emits_soft_edge_effect() -> None:
     drawingml = effect.effect.drawingml
     assert drawingml.startswith("<a:effectLst>")
     assert f'<a:softEdge rad="{expected_rad}"/>' in drawingml
-    assert effect.fallback is None
+    assert_fallback(effect, modern=None)
     assert effect.metadata.get("native_support") is True
 
 
@@ -97,11 +103,11 @@ def test_component_transfer_serialises_functions() -> None:
     )
     assert results
     effect = results[0]
-    assert effect.fallback == "emf"
-    assert effect.strategy == "vector"
-    assets = effect.metadata.get("fallback_assets")
-    assert assets and assets[0]["type"] == "emf"
-    asset_meta = assets[0].get("metadata", {})
+    assert_fallback(effect, modern="emf")
+    assert_strategy(effect, modern="vector")
+    assert_assets(effect, modern="emf")
+    assets = effect.metadata.get("fallback_assets") or []
+    asset_meta = assets[0].get("metadata", {}) if assets else {}
     assert assets[0].get("data_hex") or assets[0].get("data")
     assert asset_meta.get("filter_type") == "component_transfer"
 
@@ -117,9 +123,9 @@ def test_convolve_matrix_tracks_kernel() -> None:
     assert results
     effect = results[0]
     assert effect.metadata["order"] == (3, 3)
-    assert effect.fallback == "emf"
-    assets = effect.metadata.get("fallback_assets")
-    assert assets and assets[0]["type"] == "emf"
+    assert_fallback(effect, modern="emf")
+    assert_assets(effect, modern="emf")
+    assets = effect.metadata.get("fallback_assets") or []
     assert assets[0].get("metadata", {}).get("filter_type") == "convolve_matrix"
 
 
@@ -211,9 +217,9 @@ def test_diffuse_lighting_resvg_path() -> None:
     effect = next((res for res in results if res.metadata.get("filter_type") == "diffuse_lighting"), None)
     assert effect is not None
     if effect.metadata.get("approximation") == "glow" and effect.fallback is None:
-        assert not effect.metadata.get("fallback_assets")
+        assert_no_assets(effect)
     else:
-        assert effect.metadata.get("fallback_assets")
+        assert_assets(effect, modern="raster")
 
 
 def test_specular_lighting_resvg_path() -> None:
@@ -229,9 +235,9 @@ def test_specular_lighting_resvg_path() -> None:
     effect = next((res for res in results if res.metadata.get("filter_type") == "specular_lighting"), None)
     assert effect is not None
     if effect.metadata.get("approximation") == "glow" and effect.fallback is None:
-        assert not effect.metadata.get("fallback_assets")
+        assert_no_assets(effect)
     else:
-        assert effect.metadata.get("fallback_assets")
+        assert_assets(effect, modern="raster")
 
 
 def test_image_without_href_warns_and_falls_back() -> None:
@@ -239,7 +245,7 @@ def test_image_without_href_warns_and_falls_back() -> None:
     results = _resolve(service, "<filter id='f'><feImage/></filter>")
     assert results
     effect = results[0]
-    assert effect.fallback == "bitmap"
+    assert_fallback(effect, modern="bitmap")
 
 
 def test_image_with_href_uses_bitmap_fallback() -> None:
@@ -252,7 +258,7 @@ def test_image_with_href_uses_bitmap_fallback() -> None:
     )
     assert results
     effect = results[0]
-    assert effect.fallback == "bitmap"
+    assert_fallback(effect, modern="bitmap", legacy=None)
     assert effect.effect.drawingml.startswith("<!-- svg2ooxml:image")
 
 
@@ -276,7 +282,7 @@ def test_composite_over_reuses_native_inputs() -> None:
     ]
     assert composites, "expected over composite result"
     final = composites[-1]
-    assert final.fallback is None
+    assert_fallback(final, modern=None)
     assert final.effect.drawingml.startswith("<a:effectLst>")
     assert "<a:outerShdw" in final.effect.drawingml
     assert final.metadata.get("native_support") is True
@@ -300,15 +306,14 @@ def test_diffuse_lighting_captures_light_source() -> None:
     assert effect.metadata.get("filter_type") == "diffuse_lighting"
     if effect.metadata.get("approximation") == "glow" and effect.fallback is None:
         assert effect.metadata.get("native_support") is True
-        assert effect.fallback is None
-        assert effect.strategy == "native"
-        assert not effect.metadata.get("fallback_assets")
+        assert_fallback(effect, modern=None)
+        assert_strategy(effect, modern="native")
+        assert_no_assets(effect)
     else:
         assert effect.metadata.get("native_support") is False
-        assert effect.fallback == "raster"
-        assert effect.strategy == "raster"
-        assets = effect.metadata.get("fallback_assets")
-        assert assets and assets[0]["type"] == "raster"
+        assert_fallback(effect, modern="raster")
+        assert_strategy(effect, modern="raster")
+        assert_assets(effect, modern="raster")
 
 
 def test_specular_lighting_serialises_spot_light() -> None:
@@ -326,13 +331,12 @@ def test_specular_lighting_serialises_spot_light() -> None:
     assert effect.metadata.get("filter_type") == "specular_lighting"
     if effect.metadata.get("approximation") == "glow" and effect.fallback is None:
         assert effect.metadata.get("native_support") is True
-        assert effect.fallback is None
-        assert effect.strategy == "native"
-        assert not effect.metadata.get("fallback_assets")
+        assert_fallback(effect, modern=None)
+        assert_strategy(effect, modern="native")
+        assert_no_assets(effect)
     else:
         assert effect.metadata.get("native_support") is False
         assert effect.metadata.get("fallback_reason") == "specular_lighting_rendered_via_resvg"
-        assert effect.fallback == "raster"
-        assert effect.strategy == "raster"
-        assets = effect.metadata.get("fallback_assets")
-        assert assets and assets[0]["type"] == "raster"
+        assert_fallback(effect, modern="raster")
+        assert_strategy(effect, modern="raster")
+        assert_assets(effect, modern="raster")

@@ -7,6 +7,7 @@ from lxml import etree
 from svg2ooxml.common.units import px_to_emu
 from svg2ooxml.services.filter_service import FilterService
 from svg2ooxml.services.filter_types import FilterEffectResult
+from tests.unit.filters.policy import assert_fallback
 
 
 def _resolve_with_policy(markup: str, policy: dict[str, object]) -> list[FilterEffectResult]:
@@ -44,6 +45,6 @@ def test_morphology_dilate_respects_colour_preference_policy() -> None:
     results = _resolve_with_policy(svg, {"preferred_glow_strategy": "flood"})
     assert results
     effect = results[1]
-    assert effect.fallback is None
+    assert_fallback(effect, modern=None)
     assert effect.metadata.get("color") == "ABCDEF"
     assert str(effect.metadata.get("color_strategy", "")).startswith("pipeline:flood_color")
