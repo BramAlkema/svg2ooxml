@@ -33,6 +33,9 @@ def _default_metrics_path() -> Path:
     override = os.environ.get("SVG2OOXML_METRICS_PATH")
     if override:
         return Path(override)
+    reports_dir = os.environ.get("SVG2OOXML_REPORTS_DIR")
+    if reports_dir:
+        return Path(reports_dir).expanduser() / "metrics.jsonl"
     return _DEFAULT_METRICS_PATH
 
 

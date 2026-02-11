@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import shutil
 import tempfile
 from collections.abc import Iterator
@@ -10,13 +11,16 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_TMP_DIR = PROJECT_ROOT / "tmp"
+ENV_TEMP_DIR = "SVG2OOXML_TEMP_DIR"
 
 
 def project_temp_dir() -> Path:
-    """Ensure and return the repository-scoped tmp directory."""
+    """Ensure and return the tmp directory used for working files."""
 
-    DEFAULT_TMP_DIR.mkdir(parents=True, exist_ok=True)
-    return DEFAULT_TMP_DIR
+    override = os.getenv(ENV_TEMP_DIR)
+    base_dir = Path(override).expanduser() if override else DEFAULT_TMP_DIR
+    base_dir.mkdir(parents=True, exist_ok=True)
+    return base_dir
 
 
 @contextmanager

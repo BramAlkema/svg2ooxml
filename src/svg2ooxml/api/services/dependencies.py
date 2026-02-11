@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -60,7 +61,14 @@ def build_export_service_dependencies(project_id: str | None) -> ExportServiceDe
     if isinstance(storage_client, FakeStorageClient):
         font_fetcher = OfflineFontFetcher()
     else:
-        font_cache_root = Path(tempfile.gettempdir()) / "svg2ooxml-font-cache"
+        cache_override = (
+            os.getenv("SVG2OOXML_FONT_CACHE_DIR")
+            or os.getenv("SVG2OOXML_WEB_FONT_CACHE")
+        )
+        if cache_override:
+            font_cache_root = Path(cache_override).expanduser()
+        else:
+            font_cache_root = Path(tempfile.gettempdir()) / "svg2ooxml-font-cache"
         font_fetcher = FontFetcher(cache_directory=font_cache_root)
 
     return ExportServiceDependencies(
