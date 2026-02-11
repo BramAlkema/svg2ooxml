@@ -17,8 +17,8 @@ policy.
    `feColorMatrix`, `feComponentTransfer`, or `feConvolveMatrix` – are promoted
    straight to EMF so the effect stays editable; more complex plans fall back to
    bounded PNGs while parity work continues.
-3. **Legacy raster fallback** – only if both native and resvg fail do we fall
-   back to the original rasterisation path (skia/placeholder glyphs).</br>
+3. **Raster fallback** – only if both native and resvg fail do we fall back to
+   the original rasterisation path (skia/placeholder glyphs).</br>
 
 Every `FilterEffectResult` contains:
 
@@ -48,10 +48,9 @@ Available values:
 
 | Strategy       | Behaviour                                                               |
 | -------------- | ----------------------------------------------------------------------- |
-| `auto`         | Native → resvg → legacy (default).                                      |
+| `auto`         | Native → resvg → raster (default).                                      |
 | `resvg`        | Prefer resvg; still runs native first for primitives with known output. |
-| `resvg-only`   | Force resvg; skip native/legacy fallbacks (for targeted testing).       |
-| `legacy`       | Skip resvg and rely on the classic registry/raster path.                |
+| `resvg-only`   | Force resvg; skip native/raster fallbacks (for targeted testing).       |
 | `vector`, `emf`| Force vector fallbacks (used by policy sandboxes).                      |
 | `raster`       | Force raster fallbacks.                                                 |
 
@@ -96,13 +95,13 @@ strategy remains in control.
 Toggling a strategy in tests or scripts:
 
 ```python
-policy_overrides = {"filter": {"strategy": "legacy"}}
+policy_overrides = {"filter": {"strategy": "raster"}}
 result = exporter.convert_string(svg_text, output, tracer=tracer, policy_overrides=policy_overrides)
 ```
 
 ### Visual baselines
 
-Set `SVG2OOXML_VISUAL_FILTER_STRATEGY=resvg` (or `legacy`) before running
+Set `SVG2OOXML_VISUAL_FILTER_STRATEGY=resvg` before running
 `tools/visual/update_baselines.py` to refresh golden images with the desired
 renderer:
 
@@ -139,7 +138,7 @@ Expect to see:
   to raster (includes the violated rule and thresholds).
 - `resvg_lighting_promoted` / `resvg_lighting_candidate` when lighting primitives
   enter the promotion path (prototype coverage for diffuse/specular lighting).
-- `filter_effect` when legacy/native registry handled a primitive.
+- `filter_effect` when the native registry handled a primitive.
 - `media_registered` / `geometry_rasterized` when a bitmap asset was generated.
 
 ## Roadmap

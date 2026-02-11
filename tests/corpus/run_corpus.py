@@ -6,7 +6,6 @@ detailed metrics on rendering decisions (native/EMF/raster rates) and visual fid
 
 Usage:
     python tests/corpus/run_corpus.py
-    python tests/corpus/run_corpus.py --mode resvg
     python tests/corpus/run_corpus.py --output reports/corpus_report.json
 
 Requirements:
@@ -109,7 +108,7 @@ class DeckMetrics:
     """Metrics for a single corpus deck."""
     deck_name: str
     source: str
-    mode: str  # "legacy" or "resvg"
+    mode: str  # "resvg"
     
     # Rendering decision metrics
     total_elements: int = 0
@@ -203,7 +202,7 @@ def _run_deck_worker(payload: dict[str, Any]) -> DeckMetrics:
         if not parse_result.success or parse_result.svg_root is None:
             raise ValueError(f"SVG parsing failed: {parse_result.error_message}")
 
-        filter_strategy = mode if mode in ["legacy", "resvg"] else "resvg"
+        filter_strategy = mode
         services = parse_result.services
         if services is None:
             services = configure_services(filter_strategy=filter_strategy)
@@ -383,7 +382,7 @@ class CorpusRunner:
         Args:
             corpus_dir: Directory containing corpus SVG files and metadata
             output_dir: Directory for output PPTX files and reports
-            mode: Rendering mode ("legacy" or "resvg")
+            mode: Rendering mode ("resvg")
             metadata_file: Path to metadata file (default: corpus_dir/corpus_metadata.json)
             write_pptx: Whether to write PPTX outputs (metrics-only when False)
         """
@@ -459,7 +458,7 @@ class CorpusRunner:
                 raise ValueError(f"SVG parsing failed: {parse_result.error_message}")
             
             # Configure services with appropriate mode
-            filter_strategy = self.mode if self.mode in ["legacy", "resvg"] else "resvg"
+            filter_strategy = self.mode
             services = parse_result.services
             if services is None:
                 services = configure_services(filter_strategy=filter_strategy)
@@ -599,7 +598,7 @@ class CorpusRunner:
             if not parse_result.success or parse_result.svg_root is None:
                 raise ValueError(f"SVG parsing failed: {parse_result.error_message}")
 
-            filter_strategy = self.mode if self.mode in ["legacy", "resvg"] else "resvg"
+            filter_strategy = self.mode
             services = parse_result.services
             if services is None:
                 services = configure_services(filter_strategy=filter_strategy)
@@ -1137,9 +1136,9 @@ def main():
     )
     parser.add_argument(
         "--mode",
-        choices=["legacy", "resvg"],
+        choices=["resvg"],
         default="resvg",
-        help="Rendering mode (default: resvg)",
+        help="Rendering mode (resvg only)",
     )
     parser.add_argument(
         "--corpus-dir",

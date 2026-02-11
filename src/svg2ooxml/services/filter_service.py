@@ -33,7 +33,6 @@ ALLOWED_STRATEGIES = {
     "vector",
     "raster",
     "emf",
-    "legacy",
     "resvg",
     "resvg-only",
 }
@@ -196,7 +195,7 @@ class FilterService:
         descriptor_results: list[FilterEffectResult] | None = None
         strategy = self._resolve_strategy(filter_context, descriptor)
 
-        resvg_enabled = strategy not in {"legacy", "vector", "emf", "raster"}
+        resvg_enabled = strategy not in {"vector", "emf", "raster"}
         resvg_preferred = strategy in {"resvg", "resvg-only"}
         resvg_only = strategy == "resvg-only"
 
@@ -206,7 +205,7 @@ class FilterService:
             if resvg_result is not None and resvg_only:
                 return [resvg_result]
 
-        if strategy in {"auto", "native", "legacy", "resvg", "resvg-only"}:
+        if strategy in {"auto", "native", "resvg", "resvg-only"}:
             native_results = self._render_native(filter_element, filter_context)
             if native_results:
                 results.extend(native_results)
@@ -217,10 +216,10 @@ class FilterService:
                     if all(result.fallback is None for result in native_results):
                         return results
 
-        skip_legacy = resvg_result is not None and not resvg_preferred and not results
+        skip_fallbacks = resvg_result is not None and not resvg_preferred and not results
 
-        if not skip_legacy:
-            if strategy in {"vector", "emf", "auto", "legacy"}:
+        if not skip_fallbacks:
+            if strategy in {"vector", "emf", "auto"}:
                 computed_vector = self._render_vector(filter_element, filter_context)
                 if computed_vector:
                     emf_sources.extend(
@@ -244,7 +243,7 @@ class FilterService:
                 if emf_sources:
                     results = self._attach_emf_metadata(results, emf_sources)
 
-            if strategy in {"auto", "raster", "legacy"}:
+            if strategy in {"auto", "raster"}:
                 raster_results = self._render_raster(filter_element, filter_context, filter_ref, strategy=strategy)
                 if raster_results:
                     raster_results_cache = list(raster_results)

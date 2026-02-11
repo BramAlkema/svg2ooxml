@@ -98,16 +98,6 @@ def test_pipeline_resvg_exporter(svg_markup: str) -> None:
 
 @pytest.mark.parametrize(
     "svg_markup",
-    [SIMPLE_FILTER],
-)
-def test_pipeline_legacy_strategy(svg_markup: str) -> None:
-    report = _export_svg(svg_markup, strategy="legacy")
-    stages = [event.action for event in report.stage_events if event.stage == "filter"]
-    assert "resvg_attempt" not in stages
-
-
-@pytest.mark.parametrize(
-    "svg_markup",
     [SIMPLE_FILTER, SIMPLE_MASK, SIMPLE_CLIP],
 )
 def test_render_pipeline_surface(svg_markup: str) -> None:
