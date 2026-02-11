@@ -7,6 +7,7 @@ from lxml import etree
 from svg2ooxml.ir.effects import CustomEffect
 from svg2ooxml.services.filter_service import FilterService
 from svg2ooxml.services.filter_types import FilterEffectResult
+from tests.unit.filters.policy import assert_fallback, assert_strategy
 
 
 def _make_service() -> FilterService:
@@ -28,8 +29,8 @@ def test_color_matrix_saturate_uses_raster_fallback() -> None:
     assert results
     first = results[0]
     assert isinstance(first, FilterEffectResult)
-    assert first.fallback == "bitmap"
-    assert first.strategy == "raster"
+    assert_fallback(first, modern="bitmap")
+    assert_strategy(first, modern="raster")
     assert isinstance(first.effect, CustomEffect)
     assert first.effect.drawingml.startswith("<a:effectLst>")
 
@@ -45,8 +46,8 @@ def test_color_matrix_matrix_flags_fallback() -> None:
 
     assert results
     first = results[0]
-    assert first.fallback == "emf"
-    assert first.strategy == "vector"
+    assert_fallback(first, modern="emf")
+    assert_strategy(first, modern="vector")
     assert first.effect.drawingml.startswith("<a:effectLst>")
     assets = first.metadata.get("fallback_assets")
     assert assets and assets[0]["type"] == "emf"

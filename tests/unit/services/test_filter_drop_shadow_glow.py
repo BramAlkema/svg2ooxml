@@ -7,6 +7,7 @@ from lxml import etree
 from svg2ooxml.ir.effects import CustomEffect
 from svg2ooxml.services.filter_service import FilterService
 from svg2ooxml.services.filter_types import FilterEffectResult
+from tests.unit.filters.policy import assert_fallback, assert_strategy
 
 
 def test_drop_shadow_native() -> None:
@@ -21,7 +22,8 @@ def test_drop_shadow_native() -> None:
     assert results
     first = results[0]
     assert isinstance(first, FilterEffectResult)
-    assert first.strategy == "native"
+    assert_strategy(first, modern="native")
+    assert_fallback(first, modern=None)
     assert isinstance(first.effect, CustomEffect)
     assert "outerShdw" in first.effect.drawingml
     assert first.metadata["std_dev"] == 1.2
@@ -39,6 +41,7 @@ def test_glow_native() -> None:
     assert results
     first = results[0]
     assert isinstance(first, FilterEffectResult)
-    assert first.strategy == "native"
+    assert_strategy(first, modern="native")
+    assert_fallback(first, modern=None)
     assert isinstance(first.effect, CustomEffect)
     assert "<a:glow" in first.effect.drawingml

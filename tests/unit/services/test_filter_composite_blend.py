@@ -7,6 +7,7 @@ from lxml import etree
 from svg2ooxml.ir.effects import CustomEffect
 from svg2ooxml.services.filter_service import FilterService
 from svg2ooxml.services.filter_types import FilterEffectResult
+from tests.unit.filters.policy import assert_assets, assert_fallback, assert_strategy
 
 
 def test_composite_without_inputs_falls_back_to_bitmap() -> None:
@@ -21,12 +22,11 @@ def test_composite_without_inputs_falls_back_to_bitmap() -> None:
     assert results
     first = results[0]
     assert isinstance(first, FilterEffectResult)
-    assert first.fallback == "emf"
+    assert_fallback(first, modern="emf")
     assert isinstance(first.effect, CustomEffect)
     assert first.metadata["operator"] == "arithmetic"
     assert "k1" in first.metadata
-    assets = first.metadata.get("fallback_assets")
-    assert assets and assets[0]["type"] == "emf"
+    assert_assets(first, modern="emf")
 
 
 def test_composite_combines_previous_result() -> None:
@@ -44,7 +44,7 @@ def test_composite_combines_previous_result() -> None:
     assert len(results) >= 2
     composite = results[1]
     assert isinstance(composite, FilterEffectResult)
-    assert composite.fallback is None
+    assert_fallback(composite, modern=None)
     assert isinstance(composite.effect, CustomEffect)
     assert composite.effect.drawingml.startswith("<a:effectLst>")
     assert composite.metadata["inputs"] == ["blurred"]
@@ -65,12 +65,11 @@ def test_blend_without_inputs_falls_back_to_bitmap() -> None:
     assert results
     first = results[0]
     assert isinstance(first, FilterEffectResult)
-    assert first.fallback == "bitmap"
-    assert first.strategy == "raster"
+    assert_fallback(first, modern="bitmap", legacy="emf")
+    assert_strategy(first, modern="raster", legacy="vector")
     assert isinstance(first.effect, CustomEffect)
     assert first.metadata["mode"] == "multiply"
-    assets = first.metadata.get("fallback_assets")
-    assert assets and assets[0]["type"] == "raster"
+    assert_assets(first, modern="raster", legacy="emf")
 
 
 def test_blend_combines_previous_results() -> None:
@@ -89,12 +88,11 @@ def test_blend_combines_previous_results() -> None:
     assert len(results) >= 3
     blend_result = results[2]
     assert isinstance(blend_result, FilterEffectResult)
-    assert blend_result.fallback == "bitmap"
+    assert_fallback(blend_result, modern="bitmap", legacy="emf")
     assert isinstance(blend_result.effect, CustomEffect)
     assert blend_result.effect.drawingml.startswith("<a:effectLst>")
     assert blend_result.metadata["inputs"] == ["sat", "blur"]
     assert blend_result.metadata["mode"] == "multiply"
     assert blend_result.metadata["native_support"] is False
-    assert blend_result.strategy == "raster"
-    assets = blend_result.metadata.get("fallback_assets")
-    assert assets and assets[0]["type"] == "raster"
+    assert_strategy(blend_result, modern="raster", legacy="vector")
+    assert_assets(blend_result, modern="raster", legacy="emf")
