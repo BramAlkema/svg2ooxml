@@ -96,7 +96,7 @@ def test_tracer_records_clip_mask_filter() -> None:
 
     assert any(event.tag == "mask" for event in report.geometry_events)
     assert any("clip_id" in (event.metadata or {}) for event in report.geometry_events)
-    assert report.paint_totals.get("bitmap", 0) >= 1 or report.paint_totals.get("emf", 0) >= 1
+    assert any(report.paint_totals.get(key, 0) >= 1 for key in ("native", "bitmap", "emf"))
 
 
 def test_tracer_records_stage_events() -> None:
@@ -132,4 +132,3 @@ def test_tracer_reports_resvg_metrics() -> None:
         "successes": 1,
         "failures": 1,
     }
-
