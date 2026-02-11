@@ -65,11 +65,12 @@ def test_blend_without_inputs_falls_back_to_bitmap() -> None:
     assert results
     first = results[0]
     assert isinstance(first, FilterEffectResult)
-    assert first.fallback == "emf"
+    assert first.fallback == "bitmap"
+    assert first.strategy == "raster"
     assert isinstance(first.effect, CustomEffect)
     assert first.metadata["mode"] == "multiply"
     assets = first.metadata.get("fallback_assets")
-    assert assets and assets[0]["type"] == "emf"
+    assert assets and assets[0]["type"] == "raster"
 
 
 def test_blend_combines_previous_results() -> None:
