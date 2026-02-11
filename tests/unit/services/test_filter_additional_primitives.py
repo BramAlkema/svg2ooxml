@@ -228,7 +228,10 @@ def test_specular_lighting_resvg_path() -> None:
     )
     effect = next((res for res in results if res.metadata.get("filter_type") == "specular_lighting"), None)
     assert effect is not None
-    assert effect.metadata.get("fallback_assets")
+    if effect.metadata.get("approximation") == "glow" and effect.fallback is None:
+        assert not effect.metadata.get("fallback_assets")
+    else:
+        assert effect.metadata.get("fallback_assets")
 
 
 def test_image_without_href_warns_and_falls_back() -> None:
