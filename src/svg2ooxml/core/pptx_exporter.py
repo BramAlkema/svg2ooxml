@@ -216,148 +216,151 @@ class SvgToPptxExporter:
         if not pages:
             raise SvgConversionError("At least one SVG page is required for multi-slide conversion.")
 
-        render_results: list[DrawingMLRenderResult] = []
         page_results: list[SvgPageResult] = []
-
-        for index, page in enumerate(pages, start=1):
-            if render_tiers:
-                tier_variants = build_fidelity_tier_variants()
-                page_seed = page
-                if not page.title and not page.name:
-                    page_seed = SvgPageSource(
-                        svg_text=page.svg_text,
-                        title=f"Slide {index}",
-                        name=page.name,
-                        metadata=page.metadata,
-                    )
-                variant_pages = expand_page_with_variants(page_seed, tier_variants)
-                for variant_page in variant_pages:
-                    variant_overrides = (variant_page.metadata or {}).get("policy_overrides")
-                    variant_tracer = ConversionTracer()
-                    variant_source_path = (variant_page.metadata or {}).get("source_path")
-                    variant_render, variant_scene = self._render_svg(
-                        variant_page.svg_text,
-                        variant_tracer,
-                        variant_overrides,
-                        source_path=variant_source_path,
-                    )
-                    variant_report = variant_tracer.report().to_dict()
-
-                    variant_title = (
-                        variant_page.title
-                        or (
-                            variant_scene.metadata.get("page_title")
-                            if isinstance(variant_scene.metadata, dict)
-                            else None
-                        )
-                        or variant_page.name
-                        or f"Slide {index}"
-                    )
-
-                    variant_metadata: dict[str, Any] | None = None
-                    if isinstance(variant_scene.metadata, dict):
-                        variant_scene.metadata.setdefault("page_title", variant_title)
-                        variant_scene.metadata.setdefault("trace_report", variant_report)
-                        variant_scene.metadata.setdefault("variant", {}).setdefault(
-                            "type",
-                            variant_page.metadata.get("variant", {}).get("type", "variant"),
-                        )
-                        variant_metadata = variant_scene.metadata
-
-                    render_results.append(variant_render)
-                    page_results.append(
-                        SvgPageResult(
-                            title=variant_title,
-                            trace_report=variant_report,
-                            metadata=variant_metadata,
-                        )
-                    )
-                continue
-
-            base_overrides = (page.metadata or {}).get("policy_overrides")
-            base_tracer = ConversionTracer()
-            source_path = (page.metadata or {}).get("source_path")
-            render_result, scene = self._render_svg(
-                page.svg_text,
-                base_tracer,
-                base_overrides,
-                source_path=source_path,
-            )
-            report_dict = base_tracer.report().to_dict()
-
-            slide_title = (
-                page.title
-                or (scene.metadata.get("page_title") if isinstance(scene.metadata, dict) else None)
-                or page.name
-                or f"Slide {index}"
-            )
-
-            scene_metadata: dict[str, Any] | None = None
-            if isinstance(scene.metadata, dict):
-                scene.metadata.setdefault("page_title", slide_title)
-                scene.metadata.setdefault("trace_report", report_dict)
-                if page.metadata:
-                    scene.metadata.setdefault("page_metadata", {}).update(page.metadata)
-                scene.metadata.setdefault("variant", {}).setdefault("type", "base")
-                scene_metadata = scene.metadata
-
-            render_results.append(render_result)
-            page_results.append(
-                SvgPageResult(
-                    title=slide_title,
-                    trace_report=report_dict,
-                    metadata=scene_metadata,
-                )
-            )
-
-            if split_fallback_variants:
-                variants = derive_variants_from_trace(report_dict, enable_split=True)
-                variant_pages = expand_page_with_variants(page, variants)
-                for variant_page in variant_pages:
-                    variant_overrides = (variant_page.metadata or {}).get("policy_overrides")
-                    variant_tracer = ConversionTracer()
-                    variant_source_path = (variant_page.metadata or {}).get("source_path")
-                    variant_render, variant_scene = self._render_svg(
-                        variant_page.svg_text,
-                        variant_tracer,
-                        variant_overrides,
-                        source_path=variant_source_path,
-                    )
-                    variant_report = variant_tracer.report().to_dict()
-
-                    variant_title = (
-                        variant_page.title
-                        or (variant_scene.metadata.get("page_title") if isinstance(variant_scene.metadata, dict) else None)
-                        or variant_page.name
-                        or f"{slide_title} ({variant_page.metadata.get('variant', {}).get('type', 'variant')})"
-                    )
-
-                    variant_metadata: dict[str, Any] | None = None
-                    if isinstance(variant_scene.metadata, dict):
-                        variant_scene.metadata.setdefault("page_title", variant_title)
-                        variant_scene.metadata.setdefault("trace_report", variant_report)
-                        variant_scene.metadata.setdefault("variant", {}).setdefault(
-                            "type",
-                            variant_page.metadata.get("variant", {}).get("type", "variant"),
-                        )
-                        variant_metadata = variant_scene.metadata
-
-                    render_results.append(variant_render)
-                    page_results.append(
-                        SvgPageResult(
-                            title=variant_title,
-                            trace_report=variant_report,
-                            metadata=variant_metadata,
-                        )
-                    )
-
+        slide_count = 0
         packaging_tracer = tracer or ConversionTracer()
-        pptx_path = self._builder.build_from_results(
-            render_results,
-            output_path,
-            tracer=packaging_tracer,
-            slide_size_mode=self._slide_size_mode,
-        )
+
+        with self._builder.begin_streaming(tracer=packaging_tracer) as stream:
+            for index, page in enumerate(pages, start=1):
+                if render_tiers:
+                    tier_variants = build_fidelity_tier_variants()
+                    page_seed = page
+                    if not page.title and not page.name:
+                        page_seed = SvgPageSource(
+                            svg_text=page.svg_text,
+                            title=f"Slide {index}",
+                            name=page.name,
+                            metadata=page.metadata,
+                        )
+                    variant_pages = expand_page_with_variants(page_seed, tier_variants)
+                    for variant_page in variant_pages:
+                        variant_overrides = (variant_page.metadata or {}).get("policy_overrides")
+                        variant_tracer = ConversionTracer()
+                        variant_source_path = (variant_page.metadata or {}).get("source_path")
+                        variant_render, variant_scene = self._render_svg(
+                            variant_page.svg_text,
+                            variant_tracer,
+                            variant_overrides,
+                            source_path=variant_source_path,
+                        )
+                        variant_report = variant_tracer.report().to_dict()
+
+                        variant_title = (
+                            variant_page.title
+                            or (
+                                variant_scene.metadata.get("page_title")
+                                if isinstance(variant_scene.metadata, dict)
+                                else None
+                            )
+                            or variant_page.name
+                            or f"Slide {index}"
+                        )
+
+                        variant_metadata: dict[str, Any] | None = None
+                        if isinstance(variant_scene.metadata, dict):
+                            variant_scene.metadata.setdefault("page_title", variant_title)
+                            variant_scene.metadata.setdefault("trace_report", variant_report)
+                            variant_scene.metadata.setdefault("variant", {}).setdefault(
+                                "type",
+                                variant_page.metadata.get("variant", {}).get("type", "variant"),
+                            )
+                            variant_metadata = variant_scene.metadata
+
+                        stream.add_slide(variant_render)
+                        slide_count += 1
+                        del variant_render
+                        page_results.append(
+                            SvgPageResult(
+                                title=variant_title,
+                                trace_report=variant_report,
+                                metadata=variant_metadata,
+                            )
+                        )
+                    continue
+
+                base_overrides = (page.metadata or {}).get("policy_overrides")
+                base_tracer = ConversionTracer()
+                source_path = (page.metadata or {}).get("source_path")
+                render_result, scene = self._render_svg(
+                    page.svg_text,
+                    base_tracer,
+                    base_overrides,
+                    source_path=source_path,
+                )
+                report_dict = base_tracer.report().to_dict()
+
+                slide_title = (
+                    page.title
+                    or (scene.metadata.get("page_title") if isinstance(scene.metadata, dict) else None)
+                    or page.name
+                    or f"Slide {index}"
+                )
+
+                scene_metadata: dict[str, Any] | None = None
+                if isinstance(scene.metadata, dict):
+                    scene.metadata.setdefault("page_title", slide_title)
+                    scene.metadata.setdefault("trace_report", report_dict)
+                    if page.metadata:
+                        scene.metadata.setdefault("page_metadata", {}).update(page.metadata)
+                    scene.metadata.setdefault("variant", {}).setdefault("type", "base")
+                    scene_metadata = scene.metadata
+
+                stream.add_slide(render_result)
+                slide_count += 1
+                del render_result
+                page_results.append(
+                    SvgPageResult(
+                        title=slide_title,
+                        trace_report=report_dict,
+                        metadata=scene_metadata,
+                    )
+                )
+
+                if split_fallback_variants:
+                    variants = derive_variants_from_trace(report_dict, enable_split=True)
+                    variant_pages = expand_page_with_variants(page, variants)
+                    for variant_page in variant_pages:
+                        variant_overrides = (variant_page.metadata or {}).get("policy_overrides")
+                        variant_tracer = ConversionTracer()
+                        variant_source_path = (variant_page.metadata or {}).get("source_path")
+                        variant_render, variant_scene = self._render_svg(
+                            variant_page.svg_text,
+                            variant_tracer,
+                            variant_overrides,
+                            source_path=variant_source_path,
+                        )
+                        variant_report = variant_tracer.report().to_dict()
+
+                        variant_title = (
+                            variant_page.title
+                            or (variant_scene.metadata.get("page_title") if isinstance(variant_scene.metadata, dict) else None)
+                            or variant_page.name
+                            or f"{slide_title} ({variant_page.metadata.get('variant', {}).get('type', 'variant')})"
+                        )
+
+                        variant_metadata: dict[str, Any] | None = None
+                        if isinstance(variant_scene.metadata, dict):
+                            variant_scene.metadata.setdefault("page_title", variant_title)
+                            variant_scene.metadata.setdefault("trace_report", variant_report)
+                            variant_scene.metadata.setdefault("variant", {}).setdefault(
+                                "type",
+                                variant_page.metadata.get("variant", {}).get("type", "variant"),
+                            )
+                            variant_metadata = variant_scene.metadata
+
+                        stream.add_slide(variant_render)
+                        slide_count += 1
+                        del variant_render
+                        page_results.append(
+                            SvgPageResult(
+                                title=variant_title,
+                                trace_report=variant_report,
+                                metadata=variant_metadata,
+                            )
+                        )
+
+            pptx_path = stream.finalize(output_path)
+
         packaging_report = packaging_tracer.report().to_dict()
 
         aggregate_trace = _merge_trace_reports(
@@ -366,7 +369,7 @@ class SvgToPptxExporter:
 
         return SvgToPptxMultiResult(
             pptx_path=pptx_path,
-            slide_count=len(render_results),
+            slide_count=slide_count,
             page_results=page_results,
             packaging_report=packaging_report,
             aggregated_trace_report=aggregate_trace,

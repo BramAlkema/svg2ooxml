@@ -6,8 +6,12 @@ from dataclasses import dataclass
 
 from lxml import etree
 
+from svg2ooxml.common.conversions.opacity import opacity_to_ppt
+# Import centralized XML builders for safe DrawingML generation
+from svg2ooxml.drawingml.xml_builder import a_elem, a_sub, to_string
 from svg2ooxml.filters.base import Filter, FilterContext, FilterResult
 from svg2ooxml.filters.utils import parse_number
+from svg2ooxml.units.conversion import px_to_emu
 
 
 @dataclass
@@ -76,6 +80,25 @@ class DiffuseLightingFilter(Filter):
             "native_support": False,
             "fallback_reason": "diffuse_lighting_requires_emf",
         }
+        policy_options = {}
+        if isinstance(context.options, dict):
+            policy_options = context.options.get("policy") or {}
+        approximation_allowed = bool(policy_options.get("approximation_allowed", True))
+        if approximation_allowed:
+            drawingml = _approximate_lighting_glow(
+                color=color,
+                intensity=_clamp_intensity(diffuse_constant / 2.0, minimum=0.2),
+                radius_px=max(surface_scale, 1.0),
+            )
+            metadata["native_support"] = True
+            metadata["approximation"] = "glow"
+            metadata["no_op"] = False
+            return FilterResult(
+                success=True,
+                drawingml=drawingml,
+                fallback=None,
+                metadata=metadata,
+            )
         return FilterResult(
             success=True,
             drawingml="",
@@ -108,6 +131,27 @@ class SpecularLightingFilter(Filter):
             "native_support": False,
             "fallback_reason": "specular_lighting_rendered_via_resvg",
         }
+        policy_options = {}
+        if isinstance(context.options, dict):
+            policy_options = context.options.get("policy") or {}
+        approximation_allowed = bool(policy_options.get("approximation_allowed", True))
+        if approximation_allowed:
+            intensity = _clamp_intensity(specular_constant * 0.7, minimum=0.25)
+            radius_px = max(surface_scale, 1.0) * max(1.0, min(specular_exponent, 5.0))
+            drawingml = _approximate_lighting_glow(
+                color=color,
+                intensity=intensity,
+                radius_px=radius_px,
+            )
+            metadata["native_support"] = True
+            metadata["approximation"] = "glow"
+            metadata["no_op"] = False
+            return FilterResult(
+                success=True,
+                drawingml=drawingml,
+                fallback=None,
+                metadata=metadata,
+            )
         return FilterResult(
             success=True,
             drawingml="",
@@ -128,6 +172,25 @@ def _parse_kernel_unit(value: str | None) -> tuple[float | None, float | None]:
         parse_number(x_str) if x_str else None,
         parse_number(y_str) if y_str else None,
     )
+
+
+def _approximate_lighting_glow(*, color: str, intensity: float, radius_px: float) -> str:
+    token = color.strip().lstrip("#")
+    if len(token) == 3:
+        token = "".join(ch * 2 for ch in token)
+    if len(token) != 6:
+        token = "FFFFFF"
+    alpha = opacity_to_ppt(_clamp_intensity(intensity))
+    radius_emu = int(px_to_emu(max(0.0, radius_px)))
+    effectLst = a_elem("effectLst")
+    glow_elem = a_sub(effectLst, "glow", rad=radius_emu)
+    srgb = a_sub(glow_elem, "srgbClr", val=token.upper())
+    a_sub(srgb, "alpha", val=alpha)
+    return to_string(effectLst)
+
+
+def _clamp_intensity(value: float, *, minimum: float = 0.1) -> float:
+    return max(minimum, min(float(value), 1.0))
 
 
 __all__ = ["DiffuseLightingFilter", "SpecularLightingFilter"]

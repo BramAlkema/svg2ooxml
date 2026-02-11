@@ -182,6 +182,9 @@ class FilterService:
                 emf_sources.extend(result for result in native_results if result.fallback == "emf")
                 if strategy == "native" and not resvg_preferred:
                     return results
+                if strategy == "auto" and not resvg_preferred:
+                    if all(result.fallback is None for result in native_results):
+                        return results
 
         skip_legacy = resvg_result is not None and not resvg_preferred and not results
 

@@ -156,6 +156,35 @@ class CompositeFilter(Filter):
                 warnings=(),
             )
 
+        if params.operator == "arithmetic":
+            passthrough = self._arithmetic_passthrough(params)
+            if passthrough:
+                source = input_1 if passthrough == "in" else input_2
+                if source is not None:
+                    metadata["native_support"] = True
+                    metadata["pass_through"] = passthrough
+                    metadata["no_op"] = True
+                    drawingml = source.drawingml or ""
+
+                    if context.tracer:
+                        context.tracer.record_decision(
+                            element_type="feComposite",
+                            strategy="native",
+                            reason=f"Arithmetic operator pass-through ({passthrough})",
+                            metadata={
+                                "operator": params.operator,
+                                "pass_through": passthrough,
+                            },
+                        )
+
+                    return FilterResult(
+                        success=True,
+                        drawingml=drawingml,
+                        fallback=source.fallback,
+                        metadata=metadata,
+                        warnings=source.warnings,
+                    )
+
         # Arithmetic or other unsupported operators
         if input_1 is not None or input_2 is not None:
             metadata["native_support"] = False
@@ -248,6 +277,18 @@ class CompositeFilter(Filter):
             return candidate
         if name in {"SourceGraphic", "SourceAlpha"}:
             return pipeline.get(name)
+        return None
+
+    def _arithmetic_passthrough(self, params: CompositeParams) -> str | None:
+        if params.operator != "arithmetic":
+            return None
+        tol = 1e-6
+        if abs(params.k1) > tol or abs(params.k4) > tol:
+            return None
+        if abs(params.k2 - 1.0) <= tol and abs(params.k3) <= tol:
+            return "in"
+        if abs(params.k2) <= tol and abs(params.k3 - 1.0) <= tol:
+            return "in2"
         return None
 
     def _combine_over(
