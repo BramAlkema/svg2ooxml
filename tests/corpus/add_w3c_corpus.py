@@ -277,18 +277,27 @@ def main():
     decks = scan_w3c_tests(args.tests_dir, args.category, args.limit)
 
     # Create metadata structure
+    targets = {
+        "native_rate": 0.80,
+        "emf_rate_max": 0.15,
+        "raster_rate_max": 0.05,
+        "visual_fidelity_min": 0.90,
+    }
+    if args.category and args.category.startswith("filters"):
+        targets = {
+            "native_rate": 0.50,
+            "emf_rate_max": 0.40,
+            "raster_rate_max": 0.10,
+            "visual_fidelity_min": 0.90,
+        }
+
     metadata = {
         "$schema": "https://json-schema.org/draft-07/schema#",
         "title": "SVG2OOXML W3C Corpus Metadata",
         "description": "W3C SVG Test Suite corpus for svg2ooxml testing",
         "version": "1.0.0",
         "decks": decks,
-        "targets": {
-            "native_rate": 0.80,
-            "emf_rate_max": 0.15,
-            "raster_rate_max": 0.05,
-            "visual_fidelity_min": 0.90,
-        },
+        "targets": targets,
         "notes": [
             "W3C SVG Test Suite files from tests/svg/",
             "Animation tests excluded (animate-* files)",

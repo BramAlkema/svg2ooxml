@@ -5,6 +5,8 @@ from __future__ import annotations
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 
+from copy import deepcopy
+
 from lxml import etree
 
 from svg2ooxml.core.resvg.geometry.matrix import Matrix
@@ -542,7 +544,7 @@ def _extract_href(element: etree._Element) -> str | None:
 
 
 def _clone_element(node: etree._Element) -> etree._Element:
-    return etree.fromstring(etree.tostring(node))
+    return deepcopy(node)
 
 
 def _copy_presentation_attributes(source: etree._Element | None, target: etree._Element) -> None:

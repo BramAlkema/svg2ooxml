@@ -573,6 +573,7 @@ class FilterRenderer:
         lighting_primitives: list[str] = []
         try:
             stage_results: list[FilterResult] = []
+            no_op_primitives: list[str] = []
             for primitive_plan, element in zip(plan.primitives, matched_elements, strict=True):
                 tag = primitive_plan.tag.lower()
                 entry_override = (overrides or {}).get(tag)
@@ -629,9 +630,48 @@ class FilterRenderer:
                 if violation is not None:
                     return None
 
+                is_no_op = isinstance(promoted_result.metadata, dict) and promoted_result.metadata.get("no_op")
+                if is_no_op:
+                    no_op_primitives.append(tag)
+                    if trace is not None:
+                        trace("resvg_promotion_noop", primitive=tag)
+                    if primitive_plan.result_name:
+                        input_name = next((name for name in primitive_plan.inputs if name), None)
+                        source = pipeline_state.get(input_name) if input_name else None
+                        if source is None and input_name in {"SourceGraphic", "SourceAlpha"}:
+                            source = pipeline_state.get(input_name)
+                        pipeline_state[primitive_plan.result_name] = source or promoted_result
+                    continue
+
                 if primitive_plan.result_name:
                     pipeline_state[primitive_plan.result_name] = promoted_result
                 stage_results.append(promoted_result)
+
+            if not stage_results:
+                if no_op_primitives:
+                    metadata: dict[str, Any] = {
+                        "renderer": "resvg",
+                        "resvg_promotion": "native",
+                        "promotion_source": "resvg",
+                        "promotion_primitives": [primitive.tag for primitive in plan.primitives],
+                        "no_op": True,
+                        "no_op_primitives": list(no_op_primitives),
+                        "descriptor": self._planner.serialize_descriptor(descriptor),
+                        "primitives": [primitive.tag for primitive in descriptor.primitives],
+                        "filter_units": descriptor.filter_units,
+                        "primitive_units": descriptor.primitive_units,
+                    }
+                    if descriptor.filter_id:
+                        metadata["filter_id"] = descriptor.filter_id
+                    self._inject_promotion_metadata(metadata, plan, viewport)
+                    effect = CustomEffect(drawingml="")
+                    return FilterEffectResult(
+                        effect=effect,
+                        strategy="native",
+                        metadata=metadata,
+                        fallback=None,
+                    )
+                return None
 
             final_result = stage_results[-1]
             if final_result.fallback not in {"emf", "vector", None}:

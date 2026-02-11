@@ -6,8 +6,11 @@ from dataclasses import dataclass
 
 from lxml import etree
 
+# Import centralized XML builders for safe DrawingML generation
+from svg2ooxml.drawingml.xml_builder import a_elem, a_sub, to_string
 from svg2ooxml.filters.base import Filter, FilterContext, FilterResult
 from svg2ooxml.filters.utils import parse_number
+from svg2ooxml.units.conversion import px_to_emu
 
 
 @dataclass
@@ -30,6 +33,12 @@ class ConvolveMatrixFilter(Filter):
 
     def apply(self, primitive: etree._Element, context: FilterContext) -> FilterResult:
         params = self._parse_params(primitive)
+        policy_options = {}
+        if isinstance(context.options, dict):
+            policy_options = context.options.get("policy") or {}
+        approximation_allowed = bool(policy_options.get("approximation_allowed", True))
+        blur_strategy = str(policy_options.get("blur_strategy") or "soft_edge").strip().lower()
+
         metadata = {
             "filter_type": self.filter_type,
             "order": (params.order_x, params.order_y),
@@ -42,6 +51,30 @@ class ConvolveMatrixFilter(Filter):
         metadata["kernel"] = list(params.kernel)
         metadata["kernel_unit_length"] = params.kernel_unit_length
         metadata["kernel_source"] = (primitive.get("kernelMatrix") or "").strip()
+
+        if self._is_identity_kernel(params):
+            metadata["native_support"] = True
+            metadata["no_op"] = True
+            metadata["reason"] = "identity_kernel"
+            return FilterResult(
+                success=True,
+                drawingml="",
+                fallback=None,
+                metadata=metadata,
+            )
+
+        if approximation_allowed and self._is_box_blur(params):
+            drawingml = self._approximate_blur(params, blur_strategy=blur_strategy)
+            metadata["native_support"] = True
+            metadata["approximation"] = "box_blur"
+            metadata["blur_strategy"] = blur_strategy
+            return FilterResult(
+                success=True,
+                drawingml=drawingml,
+                fallback=None,
+                metadata=metadata,
+            )
+
         return FilterResult(
             success=True,
             drawingml="",
@@ -98,5 +131,64 @@ class ConvolveMatrixFilter(Filter):
             except ValueError:
                 continue
         return values
+
+    def _is_identity_kernel(self, params: ConvolveMatrixParams) -> bool:
+        kernel = params.kernel
+        if not kernel:
+            return False
+        expected_len = params.order_x * params.order_y
+        if len(kernel) != expected_len:
+            return False
+        if params.divisor == 0:
+            return False
+        if abs(params.bias) > 1e-6:
+            return False
+        target_index = params.target_y * params.order_x + params.target_x
+        if target_index < 0 or target_index >= len(kernel):
+            return False
+        tol = 1e-6
+        normalized = [val / params.divisor for val in kernel]
+        for idx, val in enumerate(normalized):
+            expected = 1.0 if idx == target_index else 0.0
+            if abs(val - expected) > tol:
+                return False
+        return True
+
+    def _is_box_blur(self, params: ConvolveMatrixParams) -> bool:
+        kernel = params.kernel
+        if not kernel:
+            return False
+        expected_len = params.order_x * params.order_y
+        if len(kernel) != expected_len:
+            return False
+        if params.divisor == 0:
+            return False
+        if abs(params.bias) > 1e-6:
+            return False
+        if any(val < 0 for val in kernel):
+            return False
+        first = kernel[0]
+        tol = 1e-6
+        if any(abs(val - first) > tol for val in kernel[1:]):
+            return False
+        return True
+
+    def _approximate_blur(self, params: ConvolveMatrixParams, *, blur_strategy: str) -> str:
+        radius_px = max(params.order_x, params.order_y) / 2.0
+        kx, ky = params.kernel_unit_length
+        if isinstance(kx, (int, float)):
+            radius_px *= max(0.0, float(kx))
+        if isinstance(ky, (int, float)):
+            radius_px *= max(0.0, float(ky))
+        radius_emu = int(px_to_emu(max(0.0, radius_px)))
+        effectLst = a_elem("effectLst")
+        if blur_strategy in {"blur", "soft_edge", "softedge"}:
+            if blur_strategy == "blur":
+                a_sub(effectLst, "blur", rad=radius_emu)
+            else:
+                a_sub(effectLst, "softEdge", rad=radius_emu)
+        else:
+            a_sub(effectLst, "softEdge", rad=radius_emu)
+        return to_string(effectLst)
 
 __all__ = ["ConvolveMatrixFilter"]

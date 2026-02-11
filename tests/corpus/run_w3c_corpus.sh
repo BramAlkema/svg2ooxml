@@ -47,6 +47,7 @@ run_category() {
         --output-dir "$SCRIPT_DIR/w3c/output_${category_name}" \
         --report "$SCRIPT_DIR/w3c/report_${category_name}.json" \
         --metadata "$SCRIPT_DIR/w3c/w3c_${category_name}_metadata.json" \
+        --bail \
         "${extra_args[@]}"
 
     echo -e "${GREEN}✓ Completed $category_name${NC}"

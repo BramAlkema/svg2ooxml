@@ -38,6 +38,17 @@ class ComponentTransferFilter(Filter):
         }
         summary = ";".join(self._summarise_function(func) for func in functions) or "identity"
         metadata["summary"] = summary
+        if self._is_identity_transfer(functions):
+            metadata["native_support"] = True
+            metadata["no_op"] = True
+            metadata["reason"] = "identity_transfer"
+            return FilterResult(
+                success=True,
+                drawingml="",
+                fallback=None,
+                metadata=metadata,
+            )
+
         metadata["native_support"] = False
         drawingml = ""
         warnings = ["feComponentTransfer rendered via EMF fallback"]
@@ -97,6 +108,46 @@ class ComponentTransferFilter(Filter):
         for key, value in func.params.items():
             parts.append(f"{key}={self._stringify(value)}")
         return ",".join(parts)
+
+    def _is_identity_transfer(self, functions: list[ComponentFunction]) -> bool:
+        if not functions:
+            return True
+        return all(self._is_identity_function(func) for func in functions)
+
+    def _is_identity_function(self, func: ComponentFunction) -> bool:
+        func_type = func.func_type
+        params = func.params
+        tol = 1e-6
+        if func_type == "identity":
+            return True
+        if func_type == "linear":
+            slope = float(params.get("slope", 1.0))
+            intercept = float(params.get("intercept", 0.0))
+            return abs(slope - 1.0) <= tol and abs(intercept) <= tol
+        if func_type == "gamma":
+            amplitude = float(params.get("amplitude", 1.0))
+            exponent = float(params.get("exponent", 1.0))
+            offset = float(params.get("offset", 0.0))
+            return (
+                abs(amplitude - 1.0) <= tol
+                and abs(exponent - 1.0) <= tol
+                and abs(offset) <= tol
+            )
+        if func_type in {"table", "discrete"}:
+            values = params.get("values")
+            if not isinstance(values, list) or len(values) < 2:
+                return True
+            n = len(values)
+            for idx, raw in enumerate(values):
+                try:
+                    val = float(raw)
+                except (TypeError, ValueError):
+                    return False
+                expected = idx / (n - 1)
+                if abs(val - expected) > 1e-4:
+                    return False
+            return True
+        return False
 
     def _stringify(self, value: object) -> str:
         if isinstance(value, list):

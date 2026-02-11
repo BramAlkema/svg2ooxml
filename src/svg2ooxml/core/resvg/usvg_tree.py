@@ -805,12 +805,17 @@ def _clear_ids(node: BaseNode) -> None:
 
 
 def _expand_use_nodes(root: BaseNode, ids: dict[str, BaseNode]) -> None:
-    stack: list[BaseNode] = [root]
+    stack: list[tuple[BaseNode, tuple[str, ...]]] = [(root, ())]
     while stack:
-        current = stack.pop()
+        current, active_refs = stack.pop()
         for index, child in enumerate(list(current.children)):
             if isinstance(child, UseNode) and child.href:
                 ref_id = child.href.lstrip("#")
+                if not ref_id:
+                    continue
+                if ref_id in active_refs:
+                    # Prevent infinite expansion for recursive <use> chains.
+                    continue
                 referenced = ids.get(ref_id)
                 if referenced is None:
                     continue
@@ -869,9 +874,9 @@ def _expand_use_nodes(root: BaseNode, ids: dict[str, BaseNode]) -> None:
                 current.children[index] = clone
                 if child.id:
                     ids[child.id] = clone
-                stack.append(clone)
+                stack.append((clone, (*active_refs, ref_id)))
             else:
-                stack.append(child)
+                stack.append((child, active_refs))
 
 
 def build_tree(document: SvgDocument, options: Options | None = None) -> Tree:

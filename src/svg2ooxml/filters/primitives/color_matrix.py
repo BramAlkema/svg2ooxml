@@ -38,6 +38,16 @@ class ColorMatrixFilter(Filter):
                 values_list = self._parse_floats(raw_values)
             metadata["values"] = values_list
             metadata["value_count"] = len(values_list)
+            if not values_list or self._is_identity_matrix(values_list):
+                metadata["native_support"] = True
+                metadata["no_op"] = True
+                metadata["reason"] = "identity_matrix"
+                return FilterResult(
+                    success=True,
+                    drawingml="",
+                    fallback=None,
+                    metadata=metadata,
+                )
             return FilterResult(
                 success=True,
                 drawingml="",
@@ -97,6 +107,19 @@ class ColorMatrixFilter(Filter):
 
         # Unsupported type - return empty comment placeholder
         return ""
+
+    @staticmethod
+    def _is_identity_matrix(values: list[float]) -> bool:
+        if len(values) != 20:
+            return False
+        identity = [
+            1.0, 0.0, 0.0, 0.0, 0.0,
+            0.0, 1.0, 0.0, 0.0, 0.0,
+            0.0, 0.0, 1.0, 0.0, 0.0,
+            0.0, 0.0, 0.0, 1.0, 0.0,
+        ]
+        tol = 1e-6
+        return all(abs(a - b) <= tol for a, b in zip(values, identity, strict=True))
 
 
 __all__ = ["ColorMatrixFilter"]
