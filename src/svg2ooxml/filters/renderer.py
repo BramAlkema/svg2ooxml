@@ -37,6 +37,7 @@ from svg2ooxml.filters.primitives.offset import OffsetFilter
 from svg2ooxml.filters.primitives.tile import TileFilter
 from svg2ooxml.filters.registry import FilterRegistry
 from svg2ooxml.filters.resvg_bridge import ResolvedFilter
+from svg2ooxml.filters.utils import parse_number
 from svg2ooxml.io.emf.blob import EMU_PER_INCH, EMFBlob
 from svg2ooxml.ir.effects import CustomEffect
 from svg2ooxml.render.filters import FilterPlan, UnsupportedPrimitiveError, apply_filter
@@ -577,15 +578,6 @@ class FilterRenderer:
             for primitive_plan, element in zip(plan.primitives, matched_elements, strict=True):
                 tag = primitive_plan.tag.lower()
                 entry_override = (overrides or {}).get(tag)
-                if entry_override and entry_override.get("allow_promotion") is False:
-                    if trace is not None:
-                        trace(
-                            "resvg_promotion_policy_blocked",
-                            primitive=tag,
-                            reason="allow_promotion=false",
-                        )
-                    return None
-
                 promoter = self._promotion_filter(tag)
                 if promoter is None:
                     if trace is not None:
@@ -618,6 +610,28 @@ class FilterRenderer:
                     lighting_primitives.append(tag)
                 elif tag in {"fediffuselighting", "fespecularlighting"}:
                     lighting_primitives.append(tag)
+                is_no_op = self._is_neutral_promotion(tag, element, promoted_result)
+                if is_no_op:
+                    no_op_primitives.append(tag)
+                    if trace is not None:
+                        trace("resvg_promotion_noop", primitive=tag)
+                    if primitive_plan.result_name:
+                        input_name = next((name for name in primitive_plan.inputs if name), None)
+                        source = pipeline_state.get(input_name) if input_name else None
+                        if source is None and input_name in {"SourceGraphic", "SourceAlpha"}:
+                            source = pipeline_state.get(input_name)
+                    pipeline_state[primitive_plan.result_name] = source or promoted_result
+                    continue
+
+                if entry_override and entry_override.get("allow_promotion") is False:
+                    if trace is not None:
+                        trace(
+                            "resvg_promotion_policy_blocked",
+                            primitive=tag,
+                            reason="allow_promotion=false",
+                        )
+                    return None
+
                 violation = None
                 if entry_override:
                     violation = self._planner.promotion_policy_violation(tag, promoted_result, entry_override)
@@ -629,19 +643,6 @@ class FilterRenderer:
                         )
                 if violation is not None:
                     return None
-
-                is_no_op = isinstance(promoted_result.metadata, dict) and promoted_result.metadata.get("no_op")
-                if is_no_op:
-                    no_op_primitives.append(tag)
-                    if trace is not None:
-                        trace("resvg_promotion_noop", primitive=tag)
-                    if primitive_plan.result_name:
-                        input_name = next((name for name in primitive_plan.inputs if name), None)
-                        source = pipeline_state.get(input_name) if input_name else None
-                        if source is None and input_name in {"SourceGraphic", "SourceAlpha"}:
-                            source = pipeline_state.get(input_name)
-                        pipeline_state[primitive_plan.result_name] = source or promoted_result
-                    continue
 
                 if primitive_plan.result_name:
                     pipeline_state[primitive_plan.result_name] = promoted_result
@@ -713,6 +714,70 @@ class FilterRenderer:
             )
         finally:
             context.pipeline_state = original_pipeline
+
+    @staticmethod
+    def _is_neutral_promotion(tag: str, element: etree._Element, result: FilterResult) -> bool:
+        metadata = result.metadata if isinstance(result.metadata, dict) else {}
+        if metadata.get("no_op"):
+            return True
+
+        if tag == "fegaussianblur":
+            std_x = metadata.get("std_deviation_x")
+            std_y = metadata.get("std_deviation_y")
+            try:
+                std_x_val = float(std_x) if std_x is not None else 0.0
+                std_y_val = float(std_y) if std_y is not None else 0.0
+            except (TypeError, ValueError):
+                std_x_val = 0.0
+                std_y_val = 0.0
+            return abs(std_x_val) <= 1e-6 and abs(std_y_val) <= 1e-6
+
+        if tag == "feoffset":
+            dx = metadata.get("dx")
+            dy = metadata.get("dy")
+            try:
+                dx_val = float(dx) if dx is not None else 0.0
+                dy_val = float(dy) if dy is not None else 0.0
+            except (TypeError, ValueError):
+                dx_val = 0.0
+                dy_val = 0.0
+            return abs(dx_val) <= 1e-6 and abs(dy_val) <= 1e-6
+
+        if tag == "fecolormatrix":
+            if metadata.get("reason") == "identity_matrix":
+                return True
+            matrix_type = str(metadata.get("matrix_type") or "matrix").strip().lower()
+            if matrix_type != "matrix":
+                return False
+            values = metadata.get("values")
+            if not values:
+                return True
+            try:
+                return FilterRenderer._is_identity_matrix([float(v) for v in values])
+            except (TypeError, ValueError):
+                return False
+
+        if tag == "fegaussianblur" and element is not None:
+            std_attr = element.get("stdDeviation")
+            if std_attr:
+                parts = [parse_number(token) for token in std_attr.replace(",", " ").split()]
+                if parts and all(abs(value) <= 1e-6 for value in parts[:2]):
+                    return True
+
+        return False
+
+    @staticmethod
+    def _is_identity_matrix(values: list[float]) -> bool:
+        if len(values) != 20:
+            return False
+        identity = [
+            1.0, 0.0, 0.0, 0.0, 0.0,
+            0.0, 1.0, 0.0, 0.0, 0.0,
+            0.0, 0.0, 1.0, 0.0, 0.0,
+            0.0, 0.0, 0.0, 1.0, 0.0,
+        ]
+        tol = 1e-6
+        return all(abs(a - b) <= tol for a, b in zip(values, identity, strict=True))
 
     @staticmethod
     def _promotion_filter(tag: str):

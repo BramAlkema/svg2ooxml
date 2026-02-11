@@ -277,17 +277,21 @@ def main():
     decks = scan_w3c_tests(args.tests_dir, args.category, args.limit)
 
     # Create metadata structure
-    targets = {
-        "native_rate": 0.80,
-        "emf_rate_max": 0.15,
-        "raster_rate_max": 0.05,
-        "visual_fidelity_min": 0.90,
-    }
-    if args.category and args.category.startswith("filters"):
+    if decks:
+        avg_native = sum(deck["expected_native_rate"] for deck in decks) / len(decks)
+        avg_emf = sum(deck["expected_emf_rate"] for deck in decks) / len(decks)
+        avg_raster = sum(deck["expected_raster_rate"] for deck in decks) / len(decks)
         targets = {
-            "native_rate": 0.50,
-            "emf_rate_max": 0.40,
-            "raster_rate_max": 0.10,
+            "native_rate": round(avg_native, 3),
+            "emf_rate_max": round(avg_emf, 3),
+            "raster_rate_max": round(avg_raster, 3),
+            "visual_fidelity_min": 0.90,
+        }
+    else:
+        targets = {
+            "native_rate": 0.80,
+            "emf_rate_max": 0.15,
+            "raster_rate_max": 0.05,
             "visual_fidelity_min": 0.90,
         }
 
