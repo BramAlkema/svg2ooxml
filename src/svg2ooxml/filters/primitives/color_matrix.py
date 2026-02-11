@@ -32,6 +32,9 @@ class ColorMatrixFilter(Filter):
             "value_count": len(params.values),
             "matrix_source": raw_values,
         }
+        if params.values:
+            metadata["values"] = list(params.values)
+            metadata["value_count"] = len(params.values)
         if params.matrix_type == "matrix":
             values_list = list(params.values)
             if not values_list and raw_values:
@@ -54,6 +57,16 @@ class ColorMatrixFilter(Filter):
                 fallback="emf",
                 metadata=metadata,
                 warnings=["feColorMatrix(matrix) rendered via EMF fallback"],
+            )
+        if params.matrix_type in {"saturate", "hueRotate", "luminanceToAlpha"}:
+            metadata["native_support"] = False
+            metadata["fallback_reason"] = f"{params.matrix_type}_requires_raster"
+            return FilterResult(
+                success=True,
+                drawingml="",
+                fallback="bitmap",
+                metadata=metadata,
+                warnings=[f"feColorMatrix({params.matrix_type}) rendered via raster fallback"],
             )
         return FilterResult(success=True, drawingml=drawingml, fallback=fallback, metadata=metadata)
 
