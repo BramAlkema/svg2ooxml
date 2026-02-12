@@ -20,6 +20,10 @@ source .venv/bin/activate
 
 ## Docker (Orbstack)
 
+On macOS, Homebrew's FontForge Python bindings are only available for Python 3.14,
+while Skia requires Python 3.13. Use the Orbstack container for a full stack
+(FontForge + Skia) environment.
+
 Build the container image:
 
 ```bash
@@ -30,6 +34,8 @@ Run with persistent caches and outputs:
 
 ```bash
 docker run --rm -it \
+  -v "$(pwd)":/workspace \
+  -v "$(pwd)/../openxml-audit":/workspace/openxml-audit \
   -v svg2ooxml-cache:/var/cache/svg2ooxml \
   -v "$(pwd)/reports":/workspace/reports \
   -v "$(pwd)/tests/corpus/w3c/output":/workspace/tests/corpus/w3c/output \
@@ -38,6 +44,7 @@ docker run --rm -it \
 
 Cache/output directories are preconfigured at `/var/cache/svg2ooxml`, `/var/tmp/svg2ooxml`,
 `/workspace/reports`, and `/workspace/tests/corpus/w3c/output`.
+Mounting `../openxml-audit` makes the container auto-install `openxml-audit` at startup.
 
 The developer requirements install svg2ooxml in editable mode with the full
 runtime extras (API, cloud, render, color, slides, payments, visual-testing)

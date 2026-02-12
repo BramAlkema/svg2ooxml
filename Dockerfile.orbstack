@@ -36,6 +36,9 @@ RUN mkdir -p /var/cache/svg2ooxml/fonts \
 
 COPY . /workspace
 
+COPY tools/orbstack/entrypoint.sh /usr/local/bin/orbstack-entrypoint
+RUN chmod +x /usr/local/bin/orbstack-entrypoint
+
 RUN python3 -m pip install -r /workspace/requirements-dev.txt --break-system-packages \
   && if [ -f /workspace/openxml-audit/pyproject.toml ] || [ -f /workspace/openxml-audit/setup.py ]; then \
        python3 -m pip install -e /workspace/openxml-audit --break-system-packages; \
@@ -45,4 +48,5 @@ RUN python3 -m pip install -r /workspace/requirements-dev.txt --break-system-pac
 
 VOLUME ["/var/cache/svg2ooxml", "/workspace/reports", "/workspace/tests/corpus/w3c/output"]
 
+ENTRYPOINT ["/usr/local/bin/orbstack-entrypoint"]
 CMD ["/bin/bash"]
