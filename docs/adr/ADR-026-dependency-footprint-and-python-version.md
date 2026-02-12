@@ -1,7 +1,8 @@
 # ADR-026: Dependency Footprint and Python Version Alignment
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-02-12
+- **Last Updated:** 2026-02-13
 - **Owners:** svg2ooxml team
 - **Related:** ADR-017 (resvg rendering strategy), ADR-019 (font embedding engine), ADR-024 (batch conversion performance)
 
@@ -37,6 +38,9 @@ skia-python) while preserving output fidelity and validation coverage.
 - FontForge Python bindings are packaged against the system Python in each OS.
   Example: Fedora 42 packages python3-fontforge for Python 3.13, while Ubuntu
   22.04 packages target its default Python 3.10.
+- On macOS (Homebrew), FontForge Python bindings are currently built for Python
+  3.14, while skia-python does not publish cp314 wheels. This makes a single
+  macOS venv with FontForge + skia-python infeasible today.
 
 ## 3. Decision
 
@@ -67,10 +71,12 @@ skia-python) while preserving output fidelity and validation coverage.
 
 - Target **Python 3.13** as the single runtime for the core pipeline, aligned
   with `pyproject.toml`.
-- Use an OS image that ships Python 3.13 and has working FontForge bindings if
-  we want FontForge in the same container.
-- For Ubuntu 22.04, avoid installing FontForge bindings into the Python 3.13
-  runtime; treat FontForge as optional or run it in a sidecar environment.
+- Use a Linux container image that ships Python 3.13 **and** has working
+  FontForge bindings when the full stack is required. Our Orbstack (Debian
+  trixie) image is the canonical full-stack environment for FontForge + Skia.
+- For macOS local development, treat FontForge as optional and rely on
+  resvg + skia-python for normal conversion. FontForge-only tasks run in the
+  container.
 
 ## 4. Rationale
 
@@ -91,6 +97,8 @@ skia-python) while preserving output fidelity and validation coverage.
   when unavailable.
 - CI and W3C corpus runners remain the place where LibreOffice and OpenXML audit
   are guaranteed.
+- Local macOS venvs cannot host FontForge and skia-python simultaneously; use
+  Orbstack for full-stack QA and audits.
 
 ## 6. Alternatives Considered
 
@@ -111,6 +119,8 @@ skia-python) while preserving output fidelity and validation coverage.
   a 3.13-native base image if FontForge is needed in the same container.
 - Document FontForge as optional with explicit behavior when missing.
 - Continue to gate OpenXML audit and visual regression in CI, not production.
+- Standardize Orbstack as the full-stack environment (FontForge + Skia +
+  OpenXML audit) for local QA.
 
 ## 8. References
 
