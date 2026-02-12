@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import base64
+import os
 import re
+from collections import OrderedDict
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -57,8 +59,21 @@ class FileResolver:
 class ImageService:
     """Resolve image hrefs to binary payloads."""
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        cache_max_items: int | None = None,
+        cache_max_bytes: int | None = None,
+    ) -> None:
         self._resolvers: list[Resolver] = [self._data_uri_resolver]
+        self._cache: OrderedDict[str, ImageResource] = OrderedDict()
+        self._cache_bytes = 0
+        self._cache_max_items = _env_int("SVG2OOXML_IMAGE_CACHE_SIZE", 256) if cache_max_items is None else cache_max_items
+        self._cache_max_bytes = (
+            _env_int("SVG2OOXML_IMAGE_CACHE_BYTES", 64 * 1024 * 1024)
+            if cache_max_bytes is None
+            else cache_max_bytes
+        )
 
     def bind_services(self, _services: ConversionServices) -> None:  # pragma: no cover - signature used by container
         # Image service currently does not depend on other services, but we keep
@@ -81,15 +96,24 @@ class ImageService:
 
     def resolve(self, href: str) -> ImageResource | None:
         """Try each resolver until one returns a payload."""
+        cached = self._cache_get(href)
+        if cached is not None:
+            return cached
         for resolver in self._resolvers:
             result = resolver(href)
             if result is not None:
+                self._cache_put(href, result)
                 return result
         return None
 
     def clone(self) -> ImageService:
-        clone = ImageService()
+        clone = ImageService(
+            cache_max_items=self._cache_max_items,
+            cache_max_bytes=self._cache_max_bytes,
+        )
         clone._resolvers = list(self._resolvers)
+        clone._cache = OrderedDict(self._cache)
+        clone._cache_bytes = self._cache_bytes
         return clone
 
     @staticmethod
@@ -104,6 +128,52 @@ class ImageService:
         else:
             data = payload.encode("utf-8")
         return ImageResource(data=data, mime_type=mime_type, source="data-uri")
+
+    def _cache_enabled(self) -> bool:
+        return self._cache_max_items > 0 and self._cache_max_bytes > 0
+
+    def _cache_get(self, href: str) -> ImageResource | None:
+        if not self._cache_enabled():
+            return None
+        cached = self._cache.get(href)
+        if cached is None:
+            return None
+        self._cache.move_to_end(href)
+        return cached
+
+    def _cache_put(self, href: str, resource: ImageResource) -> None:
+        if not self._cache_enabled():
+            return
+        data = resource.data or b""
+        size = len(data)
+        if size <= 0:
+            return
+        if size > self._cache_max_bytes:
+            return
+
+        if href in self._cache:
+            existing = self._cache.pop(href)
+            self._cache_bytes -= len(existing.data or b"")
+
+        while (
+            self._cache
+            and (self._cache_bytes + size > self._cache_max_bytes or len(self._cache) >= self._cache_max_items)
+        ):
+            _, evicted = self._cache.popitem(last=False)
+            self._cache_bytes -= len(evicted.data or b"")
+
+        self._cache[href] = resource
+        self._cache_bytes += size
+
+
+def _env_int(key: str, default: int) -> int:
+    raw = os.getenv(key)
+    if raw is None:
+        return default
+    try:
+        return max(0, int(raw))
+    except ValueError:
+        return default
 
 
 __all__ = ["ImageResource", "ImageService", "Resolver"]
