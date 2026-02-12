@@ -619,23 +619,51 @@ class FontLoader:
         if not url:
             return None
         path = Path(url)
+        candidates: list[Path] = []
+
         if path.is_absolute():
-            if path.exists():
-                return path
+            candidates.append(path)
+            if self.base_dir is not None:
+                try:
+                    relative = path.relative_to(path.anchor)
+                except ValueError:
+                    relative = Path(*path.parts[1:])
+                candidates.append((self.base_dir / relative))
+                candidates.append((self.base_dir.parent / relative))
+                candidates.extend(self._resource_candidates(path))
+        else:
             if self.base_dir is None:
-                return path
+                return None
+            candidates.append(self.base_dir / path)
+            candidates.append(self.base_dir.parent / path)
+            candidates.extend(self._resource_candidates(path))
+
+        for candidate in candidates:
             try:
-                relative = path.relative_to(path.anchor)
-            except ValueError:
-                relative = Path(*path.parts[1:])
-            for base in (self.base_dir, self.base_dir.parent):
-                candidate = (base / relative).resolve()
                 if candidate.exists():
-                    return candidate
-            return path
+                    return candidate.resolve()
+            except Exception:
+                continue
+
+        if candidates:
+            return candidates[0].resolve()
+        return None
+
+    def _resource_candidates(self, path: Path) -> list[Path]:
         if self.base_dir is None:
-            return None
-        return (self.base_dir / path).resolve()
+            return []
+        roots = [
+            self.base_dir,
+            self.base_dir.parent,
+        ]
+        subdirs = ("resources", "assets", "fonts", "woffs")
+        candidates: list[Path] = []
+        for root in roots:
+            for subdir in subdirs:
+                base = root / subdir
+                candidates.append(base / path)
+                candidates.append(base / path.name)
+        return candidates
 
 
 __all__ = [
