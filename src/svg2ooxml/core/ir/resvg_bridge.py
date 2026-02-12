@@ -158,6 +158,28 @@ class ResvgBridge:
                 if element_id and element_id in id_map:
                     self.element_lookup[element] = id_map[element_id]
 
+        # 3b. Map <use> elements to referenced nodes (common in W3C suite).
+        for element in svg_root.iter():
+            if element in self.element_lookup or not isinstance(element.tag, str):
+                continue
+            if self._local_name(element.tag).lower() != "use":
+                continue
+            href = element.get("href") or element.get("{http://www.w3.org/1999/xlink}href")
+            if not href or not href.startswith("#"):
+                continue
+            ref_id = href[1:]
+            resvg_node = id_map.get(ref_id) if id_map else None
+            if resvg_node is None:
+                try:
+                    matches = svg_root.xpath(f".//*[@id='{ref_id}']")
+                except Exception:
+                    matches = []
+                if matches:
+                    ref_element = matches[0]
+                    resvg_node = self.element_lookup.get(ref_element)
+            if resvg_node is not None:
+                self.element_lookup[element] = resvg_node
+
         # 4. Final Resort: Match by signature
         for sig, element in xml_signatures.items():
             if element in self.element_lookup:
