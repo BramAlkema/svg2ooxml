@@ -72,6 +72,9 @@ python tests/corpus/run_corpus.py \
 # Metrics-only run (skip writing PPTX files)
 python tests/corpus/run_corpus.py --skip-pptx
 # Note: --skip-pptx disables OpenXML audit and visual checks.
+
+# Deterministic sampling (run a stable subset)
+python tests/corpus/run_corpus.py --sample-size 50 --sample-seed 1234
 ```
 
 ### 3. View Results
@@ -91,6 +94,17 @@ alongside the corpus run:
 
 ```bash
 OPENXML_VALIDATOR=../openxml-validator python tests/corpus/run_corpus.py --openxml-audit
+```
+
+To enforce audit gating in CI, require the audit to run and set a minimum pass
+rate:
+
+```bash
+OPENXML_VALIDATOR=../openxml-validator \
+  python tests/corpus/run_corpus.py \
+    --openxml-audit \
+    --openxml-required \
+    --openxml-min-pass-rate 0.98
 ```
 
 ## Corpus Metadata Schema
@@ -119,6 +133,10 @@ The `corpus_metadata.json` file defines the test corpus structure:
     "emf_rate_max": 0.15,
     "raster_rate_max": 0.05,
     "visual_fidelity_min": 0.90
+  },
+  "sample": {
+    "size": 50,
+    "seed": 1234
   }
 }
 ```
@@ -140,6 +158,10 @@ The `corpus_metadata.json` file defines the test corpus structure:
 - `created_date`: When the test case was added (YYYY-MM-DD)
 - `license`: License information for the source file
 - `notes`: Additional notes about the test case
+
+### Optional Top-Level Fields
+
+- `sample`: Default deterministic sampling configuration (`size`, `seed`).
 
 ## Adding New Corpus Files
 
@@ -250,6 +272,7 @@ Default targets:
 - EMF rate: ≤15%
 - Raster rate: ≤5%
 - Visual fidelity (SSIM): ≥0.90
+- OpenXML audit pass rate: optional, enforced via `--openxml-min-pass-rate`
 
 ## Troubleshooting
 
