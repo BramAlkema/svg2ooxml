@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from lxml import etree
 
+from svg2ooxml.drawingml.xml_builder import NS_A
 from svg2ooxml.filters.base import FilterContext, FilterResult
 from svg2ooxml.filters.primitives.composite import CompositeFilter
 
@@ -84,3 +85,28 @@ def test_composite_mask_approximates_gradient_metadata() -> None:
     assert "<a:solidFill>" in result.drawingml
     assert result.metadata.get("mask_approximation") == "gradient_mask_avg"
     assert result.fallback is None
+
+
+def test_composite_mask_flattens_multiple_effect_lists() -> None:
+    pipeline = {
+        "SourceGraphic": FilterResult(success=True, drawingml="<a:effectLst><a:fill/></a:effectLst>", metadata={}),
+        "mask": FilterResult(
+            success=True,
+            drawingml=(
+                "<a:effectLst><a:blur/></a:effectLst>"
+                "<a:effectLst><a:glow/></a:effectLst>"
+            ),
+            metadata={"native_support": True},
+        ),
+    }
+    primitive = etree.fromstring('<feComposite operator="in" in="SourceGraphic" in2="mask"/>')
+
+    result = CompositeFilter().apply(primitive, _context(pipeline))
+
+    root = etree.fromstring(f'<root xmlns:a="{NS_A}">{result.drawingml}</root>'.encode("utf-8"))
+    alpha = root.find(".//a:alphaModFix", namespaces={"a": NS_A})
+    assert alpha is not None
+    inner = alpha.find("a:effectLst", namespaces={"a": NS_A})
+    assert inner is not None
+    tags = [child.tag.split("}", 1)[1] for child in inner if isinstance(child.tag, str)]
+    assert tags == ["blur", "glow"]
