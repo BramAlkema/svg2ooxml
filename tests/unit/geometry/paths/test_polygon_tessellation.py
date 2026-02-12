@@ -44,7 +44,10 @@ def test_polygon_path_segments_match_bounding_box() -> None:
         "</svg>"
     )
     parse_result = _build_parse_result(svg)
-    scene = convert_parser_output(parse_result)
+    scene = convert_parser_output(
+        parse_result,
+        overrides={"geometry": {"geometry_mode": "legacy"}},
+    )
 
     assert isinstance(scene, IRScene)
     assert scene.elements, "expected at least one element"
