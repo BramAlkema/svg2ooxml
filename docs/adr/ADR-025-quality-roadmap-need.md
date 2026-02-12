@@ -127,8 +127,8 @@ Tradeoffs:
 - Delay filter work and rely on raster fallbacks.
   - Rejected: degrades editability and visual fidelity for core SVG features.
 
-## 9. Open Questions
+## 9. Resolved Questions
 
-- What is the acceptable deprecation window for legacy geometry mode?
-- What is the smallest deterministic sample size that still catches regressions?
-- Which filter primitives should be prioritized after the initial set?
+- Legacy geometry mode is removed; resvg-only is the default with no deprecation window.
+- Deterministic W3C sample size is fixed to 50 with seed 1234 in CI.
+- Follow-up filter prioritization is tracked outside this ADR after the Phase 3 set.
