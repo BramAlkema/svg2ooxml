@@ -67,7 +67,8 @@ class ImageFilter(Filter):
         )
 
     def _parse_params(self, primitive: etree._Element) -> ImageParams:
-        href = primitive.get(XLINK_HREF) or primitive.get("href")
+        raw_href = primitive.get(XLINK_HREF) or primitive.get("href")
+        href = self._normalize_href(raw_href)
         preserve = primitive.get("preserveAspectRatio")
         cross_origin = primitive.get("crossorigin")
         return ImageParams(href=href, preserve_aspect_ratio=preserve, cross_origin=cross_origin)
@@ -81,6 +82,7 @@ class ImageFilter(Filter):
     ) -> dict[str, object] | None:
         if not href:
             return None
+        href = self._normalize_href(href)
         services = getattr(context, "services", None)
         image_service = getattr(services, "image_service", None) if services is not None else None
         resource = image_service.resolve(href) if image_service is not None else None
@@ -107,6 +109,7 @@ class ImageFilter(Filter):
         return asset
 
     def _resolve_from_context(self, href: str, context: FilterContext) -> ImageResource | None:
+        href = self._normalize_href(href)
         data_resource = ImageService._data_uri_resolver(href)
         if data_resource is not None:
             return data_resource
@@ -126,7 +129,8 @@ class ImageFilter(Filter):
                 target = target.resolve()
             if not target.is_file():
                 return None
-            if str(target).startswith(str(base_dir)):
+            allowed_root = self._resolve_asset_root(context, base_dir)
+            if allowed_root is None or self._is_within(target, allowed_root):
                 return ImageResource(data=target.read_bytes(), source="file")
         except Exception:
             return None
@@ -158,6 +162,41 @@ class ImageFilter(Filter):
         if token.startswith("#") or token.startswith("url("):
             return True
         return False
+
+    @staticmethod
+    def _normalize_href(href: str | None) -> str | None:
+        if href is None:
+            return None
+        token = href.strip()
+        if token.lower().startswith("url(") and token.endswith(")"):
+            token = token[4:-1].strip()
+            if (token.startswith("'") and token.endswith("'")) or (token.startswith('"') and token.endswith('"')):
+                token = token[1:-1]
+        return token or None
+
+    @staticmethod
+    def _is_within(path: Path, root: Path) -> bool:
+        try:
+            return path.is_relative_to(root)
+        except AttributeError:  # pragma: no cover - Python < 3.9
+            try:
+                path.relative_to(root)
+                return True
+            except Exception:
+                return False
+
+    @staticmethod
+    def _resolve_asset_root(context: FilterContext, base_dir: Path) -> Path | None:
+        options = context.options if isinstance(context.options, dict) else {}
+        for key in ("asset_root", "root_dir", "source_root"):
+            value = options.get(key)
+            if isinstance(value, str) and value:
+                try:
+                    return Path(value).expanduser().resolve()
+                except Exception:
+                    continue
+        # Allow one level up for common ../images patterns (e.g., W3C suite)
+        return base_dir.parent
 
     def _resource_to_png(
         self,

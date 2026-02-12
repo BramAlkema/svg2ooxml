@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import replace
+from pathlib import Path
 from typing import Any
 
 from lxml import etree
@@ -29,6 +30,7 @@ from svg2ooxml.ir.scene import ClipRef, Group, Image, MaskInstance, MaskRef, Pat
 from svg2ooxml.ir.shapes import Circle, Ellipse, Rectangle
 from svg2ooxml.ir.text import Run, TextAnchor, TextFrame
 from svg2ooxml.policy.constants import FALLBACK_BITMAP, FALLBACK_EMF
+from svg2ooxml.services.image_service import ImageResource, ImageService
 from svg2ooxml.policy.geometry import apply_geometry_policy
 
 
@@ -1003,6 +1005,7 @@ class ShapeConversionMixin:
 
     def _convert_image(self, *, element: etree._Element, coord_space: CoordinateSpace):
         href = element.get("href") or element.get("{http://www.w3.org/1999/xlink}href")
+        href = self._normalize_image_href(href)
         if not href:
             return None
         width = _parse_float(element.get("width"))
@@ -1025,9 +1028,13 @@ class ShapeConversionMixin:
         style = styles_runtime.extract_style(self, element)
 
         image_service = self._services.image_service
-        resource = None
+        resource: ImageResource | None = None
         if href and image_service:
             resource = image_service.resolve(href)
+        if resource is None and href:
+            resource = ImageService._data_uri_resolver(href)
+        if resource is None and href:
+            resource = self._resolve_image_from_source_path(href)
 
         color_service = getattr(self._services, "color_space_service", None)
         color_result = None
@@ -1086,6 +1093,39 @@ class ShapeConversionMixin:
             subject=element.get("id"),
         )
         return image
+
+    @staticmethod
+    def _normalize_image_href(href: str | None) -> str | None:
+        if href is None:
+            return None
+        token = href.strip()
+        if token.lower().startswith("url(") and token.endswith(")"):
+            token = token[4:-1].strip()
+            if (token.startswith("'") and token.endswith("'")) or (token.startswith('"') and token.endswith('"')):
+                token = token[1:-1]
+        return token or None
+
+    def _resolve_image_from_source_path(self, href: str) -> ImageResource | None:
+        token = href.strip().lower()
+        if token.startswith(("http://", "https://", "ftp://", "#")):
+            return None
+        source_path = None
+        if hasattr(self._services, "resolve"):
+            source_path = self._services.resolve("source_path")
+        if not isinstance(source_path, str) or not source_path:
+            return None
+        try:
+            base_dir = Path(source_path).expanduser().resolve().parent
+            target = Path(href).expanduser()
+            if not target.is_absolute():
+                target = (base_dir / target).resolve()
+            else:
+                target = target.resolve()
+            if not target.is_file():
+                return None
+            return ImageResource(data=target.read_bytes(), source="file")
+        except Exception:
+            return None
 
     def _convert_foreign_object(
         self,

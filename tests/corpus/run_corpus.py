@@ -272,6 +272,8 @@ def _run_deck_worker(payload: dict[str, Any]) -> DeckMetrics:
             services = configure_services(filter_strategy=filter_strategy)
         elif services.filter_service is not None:
             services.filter_service.set_strategy(filter_strategy)
+        if hasattr(writer, "set_image_service"):
+            writer.set_image_service(getattr(services, "image_service", None))
 
         from svg2ooxml.core.tracing.conversion import ConversionTracer
         tracer = ConversionTracer()
@@ -550,6 +552,8 @@ class CorpusRunner:
                 services = configure_services(filter_strategy=filter_strategy)
             elif services.filter_service is not None:
                 services.filter_service.set_strategy(filter_strategy)
+            if hasattr(self._writer, "set_image_service"):
+                self._writer.set_image_service(getattr(services, "image_service", None))
             
             # Convert to IR
             from svg2ooxml.core.tracing.conversion import ConversionTracer

@@ -416,7 +416,11 @@ class CompositeFilter(Filter):
             return "", "mask_empty"
 
         if not is_effect_list(mask_fragment):
-            return "", "mask_missing_effects"
+            wrapped = merge_effect_fragments(mask_fragment)
+            if wrapped:
+                mask_fragment = wrapped
+            else:
+                return "", "mask_missing_effects"
         mask_children = extract_effect_children(mask_fragment)
         if not mask_children:
             return "", "mask_missing_effects"

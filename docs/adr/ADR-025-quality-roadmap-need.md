@@ -113,7 +113,7 @@ Tradeoffs:
 
 - **Phase 1 (in CI):** Deterministic W3C sampling + OpenXML audit gating wired into `Tests` workflow.
 - **Phase 2 (done):** Resvg-only default path + policy/test alignment landed; legacy geometry removed.
-- **Phase 3 (pending):** Filter fidelity (feImage resolution, blend/composite/color_matrix) + font/asset hardening.
+- **Phase 3 (in progress):** Filter fidelity + font/asset hardening (feImage href resolution + corpus image resolver wiring landed; composite mask wrapping landed). Remaining: blend/composite/color_matrix fidelity, font/asset caching.
 - **Phase 4 (pending):** Docker runtime ergonomics and documentation updates.
 
 ## 8. Alternatives Considered
