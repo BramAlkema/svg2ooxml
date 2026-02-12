@@ -156,6 +156,20 @@ class TestFontLoader:
 
         assert resolved == resource_file.resolve()
 
+    def test_resolve_local_path_relative_resources_fallback(self, tmp_path: Path):
+        """Relative paths fall back to sibling resources directory."""
+        base_dir = tmp_path / "svg"
+        base_dir.mkdir(parents=True)
+        resources_dir = tmp_path / "resources"
+        resources_dir.mkdir(parents=True)
+        resource_file = resources_dir / "Blocky.woff"
+        resource_file.write_bytes(b"wOFF" + b"\x00" * 32)
+
+        loader = FontLoader(base_dir=base_dir)
+        resolved = loader._resolve_local_path("woffs/Blocky.woff")
+
+        assert resolved == resource_file.resolve()
+
     def test_load_file_ttf(self, tmp_path: Path):
         """Load TTF font from file."""
         ttf_data = b"\x00\x01\x00\x00" + b"\x00" * 100
