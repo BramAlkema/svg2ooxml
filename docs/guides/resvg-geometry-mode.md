@@ -80,9 +80,9 @@ The following SVG elements are fully supported in resvg mode:
 | `<circle>` | ✅ Full | Transforms applied to center and radius |
 | `<ellipse>` | ✅ Full | Transforms applied to center and radii |
 | `<path>` | ✅ Full | All path commands supported |
-| `<line>` | ⚠️ Fallback | Falls back to legacy mode |
-| `<polygon>` | ⚠️ Fallback | Falls back to legacy mode |
-| `<polyline>` | ⚠️ Fallback | Falls back to legacy mode |
+| `<line>` | ⚠️ Fallback | Falls back to legacy mode in `resvg` (skipped in `resvg-only`) |
+| `<polygon>` | ⚠️ Fallback | Falls back to legacy mode in `resvg` (skipped in `resvg-only`) |
+| `<polyline>` | ⚠️ Fallback | Falls back to legacy mode in `resvg` (skipped in `resvg-only`) |
 
 **Note**: Shapes not explicitly supported by resvg adapters fall back to legacy conversion in `resvg` mode. In `resvg-only` mode they are skipped and recorded as resvg-only misses.
 

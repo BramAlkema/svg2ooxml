@@ -74,6 +74,13 @@ def _build_parse_result(svg_markup: str) -> ParseResult:
     return parse_result
 
 
+def _convert_with_legacy(parse_result: ParseResult) -> IRScene:
+    return convert_parser_output(
+        parse_result,
+        overrides={"geometry": {"geometry_mode": "legacy"}},
+    )
+
+
 def _register_filter(parse_result: ParseResult, filter_markup: str) -> None:
     filters = parse_result.filters or {}
     element = etree.fromstring(filter_markup)
@@ -89,7 +96,7 @@ def test_convert_rect_produces_rectangle() -> None:
         "</svg>"
     )
 
-    scene = convert_parser_output(parse_result)
+    scene = _convert_with_legacy(parse_result)
 
     assert isinstance(scene, IRScene)
     assert len(scene.elements) == 1
@@ -109,7 +116,7 @@ def test_convert_rect_with_corner_radius_preserves_native_shape() -> None:
         "</svg>"
     )
 
-    scene = convert_parser_output(parse_result)
+    scene = _convert_with_legacy(parse_result)
 
     rect = scene.elements[0]
     assert isinstance(rect, Rectangle)
@@ -125,7 +132,7 @@ def test_convert_line_produces_native_line() -> None:
         "</svg>"
     )
 
-    scene = convert_parser_output(parse_result)
+    scene = _convert_with_legacy(parse_result)
 
     shape = scene.elements[0]
     assert isinstance(shape, Line)
@@ -141,7 +148,7 @@ def test_convert_polyline_produces_native_polyline() -> None:
         "</svg>"
     )
 
-    scene = convert_parser_output(parse_result)
+    scene = _convert_with_legacy(parse_result)
 
     shape = scene.elements[0]
     assert isinstance(shape, Polyline)
@@ -157,7 +164,7 @@ def test_convert_polygon_produces_native_polygon() -> None:
         "</svg>"
     )
 
-    scene = convert_parser_output(parse_result)
+    scene = _convert_with_legacy(parse_result)
 
     shape = scene.elements[0]
     assert isinstance(shape, Polygon)
@@ -173,7 +180,7 @@ def test_convert_rotated_rounded_rect_generates_bezier_path() -> None:
         "</svg>"
     )
 
-    scene = convert_parser_output(parse_result)
+    scene = _convert_with_legacy(parse_result)
 
     shape = scene.elements[0]
     assert isinstance(shape, Path)
@@ -192,7 +199,7 @@ def test_use_symbol_expands_children() -> None:
         "</svg>"
     )
 
-    scene = convert_parser_output(parse_result)
+    scene = _convert_with_legacy(parse_result)
 
     assert len(scene.elements) == 1
     group = scene.elements[0]
@@ -222,7 +229,7 @@ def test_foreign_object_with_nested_svg_produces_group() -> None:
         "</svg>"
     )
 
-    scene = convert_parser_output(parse_result)
+    scene = _convert_with_legacy(parse_result)
 
     assert len(scene.elements) == 1
     group = scene.elements[0]
@@ -243,7 +250,7 @@ def test_foreign_object_image_emits_image_ir() -> None:
         "</svg>"
     )
 
-    scene = convert_parser_output(parse_result)
+    scene = _convert_with_legacy(parse_result)
 
     assert len(scene.elements) == 1
     image = scene.elements[0]
@@ -263,7 +270,7 @@ def test_foreign_object_xhtml_creates_text_frame() -> None:
         "</svg>"
     )
 
-    scene = convert_parser_output(parse_result)
+    scene = _convert_with_legacy(parse_result)
 
     assert len(scene.elements) == 1
     frame = scene.elements[0]
@@ -281,7 +288,7 @@ def test_use_element_reuses_existing_geometry() -> None:
         "</svg>"
     )
 
-    scene = convert_parser_output(parse_result)
+    scene = _convert_with_legacy(parse_result)
 
     assert len(scene.elements) == 2
     first_rect = scene.elements[0]
@@ -317,7 +324,7 @@ def test_use_symbol_applies_viewbox_scaling() -> None:
         "</svg>"
     )
 
-    scene = convert_parser_output(parse_result)
+    scene = _convert_with_legacy(parse_result)
 
     assert len(scene.elements) == 1
     group = scene.elements[0]
@@ -341,7 +348,7 @@ def test_use_symbol_viewbox_meet_preserves_aspect_ratio() -> None:
         "</svg>"
     )
 
-    scene = convert_parser_output(parse_result)
+    scene = _convert_with_legacy(parse_result)
 
     group = scene.elements[0]
     rect = group.children[0]
@@ -372,7 +379,7 @@ def test_filter_metadata_carries_fallback_assets_into_policy() -> None:
         "</filter>",
     )
 
-    scene = convert_parser_output(parse_result)
+    scene = _convert_with_legacy(parse_result)
 
     assert len(scene.elements) == 1
     rect = scene.elements[0]
@@ -403,7 +410,7 @@ def test_gradient_fill_resolves_to_linear_gradient() -> None:
     )
     parse_result = _build_parse_result(svg)
 
-    scene = convert_parser_output(parse_result)
+    scene = _convert_with_legacy(parse_result)
 
     rect = scene.elements[0]
     assert isinstance(rect, Rectangle)
@@ -438,7 +445,7 @@ def test_mesh_gradient_records_policy_metadata() -> None:
         "</svg>"
     )
     parse_result = _build_parse_result(svg)
-    scene = convert_parser_output(parse_result)
+    scene = _convert_with_legacy(parse_result)
 
     rect = scene.elements[0]
     assert isinstance(rect, Rectangle)
@@ -469,7 +476,7 @@ def test_gradient_fill_resolves_without_parser_services() -> None:
     parse_result = _build_parse_result(svg)
     object.__setattr__(parse_result, "services", None)
 
-    scene = convert_parser_output(parse_result)
+    scene = _convert_with_legacy(parse_result)
 
     rect = scene.elements[0]
     assert isinstance(rect, Rectangle)
@@ -489,7 +496,7 @@ def test_text_tspan_produces_multiple_runs() -> None:
     )
     parse_result = _build_parse_result(svg)
 
-    scene = convert_parser_output(parse_result)
+    scene = _convert_with_legacy(parse_result)
 
     text = scene.elements[0]
     assert isinstance(text, TextFrame)
@@ -507,7 +514,7 @@ def test_textpath_metadata_captured() -> None:
     )
     parse_result = _build_parse_result(svg)
 
-    scene = convert_parser_output(parse_result)
+    scene = _convert_with_legacy(parse_result)
 
     assert len(scene.elements) == 1
     text = scene.elements[0]
@@ -525,7 +532,7 @@ def test_inline_navigation_attributes_attach_metadata() -> None:
     )
     parse_result = _build_parse_result(svg)
 
-    scene = convert_parser_output(parse_result)
+    scene = _convert_with_legacy(parse_result)
 
     rect = scene.elements[0]
     assert isinstance(rect, Rectangle)
@@ -546,7 +553,7 @@ def test_group_navigation_attributes_propagate_to_children() -> None:
     )
     parse_result = _build_parse_result(svg)
 
-    scene = convert_parser_output(parse_result)
+    scene = _convert_with_legacy(parse_result)
 
     group = scene.elements[0]
     assert isinstance(group, Group)
@@ -573,7 +580,7 @@ def test_filter_reference_marks_bitmap_fallback() -> None:
     )
     parse_result = _build_parse_result(svg)
 
-    scene = convert_parser_output(parse_result)
+    scene = _convert_with_legacy(parse_result)
 
     rect = scene.elements[0]
     assert isinstance(rect, Rectangle)
@@ -604,7 +611,7 @@ def test_displacement_map_filter_metadata() -> None:
     )
     parse_result = _build_parse_result(svg)
 
-    scene = convert_parser_output(parse_result)
+    scene = _convert_with_legacy(parse_result)
 
     rect = scene.elements[0]
     assert isinstance(rect, Rectangle)
@@ -632,7 +639,7 @@ def test_path_with_marker_metadata() -> None:
     )
 
     parse_result = _build_parse_result(svg)
-    scene = convert_parser_output(parse_result)
+    scene = _convert_with_legacy(parse_result)
 
     paths = [element for element in scene.elements if isinstance(element, Path)]
     assert paths, "expected at least one path element in scene"
@@ -654,7 +661,7 @@ def test_pattern_fill_records_policy_metadata() -> None:
     )
 
     parse_result = _build_parse_result(svg)
-    scene = convert_parser_output(parse_result)
+    scene = _convert_with_legacy(parse_result)
 
     rect = scene.elements[0]
     assert isinstance(rect, Rectangle)
@@ -708,7 +715,7 @@ def test_polygon_respects_geometry_policy(monkeypatch):
 
     monkeypatch.setattr(IRConverter, "_convert_path_to_emf", fake_convert_path_to_emf)
 
-    scene = convert_parser_output(parse_result)
+    scene = _convert_with_legacy(parse_result)
 
     assert calls.get("called") is True
     assert any(isinstance(elem, Image) and elem.format == "emf" for elem in scene.elements)
@@ -728,7 +735,7 @@ def test_clip_ref_generates_custom_geometry() -> None:
 
     parse_result = _build_parse_result(svg)
 
-    scene = convert_parser_output(parse_result)
+    scene = _convert_with_legacy(parse_result)
 
     paths = [element for element in scene.elements if isinstance(element, Path)]
     assert paths, "expected at least one path element due to clipping"
@@ -757,7 +764,7 @@ def test_clip_ref_circle_uses_preset_geometry() -> None:
 
     parse_result = _build_parse_result(svg)
 
-    scene = convert_parser_output(parse_result)
+    scene = _convert_with_legacy(parse_result)
 
     paths = [element for element in scene.elements if isinstance(element, Path)]
     assert paths, "expected a clipped path element"
@@ -782,7 +789,7 @@ def test_clip_ref_rotated_rect_falls_back_to_custom_geometry() -> None:
 
     parse_result = _build_parse_result(svg)
 
-    scene = convert_parser_output(parse_result)
+    scene = _convert_with_legacy(parse_result)
 
     paths = [element for element in scene.elements if isinstance(element, Path)]
     assert paths, "expected a clipped path element"
@@ -806,7 +813,7 @@ def test_clip_ref_round_rect_uses_roundrect_preset() -> None:
 
     parse_result = _build_parse_result(svg)
 
-    scene = convert_parser_output(parse_result)
+    scene = _convert_with_legacy(parse_result)
 
     clip_ref = next(path.clip for path in scene.elements if isinstance(path, Path) and path.clip is not None)
     assert clip_ref.custom_geometry_xml is not None
@@ -828,7 +835,7 @@ def test_clip_ref_mirrored_rect_uses_preset_geometry() -> None:
 
     parse_result = _build_parse_result(svg)
 
-    scene = convert_parser_output(parse_result)
+    scene = _convert_with_legacy(parse_result)
 
     clip_ref = next(path.clip for path in scene.elements if isinstance(path, Path) and path.clip is not None)
     assert clip_ref.custom_geometry_xml is not None
@@ -850,7 +857,7 @@ def test_clip_ref_mirrored_round_rect_uses_roundrect_preset() -> None:
 
     parse_result = _build_parse_result(svg)
 
-    scene = convert_parser_output(parse_result)
+    scene = _convert_with_legacy(parse_result)
 
     clip_ref = next(path.clip for path in scene.elements if isinstance(path, Path) and path.clip is not None)
     assert clip_ref.custom_geometry_xml is not None
@@ -872,7 +879,7 @@ def test_clip_ref_elliptical_radius_uses_snip_round_preset() -> None:
 
     parse_result = _build_parse_result(svg)
 
-    scene = convert_parser_output(parse_result)
+    scene = _convert_with_legacy(parse_result)
 
     clip_ref = next(path.clip for path in scene.elements if isinstance(path, Path) and path.clip is not None)
     xml = clip_ref.custom_geometry_xml
@@ -896,7 +903,7 @@ def test_clip_ref_mirrored_elliptical_radius_uses_snip_round_preset() -> None:
 
     parse_result = _build_parse_result(svg)
 
-    scene = convert_parser_output(parse_result)
+    scene = _convert_with_legacy(parse_result)
 
     clip_ref = next(path.clip for path in scene.elements if isinstance(path, Path) and path.clip is not None)
     xml = clip_ref.custom_geometry_xml
@@ -918,7 +925,7 @@ def test_path_markers_expand_scene_with_marker_geometry() -> None:
     )
 
     parse_result = _build_parse_result(svg)
-    scene = convert_parser_output(parse_result)
+    scene = _convert_with_legacy(parse_result)
 
     paths = [element for element in scene.elements if isinstance(element, Path)]
     assert len(paths) == 3, "expected base path plus start/end marker geometries"
@@ -957,7 +964,7 @@ def test_marker_group_generates_multiple_shapes() -> None:
     )
 
     parse_result = _build_parse_result(svg)
-    scene = convert_parser_output(parse_result)
+    scene = _convert_with_legacy(parse_result)
 
     marker_paths = [
         element
@@ -990,7 +997,7 @@ def test_marker_viewbox_scaling_applied() -> None:
     )
 
     parse_result = _build_parse_result(svg)
-    scene = convert_parser_output(parse_result)
+    scene = _convert_with_legacy(parse_result)
 
     marker_paths = [
         element
@@ -1034,7 +1041,7 @@ def test_marker_preserve_aspect_ratio_meet() -> None:
     )
 
     parse_result = _build_parse_result(svg)
-    scene = convert_parser_output(parse_result)
+    scene = _convert_with_legacy(parse_result)
 
     marker_paths = [
         element
@@ -1069,7 +1076,7 @@ def test_convert_path_produces_segments() -> None:
         "</svg>"
     )
 
-    scene = convert_parser_output(parse_result)
+    scene = _convert_with_legacy(parse_result)
 
     assert len(scene.elements) == 1
     path = scene.elements[0]
@@ -1085,7 +1092,7 @@ def test_convert_circle_produces_native_circle() -> None:
         "</svg>"
     )
 
-    scene = convert_parser_output(parse_result)
+    scene = _convert_with_legacy(parse_result)
 
     circle = scene.elements[0]
     assert isinstance(circle, Circle)
@@ -1102,7 +1109,7 @@ def test_convert_ellipse_produces_native_ellipse() -> None:
         "</svg>"
     )
 
-    scene = convert_parser_output(parse_result)
+    scene = _convert_with_legacy(parse_result)
 
     ellipse = scene.elements[0]
     assert isinstance(ellipse, Ellipse)
