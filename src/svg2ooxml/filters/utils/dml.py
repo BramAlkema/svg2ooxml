@@ -5,7 +5,9 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping
 
 # Import centralized XML builders for safe DrawingML generation
-from svg2ooxml.drawingml.xml_builder import a_elem, graft_xml_fragment, to_string
+from lxml import etree
+
+from svg2ooxml.drawingml.xml_builder import NS_A, a_elem, graft_xml_fragment, to_string
 
 
 def build_exporter_hook(
@@ -42,15 +44,50 @@ def extract_effect_children(fragment: str) -> str:
     """Return the inner XML of an effect list fragment."""
 
     text = fragment.strip()
-    if not is_effect_list(text):
-        return text
-    if text.endswith("/>"):
+    if not text:
         return ""
-    start = text.find(">")
-    end = text.rfind("</a:effectLst>")
-    if start == -1 or end == -1 or end <= start:
-        return text
-    return text[start + 1 : end]
+    try:
+        return _flatten_effect_children(text)
+    except Exception:
+        # Fallback to the original string parsing logic if XML parsing fails.
+        if not is_effect_list(text):
+            return text
+        if text.endswith("/>"):
+            return ""
+        start = text.find(">")
+        end = text.rfind("</a:effectLst>")
+        if start == -1 or end == -1 or end <= start:
+            return text
+        return text[start + 1 : end]
+
+
+def _flatten_effect_children(fragment: str) -> str:
+    """Flatten effect list fragments into a single sequence of effect nodes."""
+
+    wrapped = f'<root xmlns:a="{NS_A}">{fragment}</root>'
+    temp = etree.fromstring(wrapped.encode("utf-8"))
+    parts: list[str] = []
+    for child in temp:
+        if _local_name(child.tag) == "effectLst":
+            for grandchild in child:
+                parts.append(_serialize_node(grandchild))
+        else:
+            parts.append(_serialize_node(child))
+    return "".join(parts)
+
+
+def _serialize_node(node: etree._Element) -> str:
+    if isinstance(node, (etree._Comment, etree._ProcessingInstruction)):
+        return etree.tostring(node, encoding="unicode")
+    return to_string(node)
+
+
+def _local_name(tag: str | None) -> str:
+    if not tag:
+        return ""
+    if "}" in tag:
+        return tag.split("}", 1)[1]
+    return tag
 
 
 def merge_effect_fragments(*fragments: str | None) -> str:

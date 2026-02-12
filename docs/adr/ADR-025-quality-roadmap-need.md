@@ -113,7 +113,7 @@ Tradeoffs:
 
 - **Phase 1 (in CI):** Deterministic W3C sampling + OpenXML audit gating wired into `Tests` workflow.
 - **Phase 2 (done):** Resvg-only default path + policy/test alignment landed; legacy geometry removed.
-- **Phase 3 (in progress):** Filter fidelity + font/asset hardening (feImage href resolution + corpus image resolver wiring landed; blend gradient/pattern overlay approximation + composite mask metadata approximation + color matrix policy fallback landed; font/image caching hardening landed). Remaining: complex mask fidelity improvements.
+- **Phase 3 (done):** Filter fidelity + font/asset hardening (feImage href resolution + corpus image resolver wiring landed; blend gradient/pattern overlay approximation + composite mask metadata approximation + complex mask effect-list flattening landed; color matrix policy fallback landed; font/image caching hardening landed).
 - **Phase 4 (pending):** Docker runtime ergonomics and documentation updates.
 
 ## 8. Alternatives Considered
