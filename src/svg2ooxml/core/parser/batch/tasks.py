@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import time
 from collections.abc import Iterable
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -45,7 +45,7 @@ def _convert_single_svg_impl(
                 "input_filename": filename,
                 "error_message": "SVG content is not valid UTF-8",
                 "error_type": "decode_error",
-                "failed_at": datetime.utcnow().isoformat(),
+                "failed_at": datetime.now(UTC).isoformat(),
             }
     else:
         svg_text = str(content)
@@ -63,7 +63,7 @@ def _convert_single_svg_impl(
         "processing_time": elapsed,
         "element_count": result.element_count,
         "namespace_count": result.namespace_count,
-        "completed_at": datetime.utcnow().isoformat(),
+        "completed_at": datetime.now(UTC).isoformat(),
         "conversion_options": conversion_options or {},
         "metadata": result.metadata.copy(),
         "services_registered": list(result.services.services.keys()) if result.services else [],
@@ -152,7 +152,7 @@ def process_svg_batch(
     return {
         "success": success,
         "results": results,
-        "completed_at": datetime.utcnow().isoformat(),
+        "completed_at": datetime.now(UTC).isoformat(),
     }
 
 
