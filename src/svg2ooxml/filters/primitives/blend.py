@@ -30,6 +30,13 @@ class BlendParams:
     result: str | None
 
 
+@dataclass
+class OverlayInfo:
+    color: str
+    opacity: float
+    approximation: str | None = None
+
+
 class BlendFilter(Filter):
     primitive_tags = ("feBlend",)
     filter_type = "blend"
@@ -78,11 +85,14 @@ class BlendFilter(Filter):
             )
 
         if params.mode in {"multiply", "screen", "darken", "lighten"}:
-            overlay = self._build_overlay(params.mode, base_result, top_result)
+            overlay_info = self._extract_overlay_color(top_result)
+            overlay = self._build_overlay(params.mode, base_result, overlay_info)
             if overlay:
                 fallback = self._merge_fallback(base_result, top_result)
                 warnings = self._collect_warnings(base_result, top_result)
                 metadata["native_support"] = True
+                if overlay_info and overlay_info.approximation:
+                    metadata["overlay_approximation"] = overlay_info.approximation
 
                 # Record telemetry for successful native blend
                 if context.tracer:
@@ -107,6 +117,9 @@ class BlendFilter(Filter):
             prefer_rasterization = bool(policy.get("prefer_rasterization", False))
             fallback = "bitmap" if (approximation_allowed or prefer_rasterization) else "emf"
             metadata["approximation_allowed"] = approximation_allowed
+            fallback_assets = self._collect_fallback_assets(base_result, top_result)
+            if fallback_assets:
+                metadata["fallback_assets"] = fallback_assets
             if context.tracer:
                 context.tracer.record_decision(
                     element_type="feBlend",
@@ -196,20 +209,19 @@ class BlendFilter(Filter):
         self,
         mode: str,
         base: FilterResult | None,
-        top: FilterResult | None,
+        overlay_info: OverlayInfo | None,
     ) -> str | None:
-        color_info = self._extract_overlay_color(top)
-        if color_info is None:
+        if overlay_info is None:
             return None
 
         base_fragment = (base.drawingml or "").strip() if base else ""
-        overlay_child = self._overlay_child(mode, color_info)
+        overlay_child = self._overlay_child(mode, overlay_info)
         if overlay_child is None:
             return None
         return merge_effect_fragments(base_fragment, overlay_child)
 
     @staticmethod
-    def _overlay_child(mode: str, color_info: tuple[str, float]) -> str | None:
+    def _overlay_child(mode: str, color_info: OverlayInfo) -> str | None:
         blend_map = {
             "multiply": "mult",
             "screen": "screen",
@@ -219,7 +231,8 @@ class BlendFilter(Filter):
         blend = blend_map.get(mode)
         if blend is None:
             return None
-        color, opacity = color_info
+        color = color_info.color
+        opacity = color_info.opacity
         alpha = opacity_to_ppt(opacity)
 
         fillOverlay = a_elem("fillOverlay", blend=blend)
@@ -255,8 +268,8 @@ class BlendFilter(Filter):
                 fallback = self._merge_one_fallback(fallback, result.fallback)
         return fallback
 
-    @staticmethod
-    def _extract_overlay_color(result: FilterResult | None) -> tuple[str, float] | None:
+    @classmethod
+    def _extract_overlay_color(cls, result: FilterResult | None) -> OverlayInfo | None:
         if result is None or not result.metadata:
             return None
         metadata = result.metadata
@@ -265,7 +278,7 @@ class BlendFilter(Filter):
             if len(color) == 3:
                 color = "".join(ch * 2 for ch in color)
             opacity = float(metadata.get("flood_opacity", 1.0))
-            return color, opacity
+            return OverlayInfo(color=color, opacity=opacity)
 
         fill_meta = metadata.get("fill")
         if isinstance(fill_meta, dict) and fill_meta.get("type") == "solid":
@@ -276,9 +289,81 @@ class BlendFilter(Filter):
             if len(color) != 6:
                 return None
             opacity = float(fill_meta.get("opacity", metadata.get("opacity", 1.0)))
-            return color, opacity
+            return OverlayInfo(color=color, opacity=opacity)
+
+        if isinstance(fill_meta, dict) and fill_meta.get("type") in {"linearGradient", "radialGradient"}:
+            stops = fill_meta.get("stops")
+            if isinstance(stops, list) and stops:
+                approx = cls._approximate_gradient_color(stops)
+                if approx is not None:
+                    color, opacity = approx
+                    return OverlayInfo(color=color, opacity=opacity, approximation="gradient_avg")
+
+        if isinstance(fill_meta, dict) and fill_meta.get("type") == "pattern":
+            color = fill_meta.get("foreground") or fill_meta.get("background")
+            if isinstance(color, str) and color:
+                token = color.strip().lstrip("#").upper()
+                if len(token) == 3:
+                    token = "".join(ch * 2 for ch in token)
+                if len(token) == 6:
+                    opacity = float(metadata.get("opacity", 1.0))
+                    return OverlayInfo(color=token, opacity=opacity, approximation="pattern_color")
 
         return None
+
+    @staticmethod
+    def _approximate_gradient_color(stops: list[dict[str, object]]) -> tuple[str, float] | None:
+        total_weight = 0.0
+        sum_r = sum_g = sum_b = 0.0
+        sum_opacity = 0.0
+        for stop in stops:
+            if not isinstance(stop, dict):
+                continue
+            rgb = stop.get("rgb")
+            if not isinstance(rgb, str):
+                continue
+            token = rgb.strip().lstrip("#").upper()
+            if len(token) == 3:
+                token = "".join(ch * 2 for ch in token)
+            if len(token) != 6:
+                continue
+            try:
+                r = int(token[0:2], 16)
+                g = int(token[2:4], 16)
+                b = int(token[4:6], 16)
+            except ValueError:
+                continue
+            opacity = 1.0
+            try:
+                opacity = float(stop.get("opacity", 1.0))
+            except (TypeError, ValueError):
+                opacity = 1.0
+            weight = max(0.0, opacity)
+            sum_r += r * weight
+            sum_g += g * weight
+            sum_b += b * weight
+            sum_opacity += weight
+            total_weight += weight
+        if total_weight <= 0:
+            return None
+        r = int(round(sum_r / total_weight))
+        g = int(round(sum_g / total_weight))
+        b = int(round(sum_b / total_weight))
+        avg_opacity = min(1.0, sum_opacity / max(1.0, len(stops)))
+        return f"{r:02X}{g:02X}{b:02X}", avg_opacity
+
+    @staticmethod
+    def _collect_fallback_assets(*results: FilterResult | None) -> list[dict[str, object]]:
+        assets: list[dict[str, object]] = []
+        for result in results:
+            if result is None or not isinstance(result.metadata, dict):
+                continue
+            candidate = result.metadata.get("fallback_assets")
+            if isinstance(candidate, list):
+                for item in candidate:
+                    if isinstance(item, dict):
+                        assets.append(dict(item))
+        return assets
 
 
 __all__ = ["BlendFilter"]

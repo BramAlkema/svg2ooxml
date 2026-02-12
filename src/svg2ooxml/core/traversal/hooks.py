@@ -237,6 +237,8 @@ class TraversalHooksMixin:
                     }
 
                 filter_context_payload = {"element": element, "policy": filter_policy}
+                if isinstance(filter_id, str) and filter_id:
+                    filter_context_payload["filter_id"] = filter_id
                 filter_inputs = self._collect_filter_inputs(ir_object)
                 if filter_inputs:
                     filter_context_payload["filter_inputs"] = filter_inputs
