@@ -109,7 +109,7 @@ _BASE_CLIP_POLICY: dict[str, Any] = {
 }
 
 _BASE_GEOMETRY: dict[str, Any] = {
-    "geometry_mode": "resvg",  # "legacy" | "resvg" | "resvg-only"
+    "geometry_mode": "resvg-only",  # "legacy" | "resvg" | "resvg-only"
     "max_segments": _BASE_THRESHOLDS["max_path_segments"],
     "max_complexity_score": _BASE_THRESHOLDS["max_path_complexity_score"],
     "max_complexity_ratio": 0.8,
@@ -131,7 +131,7 @@ _BASE_GEOMETRY: dict[str, Any] = {
 }
 
 _BASE_FILTER: dict[str, Any] = {
-    "strategy": "auto",
+    "strategy": "resvg",
     "allow_anisotropic_native": True,
     "max_bitmap_stddev": 64.0,
     "max_shadow_distance": 80.0,
@@ -320,6 +320,7 @@ _COMPATIBILITY_OPTIONS = _policy_template(
         "prefer_bbox_clipping": True,
     },
     geometry_overrides={
+        "geometry_mode": "legacy",
         "max_segments": 300,
         "max_complexity_score": 30,
         "max_complexity_ratio": 0.45,

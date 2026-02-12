@@ -81,7 +81,7 @@ class ShapeConversionMixin:
         if isinstance(options, Mapping):
             token = options.get("geometry_mode")  # type: ignore[assignment]
         if not token:
-            token = os.environ.get("SVG2OOXML_GEOMETRY_MODE", "legacy")
+            token = os.environ.get("SVG2OOXML_GEOMETRY_MODE", "resvg-only")
         return str(token).strip().lower() or "legacy"
 
     def _resvg_only_geometry(self) -> bool:

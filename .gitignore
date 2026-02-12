@@ -30,6 +30,8 @@ reports/
 working_tmp/
 tests/corpus/output/
 tests/corpus/corpus_report.json
+tools/openxml_audit/bin/
+tools/openxml_audit/obj/
 
 # Misc generated files
 Untitled *.pptx

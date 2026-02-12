@@ -102,7 +102,7 @@ class SvgToPptxExporter:
             timeline_config: Optional timeline config
             filter_strategy: Optional filter strategy
             geometry_mode: Geometry extraction mode: "legacy", "resvg", or "resvg-only".
-                          Defaults to "resvg". Can also be set via
+                          Defaults to "resvg-only". Can also be set via
                           SVG2OOXML_GEOMETRY_MODE environment variable.
         """
         import os
@@ -116,11 +116,11 @@ class SvgToPptxExporter:
             self._timeline_sampler = TimelineSampler(timeline_config)
         self._filter_strategy = filter_strategy
 
-        # Geometry mode: check parameter, then env var, then default to "legacy"
+        # Geometry mode: check parameter, then env var, then default to "resvg-only"
         if geometry_mode is not None:
             self._geometry_mode = geometry_mode
         else:
-            self._geometry_mode = os.environ.get("SVG2OOXML_GEOMETRY_MODE", "resvg")
+            self._geometry_mode = os.environ.get("SVG2OOXML_GEOMETRY_MODE", "resvg-only")
 
         # Validate geometry_mode
         if self._geometry_mode not in ("legacy", "resvg", "resvg-only"):

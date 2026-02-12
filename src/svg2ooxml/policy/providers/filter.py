@@ -55,7 +55,7 @@ class FilterPolicyProvider(PolicyProvider):
             "telemetry_level": "detailed",
         },
         "balanced": {
-            "strategy": "auto",
+            "strategy": "resvg",
             "allow_anisotropic_native": True,
             "max_bitmap_stddev": 64.0,
             "max_shadow_distance": 80.0,
@@ -194,12 +194,12 @@ class FilterPolicyProvider(PolicyProvider):
         explicit = options.get("filter_strategy")
         if isinstance(explicit, str):
             token = explicit.strip().lower()
-            if token in {"auto", "native", "native-if-neutral", "vector", "emf", "raster"}:
+            if token in {"auto", "native", "native-if-neutral", "vector", "emf", "raster", "resvg", "resvg-only"}:
                 return token
         overrides = options.get("filter.strategy")
         if isinstance(overrides, str):
             token = overrides.strip().lower()
-            if token in {"auto", "native", "native-if-neutral", "vector", "emf", "raster"}:
+            if token in {"auto", "native", "native-if-neutral", "vector", "emf", "raster", "resvg", "resvg-only"}:
                 return token
         return default or "auto"
 

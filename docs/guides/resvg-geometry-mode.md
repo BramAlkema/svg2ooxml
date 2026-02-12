@@ -9,7 +9,7 @@ The **resvg geometry mode** is an alternative geometry extraction pipeline that 
 - **Accurate Transform Application**: Transforms (translate, rotate, scale) are fully applied during conversion
 - **Consistent Coordinate System**: Uses resvg's normalized coordinate system for reliable geometry
 - **Shape Support**: Handles circles, ellipses, rectangles, and paths with transforms
-- **Graceful Fallback**: Automatically falls back to legacy mode if conversion fails
+- **Fallback Control**: Use `resvg` for legacy fallback or `resvg-only` to skip legacy geometry
 
 ## When to Use Resvg Mode
 
@@ -28,13 +28,13 @@ The **resvg geometry mode** is an alternative geometry extraction pipeline that 
 
 ### Method 1: Parameter (Recommended)
 
-Pass `geometry_mode="resvg"` to the `SvgToPptxExporter` constructor:
+Pass `geometry_mode="resvg-only"` to the `SvgToPptxExporter` constructor:
 
 ```python
 from svg2ooxml.core.pptx_exporter import SvgToPptxExporter
 
-# Enable resvg geometry mode
-exporter = SvgToPptxExporter(geometry_mode="resvg")
+# Enable resvg-only geometry mode (no legacy fallback)
+exporter = SvgToPptxExporter(geometry_mode="resvg-only")
 
 # Convert SVG to PPTX
 result = exporter.convert_string(svg_content, "output.pptx")
@@ -45,28 +45,28 @@ result = exporter.convert_string(svg_content, "output.pptx")
 Set the `SVG2OOXML_GEOMETRY_MODE` environment variable:
 
 ```bash
-export SVG2OOXML_GEOMETRY_MODE=resvg
+export SVG2OOXML_GEOMETRY_MODE=resvg-only
 python your_script.py
 ```
 
 ```python
 from svg2ooxml.core.pptx_exporter import SvgToPptxExporter
 
-# Will use resvg mode from environment variable
+# Will use resvg-only mode from environment variable
 exporter = SvgToPptxExporter()
 result = exporter.convert_string(svg_content, "output.pptx")
 ```
 
 **Note**: Parameter takes precedence over environment variable.
 
-### Method 3: Default (Legacy Mode)
+### Method 3: Default (Resvg-Only Mode)
 
-If neither parameter nor environment variable is set, the default is `geometry_mode="legacy"`:
+If neither parameter nor environment variable is set, the default is `geometry_mode="resvg-only"`:
 
 ```python
 from svg2ooxml.core.pptx_exporter import SvgToPptxExporter
 
-# Uses legacy mode by default
+# Uses resvg-only mode by default
 exporter = SvgToPptxExporter()
 ```
 
@@ -84,7 +84,7 @@ The following SVG elements are fully supported in resvg mode:
 | `<polygon>` | ⚠️ Fallback | Falls back to legacy mode |
 | `<polyline>` | ⚠️ Fallback | Falls back to legacy mode |
 
-**Note**: Shapes not explicitly supported by resvg adapters automatically fall back to legacy conversion.
+**Note**: Shapes not explicitly supported by resvg adapters fall back to legacy conversion in `resvg` mode. In `resvg-only` mode they are skipped and recorded as resvg-only misses.
 
 ## Transform Support
 
@@ -100,7 +100,7 @@ svg = """
 </svg>
 """
 
-exporter = SvgToPptxExporter(geometry_mode="resvg")
+exporter = SvgToPptxExporter(geometry_mode="resvg-only")
 result = exporter.convert_string(svg, "rotated-rect.pptx")
 # ✅ Transform is baked into geometry coordinates
 ```
@@ -163,15 +163,15 @@ svg = """
 
 **Why**: Resvg provides normalized path data, which is converted to segments. This ensures transforms are correctly applied.
 
-## Comparison: Resvg vs Legacy Mode
+## Comparison: Resvg-Only vs Legacy Mode
 
-| Aspect | Resvg Mode | Legacy Mode |
-|--------|------------|-------------|
+| Aspect | Resvg-Only Mode | Legacy Mode |
+|--------|-----------------|-------------|
 | **Transform Handling** | Fully applied to coordinates | Applied via DrawingML transform |
 | **Coordinate System** | Resvg normalized | Manual SVG parsing |
 | **Shape Output** | Always `Path` segments | May use `Circle`, `Rectangle`, etc. |
 | **Accuracy** | High (resvg library) | Moderate (manual extraction) |
-| **Fallback** | Yes (to legacy) | N/A |
+| **Fallback** | No (misses are recorded) | N/A |
 | **Performance** | Slightly slower | Faster |
 
 ## Verification and Testing
@@ -252,16 +252,16 @@ exporter = SvgToPptxExporter(geometry_mode="resvg")
 
 ## Migration Guide
 
-### Switching from Legacy to Resvg
+### Switching from Legacy to Resvg-Only
 
 1. **Test with Sample SVGs**: Start with a few representative SVGs
 
 ```python
-# Before
-exporter = SvgToPptxExporter()  # Legacy mode (default)
+# Before (legacy fallback)
+exporter = SvgToPptxExporter(geometry_mode="legacy")
 
-# After
-exporter = SvgToPptxExporter(geometry_mode="resvg")
+# After (resvg-only default)
+exporter = SvgToPptxExporter()
 ```
 
 2. **Compare Outputs**: Verify PPTX files look identical
@@ -275,9 +275,9 @@ exporter = SvgToPptxExporter(geometry_mode="resvg")
 ```python
 import os
 
-# Development: Use resvg for testing
+# Development: Use resvg-only for testing
 if os.getenv("ENVIRONMENT") == "development":
-    geometry_mode = "resvg"
+    geometry_mode = "resvg-only"
 else:
     geometry_mode = "legacy"
 
@@ -286,9 +286,9 @@ exporter = SvgToPptxExporter(geometry_mode=geometry_mode)
 
 ## Performance Considerations
 
-- **Resvg mode**: Slightly slower due to resvg library overhead (~5-10%)
+- **Resvg-only mode**: Slightly slower due to resvg library overhead (~5-10%)
 - **Legacy mode**: Faster but less accurate for transformed shapes
-- **Recommendation**: Use resvg mode unless performance is critical
+- **Recommendation**: Use resvg-only for audits and default runs; use legacy only for compatibility checks
 
 ## Future Enhancements
 
@@ -327,3 +327,4 @@ For issues or questions:
   - Support for rect, circle, ellipse, path with transforms
   - CLI and environment variable configuration
   - Graceful fallback to legacy mode
+- **2026-02**: Default geometry mode set to resvg-only
