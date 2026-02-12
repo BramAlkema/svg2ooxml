@@ -327,6 +327,9 @@ class SVGParser:
                 svg_fonts=svg_font_result.inline_fonts if svg_font_result.inline_fonts else None,
             )
 
+            if source_path:
+                result.metadata["source_path"] = source_path
+
             try:
                 from svg2ooxml.ir import convert_parser_output
 
