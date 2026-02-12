@@ -36,6 +36,19 @@ def extract_style(converter, element: etree._Element) -> StyleResult:
     node_lookup = getattr(converter, "_resvg_element_lookup", {})
     resvg_node = node_lookup.get(element)
 
+    # Fallback: map <use> elements to their referenced source nodes.
+    if resvg_node is None:
+        tag_name = str(element.tag).split("}", 1)[-1]
+        if tag_name.lower() == "use":
+            href_attr = element.get("{http://www.w3.org/1999/xlink}href") or element.get("href")
+            if href_attr and href_attr.startswith("#"):
+                reference_id = href_attr[1:]
+                element_index = getattr(converter, "_element_index", None)
+                if isinstance(element_index, dict):
+                    source_element = element_index.get(reference_id)
+                    if isinstance(source_element, etree._Element):
+                        resvg_node = node_lookup.get(source_element)
+
     if resvg_node is None:
         logger = getattr(converter, "_logger", None)
         if logger is not None:
@@ -54,6 +67,15 @@ def extract_style(converter, element: etree._Element) -> StyleResult:
                 if local_tag == "defs":
                     in_defs = True
                     break
+                if curr.get("data-svg2ooxml-use-clone") == "true":
+                    # Cloned <use> instances are expected to be missing from resvg.
+                    return StyleResult(
+                        fill=base_style.fill,
+                        stroke=base_style.stroke,
+                        opacity=base_style.opacity,
+                        effects=base_style.effects,
+                        metadata=metadata,
+                    )
                 curr = curr.getparent()
 
             if is_drawable and not in_defs:
