@@ -1,8 +1,8 @@
 # ADR-025: Quality Roadmap Necessity (Determinism, Resvg-Only, Filters, Policies, Fonts, Docker)
 
-- **Status:** Accepted
+- **Status:** Completed
 - **Date:** 2026-02-12
-- **Last Updated:** 2026-02-12
+- **Last Updated:** 2026-02-13
 - **Owners:** svg2ooxml team
 - **Related:** ADR-017 (resvg rendering strategy), ADR-018 (EMF fallbacks), ADR-024 (batch conversion performance)
 
