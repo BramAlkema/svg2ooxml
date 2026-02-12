@@ -23,6 +23,15 @@ Production deployments should wrap `convert_single_svg` or `process_svg_batch`
 with their scheduling system (e.g., Google Cloud Tasks) when asynchronous
 processing is desired.
 
+To run a Huey worker for parser batch tasks:
+
+```
+python cli/run_batch_worker.py
+```
+
+By default this uses a SQLite-backed Huey database in the project temp
+directory. To point it at Redis, set `SVG2OOXML_BATCH_REDIS_URL` (or `REDIS_URL`).
+
 ### Output locations
 
 Batch conversions accept an `output_path` or `output_dir` inside the
