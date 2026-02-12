@@ -14,7 +14,9 @@ from svg2ooxml.core.resvg.usvg_tree import (
     CircleNode,
     EllipseNode,
     GroupNode,
+    LineNode,
     PathNode,
+    PolyNode,
     RectNode,
 )
 from svg2ooxml.drawingml.bridges.resvg_shape_adapter import (
@@ -232,6 +234,100 @@ class TestResvgShapeAdapterEllipse:
 
         segments = adapter.from_ellipse_node(ellipse)
         assert len(segments) == 0
+
+
+class TestResvgShapeAdapterLine:
+    """Test line conversion."""
+
+    def test_simple_line(self):
+        """Test basic line."""
+        adapter = ResvgShapeAdapter()
+        line = LineNode(
+            tag="line",
+            id="test-line",
+            presentation=default_presentation(),
+            attributes={},
+            styles={},
+            x1=0.0,
+            y1=0.0,
+            x2=10.0,
+            y2=5.0,
+        )
+
+        segments = adapter.from_line_node(line)
+
+        assert len(segments) == 1
+        assert isinstance(segments[0], LineSegment)
+        assert segments[0].start.x == 0.0
+        assert segments[0].start.y == 0.0
+        assert segments[0].end.x == 10.0
+        assert segments[0].end.y == 5.0
+
+    def test_zero_length_line(self):
+        """Test that zero-length lines produce no segments."""
+        adapter = ResvgShapeAdapter()
+        line = LineNode(
+            tag="line",
+            id="empty-line",
+            presentation=default_presentation(),
+            attributes={},
+            styles={},
+            x1=1.0,
+            y1=1.0,
+            x2=1.0,
+            y2=1.0,
+        )
+
+        segments = adapter.from_line_node(line)
+        assert len(segments) == 0
+
+
+class TestResvgShapeAdapterPoly:
+    """Test polyline/polygon conversion."""
+
+    def test_polyline(self):
+        """Test polyline segments are not closed."""
+        adapter = ResvgShapeAdapter()
+        polyline = PolyNode(
+            tag="polyline",
+            id="test-polyline",
+            presentation=default_presentation(),
+            attributes={},
+            styles={},
+            points=(0.0, 0.0, 10.0, 0.0, 10.0, 5.0),
+        )
+
+        segments = adapter.from_poly_node(polyline)
+
+        assert len(segments) == 2
+        assert segments[0].start.x == 0.0
+        assert segments[0].start.y == 0.0
+        assert segments[0].end.x == 10.0
+        assert segments[0].end.y == 0.0
+        assert segments[1].start.x == 10.0
+        assert segments[1].start.y == 0.0
+        assert segments[1].end.x == 10.0
+        assert segments[1].end.y == 5.0
+
+    def test_polygon(self):
+        """Test polygon segments are closed."""
+        adapter = ResvgShapeAdapter()
+        polygon = PolyNode(
+            tag="polygon",
+            id="test-polygon",
+            presentation=default_presentation(),
+            attributes={},
+            styles={},
+            points=(0.0, 0.0, 10.0, 0.0, 10.0, 10.0, 0.0, 10.0),
+        )
+
+        segments = adapter.from_poly_node(polygon)
+
+        assert len(segments) == 4
+        assert segments[0].start.x == 0.0
+        assert segments[0].start.y == 0.0
+        assert segments[-1].end.x == 0.0
+        assert segments[-1].end.y == 0.0
 
 
 class TestResvgShapeAdapterPath:

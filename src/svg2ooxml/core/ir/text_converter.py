@@ -208,88 +208,216 @@ class TextConverter:
         coord_space: CoordinateSpace,
         resvg_node: Any | None = None,
     ) -> TextFrame | list[TextFrame] | None:
-        base_style = self._compute_text_style_with_inheritance(element)
-        runs, run_metadata = self._collect_text_runs(element, base_style)
-        if not runs:
+        if resvg_node is None:
+            return None
+        return self._convert_resvg_text(
+            element=element,
+            coord_space=coord_space,
+            resvg_node=resvg_node,
+        )
+
+    # ------------------------------------------------------------------
+    # Resvg-only text conversion
+    # ------------------------------------------------------------------
+
+    def _convert_resvg_text(
+        self,
+        *,
+        element: etree._Element,
+        coord_space: CoordinateSpace,
+        resvg_node: Any,
+    ) -> TextFrame | None:
+        text_content = getattr(resvg_node, "text_content", None) or ""
+        if not text_content.strip():
             return None
 
-        if self._needs_positioned_text(element):
-            positioned = self._convert_positioned_text(
-                element=element,
-                coord_space=coord_space,
-                base_style=base_style,
-                run_metadata=run_metadata,
-            )
-            return positioned or None
+        run = self._run_from_resvg_node(resvg_node, text_content)
+        updated, run_policy = self.apply_policy(run)
+        runs = [updated]
 
-        processed_runs: list[Run] = []
-        policy_meta_accum: dict[str, Any] = {}
-        for run in runs:
-            updated, run_policy = self.apply_policy(run)
-            if run_policy:
-                policy_meta_accum.update(run_policy)
-            processed_runs.append(updated)
+        origin_x, origin_y = self._resvg_text_origin(resvg_node, coord_space)
+        anchor = self._resvg_text_anchor(resvg_node)
+        direction = self._resvg_text_direction(resvg_node)
 
-        processed_runs = self._merge_runs(processed_runs)
-        if not processed_runs:
-            return None
-
-        font_size_pt = float(base_style.get("font_size_pt", 12.0))
-        x = self._resolve_text_length(element.get("x"), axis="x", font_size_pt=font_size_pt)
-        y = self._resolve_text_length(element.get("y"), axis="y", font_size_pt=font_size_pt)
-        anchor_token = base_style.get("text_anchor") or element.get("text-anchor") or "start"
-        anchor = {
-            "middle": TextAnchor.MIDDLE,
-            "end": TextAnchor.END,
-        }.get(str(anchor_token).strip().lower(), TextAnchor.START)
-
-        # Extract text direction from CSS property or SVG attribute
-        direction = base_style.get("direction") or element.get("direction") or None
-        if isinstance(direction, str):
-            direction = direction.strip().lower() if direction.strip().lower() in ("rtl", "ltr") else None
-
-        origin_x, origin_y = coord_space.apply_point(x, y)
         font_service = self._context.services.resolve("font")
-        bbox = self._estimate_text_bbox(processed_runs, origin_x, origin_y, font_service=font_service)
+        bbox = self._estimate_text_bbox(runs, origin_x, origin_y, font_service=font_service)
         bbox = self._apply_text_anchor(bbox, anchor)
 
-        metadata: dict[str, Any] = dict(run_metadata)
-        if resvg_node is not None:
-            self._attach_resvg_text_metadata(resvg_node, metadata)
+        metadata: dict[str, Any] = {}
+        self._attach_resvg_text_metadata(resvg_node, metadata)
         self._context.attach_policy_metadata(metadata, "text")
-        if policy_meta_accum:
+        if run_policy:
             policy_meta = metadata.setdefault("policy", {}).setdefault("text", {})
-            policy_meta.update(policy_meta_accum)
+            policy_meta.update(run_policy)
 
         frame = TextFrame(
             origin=Point(origin_x, origin_y),
             anchor=anchor,
             bbox=bbox,
-            runs=processed_runs,
+            runs=runs,
             baseline_shift=0.0,
             direction=direction,
             metadata=metadata,
         )
         decision = self._resolve_policy_decision()
         if self._pipeline is not None:
-            frame = self._pipeline.plan_frame(frame, processed_runs, decision)
+            frame = self._pipeline.plan_frame(frame, runs, decision)
         if self._smart_font_bridge is not None:
-            frame = self._smart_font_bridge.enhance_frame(frame, processed_runs, decision)
+            frame = self._smart_font_bridge.enhance_frame(frame, runs, decision)
+
         trace_stage = getattr(self._context, "trace_stage", None)
         if callable(trace_stage):
             trace_stage(
                 "text_frame",
                 stage="text",
-                subject=metadata.get("text_path_id") or element.get("id"),
+                subject=element.get("id"),
                 metadata={
-                    "run_count": len(processed_runs),
-                    "uses_text_path": "text_path_id" in metadata,
-                    "policy_applied": bool(policy_meta_accum),
+                    "run_count": len(runs),
+                    "resvg_only": True,
                     "decision": getattr(decision, "value", decision),
                 },
             )
-        self._context.trace_geometry_decision(element, "native", frame.metadata)
+        self._context.trace_geometry_decision(element, "resvg", frame.metadata)
         return frame
+
+    def _resvg_text_origin(self, resvg_node: Any, coord_space: CoordinateSpace) -> tuple[float, float]:
+        spans = getattr(resvg_node, "spans", None)
+        if spans:
+            first = spans[0]
+            x = getattr(first, "x", 0.0)
+            y = getattr(first, "y", 0.0)
+            return coord_space.apply_point(float(x), float(y))
+
+        attrs = getattr(resvg_node, "attributes", {}) or {}
+        x = self._parse_number_list(attrs.get("x"))
+        y = self._parse_number_list(attrs.get("y"))
+        dx = self._parse_number_list(attrs.get("dx"))
+        dy = self._parse_number_list(attrs.get("dy"))
+        base_x = x[0] if x else 0.0
+        base_y = y[0] if y else 0.0
+        base_x += dx[0] if dx else 0.0
+        base_y += dy[0] if dy else 0.0
+        return coord_space.apply_point(base_x, base_y)
+
+    @staticmethod
+    def _parse_number_list(value: str | None) -> list[float]:
+        if not value:
+            return []
+        values: list[float] = []
+        for part in value.replace(",", " ").split():
+            try:
+                values.append(float(part))
+            except ValueError:
+                continue
+        return values
+
+    def _resvg_text_anchor(self, resvg_node: Any) -> TextAnchor:
+        attrs = getattr(resvg_node, "attributes", {}) or {}
+        anchor_token = attrs.get("text-anchor") or attrs.get("textAnchor") or "start"
+        return {
+            "middle": TextAnchor.MIDDLE,
+            "end": TextAnchor.END,
+        }.get(str(anchor_token).strip().lower(), TextAnchor.START)
+
+    def _resvg_text_direction(self, resvg_node: Any) -> str | None:
+        attrs = getattr(resvg_node, "attributes", {}) or {}
+        direction = attrs.get("direction")
+        if isinstance(direction, str):
+            token = direction.strip().lower()
+            if token in ("rtl", "ltr"):
+                return token
+        return None
+
+    def _run_from_resvg_node(self, resvg_node: Any, text: str) -> Run:
+        text_style = getattr(resvg_node, "text_style", None)
+        fill_style = getattr(resvg_node, "fill", None)
+        stroke_style = getattr(resvg_node, "stroke", None)
+
+        font_family = "Arial"
+        font_size_pt = 12.0
+        bold = False
+        italic = False
+        underline = False
+        strike = False
+        letter_spacing = None
+
+        if text_style is not None:
+            families = getattr(text_style, "font_families", None)
+            if families:
+                font_family = families[0] or font_family
+            size = getattr(text_style, "font_size", None)
+            if isinstance(size, (int, float)) and size > 0:
+                font_size_pt = float(size)
+            weight = str(getattr(text_style, "font_weight", "") or "").strip().lower()
+            if weight:
+                if weight in {"bold", "bolder"}:
+                    bold = True
+                else:
+                    try:
+                        bold = int(weight) >= 700
+                    except ValueError:
+                        bold = False
+            style = str(getattr(text_style, "font_style", "") or "").strip().lower()
+            italic = style in {"italic", "oblique"}
+            decoration = str(getattr(text_style, "text_decoration", "") or "").lower()
+            underline = "underline" in decoration
+            strike = "line-through" in decoration
+            letter_spacing = getattr(text_style, "letter_spacing", None)
+
+        rgb = "000000"
+        fill_opacity = 1.0
+        if fill_style is not None:
+            color = getattr(fill_style, "color", None)
+            if color is not None:
+                rgb = self._resvg_color_to_hex(color)
+            opacity = getattr(fill_style, "opacity", None)
+            if isinstance(opacity, (int, float)):
+                fill_opacity = float(opacity)
+
+        stroke_rgb = None
+        stroke_width_px = None
+        stroke_opacity = None
+        if stroke_style is not None:
+            color = getattr(stroke_style, "color", None)
+            if color is not None:
+                stroke_rgb = self._resvg_color_to_hex(color)
+            width = getattr(stroke_style, "width", None)
+            if isinstance(width, (int, float)):
+                stroke_width_px = float(width)
+            opacity = getattr(stroke_style, "opacity", None)
+            if isinstance(opacity, (int, float)):
+                stroke_opacity = float(opacity)
+
+        return Run(
+            text=text,
+            font_family=font_family,
+            font_size_pt=font_size_pt,
+            bold=bold,
+            italic=italic,
+            underline=underline,
+            strike=strike,
+            rgb=rgb,
+            fill_opacity=fill_opacity,
+            stroke_rgb=stroke_rgb,
+            stroke_width_px=stroke_width_px,
+            stroke_opacity=stroke_opacity,
+            letter_spacing=letter_spacing,
+        )
+
+    @staticmethod
+    def _resvg_color_to_hex(color: Any) -> str:
+        try:
+            from svg2ooxml.color.models import Color as CentralizedColor
+        except Exception:
+            return "000000"
+
+        r = float(getattr(color, "r", 0.0))
+        g = float(getattr(color, "g", 0.0))
+        b = float(getattr(color, "b", 0.0))
+        a = float(getattr(color, "a", 1.0))
+        centralized = CentralizedColor(r=r, g=g, b=b, a=a)
+        hex_with_hash = centralized.to_hex(include_alpha=False)
+        return hex_with_hash[1:].upper()
 
     def _needs_positioned_text(self, element: etree._Element) -> bool:
         for node in element.iter():
@@ -497,12 +625,10 @@ class TextConverter:
         if not policy:
             return run, {}
 
-        decision = self._resolve_policy_decision()
+        decision = self._resolve_policy_decision(policy)
         if decision is not None:
             return self._apply_text_decision(run, decision)
 
-        if isinstance(policy, Mapping):
-            return self._apply_legacy_policy(run, policy)
         return run, {}
 
     @property
@@ -892,30 +1018,6 @@ class TextConverter:
             "enabled": decision.wordart.enable_detection,
             "confidence_threshold": decision.wordart.confidence_threshold,
         }
-
-        return updated, metadata
-
-    def _apply_legacy_policy(self, run: Run, policy: Mapping[str, Any]) -> tuple[Run, dict[str, Any]]:
-        metadata: dict[str, Any] = {}
-        updated = run
-
-        allow_effects = bool(policy.get("allow_effects", True))
-        if not allow_effects and (run.bold or run.italic or run.underline):
-            updated = replace(updated, bold=False, italic=False, underline=False)
-            metadata["effects_stripped"] = True
-
-        behavior = str(policy.get("font_missing_behavior") or "").lower()
-        if behavior == "fallback_family":
-            fallback = self._resolve_font_fallback(updated.font_family, ())
-            if fallback and fallback != updated.font_family:
-                updated = replace(updated, font_family=fallback)
-                metadata["font_fallback"] = fallback
-        elif behavior in {"outline", FALLBACK_EMF}:
-            metadata["rendering_behavior"] = behavior
-
-        glyph_fallback = policy.get("glyph_fallback")
-        if glyph_fallback:
-            metadata["glyph_fallback"] = glyph_fallback
 
         return updated, metadata
 

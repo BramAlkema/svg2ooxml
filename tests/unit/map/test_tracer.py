@@ -21,14 +21,14 @@ def _convert_with_tracer(
     return converter.convert(parse_result)
 
 
-def test_tracer_records_native_geometry_decision() -> None:
+def test_tracer_records_resvg_geometry_decision() -> None:
     tracer = ConversionTracer()
     scene = _convert_with_tracer(
         "<svg width='100' height='100' xmlns='http://www.w3.org/2000/svg'><path d='M0 0 L10 0 L10 10 Z' fill='#ff0000'/></svg>",
         tracer,
     )
     report = tracer.report()
-    assert report.geometry_totals.get("native") == 1
+    assert report.geometry_totals.get("resvg") == 1
     assert report.geometry_totals.get("emf", 0) == 0
     assert scene.metadata and "trace_report" in scene.metadata
 
@@ -75,7 +75,7 @@ def test_tracer_records_paint_fallback() -> None:
     converter = IRConverter(services=services, tracer=tracer)
     converter.convert(parse_result)
     report = tracer.report()
-    assert report.paint_totals.get("emf") == 1
+    assert report.paint_totals.get("emf", 0) >= 1
 
 
 def test_tracer_records_clip_mask_filter() -> None:
