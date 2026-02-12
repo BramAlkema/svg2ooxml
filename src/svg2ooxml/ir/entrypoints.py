@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from copy import deepcopy
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -59,8 +60,30 @@ def convert_parser_output(
                 target_obj = TargetRegistry.default().get(target)
                 if target_obj:
                     # Merge global options with these specific overrides
-                    combined_options = dict(engine._policy.options)
-                    combined_options.update(values)
+                    combined_options = deepcopy(engine._policy.options)
+                    if isinstance(values, dict):
+                        combined_options.update(values)
+                        targets = combined_options.get("targets")
+                        if not isinstance(targets, dict):
+                            targets = {}
+                        target_bucket = dict(targets.get(target, {})) if isinstance(targets.get(target), dict) else {}
+                        target_bucket.update(values)
+                        targets[target] = target_bucket
+                        combined_options["targets"] = targets
+                        for key, value in values.items():
+                            combined_options[f"{target}.{key}"] = value
+                            if (
+                                target == "filter"
+                                and key == "primitives"
+                                and isinstance(value, dict)
+                            ):
+                                for primitive_name, primitive_values in value.items():
+                                    if not isinstance(primitive_values, dict):
+                                        continue
+                                    for attr_name, attr_value in primitive_values.items():
+                                        combined_options[
+                                            f"filter.primitives.{primitive_name}.{attr_name}"
+                                        ] = attr_value
                     
                     for provider in getattr(engine, "_providers", []):
                         if provider.supports(target_obj):
