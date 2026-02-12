@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Mapping, Sequence
+import os
 from dataclasses import replace
 from typing import Any
 
@@ -75,11 +76,13 @@ class ShapeConversionMixin:
     # ------------------------------------------------------------------ #
 
     def _geometry_mode(self) -> str:
-        options = self._policy_options("geometry") or {}
-        if not isinstance(options, Mapping):
-            return "legacy"
-        token = str(options.get("geometry_mode") or "legacy").strip().lower()
-        return token or "legacy"
+        options = self._policy_options("geometry")
+        token: str | None = None
+        if isinstance(options, Mapping):
+            token = options.get("geometry_mode")  # type: ignore[assignment]
+        if not token:
+            token = os.environ.get("SVG2OOXML_GEOMETRY_MODE", "legacy")
+        return str(token).strip().lower() or "legacy"
 
     def _resvg_only_geometry(self) -> bool:
         return self._geometry_mode() == "resvg-only"
@@ -444,7 +447,10 @@ class ShapeConversionMixin:
         global_transform = global_transform_lookup.get(sig)
         
         if global_transform is None:
-            self._logger.warning("No global transform found for signature: %s", sig)
+            node_transform_lookup = getattr(self, "_resvg_node_transform_lookup", {})
+            global_transform = node_transform_lookup.get(id(resvg_node))
+            if global_transform is None:
+                self._logger.warning("No global transform found for signature: %s", sig)
         
         # We replace the node's local transform with the global one before passing it
         # to the converters/adapters. This is safe because we're not modifying the 

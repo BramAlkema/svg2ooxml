@@ -55,6 +55,7 @@ class ResvgBridge:
         self.tree: ResvgTree | None = None
         self.element_lookup: dict[etree._Element, ResvgBaseNode] = {}
         self.global_transform_lookup: dict[tuple[tuple[str, int], ...], Any] = {}
+        self.node_global_transform_lookup: dict[int, Any] = {}
         self.filter_descriptors: dict[str, Any] = {}
         self.clip_definitions: dict[str, ClipDefinition] = {}
         self.mask_info: dict[str, MaskInfo] = {}
@@ -65,6 +66,7 @@ class ResvgBridge:
         self.mask_info.clear()
         self.element_lookup.clear()
         self.global_transform_lookup.clear()
+        self.node_global_transform_lookup.clear()
         self.tree = None
 
         if resvg_normalize_element is None:
@@ -123,11 +125,23 @@ class ResvgBridge:
 
             sig = tuple(current_path)
             self.global_transform_lookup[sig] = global_transform
+            self.node_global_transform_lookup[id(node)] = global_transform
 
             # A. Primary Link
             source_elem = getattr(node, "source", None)
             if isinstance(source_elem, etree._Element):
                 self.element_lookup[source_elem] = node
+
+            # A2. Map <use> elements when available (resvg exposes use_source).
+            use_source = getattr(node, "use_source", None)
+            if isinstance(use_source, etree._Element):
+                use_sig = self._element_signature(use_source)
+                if use_sig is not None:
+                    xml_elem = xml_signatures.get(use_sig, use_source)
+                    self.element_lookup.setdefault(xml_elem, node)
+                    self.global_transform_lookup.setdefault(use_sig, global_transform)
+                else:
+                    self.element_lookup.setdefault(use_source, node)
 
             # B. Record signature
             if sig not in resvg_signatures:
