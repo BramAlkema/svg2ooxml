@@ -50,6 +50,11 @@ class CompositeFilter(Filter):
 
         input_1 = self._lookup_input(pipeline, input_1_name)
         input_2 = self._lookup_input(pipeline, input_2_name)
+        policy = {}
+        if isinstance(context.options, dict):
+            policy = context.options.get("policy") or {}
+        approximation_allowed = bool(policy.get("approximation_allowed", True))
+        prefer_rasterization = bool(policy.get("prefer_rasterization", False))
 
         metadata = {
             "filter_type": self.filter_type,
@@ -109,7 +114,12 @@ class CompositeFilter(Filter):
             is_simple = self._is_simple_mask(params, input_1, input_2, context)
             metadata["is_simple_mask"] = is_simple
 
-            drawingml, fallback, approximation = self._combine_masking(params.operator, input_1, input_2)
+            drawingml, fallback, approximation = self._combine_masking(
+                params.operator,
+                input_1,
+                input_2,
+                allow_approximation=approximation_allowed,
+            )
             metadata["native_support"] = drawingml != ""
             if fallback:
                 metadata["fallback_reason"] = fallback
@@ -160,7 +170,7 @@ class CompositeFilter(Filter):
             warnings: tuple[str, ...] = ()
             if not drawingml:
                 if fallback in {"mask_empty", "mask_missing_effects", "missing_mask"}:
-                    fallback_mode = "bitmap"
+                    fallback_mode = "bitmap" if (approximation_allowed or prefer_rasterization) else "emf"
                     warnings = (f"feComposite mask fallback: {fallback}",)
                 else:
                     fallback_mode = "emf"
@@ -411,6 +421,8 @@ class CompositeFilter(Filter):
         operator: str,
         source: FilterResult | None,
         mask: FilterResult | None,
+        *,
+        allow_approximation: bool,
     ) -> tuple[str, str | None, str | None]:
         if mask is None:
             return "", "missing_mask", None
@@ -420,7 +432,7 @@ class CompositeFilter(Filter):
         source_fragment = (source.drawingml or "").strip() if source else ""
         mask_fragment = (mask.drawingml or "").strip()
         if not mask_fragment:
-            fallback_fragment, approximation = self._mask_effect_from_metadata(mask)
+            fallback_fragment, approximation = self._mask_effect_from_metadata(mask, allow_approximation)
             if fallback_fragment:
                 mask_fragment = fallback_fragment
             else:
@@ -433,7 +445,7 @@ class CompositeFilter(Filter):
             if wrapped:
                 mask_fragment = wrapped
             else:
-                fallback_fragment, approximation = self._mask_effect_from_metadata(mask)
+                fallback_fragment, approximation = self._mask_effect_from_metadata(mask, allow_approximation)
                 if fallback_fragment:
                     mask_fragment = fallback_fragment
                 else:
@@ -469,8 +481,14 @@ class CompositeFilter(Filter):
 
         return to_string(outer_effectLst), None, approximation
 
-    def _mask_effect_from_metadata(self, mask: FilterResult) -> tuple[str | None, str | None]:
+    def _mask_effect_from_metadata(
+        self,
+        mask: FilterResult,
+        allow_approximation: bool,
+    ) -> tuple[str | None, str | None]:
         if not isinstance(mask.metadata, dict):
+            return None, None
+        if not allow_approximation:
             return None, None
         color = None
         opacity = 1.0
@@ -482,19 +500,102 @@ class CompositeFilter(Filter):
             if isinstance(fill_meta, dict) and fill_meta.get("type") == "solid":
                 color = str(fill_meta.get("rgb") or "").strip().lstrip("#").upper()
                 opacity = float(fill_meta.get("opacity", mask.metadata.get("opacity", 1.0)))
+            elif isinstance(fill_meta, dict) and fill_meta.get("type") in {"linearGradient", "radialGradient"}:
+                stops = fill_meta.get("stops")
+                if isinstance(stops, list) and stops:
+                    approx = self._approximate_gradient_color(stops)
+                    if approx is not None:
+                        color, opacity = approx
+                        return self._solid_mask_fragment(color, opacity), "gradient_mask_avg"
+            elif isinstance(fill_meta, dict) and fill_meta.get("type") == "pattern":
+                candidate = fill_meta.get("foreground") or fill_meta.get("background")
+                if isinstance(candidate, str) and candidate:
+                    color = candidate.strip().lstrip("#").upper()
+                    opacity = float(mask.metadata.get("opacity", 1.0))
         if not color:
             return None, None
         if len(color) == 3:
             color = "".join(ch * 2 for ch in color)
         if len(color) != 6:
             return None, None
+        return self._solid_mask_fragment(color, opacity), "solid_mask"
 
+    @staticmethod
+    def _solid_mask_fragment(color: str, opacity: float) -> str:
         alpha = opacity_to_ppt(max(0.0, min(opacity, 1.0)))
         effectLst = a_elem("effectLst")
         solidFill = a_sub(effectLst, "solidFill")
         srgbClr = a_sub(solidFill, "srgbClr", val=color)
         a_sub(srgbClr, "alpha", val=alpha)
-        return to_string(effectLst), "solid_mask"
+        return to_string(effectLst)
+
+    @staticmethod
+    def _approximate_gradient_color(stops: list[dict[str, object]]) -> tuple[str, float] | None:
+        parsed: list[tuple[float, int, int, int, float]] = []
+        total = len(stops)
+        for index, stop in enumerate(stops):
+            if not isinstance(stop, dict):
+                continue
+            rgb = stop.get("rgb")
+            if not isinstance(rgb, str):
+                continue
+            token = rgb.strip().lstrip("#").upper()
+            if len(token) == 3:
+                token = "".join(ch * 2 for ch in token)
+            if len(token) != 6:
+                continue
+            try:
+                r = int(token[0:2], 16)
+                g = int(token[2:4], 16)
+                b = int(token[4:6], 16)
+            except ValueError:
+                continue
+            try:
+                offset = float(stop.get("offset", index / max(1, total - 1)))
+            except (TypeError, ValueError):
+                offset = index / max(1, total - 1)
+            offset = max(0.0, min(1.0, offset))
+            try:
+                opacity = float(stop.get("opacity", 1.0))
+            except (TypeError, ValueError):
+                opacity = 1.0
+            opacity = max(0.0, min(1.0, opacity))
+            parsed.append((offset, r, g, b, opacity))
+
+        if not parsed:
+            return None
+        parsed.sort(key=lambda item: item[0])
+        if parsed[0][0] > 0.0:
+            parsed.insert(0, (0.0, parsed[0][1], parsed[0][2], parsed[0][3], parsed[0][4]))
+        if parsed[-1][0] < 1.0:
+            parsed.append((1.0, parsed[-1][1], parsed[-1][2], parsed[-1][3], parsed[-1][4]))
+
+        total_weight = 0.0
+        sum_r = sum_g = sum_b = 0.0
+        sum_opacity = 0.0
+        for idx in range(len(parsed) - 1):
+            o0, r0, g0, b0, a0 = parsed[idx]
+            o1, r1, g1, b1, a1 = parsed[idx + 1]
+            weight = max(0.0, o1 - o0)
+            if weight <= 0:
+                continue
+            avg_r = (r0 + r1) / 2.0
+            avg_g = (g0 + g1) / 2.0
+            avg_b = (b0 + b1) / 2.0
+            avg_a = (a0 + a1) / 2.0
+            sum_r += avg_r * weight
+            sum_g += avg_g * weight
+            sum_b += avg_b * weight
+            sum_opacity += avg_a * weight
+            total_weight += weight
+
+        if total_weight <= 0:
+            return None
+        r = int(round(sum_r / total_weight))
+        g = int(round(sum_g / total_weight))
+        b = int(round(sum_b / total_weight))
+        avg_opacity = max(0.0, min(1.0, sum_opacity / total_weight))
+        return f"{r:02X}{g:02X}{b:02X}", avg_opacity
 
     @staticmethod
     def _collect_fallback_assets(*results: FilterResult | None) -> list[dict[str, object]]:

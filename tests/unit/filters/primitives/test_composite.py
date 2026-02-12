@@ -58,3 +58,29 @@ def test_composite_mask_approximates_solid_metadata() -> None:
     assert "<a:solidFill>" in result.drawingml
     assert result.metadata.get("mask_approximation") == "solid_mask"
     assert result.fallback is None
+
+
+def test_composite_mask_approximates_gradient_metadata() -> None:
+    pipeline = {
+        "SourceGraphic": FilterResult(success=True, drawingml="<a:effectLst><a:fill/></a:effectLst>", metadata={}),
+        "mask": FilterResult(
+            success=True,
+            drawingml="",
+            metadata={
+                "fill": {
+                    "type": "linearGradient",
+                    "stops": [
+                        {"offset": 0.0, "rgb": "000000", "opacity": 0.2},
+                        {"offset": 1.0, "rgb": "FFFFFF", "opacity": 0.8},
+                    ],
+                }
+            },
+        ),
+    }
+    primitive = etree.fromstring('<feComposite operator="in" in="SourceGraphic" in2="mask"/>')
+
+    result = CompositeFilter().apply(primitive, _context(pipeline))
+
+    assert "<a:solidFill>" in result.drawingml
+    assert result.metadata.get("mask_approximation") == "gradient_mask_avg"
+    assert result.fallback is None

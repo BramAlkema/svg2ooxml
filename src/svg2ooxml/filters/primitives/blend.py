@@ -51,6 +51,8 @@ class BlendFilter(Filter):
         policy = {}
         if isinstance(context.options, dict):
             policy = context.options.get("policy") or {}
+        approximation_allowed = bool(policy.get("approximation_allowed", True))
+        prefer_rasterization = bool(policy.get("prefer_rasterization", False))
 
         metadata = {
             "filter_type": self.filter_type,
@@ -86,6 +88,8 @@ class BlendFilter(Filter):
 
         if params.mode in {"multiply", "screen", "darken", "lighten"}:
             overlay_info = self._extract_overlay_color(top_result)
+            if overlay_info and overlay_info.approximation and not approximation_allowed:
+                overlay_info = None
             overlay = self._build_overlay(params.mode, base_result, overlay_info)
             if overlay:
                 fallback = self._merge_fallback(base_result, top_result)
@@ -113,8 +117,6 @@ class BlendFilter(Filter):
 
             metadata["native_support"] = False
             metadata["fallback_reason"] = "missing_overlay"
-            approximation_allowed = bool(policy.get("approximation_allowed", True))
-            prefer_rasterization = bool(policy.get("prefer_rasterization", False))
             fallback = "bitmap" if (approximation_allowed or prefer_rasterization) else "emf"
             metadata["approximation_allowed"] = approximation_allowed
             fallback_assets = self._collect_fallback_assets(base_result, top_result)
@@ -313,10 +315,9 @@ class BlendFilter(Filter):
 
     @staticmethod
     def _approximate_gradient_color(stops: list[dict[str, object]]) -> tuple[str, float] | None:
-        total_weight = 0.0
-        sum_r = sum_g = sum_b = 0.0
-        sum_opacity = 0.0
-        for stop in stops:
+        parsed: list[tuple[float, int, int, int, float]] = []
+        total = len(stops)
+        for index, stop in enumerate(stops):
             if not isinstance(stop, dict):
                 continue
             rgb = stop.get("rgb")
@@ -333,23 +334,51 @@ class BlendFilter(Filter):
                 b = int(token[4:6], 16)
             except ValueError:
                 continue
-            opacity = 1.0
+            try:
+                offset = float(stop.get("offset", index / max(1, total - 1)))
+            except (TypeError, ValueError):
+                offset = index / max(1, total - 1)
+            offset = max(0.0, min(1.0, offset))
             try:
                 opacity = float(stop.get("opacity", 1.0))
             except (TypeError, ValueError):
                 opacity = 1.0
-            weight = max(0.0, opacity)
-            sum_r += r * weight
-            sum_g += g * weight
-            sum_b += b * weight
-            sum_opacity += weight
+            opacity = max(0.0, min(1.0, opacity))
+            parsed.append((offset, r, g, b, opacity))
+
+        if not parsed:
+            return None
+        parsed.sort(key=lambda item: item[0])
+        if parsed[0][0] > 0.0:
+            parsed.insert(0, (0.0, parsed[0][1], parsed[0][2], parsed[0][3], parsed[0][4]))
+        if parsed[-1][0] < 1.0:
+            parsed.append((1.0, parsed[-1][1], parsed[-1][2], parsed[-1][3], parsed[-1][4]))
+
+        total_weight = 0.0
+        sum_r = sum_g = sum_b = 0.0
+        sum_opacity = 0.0
+        for idx in range(len(parsed) - 1):
+            o0, r0, g0, b0, a0 = parsed[idx]
+            o1, r1, g1, b1, a1 = parsed[idx + 1]
+            weight = max(0.0, o1 - o0)
+            if weight <= 0:
+                continue
+            avg_r = (r0 + r1) / 2.0
+            avg_g = (g0 + g1) / 2.0
+            avg_b = (b0 + b1) / 2.0
+            avg_a = (a0 + a1) / 2.0
+            sum_r += avg_r * weight
+            sum_g += avg_g * weight
+            sum_b += avg_b * weight
+            sum_opacity += avg_a * weight
             total_weight += weight
+
         if total_weight <= 0:
             return None
         r = int(round(sum_r / total_weight))
         g = int(round(sum_g / total_weight))
         b = int(round(sum_b / total_weight))
-        avg_opacity = min(1.0, sum_opacity / max(1.0, len(stops)))
+        avg_opacity = max(0.0, min(1.0, sum_opacity / total_weight))
         return f"{r:02X}{g:02X}{b:02X}", avg_opacity
 
     @staticmethod
