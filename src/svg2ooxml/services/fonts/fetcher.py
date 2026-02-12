@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import tempfile
 import urllib.request
 from collections.abc import Iterable
 from dataclasses import dataclass
@@ -19,7 +20,10 @@ def _default_cache_directory() -> Path:
     override = os.getenv(ENV_FONT_CACHE_DIR) or os.getenv(ENV_WEB_FONT_CACHE_DIR)
     if override:
         return Path(override).expanduser()
-    return Path.cwd() / ".cache" / "fonts"
+    xdg_cache = os.getenv("XDG_CACHE_HOME")
+    if xdg_cache:
+        return Path(xdg_cache).expanduser() / "svg2ooxml" / "fonts"
+    return Path.home() / ".cache" / "svg2ooxml" / "fonts"
 
 
 @dataclass(frozen=True)
@@ -59,7 +63,12 @@ class FontFetcher:
         cache_key = self._cache_key(source.url)
         target_path = self.cache_directory / cache_key
         if target_path.exists():
-            return target_path
+            try:
+                if target_path.stat().st_size > 0:
+                    return target_path
+                target_path.unlink(missing_ok=True)
+            except Exception:
+                return target_path
 
         if not self.allow_network:
             return None
@@ -88,8 +97,21 @@ class FontFetcher:
         data = self._download_bytes(url)
         if data is None or not self._sanitize_font_data(data):
             return None
-        target_path.write_bytes(data)
-        return target_path
+        tmp_path: Path | None = None
+        try:
+            self.cache_directory.mkdir(parents=True, exist_ok=True)
+            with tempfile.NamedTemporaryFile(dir=self.cache_directory, delete=False) as tmp_file:
+                tmp_file.write(data)
+                tmp_path = Path(tmp_file.name)
+            tmp_path.replace(target_path)
+            return target_path
+        except Exception:
+            if tmp_path is not None:
+                try:
+                    tmp_path.unlink(missing_ok=True)
+                except Exception:
+                    pass
+            return None
 
     def _download_bytes(self, url: str) -> bytes | None:
         try:
