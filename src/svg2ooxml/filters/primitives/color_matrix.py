@@ -26,6 +26,11 @@ class ColorMatrixFilter(Filter):
         drawingml = self._to_drawingml(params)
         raw_values = (primitive.get("values") or "").strip()
         fallback = None
+        policy = {}
+        if isinstance(context.options, dict):
+            policy = context.options.get("policy") or {}
+        approximation_allowed = bool(policy.get("approximation_allowed", True))
+        prefer_rasterization = bool(policy.get("prefer_rasterization", False))
         metadata = {
             "filter_type": self.filter_type,
             "matrix_type": params.matrix_type,
@@ -85,12 +90,15 @@ class ColorMatrixFilter(Filter):
                     )
             metadata["native_support"] = False
             metadata["fallback_reason"] = f"{params.matrix_type}_requires_raster"
+            metadata["approximation_allowed"] = approximation_allowed
+            metadata["prefer_rasterization"] = prefer_rasterization
+            fallback = "bitmap" if (approximation_allowed or prefer_rasterization) else "emf"
             return FilterResult(
                 success=True,
                 drawingml="",
-                fallback="bitmap",
+                fallback=fallback,
                 metadata=metadata,
-                warnings=[f"feColorMatrix({params.matrix_type}) rendered via raster fallback"],
+                warnings=[f"feColorMatrix({params.matrix_type}) rendered via {fallback} fallback"],
             )
         return FilterResult(success=True, drawingml=drawingml, fallback=fallback, metadata=metadata)
 

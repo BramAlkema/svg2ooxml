@@ -8,6 +8,7 @@ from lxml import etree
 
 # Import centralized XML builders for safe DrawingML generation
 from svg2ooxml.drawingml.xml_builder import a_elem, a_sub, graft_xml_fragment, to_string
+from svg2ooxml.common.conversions.opacity import opacity_to_ppt
 from svg2ooxml.filters.base import Filter, FilterContext, FilterResult
 from svg2ooxml.filters.utils.dml import (
     extract_effect_children,
@@ -108,10 +109,12 @@ class CompositeFilter(Filter):
             is_simple = self._is_simple_mask(params, input_1, input_2, context)
             metadata["is_simple_mask"] = is_simple
 
-            drawingml, fallback = self._combine_masking(params.operator, input_1, input_2)
+            drawingml, fallback, approximation = self._combine_masking(params.operator, input_1, input_2)
             metadata["native_support"] = drawingml != ""
             if fallback:
                 metadata["fallback_reason"] = fallback
+            if approximation:
+                metadata["mask_approximation"] = approximation
 
             # Record telemetry for masking operators
             tracer = getattr(context, "tracer", None)
@@ -161,6 +164,10 @@ class CompositeFilter(Filter):
                     warnings = (f"feComposite mask fallback: {fallback}",)
                 else:
                     fallback_mode = "emf"
+            if fallback_mode:
+                assets = self._collect_fallback_assets(input_1, input_2)
+                if assets:
+                    metadata["fallback_assets"] = assets
             return FilterResult(
                 success=True,
                 drawingml=drawingml,
@@ -404,26 +411,36 @@ class CompositeFilter(Filter):
         operator: str,
         source: FilterResult | None,
         mask: FilterResult | None,
-    ) -> tuple[str, str | None]:
+    ) -> tuple[str, str | None, str | None]:
         if mask is None:
-            return "", "missing_mask"
+            return "", "missing_mask", None
         if isinstance(mask.metadata, dict) and mask.metadata.get("native_support") is False:
-            return "", "mask_missing_effects"
+            return "", "mask_missing_effects", None
 
         source_fragment = (source.drawingml or "").strip() if source else ""
         mask_fragment = (mask.drawingml or "").strip()
         if not mask_fragment:
-            return "", "mask_empty"
+            fallback_fragment, approximation = self._mask_effect_from_metadata(mask)
+            if fallback_fragment:
+                mask_fragment = fallback_fragment
+            else:
+                return "", "mask_empty", None
+        else:
+            approximation = None
 
         if not is_effect_list(mask_fragment):
             wrapped = merge_effect_fragments(mask_fragment)
             if wrapped:
                 mask_fragment = wrapped
             else:
-                return "", "mask_missing_effects"
+                fallback_fragment, approximation = self._mask_effect_from_metadata(mask)
+                if fallback_fragment:
+                    mask_fragment = fallback_fragment
+                else:
+                    return "", "mask_missing_effects", None
         mask_children = extract_effect_children(mask_fragment)
         if not mask_children:
-            return "", "mask_missing_effects"
+            return "", "mask_missing_effects", None
 
         alpha_tag = self._alpha_tag_for_operator(operator)
 
@@ -450,7 +467,47 @@ class CompositeFilter(Filter):
         except Exception:
             pass  # Skip if parsing fails
 
-        return to_string(outer_effectLst), None
+        return to_string(outer_effectLst), None, approximation
+
+    def _mask_effect_from_metadata(self, mask: FilterResult) -> tuple[str | None, str | None]:
+        if not isinstance(mask.metadata, dict):
+            return None, None
+        color = None
+        opacity = 1.0
+        if "flood_color" in mask.metadata:
+            color = str(mask.metadata.get("flood_color") or "").strip().lstrip("#").upper()
+            opacity = float(mask.metadata.get("flood_opacity", 1.0))
+        else:
+            fill_meta = mask.metadata.get("fill")
+            if isinstance(fill_meta, dict) and fill_meta.get("type") == "solid":
+                color = str(fill_meta.get("rgb") or "").strip().lstrip("#").upper()
+                opacity = float(fill_meta.get("opacity", mask.metadata.get("opacity", 1.0)))
+        if not color:
+            return None, None
+        if len(color) == 3:
+            color = "".join(ch * 2 for ch in color)
+        if len(color) != 6:
+            return None, None
+
+        alpha = opacity_to_ppt(max(0.0, min(opacity, 1.0)))
+        effectLst = a_elem("effectLst")
+        solidFill = a_sub(effectLst, "solidFill")
+        srgbClr = a_sub(solidFill, "srgbClr", val=color)
+        a_sub(srgbClr, "alpha", val=alpha)
+        return to_string(effectLst), "solid_mask"
+
+    @staticmethod
+    def _collect_fallback_assets(*results: FilterResult | None) -> list[dict[str, object]]:
+        assets: list[dict[str, object]] = []
+        for result in results:
+            if result is None or not isinstance(result.metadata, dict):
+                continue
+            candidate = result.metadata.get("fallback_assets")
+            if isinstance(candidate, list):
+                for item in candidate:
+                    if isinstance(item, dict):
+                        assets.append(dict(item))
+        return assets
 
     @staticmethod
     def _alpha_tag_for_operator(operator: str) -> str:

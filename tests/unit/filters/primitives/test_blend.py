@@ -49,3 +49,30 @@ def test_blend_multiply_uses_fill_overlay_when_flood_metadata() -> None:
     assert result.drawingml == expected_overlay
     assert result.fallback is None
     assert result.metadata.get("native_support") is True
+
+
+def test_blend_multiply_approximates_gradient_overlay() -> None:
+    pipeline = {
+        "SourceGraphic": FilterResult(success=True, drawingml="<a:effectLst><a:fill/></a:effectLst>", metadata={}),
+        "layer": FilterResult(
+            success=True,
+            drawingml="",
+            metadata={
+                "fill": {
+                    "type": "linearGradient",
+                    "stops": [
+                        {"offset": 0.0, "rgb": "FF0000", "opacity": 1.0},
+                        {"offset": 1.0, "rgb": "0000FF", "opacity": 1.0},
+                    ],
+                }
+            },
+        ),
+    }
+    context = _context_with_pipeline(pipeline)
+    primitive = etree.fromstring('<feBlend mode="multiply" in="SourceGraphic" in2="layer"/>')
+
+    result = BlendFilter().apply(primitive, context)
+
+    assert 'val="800080"' in result.drawingml
+    assert result.metadata.get("overlay_approximation") == "gradient_avg"
+    assert result.fallback is None
