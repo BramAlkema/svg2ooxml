@@ -5,9 +5,12 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PIP_NO_CACHE_DIR=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
+    XDG_CACHE_HOME=/var/cache \
     SVG2OOXML_FONT_CACHE_DIR=/var/cache/svg2ooxml/fonts \
     SVG2OOXML_TEMP_DIR=/var/tmp/svg2ooxml \
-    SVG2OOXML_REPORTS_DIR=/workspace/reports
+    SVG2OOXML_REPORTS_DIR=/workspace/reports \
+    SVG2OOXML_W3C_OUTPUT=/workspace/tests/corpus/w3c/output \
+    OPENXML_VALIDATOR="/usr/local/bin"
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 \
@@ -26,12 +29,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /workspace
 
-COPY svg2ooxml /workspace
-COPY openxml-audit /workspace/openxml-audit
+RUN mkdir -p /var/cache/svg2ooxml/fonts \
+  /var/tmp/svg2ooxml \
+  /workspace/reports \
+  /workspace/tests/corpus/w3c/output
+
+COPY . /workspace
 
 RUN python3 -m pip install -r /workspace/requirements-dev.txt --break-system-packages \
   && python3 -m pip install -e /workspace/openxml-audit --break-system-packages
 
-ENV OPENXML_VALIDATOR="/usr/local/bin"
+VOLUME ["/var/cache/svg2ooxml", "/workspace/reports", "/workspace/tests/corpus/w3c/output"]
 
 CMD ["/bin/bash"]

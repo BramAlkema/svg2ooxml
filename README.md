@@ -18,6 +18,27 @@ core that can run locally without GCP dependencies.
 source .venv/bin/activate
 ```
 
+## Docker (Orbstack)
+
+Build the container image:
+
+```bash
+docker build -f Dockerfile.orbstack -t svg2ooxml-orb .
+```
+
+Run with persistent caches and outputs:
+
+```bash
+docker run --rm -it \
+  -v svg2ooxml-cache:/var/cache/svg2ooxml \
+  -v "$(pwd)/reports":/workspace/reports \
+  -v "$(pwd)/tests/corpus/w3c/output":/workspace/tests/corpus/w3c/output \
+  svg2ooxml-orb
+```
+
+Cache/output directories are preconfigured at `/var/cache/svg2ooxml`, `/var/tmp/svg2ooxml`,
+`/workspace/reports`, and `/workspace/tests/corpus/w3c/output`.
+
 The developer requirements install svg2ooxml in editable mode with the full
 runtime extras (API, cloud, render, color, slides, payments, visual-testing)
 plus linting and test tooling. For leaner installs, use:
