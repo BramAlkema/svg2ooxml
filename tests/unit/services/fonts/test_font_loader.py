@@ -141,6 +141,21 @@ class TestFontLoader:
 
         assert result is None
 
+    def test_resolve_local_path_absolute_fallback(self, tmp_path: Path):
+        """Absolute paths fall back to base_dir parent when missing."""
+        base_dir = tmp_path / "svg"
+        base_dir.mkdir(parents=True)
+        resources_dir = tmp_path / "resources"
+        resources_dir.mkdir(parents=True)
+        resource_file = resources_dir / "Blocky.svg"
+        resource_file.write_text("<svg/>", encoding="utf-8")
+
+        loader = FontLoader(base_dir=base_dir)
+        absolute = Path("/") / "resources" / "Blocky.svg"
+        resolved = loader._resolve_local_path(str(absolute))
+
+        assert resolved == resource_file.resolve()
+
     def test_load_file_ttf(self, tmp_path: Path):
         """Load TTF font from file."""
         ttf_data = b"\x00\x01\x00\x00" + b"\x00" * 100
