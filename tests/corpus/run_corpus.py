@@ -26,6 +26,7 @@ import logging
 import multiprocessing as mp
 import os
 import queue
+import random
 import subprocess
 import time
 import sys
@@ -213,6 +214,17 @@ class CorpusReport:
     # Resvg-only geometry misses (aggregated)
     resvg_only_total: int = 0
     resvg_only_misses: dict[str, int] | None = None
+
+    # Sampling metadata
+    available_decks: int | None = None
+    sample_size: int | None = None
+    sample_seed: int | None = None
+    sampled_decks: list[str] | None = None
+
+    # OpenXML audit (aggregate)
+    openxml_pass_rate: float | None = None
+    openxml_min_pass_rate: float | None = None
+    openxml_required: bool = False
 
 
 def _run_deck_worker(payload: dict[str, Any]) -> DeckMetrics:
@@ -435,9 +447,13 @@ class CorpusRunner:
         mode: str = "resvg",
         metadata_file: Path | None = None,
         *,
+        sample_size: int | None = None,
+        sample_seed: int | None = None,
         openxml_validator: str | None = None,
         openxml_timeout_s: float | None = None,
         openxml_audit: bool = False,
+        openxml_min_pass_rate: float | None = None,
+        openxml_required: bool = False,
         write_pptx: bool = True,
     ):
         """Initialize corpus runner.
@@ -453,16 +469,23 @@ class CorpusRunner:
         self.output_dir = output_dir
         self.mode = mode
         self.metadata_file = metadata_file
+        self._sample_size = sample_size
+        self._sample_seed = sample_seed
         self._openxml_validator = openxml_validator
         self._openxml_timeout_s = openxml_timeout_s
         self._openxml_audit = openxml_audit
+        self._openxml_min_pass_rate = openxml_min_pass_rate
+        self._openxml_required = openxml_required
         self._write_pptx = write_pptx
         if self._openxml_audit and not self._write_pptx:
             logger.warning("OpenXML audit disabled because PPTX output is disabled.")
             self._openxml_audit = False
         self._openxml_cmd = _resolve_openxml_validator(openxml_validator) if self._openxml_audit else None
         if self._openxml_audit and self._openxml_cmd is None:
-            logger.warning("OpenXML audit enabled but validator not found: %s", openxml_validator)
+            message = f"OpenXML audit enabled but validator not found: {openxml_validator}"
+            if self._openxml_required:
+                raise RuntimeError(message)
+            logger.warning(message)
         
         self.output_dir.mkdir(parents=True, exist_ok=True)
         
@@ -762,6 +785,26 @@ class CorpusRunner:
         """
         metadata = self.load_metadata()
         decks = metadata.get("decks", [])
+        available_total = len(decks)
+        sample_config = metadata.get("sample", {}) if isinstance(metadata.get("sample"), dict) else {}
+        sample_size = self._sample_size if self._sample_size is not None else sample_config.get("size")
+        sample_seed = self._sample_seed if self._sample_seed is not None else sample_config.get("seed")
+        sampled_decks: list[str] | None = None
+
+        if sample_size is not None:
+            sample_size = int(sample_size)
+            if sample_size < 0:
+                raise ValueError("sample-size must be a positive integer")
+        if sample_seed is not None:
+            sample_seed = int(sample_seed)
+
+        if sample_size and sample_size > 0:
+            ordered = sorted(decks, key=lambda d: d.get("deck_name", ""))
+            effective_seed = sample_seed if sample_seed is not None else 0
+            rng = random.Random(effective_seed)
+            rng.shuffle(ordered)
+            decks = ordered[: min(sample_size, len(ordered))]
+            sampled_decks = [deck.get("deck_name", "") for deck in decks]
         global_overrides = metadata.get("policy_overrides")
         if global_overrides:
             decks = [
@@ -1195,17 +1238,41 @@ class CorpusRunner:
                 f"{'✓ PASS' if targets_met.get('visual_fidelity', False) else '✗ FAIL'}"
             )
         openxml_results = [r.openxml_valid for r in successful if r.openxml_valid is not None]
+        openxml_pass_rate: float | None = None
         if openxml_results:
             passed = sum(1 for value in openxml_results if value)
-            openxml_rate = passed / len(openxml_results)
+            openxml_pass_rate = passed / len(openxml_results)
             summary_lines.append(
-                f"OpenXML audit pass rate: {openxml_rate:.1%} ({passed}/{len(openxml_results)})"
+                f"OpenXML audit pass rate: {openxml_pass_rate:.1%} ({passed}/{len(openxml_results)})"
             )
+        if self._openxml_min_pass_rate is not None:
+            openxml_target_met = (
+                openxml_pass_rate is not None
+                and openxml_pass_rate >= self._openxml_min_pass_rate
+            )
+            targets_met["openxml_pass_rate"] = openxml_target_met
+            if openxml_pass_rate is None:
+                summary_lines.append(
+                    "OpenXML audit pass rate target: missing results - ✗ FAIL"
+                )
+            else:
+                summary_lines.append(
+                    f"OpenXML audit target: >= {self._openxml_min_pass_rate:.1%} - "
+                    f"{'✓ PASS' if openxml_target_met else '✗ FAIL'}"
+                )
+        if self._openxml_required and openxml_pass_rate is None:
+            targets_met["openxml_required"] = False
+            summary_lines.append("OpenXML audit required but not executed - ✗ FAIL")
         if resvg_only_total:
             top_tags = sorted(resvg_only_misses.items(), key=lambda item: item[1], reverse=True)[:8]
             top_tags_str = ", ".join(f"{tag}={count}" for tag, count in top_tags)
             summary_lines.append(
                 f"Resvg-only geometry skips: {resvg_only_total} (top: {top_tags_str})"
+            )
+        if sample_size:
+            summary_lines.insert(
+                1,
+                f"Sampled {planned_total}/{available_total} decks (seed={sample_seed or 0})",
             )
         summary = "\n".join(summary_lines)
         
@@ -1215,10 +1282,17 @@ class CorpusRunner:
             total_decks=total_decks,
             successful_decks=successful_decks,
             failed_decks=failed_decks,
+            available_decks=available_total,
+            sample_size=int(sample_size) if sample_size else None,
+            sample_seed=int(sample_seed) if sample_seed is not None else None,
+            sampled_decks=sampled_decks,
             avg_native_rate=avg_native,
             avg_emf_rate=avg_emf,
             avg_raster_rate=avg_raster,
             avg_ssim_score=avg_ssim,
+            openxml_pass_rate=openxml_pass_rate,
+            openxml_min_pass_rate=self._openxml_min_pass_rate,
+            openxml_required=self._openxml_required,
             decks=[asdict(r) for r in results],
             targets_met=targets_met,
             resvg_only_total=resvg_only_total,
@@ -1286,6 +1360,17 @@ def main():
         help="Timeout (seconds) for OpenXML validation (default: 60)",
     )
     parser.add_argument(
+        "--openxml-min-pass-rate",
+        type=float,
+        default=None,
+        help="Minimum OpenXML audit pass rate required to pass (0.0-1.0).",
+    )
+    parser.add_argument(
+        "--openxml-required",
+        action="store_true",
+        help="Fail if OpenXML audit cannot be executed (missing validator).",
+    )
+    parser.add_argument(
         "--metadata",
         type=Path,
         help="Path to metadata file (default: corpus-dir/corpus_metadata.json)",
@@ -1295,6 +1380,18 @@ def main():
         type=int,
         default=1,
         help="Number of worker processes for parallel rendering (default: 1)",
+    )
+    parser.add_argument(
+        "--sample-size",
+        type=int,
+        default=None,
+        help="Deterministically sample N decks from metadata (optional).",
+    )
+    parser.add_argument(
+        "--sample-seed",
+        type=int,
+        default=None,
+        help="Random seed for deterministic sampling (default: 0 when sampling).",
     )
     parser.add_argument(
         "--buffer",
@@ -1344,18 +1441,29 @@ def main():
             logger.warning("Single-deck output disabled because --skip-pptx is set.")
             args.single_deck = False
             args.single_deck_output = None
+    if args.openxml_required and not openxml_audit:
+        logger.error("OpenXML audit required but not enabled. Provide --openxml-audit or OPENXML_VALIDATOR.")
+        sys.exit(2)
 
     # Run corpus tests
-    runner = CorpusRunner(
-        corpus_dir=args.corpus_dir,
-        output_dir=args.output_dir,
-        mode=args.mode,
-        metadata_file=args.metadata,
-        openxml_validator=openxml_validator,
-        openxml_timeout_s=args.openxml_timeout,
-        openxml_audit=openxml_audit,
-        write_pptx=not args.skip_pptx,
-    )
+    try:
+        runner = CorpusRunner(
+            corpus_dir=args.corpus_dir,
+            output_dir=args.output_dir,
+            mode=args.mode,
+            metadata_file=args.metadata,
+            sample_size=args.sample_size,
+            sample_seed=args.sample_seed,
+            openxml_validator=openxml_validator,
+            openxml_timeout_s=args.openxml_timeout,
+            openxml_audit=openxml_audit,
+            openxml_min_pass_rate=args.openxml_min_pass_rate,
+            openxml_required=args.openxml_required,
+            write_pptx=not args.skip_pptx,
+        )
+    except RuntimeError as exc:
+        logger.error("%s", exc)
+        sys.exit(2)
     
     report = runner.run_all(
         workers=args.workers,

@@ -28,6 +28,19 @@ The svg2ooxml project includes 525 SVG files from the W3C SVG 1.1 Test Suite (44
 ./tests/corpus/run_w3c_corpus.sh gradients --mode legacy
 ```
 
+### Run a Deterministic Sample
+
+```bash
+python tests/corpus/run_corpus.py \
+  --corpus-dir tests/svg \
+  --metadata tests/corpus/w3c_corpus_metadata.json \
+  --output-dir tests/corpus/w3c/output_sample \
+  --report tests/corpus/w3c/report_sample.json \
+  --mode resvg \
+  --sample-size 50 \
+  --sample-seed 1234
+```
+
 ## Available Categories
 
 | Category | Tests | Description | Expected Native Rate |
