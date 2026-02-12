@@ -620,6 +620,18 @@ class FontLoader:
             return None
         path = Path(url)
         if path.is_absolute():
+            if path.exists():
+                return path
+            if self.base_dir is None:
+                return path
+            try:
+                relative = path.relative_to(path.anchor)
+            except ValueError:
+                relative = Path(*path.parts[1:])
+            for base in (self.base_dir, self.base_dir.parent):
+                candidate = (base / relative).resolve()
+                if candidate.exists():
+                    return candidate
             return path
         if self.base_dir is None:
             return None
