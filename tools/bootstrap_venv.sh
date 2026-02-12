@@ -72,4 +72,6 @@ Activate with:
   source $VENV_DIR/bin/activate
 
 Tip: set PYTHON_BIN or VENV_DIR before running to customise the interpreter or location.
+Note: On macOS, FontForge's Python bindings are 3.14-only via Homebrew, so this 3.13 venv won't include FontForge.
+Use the Orbstack container for a full FontForge + Skia stack.
 EOF
