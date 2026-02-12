@@ -5,13 +5,13 @@ SvgToPptxExporter through the policy system to the IRConverter where it can be
 accessed via _policy_options("geometry").
 
 Flow being tested:
-    SvgToPptxExporter(geometry_mode defaults to "resvg")
+    SvgToPptxExporter(geometry_mode defaults to "resvg-only")
         ↓
-    policy_overrides = {"geometry": {"geometry_mode": "resvg"}}
+    policy_overrides = {"geometry": {"geometry_mode": "resvg-only"}}
         ↓
     PolicyContext with geometry selections including geometry_mode
         ↓
-    IRConverter._policy_options("geometry").get("geometry_mode") == "resvg"
+    IRConverter._policy_options("geometry").get("geometry_mode") == "resvg-only"
 """
 
 from __future__ import annotations
@@ -36,11 +36,11 @@ TEST_SVG = """<?xml version="1.0" encoding="UTF-8"?>
 class TestGeometryModePropagation:
     """Test suite for geometry_mode policy propagation."""
 
-    def test_default_geometry_mode_is_resvg(self, monkeypatch: pytest.MonkeyPatch):
-        """Test that the default geometry_mode is 'resvg'."""
+    def test_default_geometry_mode_is_resvg_only(self, monkeypatch: pytest.MonkeyPatch):
+        """Test that the default geometry_mode is 'resvg-only'."""
         monkeypatch.delenv("SVG2OOXML_GEOMETRY_MODE", raising=False)
         exporter = SvgToPptxExporter()
-        assert exporter._geometry_mode == "resvg"
+        assert exporter._geometry_mode == "resvg-only"
 
     def test_explicit_geometry_mode_parameter(self):
         """Test setting geometry_mode via parameter."""
@@ -92,7 +92,7 @@ class TestGeometryModePropagation:
         base_context = PolicyContext(selections={
             "geometry": {
                 "max_segments": 1000,
-                "geometry_mode": "resvg",  # Base value
+                "geometry_mode": "resvg-only",  # Base value
             }
         })
 
@@ -116,7 +116,7 @@ class TestGeometryModePropagation:
         base_context = PolicyContext(selections={
             "geometry": {
                 "max_segments": 1000,
-                "geometry_mode": "resvg",
+                "geometry_mode": "resvg-only",
             }
         })
 
@@ -133,13 +133,13 @@ class TestGeometryModePropagation:
         assert result_context is not None
         geometry_options = result_context.get("geometry")
         assert geometry_options is not None
-        assert geometry_options["geometry_mode"] == "resvg"
+        assert geometry_options["geometry_mode"] == "resvg-only"
 
     def test_policy_context_structure(self):
         """Test that PolicyContext has the expected structure."""
         context = PolicyContext(selections={
             "geometry": {
-                "geometry_mode": "resvg",
+                "geometry_mode": "resvg-only",
                 "max_segments": 2000,
             }
         })
@@ -148,7 +148,7 @@ class TestGeometryModePropagation:
         geometry_options = context.get("geometry")
         assert geometry_options is not None
         assert isinstance(geometry_options, dict)
-        assert geometry_options["geometry_mode"] == "resvg"
+        assert geometry_options["geometry_mode"] == "resvg-only"
         assert geometry_options["max_segments"] == 2000
 
         # Test get with default
@@ -190,7 +190,7 @@ class TestGeometryModePropagation:
         """Test complete policy flow from exporter to IRConverter-like access.
 
         This verifies the complete flow:
-        1. SvgToPptxExporter geometry mode defaults to "resvg"
+        1. SvgToPptxExporter geometry mode defaults to "resvg-only"
         2. Creates policy_overrides with geometry_mode
         3. Policy context is built with merged overrides
         4. IRConverter can access geometry_mode via _policy_options("geometry")
@@ -198,20 +198,20 @@ class TestGeometryModePropagation:
         from svg2ooxml.core.ir.policy_hooks import PolicyHooksMixin
         from svg2ooxml.policy.setup import build_policy_engine
     
-        # Step 1: Create exporter with default geometry_mode (should be "resvg")
+        # Step 1: Create exporter with default geometry_mode (should be "resvg-only")
         monkeypatch.delenv("SVG2OOXML_GEOMETRY_MODE", raising=False)
         exporter = SvgToPptxExporter()
-        assert exporter._geometry_mode == "resvg"
+        assert exporter._geometry_mode == "resvg-only"
 
         # Step 2: Simulate the flow in _render_svg
         # Build policy engine and evaluate to get base context
         policy_engine = build_policy_engine()
         base_context = policy_engine.evaluate()
 
-        # Verify base context has geometry with default geometry_mode="resvg"
+        # Verify base context has geometry with default geometry_mode="resvg-only"
         base_geometry = base_context.get("geometry")
         assert base_geometry is not None
-        assert base_geometry.get("geometry_mode") == "resvg"
+        assert base_geometry.get("geometry_mode") == "resvg-only"
 
         # Step 3: Apply overrides (as _render_svg does)
         overrides: dict[str, dict[str, str]] = {}
@@ -219,10 +219,10 @@ class TestGeometryModePropagation:
             overrides["geometry"] = {"geometry_mode": exporter._geometry_mode}
         final_context = exporter._apply_policy_overrides(base_context, overrides or None)
 
-        # Step 4: Verify final context has geometry_mode="resvg"
+        # Step 4: Verify final context has geometry_mode="resvg-only"
         final_geometry = final_context.get("geometry")
         assert final_geometry is not None
-        assert final_geometry.get("geometry_mode") == "resvg"
+        assert final_geometry.get("geometry_mode") == "resvg-only"
 
         # Step 5: Simulate IRConverter accessing via _policy_options
         class MockConverter(PolicyHooksMixin):
@@ -232,7 +232,7 @@ class TestGeometryModePropagation:
         converter = MockConverter(final_context)
         geometry_options = converter._policy_options("geometry")
         assert geometry_options is not None
-        assert geometry_options.get("geometry_mode") == "resvg"
+        assert geometry_options.get("geometry_mode") == "resvg-only"
 
 
 if __name__ == "__main__":

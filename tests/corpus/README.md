@@ -96,6 +96,14 @@ alongside the corpus run:
 OPENXML_VALIDATOR=../openxml-validator python tests/corpus/run_corpus.py --openxml-audit
 ```
 
+This repo also includes a lightweight OpenXML audit wrapper at `tools/openxml-audit`
+powered by the .NET Open XML SDK. Build once, then point `OPENXML_VALIDATOR` at it:
+
+```bash
+dotnet publish tools/openxml_audit/OpenXmlAudit.csproj -c Release -o tools/openxml_audit/bin/publish
+OPENXML_VALIDATOR=tools/openxml-audit python tests/corpus/run_corpus.py --openxml-audit
+```
+
 To enforce audit gating in CI, require the audit to run and set a minimum pass
 rate:
 

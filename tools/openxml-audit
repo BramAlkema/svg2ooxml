@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+PUBLISH_DIR="$ROOT/tools/openxml_audit/bin/publish"
+DLL="$PUBLISH_DIR/OpenXmlAudit.dll"
+
+if [[ ! -f "$DLL" ]]; then
+  dotnet publish "$ROOT/tools/openxml_audit/OpenXmlAudit.csproj" -c Release -o "$PUBLISH_DIR"
+fi
+
+dotnet "$DLL" "$@"

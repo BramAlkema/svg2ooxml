@@ -48,11 +48,13 @@ Available values:
 
 | Strategy       | Behaviour                                                               |
 | -------------- | ----------------------------------------------------------------------- |
-| `auto`         | Native → resvg → raster (default).                                      |
+| `auto`         | Native → resvg → raster (default when no policy override is set).       |
 | `resvg`        | Prefer resvg; still runs native first for primitives with known output. |
 | `resvg-only`   | Force resvg; skip native/raster fallbacks (for targeted testing).       |
 | `vector`, `emf`| Force vector fallbacks (used by policy sandboxes).                      |
 | `raster`       | Force raster fallbacks.                                                 |
+
+By default, the policy layer sets filter strategy to `resvg` unless overridden.
 
 Per-primitive policy overrides can further control promotion:
 
