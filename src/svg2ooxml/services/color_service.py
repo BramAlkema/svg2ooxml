@@ -135,7 +135,10 @@ class ColorSpaceService:
                     resampling = getattr(Image, "Resampling", None)
                     resample_filter = getattr(resampling, "BILINEAR", Image.BILINEAR) if resampling else Image.BILINEAR
                     working = working.resize((new_width, new_height), resample_filter)
-                pixels = list(working.getdata())
+                if hasattr(working, "get_flattened_data"):
+                    pixels = list(working.get_flattened_data())
+                else:
+                    pixels = list(working.getdata())
         except Exception:
             return None
 
