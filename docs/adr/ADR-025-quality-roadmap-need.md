@@ -1,7 +1,8 @@
 # ADR-025: Quality Roadmap Necessity (Determinism, Resvg-Only, Filters, Policies, Fonts, Docker)
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-02-12
+- **Last Updated:** 2026-02-12
 - **Owners:** svg2ooxml team
 - **Related:** ADR-017 (resvg rendering strategy), ADR-018 (EMF fallbacks), ADR-024 (batch conversion performance)
 
@@ -108,6 +109,13 @@ Tradeoffs:
 - Phase 3: Filter fidelity improvements and font/asset hardening.
 - Phase 4: Docker ergonomics and documentation updates.
 
+## 10. Implementation Status
+
+- **Phase 1 (in CI):** Deterministic W3C sampling + OpenXML audit gating wired into `Tests` workflow.
+- **Phase 2 (done):** Resvg-only default path + policy/test alignment landed; legacy geometry removed.
+- **Phase 3 (pending):** Filter fidelity (feImage resolution, blend/composite/color_matrix) + font/asset hardening.
+- **Phase 4 (pending):** Docker runtime ergonomics and documentation updates.
+
 ## 8. Alternatives Considered
 
 - Keep mixed pipeline as default and only tune tests.
@@ -124,4 +132,3 @@ Tradeoffs:
 - What is the acceptable deprecation window for legacy geometry mode?
 - What is the smallest deterministic sample size that still catches regressions?
 - Which filter primitives should be prioritized after the initial set?
-
