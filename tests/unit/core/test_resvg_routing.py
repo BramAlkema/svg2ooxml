@@ -4,7 +4,7 @@ This module verifies that:
 1. Shape converters check geometry_mode policy
 2. Routing correctly delegates to resvg adapters when enabled
 3. Legacy path is used when resvg mode is disabled or unavailable
-4. Fallback to legacy works when resvg conversion fails
+4. Resvg-only mode returns None when conversion fails
 """
 
 from unittest.mock import Mock, patch
@@ -31,6 +31,9 @@ class MockConverter(ShapeConversionMixin):
             return getattr(self, "_geometry_policy", {})
         return {}
 
+    def _bitmap_fallback_limits(self, options):
+        return (None, None)
+
     def _resolve_clip_ref(self, element):
         return None
 
@@ -50,15 +53,15 @@ class MockConverter(ShapeConversionMixin):
 class TestResvgRouting:
     """Test resvg routing infrastructure."""
 
-    def test_can_use_resvg_returns_false_when_mode_is_legacy(self):
-        """Test that _can_use_resvg returns False when geometry_mode is legacy."""
+    def test_can_use_resvg_ignores_geometry_mode(self):
+        """Test that _can_use_resvg ignores geometry_mode when resvg data exists."""
         converter = MockConverter()
         converter._geometry_policy = {"geometry_mode": "legacy"}
         converter._resvg_tree = Mock()
         element = etree.Element("circle")
         converter._resvg_element_lookup[element] = Mock()
 
-        assert converter._can_use_resvg(element) is False
+        assert converter._can_use_resvg(element) is True
 
     def test_can_use_resvg_returns_false_when_no_resvg_tree(self):
         """Test that _can_use_resvg returns False when resvg tree is None."""
@@ -89,8 +92,8 @@ class TestResvgRouting:
 
         assert converter._can_use_resvg(element) is True
 
-    def test_convert_circle_uses_legacy_when_resvg_disabled(self):
-        """Test that _convert_circle uses legacy path when resvg is disabled."""
+    def test_convert_circle_returns_none_when_resvg_disabled(self):
+        """Test that _convert_circle returns None when resvg is disabled."""
         converter = MockConverter()
         converter._geometry_policy = {"geometry_mode": "legacy"}
 
@@ -111,9 +114,7 @@ class TestResvgRouting:
             mock_styles.extract_style.return_value = mock_style
 
             result = converter._convert_circle(element=element, coord_space=coord_space)
-
-            # Should produce a Circle or Path (legacy behavior)
-            assert result is not None
+            assert result is None
 
     def test_convert_circle_tries_resvg_when_enabled(self):
         """Test that _convert_circle tries resvg path when enabled."""
@@ -162,8 +163,8 @@ class TestResvgRouting:
                 # Result should be a Path from resvg
                 assert isinstance(result, Path)
 
-    def test_convert_circle_falls_back_to_legacy_when_resvg_fails(self):
-        """Test that _convert_circle falls back to legacy when resvg conversion fails."""
+    def test_convert_circle_returns_none_when_resvg_fails(self):
+        """Test that _convert_circle returns None when resvg conversion fails."""
         converter = MockConverter()
         converter._geometry_policy = {"geometry_mode": "resvg"}
         converter._resvg_tree = Mock()
@@ -205,8 +206,8 @@ class TestResvgRouting:
 
                 # Should have tried resvg adapter
                 mock_adapter.from_circle_node.assert_called_once()
-                # Should have fallen back to legacy and still produced result
-                assert result is not None
+                # Resvg-only mode returns None on failure
+                assert result is None
 
     def test_convert_ellipse_routing(self):
         """Test that _convert_ellipse routing works similarly to circle."""
@@ -338,6 +339,141 @@ class TestResvgRouting:
                 result = converter._convert_path(element=element, coord_space=coord_space)
 
                 mock_adapter.from_path_node.assert_called_once()
+                assert isinstance(result, Path)
+
+    def test_convert_line_uses_resvg_when_resvg_only(self):
+        """Test that _convert_line routes to resvg in resvg-only mode."""
+        converter = MockConverter()
+        converter._geometry_policy = {"geometry_mode": "resvg-only"}
+        converter._resvg_tree = Mock()
+
+        element = etree.Element("line")
+        element.set("x1", "0")
+        element.set("y1", "0")
+        element.set("x2", "10")
+        element.set("y2", "5")
+
+        mock_node = Mock()
+        mock_node.__class__.__name__ = "LineNode"
+        mock_node.fill = None
+        mock_node.stroke = None
+        mock_node.use_source = None
+        mock_node.source = None
+        converter._resvg_element_lookup[element] = mock_node
+
+        coord_space = CoordinateSpace()
+
+        with patch("svg2ooxml.core.ir.shape_converters.styles_runtime") as mock_styles:
+            mock_style = Mock()
+            mock_style.fill = None
+            mock_style.stroke = None
+            mock_style.opacity = 1.0
+            mock_style.effects = []
+            mock_style.metadata = {}
+            mock_styles.extract_style.return_value = mock_style
+
+            with patch(
+                "svg2ooxml.drawingml.bridges.resvg_shape_adapter.ResvgShapeAdapter"
+            ) as mock_adapter_class:
+                mock_adapter = Mock()
+                mock_adapter.from_line_node.return_value = [
+                    LineSegment(Point(0, 0), Point(10, 5))
+                ]
+                mock_adapter_class.return_value = mock_adapter
+
+                result = converter._convert_line(element=element, coord_space=coord_space)
+
+                mock_adapter.from_line_node.assert_called_once()
+                assert isinstance(result, Path)
+
+    def test_convert_polyline_uses_resvg_when_resvg_only(self):
+        """Test that _convert_polyline routes to resvg in resvg-only mode."""
+        converter = MockConverter()
+        converter._geometry_policy = {"geometry_mode": "resvg-only"}
+        converter._resvg_tree = Mock()
+
+        element = etree.Element("polyline")
+        element.set("points", "0,0 10,0 10,5")
+
+        mock_node = Mock()
+        mock_node.__class__.__name__ = "PolyNode"
+        mock_node.tag = "polyline"
+        mock_node.fill = None
+        mock_node.stroke = None
+        mock_node.use_source = None
+        mock_node.source = None
+        converter._resvg_element_lookup[element] = mock_node
+
+        coord_space = CoordinateSpace()
+
+        with patch("svg2ooxml.core.ir.shape_converters.styles_runtime") as mock_styles:
+            mock_style = Mock()
+            mock_style.fill = None
+            mock_style.stroke = None
+            mock_style.opacity = 1.0
+            mock_style.effects = []
+            mock_style.metadata = {}
+            mock_styles.extract_style.return_value = mock_style
+
+            with patch(
+                "svg2ooxml.drawingml.bridges.resvg_shape_adapter.ResvgShapeAdapter"
+            ) as mock_adapter_class:
+                mock_adapter = Mock()
+                mock_adapter.from_poly_node.return_value = [
+                    LineSegment(Point(0, 0), Point(10, 0)),
+                    LineSegment(Point(10, 0), Point(10, 5)),
+                ]
+                mock_adapter_class.return_value = mock_adapter
+
+                result = converter._convert_polyline(element=element, coord_space=coord_space)
+
+                mock_adapter.from_poly_node.assert_called_once()
+                assert isinstance(result, Path)
+
+    def test_convert_polygon_uses_resvg_when_resvg_only(self):
+        """Test that _convert_polygon routes to resvg in resvg-only mode."""
+        converter = MockConverter()
+        converter._geometry_policy = {"geometry_mode": "resvg-only"}
+        converter._resvg_tree = Mock()
+
+        element = etree.Element("polygon")
+        element.set("points", "0,0 10,0 10,10 0,10")
+
+        mock_node = Mock()
+        mock_node.__class__.__name__ = "PolyNode"
+        mock_node.tag = "polygon"
+        mock_node.fill = None
+        mock_node.stroke = None
+        mock_node.use_source = None
+        mock_node.source = None
+        converter._resvg_element_lookup[element] = mock_node
+
+        coord_space = CoordinateSpace()
+
+        with patch("svg2ooxml.core.ir.shape_converters.styles_runtime") as mock_styles:
+            mock_style = Mock()
+            mock_style.fill = None
+            mock_style.stroke = None
+            mock_style.opacity = 1.0
+            mock_style.effects = []
+            mock_style.metadata = {}
+            mock_styles.extract_style.return_value = mock_style
+
+            with patch(
+                "svg2ooxml.drawingml.bridges.resvg_shape_adapter.ResvgShapeAdapter"
+            ) as mock_adapter_class:
+                mock_adapter = Mock()
+                mock_adapter.from_poly_node.return_value = [
+                    LineSegment(Point(0, 0), Point(10, 0)),
+                    LineSegment(Point(10, 0), Point(10, 10)),
+                    LineSegment(Point(10, 10), Point(0, 10)),
+                    LineSegment(Point(0, 10), Point(0, 0)),
+                ]
+                mock_adapter_class.return_value = mock_adapter
+
+                result = converter._convert_polygon(element=element, coord_space=coord_space)
+
+                mock_adapter.from_poly_node.assert_called_once()
                 assert isinstance(result, Path)
 
     def test_convert_via_resvg_returns_none_for_unsupported_node_type(self):

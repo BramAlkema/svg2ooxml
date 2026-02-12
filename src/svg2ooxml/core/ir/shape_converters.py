@@ -5,20 +5,13 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Mapping, Sequence
-import os
 from dataclasses import replace
 from typing import Any
 
 from lxml import etree
 
 from svg2ooxml.common.geometry import Matrix2D
-from svg2ooxml.common.geometry.paths import (
-    PathParseError,
-    normalize_path_to_segments,
-    parse_path_data,
-)
 from svg2ooxml.core.ir import fallbacks
-from svg2ooxml.core.ir.rectangles import convert_rect as convert_rectangle
 from svg2ooxml.core.masks.baker import try_bake_mask
 from svg2ooxml.core.styling import style_runtime as styles_runtime
 from svg2ooxml.core.styling.style_extractor import StyleResult
@@ -33,7 +26,7 @@ from svg2ooxml.core.traversal.geometry_utils import (
 from svg2ooxml.ir.geometry import BezierSegment, LineSegment, Point, Rect, SegmentType
 from svg2ooxml.ir.paint import SolidPaint, Stroke, StrokeCap, StrokeJoin
 from svg2ooxml.ir.scene import ClipRef, Group, Image, MaskInstance, MaskRef, Path
-from svg2ooxml.ir.shapes import Circle, Ellipse, Line, Polygon, Polyline, Rectangle
+from svg2ooxml.ir.shapes import Circle, Ellipse, Rectangle
 from svg2ooxml.ir.text import Run, TextAnchor, TextFrame
 from svg2ooxml.policy.constants import FALLBACK_BITMAP, FALLBACK_EMF
 from svg2ooxml.policy.geometry import apply_geometry_policy
@@ -75,22 +68,7 @@ class ShapeConversionMixin:
     # Resvg routing infrastructure                                       #
     # ------------------------------------------------------------------ #
 
-    def _geometry_mode(self) -> str:
-        options = self._policy_options("geometry")
-        token: str | None = None
-        if isinstance(options, Mapping):
-            token = options.get("geometry_mode")  # type: ignore[assignment]
-        if not token:
-            token = os.environ.get("SVG2OOXML_GEOMETRY_MODE", "resvg-only")
-        return str(token).strip().lower() or "legacy"
-
-    def _resvg_only_geometry(self) -> bool:
-        return self._geometry_mode() == "resvg-only"
-
     def _resvg_miss_reason(self, element: etree._Element) -> str:
-        mode = self._geometry_mode()
-        if mode not in {"resvg", "resvg-only"}:
-            return "resvg_disabled"
         if getattr(self, "_resvg_tree", None) is None:
             return "resvg_tree_missing"
         resvg_lookup = getattr(self, "_resvg_element_lookup", {})
@@ -102,7 +80,7 @@ class ShapeConversionMixin:
         self._trace_geometry_decision(
             element,
             "resvg_only_skip",
-            {"reason": reason, "geometry_mode": self._geometry_mode()},
+            {"reason": reason, "geometry_mode": "resvg-only"},
         )
 
     def _can_use_resvg(self, element: etree._Element) -> bool:
@@ -110,15 +88,9 @@ class ShapeConversionMixin:
 
         Returns:
             True if:
-            - geometry_mode policy is "resvg" or "resvg-only"
             - resvg tree exists on converter
             - element has corresponding resvg node in lookup table
         """
-        # Check policy
-        geometry_options = self._policy_options("geometry")
-        if not geometry_options or geometry_options.get("geometry_mode") not in {"resvg", "resvg-only"}:
-            return False
-
         # Check resvg tree exists
         if getattr(self, "_resvg_tree", None) is None:
             return False
@@ -480,21 +452,60 @@ class ShapeConversionMixin:
             style = self._merge_use_styles(style, source_style)
             metadata.update(source_style.metadata or {})
 
-        # Override stroke/fill from resvg_node if available
-        if hasattr(resvg_node, 'stroke') and resvg_node.stroke is not None:
-            from svg2ooxml.paint.resvg_bridge import resolve_stroke_style
+        # For <use> elements, resvg expansion does not apply viewBox scaling or
+        # the <use> element's own transform. Rebuild the local transform to keep
+        # parity with legacy behavior.
+        use_global_override: Matrix2D | None = None
+        original_global_transform = global_transform
+        if hasattr(self, "_local_name"):
+            element_local = self._local_name(element.tag).lower()
+        else:
+            element_local = element.tag.split("}")[-1].lower() if isinstance(element.tag, str) else ""
+        if element_local == "use" and isinstance(source_element, etree._Element):
+            from svg2ooxml.core.styling.use_expander import (
+                compute_use_transform,
+                resolve_use_offsets,
+            )
+
+            use_matrix = compute_use_transform(self, element, source_element, tolerance=DEFAULT_TOLERANCE)
+            if use_matrix is not None:
+                dx, dy = resolve_use_offsets(self, element)
+                translation = Matrix2D(e=dx, f=dy)
+                combined = use_matrix.multiply(translation)
+                if global_transform is None:
+                    use_global_override = combined
+                else:
+                    local_transform = self._matrix2d_from_resvg(getattr(resvg_node, "transform", None))
+                    try:
+                        parent_transform = self._matrix2d_from_resvg(global_transform).multiply(
+                            local_transform.inverse()
+                        )
+                    except Exception:
+                        parent_transform = self._matrix2d_from_resvg(global_transform)
+                    use_global_override = parent_transform.multiply(combined)
+                if use_global_override is not None:
+                    global_transform = use_global_override
+
+        def _apply_resvg_paint_overrides(node, base_style: StyleResult) -> StyleResult:
+            updated = base_style
             tree = getattr(self, "_resvg_tree", None)
-            if tree is not None:
-                resvg_stroke = resolve_stroke_style(resvg_node.stroke, tree)
+            if tree is None:
+                return updated
+            if hasattr(node, "stroke") and node.stroke is not None:
+                from svg2ooxml.paint.resvg_bridge import resolve_stroke_style
+
+                resvg_stroke = resolve_stroke_style(node.stroke, tree)
                 if resvg_stroke is not None and resvg_stroke.paint is not None:
-                    style = replace(style, stroke=resvg_stroke)
-        if hasattr(resvg_node, 'fill') and resvg_node.fill is not None:
-            from svg2ooxml.paint.resvg_bridge import resolve_fill_paint
-            tree = getattr(self, "_resvg_tree", None)
-            if tree is not None:
-                resvg_fill = resolve_fill_paint(resvg_node.fill, tree)
+                    updated = replace(updated, stroke=resvg_stroke)
+            if hasattr(node, "fill") and node.fill is not None:
+                from svg2ooxml.paint.resvg_bridge import resolve_fill_paint
+
+                resvg_fill = resolve_fill_paint(node.fill, tree)
                 if resvg_fill is not None:
-                    style = replace(style, fill=resvg_fill)
+                    updated = replace(updated, fill=resvg_fill)
+            return updated
+
+        style = _apply_resvg_paint_overrides(resvg_node, style)
 
         node_type = type(resvg_node).__name__
         # Get clip/mask refs
@@ -554,6 +565,124 @@ class ShapeConversionMixin:
                 self._trace_geometry_decision(element, "resvg", ellipse.metadata)
                 return ellipse
 
+        if node_type == "GenericNode":
+            children = getattr(resvg_node, "children", []) or []
+            if children:
+                group_children: list[Any] = []
+                node_transform_lookup = getattr(self, "_resvg_node_transform_lookup", {})
+                for child in children:
+                    child_global = node_transform_lookup.get(id(child)) or getattr(child, "transform", None)
+                    if child_global is not None:
+                        child_global = self._matrix2d_from_resvg(child_global)
+                    if (
+                        use_global_override is not None
+                        and original_global_transform is not None
+                        and child_global is not None
+                    ):
+                        try:
+                            relative = child_global.multiply(
+                                self._matrix2d_from_resvg(original_global_transform).inverse()
+                            )
+                            child_global = use_global_override.multiply(relative)
+                        except Exception:
+                            pass
+                    child_proxy = GlobalTransformProxy(child, child_global)
+                    child_style = _apply_resvg_paint_overrides(child, style)
+                    child_metadata = dict(metadata)
+                    child_node_type = type(child).__name__
+
+                    if child_node_type == "RectNode":
+                        rectangle = self._resvg_rect_to_rectangle(
+                            element=element,
+                            resvg_node=child_proxy,
+                            style=child_style,
+                            metadata=child_metadata,
+                            clip_ref=clip_ref,
+                            mask_ref=mask_ref,
+                            mask_instance=mask_instance,
+                        )
+                        if rectangle is not None:
+                            group_children.append(rectangle)
+                            continue
+                    if child_node_type == "CircleNode":
+                        circle = self._resvg_circle_to_circle(
+                            element=element,
+                            resvg_node=child_proxy,
+                            style=child_style,
+                            metadata=child_metadata,
+                            clip_ref=clip_ref,
+                            mask_ref=mask_ref,
+                            mask_instance=mask_instance,
+                        )
+                        if circle is not None:
+                            group_children.append(circle)
+                            continue
+                    if child_node_type == "EllipseNode":
+                        ellipse = self._resvg_ellipse_to_ellipse(
+                            element=element,
+                            resvg_node=child_proxy,
+                            style=child_style,
+                            metadata=child_metadata,
+                            clip_ref=clip_ref,
+                            mask_ref=mask_ref,
+                            mask_instance=mask_instance,
+                        )
+                        if ellipse is not None:
+                            group_children.append(ellipse)
+                            continue
+
+                    adapter = ResvgShapeAdapter()
+                    try:
+                        if child_node_type == "PathNode":
+                            segments = adapter.from_path_node(child_proxy)
+                        elif child_node_type == "RectNode":
+                            segments = adapter.from_rect_node(child_proxy)
+                        elif child_node_type == "CircleNode":
+                            segments = adapter.from_circle_node(child_proxy)
+                        elif child_node_type == "EllipseNode":
+                            segments = adapter.from_ellipse_node(child_proxy)
+                        elif child_node_type == "LineNode":
+                            segments = adapter.from_line_node(child_proxy)
+                        elif child_node_type == "PolyNode":
+                            segments = adapter.from_poly_node(child_proxy)
+                        else:
+                            segments = None
+                    except Exception as exc:
+                        self._logger.debug(
+                            "Resvg adapter failed for %s child: %s",
+                            element.get("id") or f"<{child_node_type}>",
+                            exc,
+                        )
+                        segments = None
+
+                    if segments:
+                        child_shape = self._resvg_segments_to_path(
+                            element=element,
+                            segments=segments,
+                            coord_space=CoordinateSpace(),
+                            style=child_style,
+                            metadata=child_metadata,
+                            clip_ref=clip_ref,
+                            mask_ref=mask_ref,
+                            mask_instance=mask_instance,
+                        )
+                        if isinstance(child_shape, list):
+                            group_children.extend(child_shape)
+                        elif child_shape is not None:
+                            group_children.append(child_shape)
+
+                if group_children:
+                    group = Group(
+                        children=group_children,
+                        clip=clip_ref,
+                        mask=mask_ref,
+                        mask_instance=mask_instance,
+                        opacity=style.opacity,
+                        metadata=metadata,
+                    )
+                    self._trace_geometry_decision(element, "resvg", group.metadata)
+                    return group
+
         # Convert using resvg adapter
         adapter = ResvgShapeAdapter()
         segments = None
@@ -568,6 +697,10 @@ class ShapeConversionMixin:
                 segments = adapter.from_circle_node(proxy_node)
             elif node_type == "EllipseNode":
                 segments = adapter.from_ellipse_node(proxy_node)
+            elif node_type == "LineNode":
+                segments = adapter.from_line_node(proxy_node)
+            elif node_type == "PolyNode":
+                segments = adapter.from_poly_node(proxy_node)
             else:
                 return None
         except Exception as exc:
@@ -581,26 +714,19 @@ class ShapeConversionMixin:
         if not segments:
             return None
 
-        # Resvg segments already have transforms applied, so we don't apply coord_space
-        # Create IR Path with segments
-        path = Path(
+        # Resvg segments already have transforms applied, so use an identity coord space
+        # for geometry policy + fallback rendering (EMF/bitmap) to avoid double transforms.
+        resvg_coord_space = CoordinateSpace()
+        return self._resvg_segments_to_path(
+            element=element,
             segments=segments,
-            fill=style.fill,
-            stroke=style.stroke,
-            clip=clip_ref,
-            mask=mask_ref,
-            mask_instance=mask_instance,
-            opacity=style.opacity,
-            effects=style.effects,
+            coord_space=resvg_coord_space,
+            style=style,
             metadata=metadata,
+            clip_ref=clip_ref,
+            mask_ref=mask_ref,
+            mask_instance=mask_instance,
         )
-        self._process_mask_metadata(path)
-        self._apply_marker_metadata(element, path.metadata)
-        marker_shapes = self._build_marker_shapes(element, path)
-        self._trace_geometry_decision(element, "resvg", path.metadata)
-        if marker_shapes:
-            return [path, *marker_shapes]
-        return path
 
     def _convert_use(
         self,
@@ -610,640 +736,87 @@ class ShapeConversionMixin:
         current_navigation,
         traverse_callback,
     ):
-        """Convert <use> elements via resvg or fall back to legacy expansion."""
+        """Convert <use> elements via resvg only."""
         if self._can_use_resvg(element):
             resvg_result = self._convert_via_resvg(element, coord_space)
             if resvg_result is not None:
                 return resvg_result
-            if self._resvg_only_geometry():
-                self._trace_resvg_only_miss(element, "resvg_conversion_failed")
-                return None
-        elif self._resvg_only_geometry():
-            self._trace_resvg_only_miss(element, self._resvg_miss_reason(element))
+            self._trace_resvg_only_miss(element, "resvg_conversion_failed")
             return None
-
-        return self.expand_use(
-            element=element,
-            coord_space=coord_space,
-            current_navigation=current_navigation,
-            traverse_callback=traverse_callback,
-        )
+        self._trace_resvg_only_miss(element, self._resvg_miss_reason(element))
+        return None
 
     def _convert_rect(self, *, element: etree._Element, coord_space: CoordinateSpace):
-        # Try resvg path first if available
         if self._can_use_resvg(element):
             resvg_result = self._convert_via_resvg(element, coord_space)
             if resvg_result is not None:
                 return resvg_result
-            # If resvg failed, fall through to legacy
-            if self._resvg_only_geometry():
-                self._trace_resvg_only_miss(element, "resvg_conversion_failed")
-                return None
-        elif self._resvg_only_geometry():
-            self._trace_resvg_only_miss(element, self._resvg_miss_reason(element))
+            self._trace_resvg_only_miss(element, "resvg_conversion_failed")
             return None
-
-        # Legacy conversion path
-        return convert_rectangle(self, element, coord_space, tolerance=DEFAULT_TOLERANCE)
+        self._trace_resvg_only_miss(element, self._resvg_miss_reason(element))
+        return None
 
     def _convert_circle(self, *, element: etree._Element, coord_space: CoordinateSpace):
-        # Try resvg path first if available
         if self._can_use_resvg(element):
             resvg_result = self._convert_via_resvg(element, coord_space)
             if resvg_result is not None:
                 return resvg_result
-            # If resvg failed, fall through to legacy
-            if self._resvg_only_geometry():
-                self._trace_resvg_only_miss(element, "resvg_conversion_failed")
-                return None
-        elif self._resvg_only_geometry():
-            self._trace_resvg_only_miss(element, self._resvg_miss_reason(element))
+            self._trace_resvg_only_miss(element, "resvg_conversion_failed")
             return None
+        self._trace_resvg_only_miss(element, self._resvg_miss_reason(element))
+        return None
 
-        # Legacy conversion path
-        return self._convert_circle_legacy(element=element, coord_space=coord_space)
-
-    def _convert_circle_legacy(self, *, element: etree._Element, coord_space: CoordinateSpace):
-        """Legacy circle conversion (manual coordinate extraction)."""
-        cx = _parse_float(element.get("cx"), default=0.0) or 0.0
-        cy = _parse_float(element.get("cy"), default=0.0) or 0.0
-        radius = _parse_float(element.get("r"))
-        if radius is None or radius <= 0:
-            return None
-
-        style = styles_runtime.extract_style(self, element)
-        metadata = dict(style.metadata)
-        self._attach_policy_metadata(metadata, "geometry")
-        clip_ref = self._resolve_clip_ref(element)
-        mask_ref, mask_instance = self._resolve_mask_ref(element)
-        matrix = coord_space.current
-
-        if not clip_ref and not mask_ref:
-            scale = _uniform_scale(matrix, DEFAULT_TOLERANCE)
-            if scale is not None:
-                center = matrix.transform_point(Point(cx, cy))
-                scaled_radius = radius * scale
-                if scaled_radius > DEFAULT_TOLERANCE:
-                    circle = Circle(
-                        center=center,
-                        radius=scaled_radius,
-                        fill=style.fill,
-                        stroke=style.stroke,
-                        opacity=style.opacity,
-                        effects=list(style.effects),
-                        metadata=metadata,
-                        element_id=element.get("id"),
-                    )
-                    self._trace_geometry_decision(element, "native", circle.metadata)
-                    return circle
-
-        segments = _ellipse_segments(cx, cy, radius, radius)
-        transformed_segments = coord_space.apply_segments(segments)
-        path = Path(
-            segments=transformed_segments,
-            fill=style.fill,
-            stroke=style.stroke,
-            clip=clip_ref,
-            mask=mask_ref,
-            mask_instance=mask_instance,
-            opacity=style.opacity,
-            effects=style.effects,
-            metadata=metadata,
-        )
-        self._process_mask_metadata(path)
-        self._trace_geometry_decision(element, "native", path.metadata)
-        return path
 
     def _convert_ellipse(self, *, element: etree._Element, coord_space: CoordinateSpace):
-        # Try resvg path first if available
         if self._can_use_resvg(element):
             resvg_result = self._convert_via_resvg(element, coord_space)
             if resvg_result is not None:
                 return resvg_result
-            # If resvg failed, fall through to legacy
-            if self._resvg_only_geometry():
-                self._trace_resvg_only_miss(element, "resvg_conversion_failed")
-                return None
-        elif self._resvg_only_geometry():
-            self._trace_resvg_only_miss(element, self._resvg_miss_reason(element))
+            self._trace_resvg_only_miss(element, "resvg_conversion_failed")
             return None
+        self._trace_resvg_only_miss(element, self._resvg_miss_reason(element))
+        return None
 
-        # Legacy conversion path
-        return self._convert_ellipse_legacy(element=element, coord_space=coord_space)
-
-    def _convert_ellipse_legacy(self, *, element: etree._Element, coord_space: CoordinateSpace):
-        """Legacy ellipse conversion (manual coordinate extraction)."""
-        cx = _parse_float(element.get("cx"), default=0.0) or 0.0
-        cy = _parse_float(element.get("cy"), default=0.0) or 0.0
-        rx = _parse_float(element.get("rx"))
-        ry = _parse_float(element.get("ry"))
-        if rx is None or ry is None or rx <= 0 or ry <= 0:
-            return None
-
-        style = styles_runtime.extract_style(self, element)
-        metadata = dict(style.metadata)
-        self._attach_policy_metadata(metadata, "geometry")
-        clip_ref = self._resolve_clip_ref(element)
-        mask_ref, mask_instance = self._resolve_mask_ref(element)
-        matrix = coord_space.current
-
-        if not clip_ref and not mask_ref and is_axis_aligned(matrix, DEFAULT_TOLERANCE):
-            scale_x = abs(matrix.a)
-            scale_y = abs(matrix.d)
-            if scale_x > DEFAULT_TOLERANCE and scale_y > DEFAULT_TOLERANCE:
-                center = matrix.transform_point(Point(cx, cy))
-                scaled_rx = rx * scale_x
-                scaled_ry = ry * scale_y
-                if scaled_rx > DEFAULT_TOLERANCE and scaled_ry > DEFAULT_TOLERANCE:
-                    ellipse = Ellipse(
-                        center=center,
-                        radius_x=scaled_rx,
-                        radius_y=scaled_ry,
-                        fill=style.fill,
-                        stroke=style.stroke,
-                        opacity=style.opacity,
-                        effects=list(style.effects),
-                        metadata=metadata,
-                        element_id=element.get("id"),
-                    )
-                    self._trace_geometry_decision(element, "native", ellipse.metadata)
-                    return ellipse
-
-        segments = _ellipse_segments(cx, cy, rx, ry)
-        transformed_segments = coord_space.apply_segments(segments)
-        path = Path(
-            segments=transformed_segments,
-            fill=style.fill,
-            stroke=style.stroke,
-            clip=clip_ref,
-            mask=mask_ref,
-            mask_instance=mask_instance,
-            opacity=style.opacity,
-            effects=style.effects,
-            metadata=metadata,
-        )
-        self._process_mask_metadata(path)
-        self._trace_geometry_decision(element, "native", path.metadata)
-        return path
 
     def _convert_line(self, *, element: etree._Element, coord_space: CoordinateSpace):
-        if self._resvg_only_geometry():
-            if self._can_use_resvg(element):
-                resvg_result = self._convert_via_resvg(element, coord_space)
-                if resvg_result is not None:
-                    return resvg_result
-                self._trace_resvg_only_miss(element, "resvg_conversion_failed")
-                return None
-            self._trace_resvg_only_miss(element, self._resvg_miss_reason(element))
-            return None
-
-        x1 = _parse_float(element.get("x1"))
-        y1 = _parse_float(element.get("y1"))
-        x2 = _parse_float(element.get("x2"))
-        y2 = _parse_float(element.get("y2"))
-        if None in (x1, y1, x2, y2):
-            return None
-
-        style = styles_runtime.extract_style(self, element)
-        metadata = dict(style.metadata)
-        self._attach_policy_metadata(metadata, "geometry")
-        clip_ref = self._resolve_clip_ref(element)
-        mask_ref, mask_instance = self._resolve_mask_ref(element)
-
-        if (
-            clip_ref is None
-            and mask_ref is None
-            and mask_instance is None
-            and not _has_markers(element)
-        ):
-            start_x, start_y = coord_space.apply_point(x1, y1)
-            end_x, end_y = coord_space.apply_point(x2, y2)
-            line = Line(
-                start=Point(start_x, start_y),
-                end=Point(end_x, end_y),
-                stroke=style.stroke,
-                opacity=style.opacity,
-                effects=list(style.effects),
-                metadata=metadata,
-            )
-            if not line.is_degenerate:
-                self._trace_geometry_decision(element, "native", line.metadata)
-                return line
-
-        segments = [LineSegment(Point(x1, y1), Point(x2, y2))]
-        transformed = coord_space.apply_segments(segments)
-        path = Path(
-            segments=transformed,
-            fill=None,
-            stroke=style.stroke,
-            clip=clip_ref,
-            mask=mask_ref,
-            mask_instance=mask_instance,
-            opacity=style.opacity,
-            effects=style.effects,
-            metadata=metadata,
-        )
-        self._trace_geometry_decision(element, "native", path.metadata)
-        return path
-
-    def _convert_path(self, *, element: etree._Element, coord_space: CoordinateSpace):
-        data = element.get("d")
-        if not data:
-            return None
-
-        # Try resvg path first if available AND geometry_mode is "resvg"
         if self._can_use_resvg(element):
             resvg_result = self._convert_via_resvg(element, coord_space)
             if resvg_result is not None:
                 return resvg_result
-            # If resvg failed, fall through to legacy
-            if self._resvg_only_geometry():
-                self._trace_resvg_only_miss(element, "resvg_conversion_failed")
-                return None
-        elif self._resvg_only_geometry():
-            self._trace_resvg_only_miss(element, self._resvg_miss_reason(element))
+            self._trace_resvg_only_miss(element, "resvg_conversion_failed")
             return None
+        self._trace_resvg_only_miss(element, self._resvg_miss_reason(element))
+        return None
 
-        # Legacy path conversion (with optional resvg normalization as best-effort)
-        segments: list[SegmentType] | None = None
-
-        resvg_node = (
-            getattr(self, "_resvg_element_lookup", {}).get(element)
-            if hasattr(self, "_resvg_element_lookup")
-            else None
-        )
-
-        style = styles_runtime.extract_style(self, element)
-
-        # Best-effort resvg normalization (even in legacy mode)
-        if resvg_node is not None and getattr(resvg_node, "d", None):
-            try:
-                normalized = normalize_path_to_segments(
-                    resvg_node.d,
-                    stroke_width=style.stroke.width if style.stroke else None,
-                    tolerance=DEFAULT_TOLERANCE,
-                )
-                segments = normalized.segments
-            except Exception as exc:  # pragma: no cover - bridge is best-effort during porting
-                self._logger.debug("resvg bridge failed for path %s: %s", resvg_node.id or "<unnamed>", exc)
-
-        if segments is None:
-            try:
-                segments = list(parse_path_data(data))
-            except PathParseError as exc:
-                self._logger.debug("Failed to parse path data: %s", exc)
-                return None
-
-        clip_ref = self._resolve_clip_ref(element)
-        mask_ref, mask_instance = self._resolve_mask_ref(element)
-
-        policy = self._policy_options("geometry")
-        allow_emf_fallback, allow_bitmap_fallback = self._geometry_fallback_flags(policy)
-        segments, geom_meta, render_mode = apply_geometry_policy(list(segments), policy)
-        bitmap_limits = self._bitmap_fallback_limits(policy)
-        metadata = dict(style.metadata)
-        self._attach_policy_metadata(metadata, "geometry")
-        if geom_meta:
-            policy_meta = metadata.setdefault("policy", {}).setdefault("geometry", {})
-            policy_meta.update(geom_meta)
-        if style.fill and not isinstance(style.fill, SolidPaint):
-            if allow_bitmap_fallback:
-                render_mode = FALLBACK_BITMAP
-            elif allow_emf_fallback:
-                render_mode = FALLBACK_EMF
-
-        fallback_to_bitmap = False
-        if render_mode == FALLBACK_EMF:
-            emf_image = self._convert_path_to_emf(
-                element=element,
-                style=style,
-                segments=segments,
-                coord_space=coord_space,
-                clip_ref=clip_ref,
-                mask_ref=mask_ref,
-                mask_instance=mask_instance,
-                metadata=metadata,
-            )
-            if emf_image is not None:
-                self._process_mask_metadata(emf_image)
-                self._trace_geometry_decision(element, "emf", emf_image.metadata if isinstance(emf_image.metadata, dict) else metadata)
-                return emf_image
-            if allow_bitmap_fallback:
-                self._logger.warning("Failed to build EMF fallback; attempting bitmap fallback.")
-                fallback_to_bitmap = True
-            else:
-                self._logger.warning("Failed to build EMF fallback; bitmap fallback disabled.")
-
-        if (render_mode == FALLBACK_BITMAP or fallback_to_bitmap) and allow_bitmap_fallback:
-            bitmap_image = self._convert_path_to_bitmap(
-                element=element,
-                style=style,
-                segments=segments,
-                coord_space=coord_space,
-                clip_ref=clip_ref,
-                mask_ref=mask_ref,
-                mask_instance=mask_instance,
-                metadata=metadata,
-                bitmap_limits=bitmap_limits,
-            )
-            if bitmap_image is not None:
-                if fallback_to_bitmap:
-                    geometry_policy = metadata.setdefault("policy", {}).setdefault("geometry", {})
-                    geometry_policy["render_mode"] = FALLBACK_BITMAP
-                self._process_mask_metadata(bitmap_image)
-                self._trace_geometry_decision(
-                    element,
-                    "bitmap",
-                    bitmap_image.metadata if isinstance(bitmap_image.metadata, dict) else metadata,
-                )
-                return bitmap_image
-            self._logger.warning("Failed to rasterize path; falling back to native rendering.")
-        elif render_mode == FALLBACK_BITMAP and not allow_bitmap_fallback:
-            self._logger.warning("Bitmap fallback disabled; falling back to native rendering.")
-
-        transformed = coord_space.apply_segments(segments)
-        if not transformed:
+    def _convert_path(self, *, element: etree._Element, coord_space: CoordinateSpace):
+        if self._can_use_resvg(element):
+            resvg_result = self._convert_via_resvg(element, coord_space)
+            if resvg_result is not None:
+                return resvg_result
+            self._trace_resvg_only_miss(element, "resvg_conversion_failed")
             return None
-
-        path_object = Path(
-            segments=transformed,
-            fill=style.fill,
-            stroke=style.stroke,
-            clip=clip_ref,
-            mask=mask_ref,
-            mask_instance=mask_instance,
-            opacity=style.opacity,
-            effects=style.effects,
-            metadata=metadata,
-        )
-        self._process_mask_metadata(path_object)
-        self._trace_geometry_decision(element, "native", path_object.metadata)
-        self._apply_marker_metadata(element, path_object.metadata)
-        marker_shapes = self._build_marker_shapes(element, path_object)
-        if marker_shapes:
-            return [path_object, *marker_shapes]
-        return path_object
+        self._trace_resvg_only_miss(element, self._resvg_miss_reason(element))
+        return None
 
     def _convert_polygon(self, *, element: etree._Element, coord_space: CoordinateSpace):
-        if self._resvg_only_geometry():
-            if self._can_use_resvg(element):
-                resvg_result = self._convert_via_resvg(element, coord_space)
-                if resvg_result is not None:
-                    return resvg_result
-                self._trace_resvg_only_miss(element, "resvg_conversion_failed")
-                return None
-            self._trace_resvg_only_miss(element, self._resvg_miss_reason(element))
+        if self._can_use_resvg(element):
+            resvg_result = self._convert_via_resvg(element, coord_space)
+            if resvg_result is not None:
+                return resvg_result
+            self._trace_resvg_only_miss(element, "resvg_conversion_failed")
             return None
-
-        points = _parse_points(element.get("points"))
-        if len(points) < 3:
-            return None
-        clip_ref = self._resolve_clip_ref(element)
-        mask_ref, mask_instance = self._resolve_mask_ref(element)
-        if clip_ref is not None or mask_ref is not None or mask_instance is not None or _has_markers(element):
-            segments = _points_to_segments(points, closed=True)
-            return self._segments_to_path(element, segments, coord_space)
-
-        style = styles_runtime.extract_style(self, element)
-        metadata = dict(style.metadata)
-        self._attach_policy_metadata(metadata, "geometry")
-
-        policy = self._policy_options("geometry")
-        allow_emf_fallback, allow_bitmap_fallback = self._geometry_fallback_flags(policy)
-        segments = _points_to_segments(points, closed=True)
-        segments, geom_meta, render_mode = apply_geometry_policy(list(segments), policy)
-        bitmap_limits = self._bitmap_fallback_limits(policy)
-        if geom_meta:
-            policy_meta = metadata.setdefault("policy", {}).setdefault("geometry", {})
-            policy_meta.update(geom_meta)
-
-        if style.fill and not isinstance(style.fill, SolidPaint):
-            if allow_bitmap_fallback:
-                render_mode = FALLBACK_BITMAP
-            elif allow_emf_fallback:
-                render_mode = FALLBACK_EMF
-
-        fallback_to_bitmap = False
-        if render_mode == FALLBACK_EMF:
-            emf_image = self._convert_path_to_emf(
-                element=element,
-                style=style,
-                segments=segments,
-                coord_space=coord_space,
-                clip_ref=clip_ref,
-                mask_ref=mask_ref,
-                mask_instance=mask_instance,
-                metadata=metadata,
-            )
-            if emf_image is not None:
-                self._trace_geometry_decision(element, "emf", emf_image.metadata if isinstance(emf_image.metadata, dict) else metadata)
-                return emf_image
-            if allow_bitmap_fallback:
-                self._logger.warning("Failed to build EMF fallback; attempting bitmap fallback.")
-                fallback_to_bitmap = True
-            else:
-                self._logger.warning("Failed to build EMF fallback; bitmap fallback disabled.")
-
-        if (render_mode == FALLBACK_BITMAP or fallback_to_bitmap) and allow_bitmap_fallback:
-            bitmap_image = self._convert_path_to_bitmap(
-                element=element,
-                style=style,
-                segments=segments,
-                coord_space=coord_space,
-                clip_ref=clip_ref,
-                mask_ref=mask_ref,
-                mask_instance=mask_instance,
-                metadata=metadata,
-                bitmap_limits=bitmap_limits,
-            )
-            if bitmap_image is not None:
-                if fallback_to_bitmap:
-                    geometry_policy = metadata.setdefault("policy", {}).setdefault("geometry", {})
-                    geometry_policy["render_mode"] = FALLBACK_BITMAP
-                self._trace_geometry_decision(
-                    element,
-                    "bitmap",
-                    bitmap_image.metadata if isinstance(bitmap_image.metadata, dict) else metadata,
-                )
-                return bitmap_image
-            self._logger.warning("Failed to rasterize polygon; falling back to native rendering.")
-        elif render_mode == FALLBACK_BITMAP and not allow_bitmap_fallback:
-            self._logger.warning("Bitmap fallback disabled; falling back to native rendering.")
-
-        if any(not isinstance(segment, LineSegment) for segment in segments):
-            transformed = coord_space.apply_segments(segments)
-            path_object = Path(
-                segments=transformed,
-                fill=style.fill,
-                stroke=style.stroke,
-                clip=clip_ref,
-                mask=mask_ref,
-                mask_instance=mask_instance,
-                opacity=style.opacity,
-                effects=style.effects,
-                metadata=metadata,
-            )
-            self._trace_geometry_decision(element, "native", path_object.metadata)
-            return path_object
-
-        transformed_segments = coord_space.apply_segments(segments)
-        polygon_points = _segments_to_points(transformed_segments, closed=True)
-        if len(polygon_points) < 3:
-            # Degenerate after transforms; fall back to path for consistency
-            path_object = Path(
-                segments=transformed_segments,
-                fill=style.fill,
-                stroke=style.stroke,
-                clip=clip_ref,
-                mask=mask_ref,
-                mask_instance=mask_instance,
-                opacity=style.opacity,
-                effects=style.effects,
-                metadata=metadata,
-            )
-            self._trace_geometry_decision(element, "native", path_object.metadata)
-            return path_object
-
-        polygon = Polygon(
-            points=polygon_points,
-            fill=style.fill,
-            stroke=style.stroke,
-            opacity=style.opacity,
-            effects=list(style.effects),
-            metadata=metadata,
-        )
-        self._trace_geometry_decision(element, "native", polygon.metadata)
-        return polygon
+        self._trace_resvg_only_miss(element, self._resvg_miss_reason(element))
+        return None
 
     def _convert_polyline(self, *, element: etree._Element, coord_space: CoordinateSpace):
-        if self._resvg_only_geometry():
-            if self._can_use_resvg(element):
-                resvg_result = self._convert_via_resvg(element, coord_space)
-                if resvg_result is not None:
-                    return resvg_result
-                self._trace_resvg_only_miss(element, "resvg_conversion_failed")
-                return None
-            self._trace_resvg_only_miss(element, self._resvg_miss_reason(element))
+        if self._can_use_resvg(element):
+            resvg_result = self._convert_via_resvg(element, coord_space)
+            if resvg_result is not None:
+                return resvg_result
+            self._trace_resvg_only_miss(element, "resvg_conversion_failed")
             return None
-
-        points = _parse_points(element.get("points"))
-        if len(points) < 2:
-            return None
-        clip_ref = self._resolve_clip_ref(element)
-        mask_ref, mask_instance = self._resolve_mask_ref(element)
-        if clip_ref is not None or mask_ref is not None or mask_instance is not None or _has_markers(element):
-            segments = _points_to_segments(points, closed=False)
-            return self._segments_to_path(element, segments, coord_space)
-
-        style = styles_runtime.extract_style(self, element)
-        metadata = dict(style.metadata)
-        self._attach_policy_metadata(metadata, "geometry")
-
-        policy = self._policy_options("geometry")
-        allow_emf_fallback, allow_bitmap_fallback = self._geometry_fallback_flags(policy)
-        segments = _points_to_segments(points, closed=False)
-        segments, geom_meta, render_mode = apply_geometry_policy(list(segments), policy)
-        bitmap_limits = self._bitmap_fallback_limits(policy)
-        if geom_meta:
-            policy_meta = metadata.setdefault("policy", {}).setdefault("geometry", {})
-            policy_meta.update(geom_meta)
-
-        if style.fill and not isinstance(style.fill, SolidPaint):
-            if allow_bitmap_fallback:
-                render_mode = FALLBACK_BITMAP
-            elif allow_emf_fallback:
-                render_mode = FALLBACK_EMF
-
-        fallback_to_bitmap = False
-        if render_mode == FALLBACK_EMF:
-            emf_image = self._convert_path_to_emf(
-                element=element,
-                style=style,
-                segments=segments,
-                coord_space=coord_space,
-                clip_ref=clip_ref,
-                mask_ref=mask_ref,
-                mask_instance=mask_instance,
-                metadata=metadata,
-            )
-            if emf_image is not None:
-                self._trace_geometry_decision(element, "emf", emf_image.metadata if isinstance(emf_image.metadata, dict) else metadata)
-                return emf_image
-            if allow_bitmap_fallback:
-                self._logger.warning("Failed to build EMF fallback; attempting bitmap fallback.")
-                fallback_to_bitmap = True
-            else:
-                self._logger.warning("Failed to build EMF fallback; bitmap fallback disabled.")
-
-        if (render_mode == FALLBACK_BITMAP or fallback_to_bitmap) and allow_bitmap_fallback:
-            bitmap_image = self._convert_path_to_bitmap(
-                element=element,
-                style=style,
-                segments=segments,
-                coord_space=coord_space,
-                clip_ref=clip_ref,
-                mask_ref=mask_ref,
-                mask_instance=mask_instance,
-                metadata=metadata,
-                bitmap_limits=bitmap_limits,
-            )
-            if bitmap_image is not None:
-                if fallback_to_bitmap:
-                    geometry_policy = metadata.setdefault("policy", {}).setdefault("geometry", {})
-                    geometry_policy["render_mode"] = FALLBACK_BITMAP
-                self._trace_geometry_decision(
-                    element,
-                    "bitmap",
-                    bitmap_image.metadata if isinstance(bitmap_image.metadata, dict) else metadata,
-                )
-                return bitmap_image
-            self._logger.warning("Failed to rasterize polyline; falling back to native rendering.")
-        elif render_mode == FALLBACK_BITMAP and not allow_bitmap_fallback:
-            self._logger.warning("Bitmap fallback disabled; falling back to native rendering.")
-
-        if any(not isinstance(segment, LineSegment) for segment in segments):
-            transformed = coord_space.apply_segments(segments)
-            path_object = Path(
-                segments=transformed,
-                fill=style.fill,
-                stroke=style.stroke,
-                clip=clip_ref,
-                mask=mask_ref,
-                mask_instance=mask_instance,
-                opacity=style.opacity,
-                effects=style.effects,
-                metadata=metadata,
-            )
-            self._trace_geometry_decision(element, "native", path_object.metadata)
-            return path_object
-
-        transformed_segments = coord_space.apply_segments(segments)
-        polyline_points = _segments_to_points(transformed_segments, closed=False)
-        if len(polyline_points) < 2:
-            path_object = Path(
-                segments=transformed_segments,
-                fill=style.fill,
-                stroke=style.stroke,
-                clip=clip_ref,
-                mask=mask_ref,
-                mask_instance=mask_instance,
-                opacity=style.opacity,
-                effects=style.effects,
-                metadata=metadata,
-            )
-            self._trace_geometry_decision(element, "native", path_object.metadata)
-            return path_object
-
-        polyline = Polyline(
-            points=polyline_points,
-            fill=style.fill,
-            stroke=style.stroke,
-            opacity=style.opacity,
-            effects=list(style.effects),
-            metadata=metadata,
-        )
-        self._trace_geometry_decision(element, "native", polyline.metadata)
-        return polyline
+        self._trace_resvg_only_miss(element, self._resvg_miss_reason(element))
+        return None
 
     def _segments_to_path(self, element: etree._Element, segments: list[SegmentType], coord_space: CoordinateSpace):
         style = styles_runtime.extract_style(self, element)
@@ -1321,6 +894,108 @@ class ShapeConversionMixin:
         )
         self._apply_marker_metadata(element, path_object.metadata)
         self._trace_geometry_decision(element, "native", path_object.metadata)
+        marker_shapes = self._build_marker_shapes(element, path_object)
+        if marker_shapes:
+            return [path_object, *marker_shapes]
+        return path_object
+
+    def _resvg_segments_to_path(
+        self,
+        *,
+        element: etree._Element,
+        segments: list[SegmentType],
+        coord_space: CoordinateSpace,
+        style: StyleResult,
+        metadata: dict[str, Any],
+        clip_ref: ClipRef | None,
+        mask_ref: MaskRef | None,
+        mask_instance: MaskInstance | None,
+    ):
+        policy = self._policy_options("geometry")
+        allow_emf_fallback, allow_bitmap_fallback = self._geometry_fallback_flags(policy)
+        segments, geom_meta, render_mode = apply_geometry_policy(list(segments), policy)
+        bitmap_limits = self._bitmap_fallback_limits(policy)
+        if geom_meta:
+            policy_meta = metadata.setdefault("policy", {}).setdefault("geometry", {})
+            policy_meta.update(geom_meta)
+
+        if style.fill and not isinstance(style.fill, SolidPaint):
+            if allow_bitmap_fallback:
+                render_mode = FALLBACK_BITMAP
+            elif allow_emf_fallback:
+                render_mode = FALLBACK_EMF
+
+        fallback_to_bitmap = False
+        if render_mode == FALLBACK_EMF:
+            emf_image = self._convert_path_to_emf(
+                element=element,
+                style=style,
+                segments=segments,
+                coord_space=coord_space,
+                clip_ref=clip_ref,
+                mask_ref=mask_ref,
+                mask_instance=mask_instance,
+                metadata=metadata,
+            )
+            if emf_image is not None:
+                self._process_mask_metadata(emf_image)
+                self._trace_geometry_decision(
+                    element,
+                    "emf",
+                    emf_image.metadata if isinstance(emf_image.metadata, dict) else metadata,
+                )
+                return emf_image
+            if allow_bitmap_fallback:
+                self._logger.warning("Failed to build EMF fallback; attempting bitmap fallback.")
+                fallback_to_bitmap = True
+            else:
+                self._logger.warning("Failed to build EMF fallback; bitmap fallback disabled.")
+
+        if (render_mode == FALLBACK_BITMAP or fallback_to_bitmap) and allow_bitmap_fallback:
+            bitmap_image = self._convert_path_to_bitmap(
+                element=element,
+                style=style,
+                segments=segments,
+                coord_space=coord_space,
+                clip_ref=clip_ref,
+                mask_ref=mask_ref,
+                mask_instance=mask_instance,
+                metadata=metadata,
+                bitmap_limits=bitmap_limits,
+            )
+            if bitmap_image is not None:
+                if fallback_to_bitmap:
+                    geometry_policy = metadata.setdefault("policy", {}).setdefault("geometry", {})
+                    geometry_policy["render_mode"] = FALLBACK_BITMAP
+                self._process_mask_metadata(bitmap_image)
+                self._trace_geometry_decision(
+                    element,
+                    "bitmap",
+                    bitmap_image.metadata if isinstance(bitmap_image.metadata, dict) else metadata,
+                )
+                return bitmap_image
+            self._logger.warning("Failed to rasterize path; falling back to native rendering.")
+        elif render_mode == FALLBACK_BITMAP and not allow_bitmap_fallback:
+            self._logger.warning("Bitmap fallback disabled; falling back to native rendering.")
+
+        transformed = coord_space.apply_segments(segments)
+        if not transformed:
+            return None
+
+        path_object = Path(
+            segments=transformed,
+            fill=style.fill,
+            stroke=style.stroke,
+            clip=clip_ref,
+            mask=mask_ref,
+            mask_instance=mask_instance,
+            opacity=style.opacity,
+            effects=style.effects,
+            metadata=metadata,
+        )
+        self._process_mask_metadata(path_object)
+        self._apply_marker_metadata(element, path_object.metadata)
+        self._trace_geometry_decision(element, "resvg", path_object.metadata)
         marker_shapes = self._build_marker_shapes(element, path_object)
         if marker_shapes:
             return [path_object, *marker_shapes]

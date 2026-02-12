@@ -4,7 +4,7 @@ from svg2ooxml.policy.providers.filter import FilterPolicyProvider
 from svg2ooxml.policy.targets import PolicyTarget
 
 
-ALLOWED_STRATEGIES = {"auto", "native", "native-if-neutral", "vector", "emf", "raster"}
+ALLOWED_STRATEGIES = {"auto", "native", "native-if-neutral", "vector", "emf", "raster", "resvg"}
 ALLOWED_GLOW_STRATEGIES = {"inherit", "source", "flood", "style"}
 ALLOWED_BLUR_STRATEGIES = {"soft_edge", "blur", "outer_shadow", "inner_shadow"}
 ALLOWED_TELEMETRY_LEVELS = {"off", "summary", "detailed"}
