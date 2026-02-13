@@ -51,6 +51,7 @@ def write_slide_bundle(
     slide_index: int,
     *,
     base_dir: Path | None = None,
+    metrics: dict[str, Any] | None = None,
 ) -> Path:
     bundle_dir = job_dir(job_id, base_dir) / f"slide_{slide_index:04d}"
     bundle_dir.mkdir(parents=True, exist_ok=True)
@@ -122,6 +123,7 @@ def write_slide_bundle(
         "job_id": job_id,
         "slide_index": slide_index,
         "slide_size": list(result.slide_size),
+        "metrics": metrics or {},
         "media": media_entries,
         "fonts": font_entries,
         "navigation": navigation_entries,

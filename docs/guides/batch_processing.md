@@ -32,6 +32,24 @@ python cli/run_batch_worker.py
 By default this uses a SQLite-backed Huey database in the project temp
 directory. To point it at Redis, set `SVG2OOXML_BATCH_REDIS_URL` (or `REDIS_URL`).
 
+### CLI: split → stitch → audit
+
+For a quick end-to-end run (bundle + stitch + OpenXML audit):
+
+```
+python tools/batch_run.py \
+  --metadata tests/corpus/w3c_corpus_metadata.json \
+  --corpus-dir tests/svg \
+  --sample-size 10 \
+  --sample-seed 1234 \
+  --output /tmp/w3c_parallel.pptx \
+  --bundle-dir /tmp/w3c_parallel_bundles \
+  --openxml-validator /path/to/openxml-audit \
+  --openxml-policy strict \
+  --openxml-required \
+  --inline
+```
+
 ### Output locations
 
 Batch conversions accept an `output_path` or `output_dir` inside the
