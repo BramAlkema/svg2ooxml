@@ -72,3 +72,6 @@ batch path.
 - `OPENXML_VALIDATOR`: Path to the `openxml-audit` binary.
 - `OPENXML_POLICY`: OpenXML policy (default `strict`).
 - `OPENXML_REQUIRED`: Require a passing OpenXML audit (default `false`).
+
+Notes:
+- `SVG2OOXML_PARALLEL_DISABLE` overrides `SVG2OOXML_PARALLEL_FORCE`.
