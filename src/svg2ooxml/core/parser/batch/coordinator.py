@@ -122,6 +122,13 @@ def stitch_and_audit_job(
             timeout_s=openxml_timeout_s,
             policy=openxml_policy,
         )
+        if openxml_required and openxml_valid is False:
+            return {
+                **stitch_result,
+                "success": False,
+                "openxml_valid": openxml_valid,
+                "openxml_messages": openxml_messages,
+            }
     elif openxml_required:
         return {
             **stitch_result,
