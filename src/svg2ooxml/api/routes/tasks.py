@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Header, HTTPException, status
 from pydantic import BaseModel
 
+from ..auth.cloud_tasks import verify_cloud_tasks_bearer_token
 from ..services.export_service import ExportService
 
 logger = logging.getLogger(__name__)
@@ -25,7 +26,10 @@ class TaskRequest(BaseModel):
 
 
 @router.post("/process-export", status_code=status.HTTP_200_OK)
-async def process_export_task(request: TaskRequest) -> dict:
+async def process_export_task(
+    request: TaskRequest,
+    authorization: str | None = Header(default=None, alias="Authorization"),
+) -> dict:
     """
     Process an export job (called by Cloud Tasks).
 
@@ -42,6 +46,7 @@ async def process_export_task(request: TaskRequest) -> dict:
     encrypted_token = request.auth_token_encrypted
 
     try:
+        verify_cloud_tasks_bearer_token(authorization, task_path="/api/v1/tasks/process-export")
         logger.info(f"Processing export job from Cloud Tasks: {job_id}")
 
         # Decrypt user token if present
@@ -78,6 +83,8 @@ async def process_export_task(request: TaskRequest) -> dict:
             "message": "Export job processed successfully",
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(
             f"Failed to process export job {job_id}: {e}", exc_info=True

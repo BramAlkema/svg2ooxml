@@ -12,6 +12,8 @@ from svg2ooxml.api.background.tasks import CloudTasksQueue, tasks_v2
 @pytest.fixture
 def mock_cloud_tasks(monkeypatch: pytest.MonkeyPatch):
     """Mocks the Cloud Tasks client and returns the mock object."""
+    if tasks_v2 is None:
+        pytest.skip("google-cloud-tasks is not installed")
     mock_client = (
         MagicMock()
     )  # Directly creating a MagicMock for simplicity

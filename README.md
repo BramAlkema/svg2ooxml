@@ -127,6 +127,7 @@ and `slides_presentation_id` when the Slides promotion succeeds.
 - `pytest` – runs the default suite; coverage and HTML reports land in `reports/`.
 - `pytest -m "unit and not slow"` – tight loop for fast checks.
 - `pytest -m smoke tests/smoke/` – end-to-end tests against the deployed Cloud Run service (see `tests/smoke/README.md` for authentication setup).
+- `python tools/check_file_sizes.py` – track large Python files against maintainability guardrails.
 - `pre-commit install` – enable lint/type/security hooks before committing.
 - `svg2ooxml visual` – launch the local side-by-side visual comparison server
   (requires LibreOffice's `soffice` binary for PPTX screenshots).
