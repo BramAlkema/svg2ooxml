@@ -43,7 +43,7 @@ def test_convert_accepts_http_uri(monkeypatch: pytest.MonkeyPatch) -> None:
         assert uri == "https://example.com/test.svg"
         return _MockResponse(svg_markup)
 
-    monkeypatch.setattr("cli.commands.convert.urlopen", fake_urlopen)
+    monkeypatch.setattr("cli.commands._convert_sources.urlopen", fake_urlopen)
 
     runner = CliRunner()
     with runner.isolated_filesystem():
@@ -59,7 +59,7 @@ def test_convert_uri_reports_fetch_failure(monkeypatch: pytest.MonkeyPatch) -> N
     def failing_urlopen(_uri: str):
         raise URLError("network unreachable")
 
-    monkeypatch.setattr("cli.commands.convert.urlopen", failing_urlopen)
+    monkeypatch.setattr("cli.commands._convert_sources.urlopen", failing_urlopen)
 
     runner = CliRunner()
     with runner.isolated_filesystem():

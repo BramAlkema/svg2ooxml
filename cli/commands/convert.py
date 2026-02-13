@@ -6,90 +6,25 @@ import json
 import logging
 from pathlib import Path
 from typing import Any
-from urllib.error import HTTPError, URLError
-from urllib.parse import urlparse
-from urllib.request import urlopen
 
 import click
 
-from svg2ooxml.core.multipage import SplitPage, split_svg_into_pages
-from svg2ooxml.core.slide_orchestrator import expand_page_with_variants, derive_variants_from_trace
 from svg2ooxml.core.pptx_exporter import (
     SvgConversionError,
     SvgPageSource,
     SvgToPptxExporter,
-    SvgToPptxMultiResult,
-    SvgToPptxResult,
 )
 from svg2ooxml.core.tracing import ConversionTracer
 
-
-def _looks_like_uri(value: str) -> bool:
-    parsed = urlparse(value)
-    return parsed.scheme in {"http", "https"}
-
-
-def _fetch_svg_from_uri(uri: str) -> str:
-    try:
-        with urlopen(uri) as response:  # type: ignore[call-arg]
-            charset = "utf-8"
-            if hasattr(response, "headers"):
-                charset = response.headers.get_content_charset() or charset  # type: ignore[attr-defined]
-            data = response.read()
-    except (HTTPError, URLError, ValueError) as exc:  # pragma: no cover - network errors vary by env
-        raise click.ClickException(f"Failed to fetch SVG from {uri}: {exc}") from exc
-
-    try:
-        return data.decode(charset or "utf-8")
-    except UnicodeDecodeError as exc:  # pragma: no cover - rare invalid charset
-        raise click.ClickException(f"Failed to decode SVG from {uri}: {exc}") from exc
-
-
-def _derive_default_output(source_path: Path | None, source_uri: str | None) -> Path:
-    if source_path is not None:
-        return source_path.with_suffix(".pptx")
-
-    parsed = urlparse(source_uri or "")
-    stem = Path(parsed.path).stem or "document"
-    return Path.cwd() / f"{stem}.pptx"
-
-
-def _derive_title(source_path: Path | None, source_uri: str | None, fallback: str | None = None) -> str:
-    if fallback:
-        return fallback
-    if source_path is not None:
-        return source_path.stem
-    parsed = urlparse(source_uri or "")
-    stem = Path(parsed.path).stem
-    return stem or "remote_svg"
-
-
-def _load_source(source: str) -> tuple[str, str | None, Path | None]:
-    if _looks_like_uri(source):
-        svg_text = _fetch_svg_from_uri(source)
-        parsed = urlparse(source)
-        title = Path(parsed.path).stem or None
-        return svg_text, title, None
-
-    input_path = Path(source)
-    if not input_path.exists():
-        raise click.ClickException(f"Input path does not exist: {source}")
-    try:
-        svg_text = input_path.read_text(encoding="utf-8")
-    except OSError as exc:
-        raise click.ClickException(f"Failed to read SVG file {source}: {exc}") from exc
-
-    return svg_text, input_path.stem, input_path
-
-
-def _split_pages(svg_text: str, base_title: str | None) -> list[SvgPageSource]:
-    pages = split_svg_into_pages(svg_text)
-    result: list[SvgPageSource] = []
-    for index, page in enumerate(pages, start=1):
-        title = page.title or (f"{base_title} {index}" if base_title else f"Page {index}")
-        name = f"page_{index}"
-        result.append(SvgPageSource(svg_text=page.content, title=title, name=name))
-    return result
+from ._convert_sources import (
+    derive_default_output,
+    derive_title,
+    load_source,
+    looks_like_uri,
+)
+from ._convert_sources import (
+    split_pages as split_svg_pages,
+)
 
 
 @click.command()
@@ -149,12 +84,12 @@ def convert(  # noqa: PLR0913  (CLI surface)
         logging.basicConfig(level=logging.DEBUG)
         tracer = ConversionTracer(logger=logging.getLogger("svg2ooxml.map"), collect_events=True)
 
-    primary_svg, primary_title, primary_path = _load_source(input_source)
-    primary_uri = input_source if _looks_like_uri(input_source) else None
+    primary_svg, primary_title, primary_path = load_source(input_source)
+    primary_uri = input_source if looks_like_uri(input_source) else None
 
     slides: list[SvgPageSource] = []
     if split_pages:
-        split_results = _split_pages(primary_svg, primary_title)
+        split_results = split_svg_pages(primary_svg, primary_title)
         if split_results:
             slides.extend(split_results)
         else:
@@ -162,7 +97,7 @@ def convert(  # noqa: PLR0913  (CLI surface)
     else:
         slides.append(SvgPageSource(svg_text=primary_svg, title=primary_title, name=primary_title))
     for extra in extra_slides:
-        svg_text, slide_title, _ = _load_source(extra)
+        svg_text, slide_title, _ = load_source(extra)
         slides.append(
             SvgPageSource(
                 svg_text=svg_text,
@@ -172,7 +107,7 @@ def convert(  # noqa: PLR0913  (CLI surface)
             )
         )
 
-    target_path = output_file or _derive_default_output(primary_path, primary_uri)
+    target_path = output_file or derive_default_output(primary_path, primary_uri)
 
     click.echo(f"📄 Converting: {input_source}")
     if extra_slides:
@@ -225,7 +160,7 @@ def convert(  # noqa: PLR0913  (CLI surface)
     click.echo("📤 Exporting to Google Slides...")
 
     try:
-        from svg2ooxml.core.auth import (  # noqa: WPS433 - optional dependency
+        from svg2ooxml.core.auth import (
             DriveError,
             GoogleDriveService,
             GoogleOAuthService,
@@ -254,7 +189,7 @@ def convert(  # noqa: PLR0913  (CLI surface)
 
     pptx_bytes = pptx_path.read_bytes()
     first_slide_title = slides[0].title if slides else None
-    presentation_title = title or _derive_title(primary_path, primary_uri, fallback=first_slide_title)
+    presentation_title = title or derive_title(primary_path, primary_uri, fallback=first_slide_title)
 
     try:
         oauth_service = GoogleOAuthService(

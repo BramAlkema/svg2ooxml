@@ -15,6 +15,9 @@ name = "SVG2OOXML Contributors"
 [project.license]
 text = "TBD"
 
+[project.scripts]
+svg2ooxml = "cli.main:run_cli"
+
 [project.optional-dependencies]
 dev = [
   "black>=24.0",
@@ -81,5 +84,6 @@ markers = [
 ]
 
 [tool.setuptools.packages.find]
-where = [ "src",]
+where = [ "src", ".",]
+include = [ "svg2ooxml*", "cli*",]
 namespaces = false

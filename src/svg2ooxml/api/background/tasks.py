@@ -5,14 +5,15 @@ from __future__ import annotations
 import json
 import logging
 import os
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 try:  # pragma: no cover - optional dependency
     from google.cloud import tasks_v2
-    from google.protobuf import duration_pb2
+    from google.protobuf import timestamp_pb2
 except ImportError:  # pragma: no cover - allows local fallback without GCP SDK
     tasks_v2 = None  # type: ignore[assignment]
-    duration_pb2 = None  # type: ignore[assignment]
+    timestamp_pb2 = None  # type: ignore[assignment]
 
 logger = logging.getLogger(__name__)
 
@@ -109,10 +110,12 @@ class CloudTasksQueue:
         }
 
         # Add schedule delay if specified
-        if schedule_delay_seconds > 0 and duration_pb2 is not None:
-            task["schedule_time"] = duration_pb2.Duration(
-                seconds=schedule_delay_seconds
+        if schedule_delay_seconds > 0 and timestamp_pb2 is not None:
+            schedule_time = timestamp_pb2.Timestamp()
+            schedule_time.FromDatetime(
+                datetime.now(UTC) + timedelta(seconds=schedule_delay_seconds)
             )
+            task["schedule_time"] = schedule_time
 
         try:
             # Create the task

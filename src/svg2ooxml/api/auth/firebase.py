@@ -12,6 +12,23 @@ from google.oauth2 import id_token
 logger = logging.getLogger(__name__)
 
 
+def _configured_identity_token_audiences() -> tuple[str, ...]:
+    """Return configured audiences accepted for Google identity token fallback."""
+
+    configured: list[str] = []
+    for value in (
+        os.getenv("GOOGLE_ID_TOKEN_AUDIENCE"),
+        os.getenv("SERVICE_URL"),
+        os.getenv("FIREBASE_WEB_CLIENT_ID"),
+    ):
+        if not value:
+            continue
+        normalised = value.strip()
+        if normalised and normalised not in configured:
+            configured.append(normalised)
+    return tuple(configured)
+
+
 def initialize_firebase() -> None:
     """Initialize Firebase Admin SDK.
 
@@ -81,11 +98,30 @@ def verify_google_identity_token(token: str) -> dict[str, Any]:
     Raises:
         ValueError: If token is invalid or expired
     """
+    audiences = _configured_identity_token_audiences()
+    if not audiences:
+        raise ValueError(
+            "Google Identity token verification is not configured. "
+            "Set GOOGLE_ID_TOKEN_AUDIENCE, SERVICE_URL, or FIREBASE_WEB_CLIENT_ID."
+        )
+
+    request = requests.Request()
+    last_error: Exception | None = None
+    claims: dict[str, Any] | None = None
+
     try:
-        # Verify token signature and claims
-        # This accepts Google Identity tokens with various audiences
-        request = requests.Request()
-        claims = id_token.verify_oauth2_token(token, request)
+        # Verify token signature and claims against configured audiences.
+        for audience in audiences:
+            try:
+                claims = id_token.verify_oauth2_token(token, request, audience)
+                break
+            except Exception as exc:
+                last_error = exc
+
+        if claims is None:
+            if last_error is not None:
+                raise last_error
+            raise ValueError("Identity token verification failed")
 
         # Extract user info in Firebase-compatible format
         user_info = {

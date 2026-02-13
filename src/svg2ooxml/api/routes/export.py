@@ -14,6 +14,8 @@ from ..background import enqueue_export_job
 from ..models import ExportRequest, ExportResponse, JobStatusResponse
 from ..services.export_service import ExportService, ExportStatus, JobNotFoundError
 from ..services.subscription_repository import SubscriptionRepository
+from ._job_access import ensure_job_access
+from ._user_state import fetch_encrypted_google_oauth_token, has_unlimited_exports
 
 logger = logging.getLogger(__name__)
 
@@ -83,23 +85,7 @@ async def create_export_job(
         user_has_unlimited = False
         if not disable_quota:
             try:
-                from ..auth.firebase import get_firestore_client
-
-                def check_unlimited_flag():
-                    logger.info(f"Checking unlimited flag for user {firebase_uid}")
-                    firestore_client = get_firestore_client()
-                    logger.info(f"Got Firestore client, checking users/{firebase_uid}")
-                    user_doc = firestore_client.collection("users").document(firebase_uid).get()
-                    logger.info(f"User doc exists: {user_doc.exists}")
-                    if user_doc.exists:
-                        user_data = user_doc.to_dict()
-                        logger.info(f"User data: {user_data}")
-                        has_flag = user_data.get("unlimited_exports", False) or user_data.get("admin", False)
-                        logger.info(f"Has unlimited flag: {has_flag}")
-                        return has_flag
-                    return False
-
-                user_has_unlimited = await run_in_threadpool(check_unlimited_flag)
+                user_has_unlimited = await has_unlimited_exports(firebase_uid)
                 if user_has_unlimited:
                     logger.info(f"✅ User {firebase_uid} has unlimited quota flag - bypassing quota check")
                 else:
@@ -148,24 +134,7 @@ async def create_export_job(
 
         # Check for OAuth token if Slides format is requested
         if request.output_format.lower() == "slides":
-            from ..auth.firebase import get_firestore_client
-
-            def fetch_encrypted_oauth_token():
-                logger.info(f"Checking OAuth token for user {firebase_uid}")
-                firestore_client = get_firestore_client()
-                user_doc = firestore_client.collection("users").document(firebase_uid).get()
-                if not user_doc.exists:
-                    logger.info(f"User {firebase_uid} document missing or has no OAuth token")
-                    return None
-
-                user_data = user_doc.to_dict()
-                logger.info(f"User data: {user_data}")
-                google_oauth = user_data.get("google_oauth", {})
-                encrypted = google_oauth.get("refresh_token_encrypted")
-                logger.info(f"User {firebase_uid} has OAuth token: {bool(encrypted)}")
-                return encrypted
-
-            encrypted_oauth_token = await run_in_threadpool(fetch_encrypted_oauth_token)
+            encrypted_oauth_token = await fetch_encrypted_google_oauth_token(firebase_uid)
 
             google_refresh_token: str | None = None
             if encrypted_oauth_token:
@@ -248,7 +217,10 @@ async def create_export_job(
 
 
 @router.get("/export/{job_id}", response_model=JobStatusResponse)
-async def get_job_status(job_id: str) -> JobStatusResponse:
+async def get_job_status(
+    job_id: str,
+    user: dict = Depends(verify_firebase_token),
+) -> JobStatusResponse:
     """
     Get the status of an export job.
 
@@ -258,6 +230,7 @@ async def get_job_status(job_id: str) -> JobStatusResponse:
     """
     try:
         job_data = await run_in_threadpool(export_service.get_job_status, job_id)
+        ensure_job_access(job_id, job_data, user)
 
         return JobStatusResponse(
             job_id=job_id,
@@ -282,6 +255,8 @@ async def get_job_status(job_id: str) -> JobStatusResponse:
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Job {job_id} not found",
         ) from None
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to get job status for {job_id}: {e}", exc_info=True)
         raise HTTPException(
@@ -291,7 +266,10 @@ async def get_job_status(job_id: str) -> JobStatusResponse:
 
 
 @router.delete("/export/{job_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_job(job_id: str):
+async def delete_job(
+    job_id: str,
+    user: dict = Depends(verify_firebase_token),
+):
     """
     Delete an export job and clean up associated resources.
 
@@ -300,6 +278,8 @@ async def delete_job(job_id: str):
     - **job_id**: The unique identifier of the job to delete
     """
     try:
+        job_data = await run_in_threadpool(export_service.get_job_status, job_id)
+        ensure_job_access(job_id, job_data, user)
         await run_in_threadpool(export_service.delete_job, job_id)
         return None
 
@@ -308,6 +288,8 @@ async def delete_job(job_id: str):
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Job {job_id} not found",
         ) from None
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to delete job {job_id}: {e}", exc_info=True)
         raise HTTPException(

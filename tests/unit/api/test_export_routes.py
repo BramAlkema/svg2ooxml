@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 
 pytest.importorskip("huey")
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 
 @pytest.fixture()
@@ -75,7 +75,7 @@ def client_with_service(monkeypatch):
             user_refresh_token=None,  # Add user_refresh_token here
         ):  # noqa: ARG002
             job_id = "job123"
-            now = datetime.utcnow().isoformat()
+            now = datetime.now(UTC).isoformat()
             self.jobs[job_id] = {
                 "job_id": job_id,
                 "status": "queued",
@@ -83,6 +83,7 @@ def client_with_service(monkeypatch):
                 "progress": 0.0,
                 "created_at": now,
                 "updated_at": now,
+                "user": {"uid": user["uid"]},
             }
             return job_id
 
@@ -101,16 +102,18 @@ def client_with_service(monkeypatch):
     app = FastAPI()
     app.include_router(export_routes.router, prefix="/api/v1")
 
+    current_user = {"uid": "firebase-user"}
+
     async def _fake_verify(credentials=None):
-        return {"uid": "firebase-user"}
+        return dict(current_user)
 
     app.dependency_overrides[export_routes.verify_firebase_token] = _fake_verify
 
-    return TestClient(app), service, stub_repo
+    return TestClient(app), service, stub_repo, current_user
 
 
 def test_create_export_job_route(client_with_service):
-    client, service, stub_repo = client_with_service
+    client, service, stub_repo, _ = client_with_service
 
     payload = {
         "frames": [
@@ -140,8 +143,8 @@ def test_create_export_job_route(client_with_service):
 
 
 def test_get_export_job_status_route(client_with_service):
-    client, service, _ = client_with_service
-    now = datetime.utcnow().isoformat()
+    client, service, _, _ = client_with_service
+    now = datetime.now(UTC).isoformat()
     service.jobs["abc"] = {
         "job_id": "abc",
         "status": "completed",
@@ -155,6 +158,7 @@ def test_get_export_job_status_route(client_with_service):
         "slides_error": None,
         "created_at": now,
         "updated_at": now,
+        "user": {"uid": "firebase-user"},
     }
 
     response = client.get("/api/v1/export/abc")
@@ -164,3 +168,55 @@ def test_get_export_job_status_route(client_with_service):
     assert payload["slides_url"] == "https://example.com/slides"
     assert payload["pptx_url"] == "https://example.com/pptx"
     assert payload["slides_embed_url"] == "https://example.com/embed"
+
+
+def test_get_export_job_status_route_rejects_other_owner(client_with_service):
+    client, service, _, _ = client_with_service
+    now = datetime.now(UTC).isoformat()
+    service.jobs["abc"] = {
+        "job_id": "abc",
+        "status": "completed",
+        "message": "Done",
+        "progress": 100.0,
+        "created_at": now,
+        "updated_at": now,
+        "user": {"uid": "different-user"},
+    }
+
+    response = client.get("/api/v1/export/abc")
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Job abc not found"
+
+
+def test_delete_export_job_route_owner_only(client_with_service):
+    client, service, _, _ = client_with_service
+    now = datetime.now(UTC).isoformat()
+    service.jobs["mine"] = {
+        "job_id": "mine",
+        "status": "queued",
+        "message": "Queued",
+        "progress": 0.0,
+        "created_at": now,
+        "updated_at": now,
+        "user": {"uid": "firebase-user"},
+    }
+    service.jobs["theirs"] = {
+        "job_id": "theirs",
+        "status": "queued",
+        "message": "Queued",
+        "progress": 0.0,
+        "created_at": now,
+        "updated_at": now,
+        "user": {"uid": "different-user"},
+    }
+
+    own_response = client.delete("/api/v1/export/mine")
+    other_response = client.delete("/api/v1/export/theirs")
+
+    assert own_response.status_code == 204
+    assert "mine" not in service.jobs
+
+    assert other_response.status_code == 404
+    assert other_response.json()["detail"] == "Job theirs not found"
+    assert "theirs" in service.jobs
