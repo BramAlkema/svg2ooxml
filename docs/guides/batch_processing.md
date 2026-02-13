@@ -56,3 +56,19 @@ Batch conversions accept an `output_path` or `output_dir` inside the
 `conversion_options` dictionary. When nothing is provided the pipeline writes a
 temporary file under the system temp directory using the SVG stem and a unique
 suffix.
+
+### API parallel switches
+
+These environment variables control whether the export API uses the parallel
+batch path.
+
+- `SVG2OOXML_PARALLEL_FORCE`: Force parallel conversion regardless of frame count.
+- `SVG2OOXML_PARALLEL_ENABLE`: Enable parallel conversion (default `true`).
+- `SVG2OOXML_PARALLEL_DISABLE`: Disable parallel conversion (default `false`).
+- `SVG2OOXML_PARALLEL_SLIDE_THRESHOLD`: Minimum frames before parallel conversion (default `25`).
+- `SVG2OOXML_PARALLEL_TIMEOUT_S`: Optional timeout for batch conversion.
+- `SVG2OOXML_PARALLEL_BAIL`: Stop on first failure (default `true`).
+- `SVG2OOXML_BUNDLE_DIR`: Override bundle directory for batch artifacts.
+- `OPENXML_VALIDATOR`: Path to the `openxml-audit` binary.
+- `OPENXML_POLICY`: OpenXML policy (default `strict`).
+- `OPENXML_REQUIRED`: Require a passing OpenXML audit (default `false`).
