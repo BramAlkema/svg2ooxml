@@ -35,6 +35,7 @@ def _convert_single_svg_impl(
     """Internal helper that runs the parser + IR converter."""
 
     filename = file_data.get("filename", "unknown.svg")
+    source_path = file_data.get("source_path") or filename
     content = file_data.get("content", b"")
 
     logger.info("Starting conversion for %s", filename)
@@ -68,7 +69,7 @@ def _convert_single_svg_impl(
     parser = SVGParser(services=parser_services)
 
     start = time.perf_counter()
-    result = parser.parse(svg_text, source_path=str(filename))
+    result = parser.parse(svg_text, source_path=str(source_path))
     elapsed = time.perf_counter() - start
 
     response: dict[str, Any] = {
@@ -215,11 +216,17 @@ def _render_slide_bundle_impl(
     bundle_base = None
     if conversion_options:
         bundle_base = conversion_options.get("bundle_dir")
+    bundle_metrics = {
+        "processing_time": elapsed,
+        "element_count": result.element_count,
+        "namespace_count": result.namespace_count,
+    }
     bundle_dir = write_slide_bundle(
         render_result,
         job_id,
         slide_index,
         base_dir=Path(bundle_base).expanduser() if bundle_base else None,
+        metrics=bundle_metrics,
     )
 
     response.update(
