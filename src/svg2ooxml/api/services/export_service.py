@@ -21,7 +21,12 @@ from svg2ooxml.services.fonts import FontFetcher, FontSource
 
 from ..caching.status import job_status_cache
 from ..models import RequestedFont, SVGFrame
-from .converter import ConversionArtifacts, FontDiagnostics, render_pptx_for_frames
+from .converter import (
+    ConversionArtifacts,
+    FontDiagnostics,
+    render_pptx_for_frames,
+    render_pptx_for_frames_parallel,
+)
 from .dependencies import ExportServiceDependencies, build_export_service_dependencies
 from .slides_publisher import (
     SlidesPublishingError,
@@ -298,12 +303,37 @@ class ExportService:
             if cached_summary is not None:
                 summary = cached_summary
             else:
-                conversion = render_pptx_for_frames(
-                    frames,
-                    pptx_path,
-                    requested_fonts=requested_fonts,
-                    extra_font_directories=font_prep.directories,
-                )
+                parallel_force = os.getenv("SVG2OOXML_PARALLEL_FORCE", "").lower() in ("1", "true", "yes")
+                parallel_enabled = os.getenv("SVG2OOXML_PARALLEL_ENABLE", "1").lower() not in ("0", "false", "no")
+                parallel_threshold = int(os.getenv("SVG2OOXML_PARALLEL_SLIDE_THRESHOLD", "25"))
+                use_parallel = parallel_force or (parallel_enabled and len(frames) >= parallel_threshold)
+                if use_parallel:
+                    timeout_raw = os.getenv("SVG2OOXML_PARALLEL_TIMEOUT_S")
+                    timeout_s = float(timeout_raw) if timeout_raw else None
+                    bail = os.getenv("SVG2OOXML_PARALLEL_BAIL", "1").lower() not in ("0", "false", "no")
+                    openxml_validator = os.getenv("OPENXML_VALIDATOR")
+                    openxml_policy = os.getenv("OPENXML_POLICY", "strict")
+                    openxml_required = os.getenv("OPENXML_REQUIRED", "").lower() in ("1", "true", "yes")
+                    conversion = render_pptx_for_frames_parallel(
+                        frames,
+                        pptx_path,
+                        requested_fonts=requested_fonts,
+                        extra_font_directories=font_prep.directories,
+                        job_id=job_id,
+                        bundle_dir=tmp_dir / "bundles",
+                        openxml_validator=openxml_validator,
+                        openxml_policy=openxml_policy,
+                        openxml_required=openxml_required,
+                        timeout_s=timeout_s,
+                        bail=bail,
+                    )
+                else:
+                    conversion = render_pptx_for_frames(
+                        frames,
+                        pptx_path,
+                        requested_fonts=requested_fonts,
+                        extra_font_directories=font_prep.directories,
+                    )
                 summary = self._build_conversion_summary(conversion, font_prep, requested_fonts)
                 self._store_conversion_cache(cache_key, summary, conversion.pptx_path)
 

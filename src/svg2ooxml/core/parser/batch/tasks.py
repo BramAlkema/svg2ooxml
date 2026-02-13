@@ -13,6 +13,7 @@ from uuid import uuid4
 from svg2ooxml.common.tempfiles import project_temp_dir
 from svg2ooxml.drawingml.writer import DrawingMLWriter
 from svg2ooxml.io.pptx_writer import write_pptx
+from svg2ooxml.services.fonts.providers.directory import DirectoryFontProvider
 
 from ..preprocess.services import build_parser_services
 from ..svg_parser import SVGParser
@@ -54,6 +55,16 @@ def _convert_single_svg_impl(
         svg_text = str(content)
 
     parser_services = build_parser_services()
+    font_dirs = []
+    if conversion_options:
+        font_dirs = list(conversion_options.get("font_dirs") or [])
+    if font_dirs and parser_services.services.font_service:
+        for directory in font_dirs:
+            path = Path(directory).expanduser()
+            if not path.exists() or not path.is_dir():
+                continue
+            parser_services.services.font_service.register_provider(DirectoryFontProvider((path,)))
+        parser_services.services.font_service.clear_cache()
     parser = SVGParser(services=parser_services)
 
     start = time.perf_counter()
