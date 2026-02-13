@@ -28,6 +28,7 @@ from .converter import (
     render_pptx_for_frames_parallel,
 )
 from .dependencies import ExportServiceDependencies, build_export_service_dependencies
+from .export_settings import ParallelExportSettings
 from .slides_publisher import (
     SlidesPublishingError,
     SlidesPublishResult,
@@ -303,29 +304,20 @@ class ExportService:
             if cached_summary is not None:
                 summary = cached_summary
             else:
-                parallel_force = os.getenv("SVG2OOXML_PARALLEL_FORCE", "").lower() in ("1", "true", "yes")
-                parallel_enabled = os.getenv("SVG2OOXML_PARALLEL_ENABLE", "1").lower() not in ("0", "false", "no")
-                parallel_threshold = int(os.getenv("SVG2OOXML_PARALLEL_SLIDE_THRESHOLD", "25"))
-                use_parallel = parallel_force or (parallel_enabled and len(frames) >= parallel_threshold)
-                if use_parallel:
-                    timeout_raw = os.getenv("SVG2OOXML_PARALLEL_TIMEOUT_S")
-                    timeout_s = float(timeout_raw) if timeout_raw else None
-                    bail = os.getenv("SVG2OOXML_PARALLEL_BAIL", "1").lower() not in ("0", "false", "no")
-                    openxml_validator = os.getenv("OPENXML_VALIDATOR")
-                    openxml_policy = os.getenv("OPENXML_POLICY", "strict")
-                    openxml_required = os.getenv("OPENXML_REQUIRED", "").lower() in ("1", "true", "yes")
+                parallel_settings = ParallelExportSettings.from_env(tmp_dir=tmp_dir)
+                if parallel_settings.should_use_parallel(len(frames)):
                     conversion = render_pptx_for_frames_parallel(
                         frames,
                         pptx_path,
                         requested_fonts=requested_fonts,
                         extra_font_directories=font_prep.directories,
                         job_id=job_id,
-                        bundle_dir=tmp_dir / "bundles",
-                        openxml_validator=openxml_validator,
-                        openxml_policy=openxml_policy,
-                        openxml_required=openxml_required,
-                        timeout_s=timeout_s,
-                        bail=bail,
+                        bundle_dir=parallel_settings.bundle_dir,
+                        openxml_validator=parallel_settings.openxml_validator,
+                        openxml_policy=parallel_settings.openxml_policy,
+                        openxml_required=parallel_settings.openxml_required,
+                        timeout_s=parallel_settings.timeout_s,
+                        bail=parallel_settings.bail,
                     )
                 else:
                     conversion = render_pptx_for_frames(
