@@ -58,6 +58,7 @@ class SMILParser:
 
     def __init__(self) -> None:
         self.animation_summary = AnimationSummary()
+        self._degradation_reasons: dict[str, int] = {}
         self._namespace_map = {
             "svg": "http://www.w3.org/2000/svg",
             "smil": "http://www.w3.org/2001/SMIL20/",
@@ -79,13 +80,16 @@ class SMILParser:
                 definition = self._parse_animation_element(element)
             except SMILParsingError as exc:
                 self.animation_summary.add_warning(f"Failed to parse animation: {exc}")
+                self._record_degradation("animation_parse_failed")
                 continue
             except ValueError as exc:
                 self.animation_summary.add_warning(f"Invalid animation definition: {exc}")
+                self._record_degradation("animation_definition_invalid")
                 continue
             except Exception:
                 # Silently skip unexpected issues; callers can inspect warnings
                 self.animation_summary.add_warning("Unexpected error parsing animation element")
+                self._record_degradation("unexpected_parse_error")
                 continue
 
             if definition:
@@ -98,8 +102,13 @@ class SMILParser:
     def get_animation_summary(self) -> AnimationSummary:
         return self.animation_summary
 
+    def get_degradation_reasons(self) -> dict[str, int]:
+        """Return parser fallback/degradation reasons with occurrence counts."""
+        return dict(self._degradation_reasons)
+
     def reset_summary(self) -> None:
         self.animation_summary = AnimationSummary()
+        self._degradation_reasons = {}
 
     def validate_animation_structure(self, animations: Iterable[AnimationDefinition]) -> list[str]:
         warnings: list[str] = []
@@ -192,17 +201,20 @@ class SMILParser:
                     self.animation_summary.add_warning(
                         "Ignoring keyTimes for animateMotion: expected at least 2 entries"
                     )
+                    self._record_degradation("motion_key_times_too_short")
                     key_times = None
             elif len(key_times) != len(values):
                 self.animation_summary.add_warning(
                     f"keyTimes length mismatch: expected {len(values)}, got {len(key_times)}"
                 )
+                self._record_degradation("key_times_length_mismatch")
                 key_times = None
 
         if key_splines is not None and calc_mode != CalcMode.SPLINE:
             self.animation_summary.add_warning(
                 "Ignoring keySplines because calcMode is not spline"
             )
+            self._record_degradation("key_splines_non_spline_mode")
             key_splines = None
 
         if key_splines is not None:
@@ -214,6 +226,7 @@ class SMILParser:
                 self.animation_summary.add_warning(
                     f"keySplines length mismatch: expected {expected_splines}, got {len(key_splines)}"
                 )
+                self._record_degradation("key_splines_length_mismatch")
                 key_splines = None
 
         if (
@@ -296,6 +309,7 @@ class SMILParser:
                     self.animation_summary.add_warning(
                         f"animateMotion mpath reference unresolved: {href}"
                     )
+                    self._record_degradation("mpath_reference_unresolved")
             return ["M 0,0"]
 
         values_attr = element.get("values")
@@ -385,10 +399,12 @@ class SMILParser:
             trigger = self._parse_begin_token(token)
             if trigger is None:
                 self.animation_summary.add_warning(f"Invalid begin expression: {token}")
+                self._record_degradation("begin_expression_invalid")
                 continue
             parsed.append(trigger)
 
         if not parsed:
+            self._record_degradation("begin_fallback_default_zero")
             return (0.0, [BeginTrigger(trigger_type=BeginTriggerType.TIME_OFFSET, delay_seconds=0.0)])
 
         # Backward-compatible numeric begin fallback used by existing timing helpers.
@@ -460,13 +476,16 @@ class SMILParser:
             values = [float(value.strip()) for value in attr.split(";") if value.strip()]
         except (ValueError, TypeError):
             self.animation_summary.add_warning("Invalid keyTimes format")
+            self._record_degradation("key_times_invalid_format")
             return None
 
         if not all(0.0 <= value <= 1.0 for value in values):
             self.animation_summary.add_warning("keyTimes values outside [0,1] range")
+            self._record_degradation("key_times_out_of_range")
             return None
         if values != sorted(values):
             self.animation_summary.add_warning("keyTimes must be in ascending order")
+            self._record_degradation("key_times_not_ascending")
             return None
 
         return values or None
@@ -486,6 +505,7 @@ class SMILParser:
                 splines.append(numbers)
         except (ValueError, TypeError):
             self.animation_summary.add_warning("Invalid keySplines format")
+            self._record_degradation("key_splines_invalid_format")
             return None
 
         return splines or None
@@ -557,6 +577,9 @@ class SMILParser:
         self.animation_summary.total_animations = len(animations)
         self.animation_summary.element_count = len({anim.element_id for anim in animations})
         self.animation_summary.calculate_complexity()
+
+    def _record_degradation(self, reason: str) -> None:
+        self._degradation_reasons[reason] = self._degradation_reasons.get(reason, 0) + 1
 
 
 __all__ = ["SMILParser", "SMILParsingError", "ParsedAnimation"]

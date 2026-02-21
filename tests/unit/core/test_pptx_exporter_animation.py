@@ -70,6 +70,35 @@ def test_render_svg_emits_animation_metadata() -> None:
     assert '<p:spTgt spid="' in render_result.slide_xml
 
 
+def test_animation_parse_fallback_reasons_are_traced() -> None:
+    svg = """
+    <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">
+      <rect id="rect1" width="10" height="10" fill="#000">
+        <animate attributeName="x" values="0;10;20" keyTimes="0;0.7;0.2" dur="1s" begin="0s"/>
+      </rect>
+    </svg>
+    """
+
+    _, scene, tracer = _render(svg)
+
+    assert scene.metadata is not None
+    animation_meta = scene.metadata.get("animation")
+    assert animation_meta is not None
+    assert animation_meta["summary"]["fallback_reasons"]["key_times_not_ascending"] == 1
+
+    fallback_events = [
+        event
+        for event in tracer.report().stage_events
+        if event.stage == "animation" and event.action == "parse_fallback"
+    ]
+    assert fallback_events
+    assert any(
+        event.metadata.get("reason") == "key_times_not_ascending"
+        and event.metadata.get("count") == 1
+        for event in fallback_events
+    )
+
+
 def test_scale_animation_emits_animscale() -> None:
     svg = """
     <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">
