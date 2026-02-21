@@ -152,6 +152,63 @@ class TAVBuilder:
 
         return (tav_elements, uses_custom_namespace)
 
+    def build_discrete_tav_list(
+        self,
+        *,
+        values: Sequence[str],
+        key_times: Sequence[float] | None,
+        value_formatter: ValueFormatter,
+    ) -> list[etree._Element]:
+        """Build step-style TAV entries for ``calcMode="discrete"``.
+
+        Discrete timing is approximated by emitting two keyframes at each
+        boundary: one with the previous value, immediately followed by one with
+        the new value at the same timestamp.
+        """
+        if not values:
+            return []
+
+        resolved_times = self.resolve_key_times(values, key_times)
+        if not resolved_times:
+            return []
+
+        if len(values) == 1:
+            return [
+                self._xml.build_tav_element(
+                    tm=0,
+                    value_elem=value_formatter(values[0]),
+                )
+            ]
+
+        tav_elements: list[etree._Element] = []
+        first_tm = int(round(max(0.0, min(1.0, resolved_times[0])) * 100000))
+        tav_elements.append(
+            self._xml.build_tav_element(
+                tm=first_tm,
+                value_elem=value_formatter(values[0]),
+            )
+        )
+
+        for index in range(1, len(values)):
+            tm = int(round(max(0.0, min(1.0, resolved_times[index])) * 100000))
+            prev_value_elem = value_formatter(values[index - 1])
+            next_value_elem = value_formatter(values[index])
+
+            tav_elements.append(
+                self._xml.build_tav_element(
+                    tm=tm,
+                    value_elem=prev_value_elem,
+                )
+            )
+            tav_elements.append(
+                self._xml.build_tav_element(
+                    tm=tm,
+                    value_elem=next_value_elem,
+                )
+            )
+
+        return tav_elements
+
     def resolve_key_times(
         self,
         values: Sequence[str],

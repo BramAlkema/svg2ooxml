@@ -15,6 +15,7 @@ from svg2ooxml.ir.animation import (
     AnimationDefinition,
     AnimationTiming,
     AnimationType,
+    CalcMode,
 )
 
 
@@ -233,3 +234,24 @@ class TestMultiKeyframe:
         par = handler.build(anim, par_id=4, behavior_id=5)
         tavs = par.findall(f".//{{{NS_P}}}tav")
         assert len(tavs) == 3
+
+    def test_discrete_calc_mode_emits_step_tavs(self, handler: NumericAnimationHandler):
+        anim = make_numeric_animation(
+            values=["0", "10", "20"],
+            key_times=[0.0, 0.4, 1.0],
+            calc_mode=CalcMode.DISCRETE,
+        )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        tavs = par.findall(f".//{{{NS_P}}}tav")
+        assert [tav.get("tm") for tav in tavs] == ["0", "40000", "40000", "100000", "100000"]
+
+    def test_paced_calc_mode_overrides_explicit_key_times(self, handler: NumericAnimationHandler):
+        anim = make_numeric_animation(
+            values=["0", "10", "40"],
+            key_times=[0.0, 0.5, 1.0],
+            calc_mode=CalcMode.PACED,
+        )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        tavs = par.findall(f".//{{{NS_P}}}tav")
+        # Distances are 10 then 30, so paced midpoint should be 25%.
+        assert [tav.get("tm") for tav in tavs] == ["0", "25000", "100000"]

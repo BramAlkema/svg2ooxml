@@ -3,7 +3,7 @@ from __future__ import annotations
 from lxml import etree
 
 from svg2ooxml.core.animation import SMILParser
-from svg2ooxml.ir.animation import AnimationType, BeginTriggerType, TransformType
+from svg2ooxml.ir.animation import AnimationType, BeginTriggerType, CalcMode, TransformType
 
 
 def _parse(svg: str):
@@ -157,6 +157,68 @@ def test_parse_begin_click_with_offset() -> None:
     assert len(animation.timing.begin_triggers) == 1
     assert animation.timing.begin_triggers[0].trigger_type is BeginTriggerType.CLICK
     assert animation.timing.begin_triggers[0].delay_seconds == 0.5
+
+
+def test_parse_descending_key_times_falls_back_with_warning() -> None:
+    parser = SMILParser()
+    svg = _parse(
+        """
+        <svg xmlns="http://www.w3.org/2000/svg">
+          <rect id="shape">
+            <animate attributeName="x" values="0;10;20" keyTimes="0;0.7;0.2" dur="1s" />
+          </rect>
+        </svg>
+        """
+    )
+
+    animations = parser.parse_svg_animations(svg)
+    assert len(animations) == 1
+    animation = animations[0]
+    assert animation.key_times is None
+    assert parser.animation_summary.warnings
+    assert any("keyTimes must be in ascending order" in warning for warning in parser.animation_summary.warnings)
+
+
+def test_parse_key_splines_without_spline_mode_are_ignored() -> None:
+    parser = SMILParser()
+    svg = _parse(
+        """
+        <svg xmlns="http://www.w3.org/2000/svg">
+          <rect id="shape">
+            <animate attributeName="x" values="0;10" keySplines="0.25 0.1 0.25 1" calcMode="linear" dur="1s" />
+          </rect>
+        </svg>
+        """
+    )
+
+    animations = parser.parse_svg_animations(svg)
+    assert len(animations) == 1
+    animation = animations[0]
+    assert animation.calc_mode == CalcMode.LINEAR
+    assert animation.key_splines is None
+    assert parser.animation_summary.warnings
+    assert any("Ignoring keySplines because calcMode is not spline" in warning for warning in parser.animation_summary.warnings)
+
+
+def test_parse_invalid_key_splines_count_falls_back() -> None:
+    parser = SMILParser()
+    svg = _parse(
+        """
+        <svg xmlns="http://www.w3.org/2000/svg">
+          <rect id="shape">
+            <animate attributeName="x" values="0;10;20" keyTimes="0;0.5;1" keySplines="0.25 0.1 0.25 1" calcMode="spline" dur="1s" />
+          </rect>
+        </svg>
+        """
+    )
+
+    animations = parser.parse_svg_animations(svg)
+    assert len(animations) == 1
+    animation = animations[0]
+    assert animation.calc_mode == CalcMode.SPLINE
+    assert animation.key_splines is None
+    assert parser.animation_summary.warnings
+    assert any("keySplines length mismatch" in warning for warning in parser.animation_summary.warnings)
 
 
 def test_parse_animate_motion_resolves_mpath_reference() -> None:

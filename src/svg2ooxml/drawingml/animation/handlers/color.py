@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 from lxml import etree
 
 from svg2ooxml.drawingml.xml_builder import a_sub, p_elem, p_sub
-from svg2ooxml.ir.animation import AnimationType
+from svg2ooxml.ir.animation import AnimationType, CalcMode
 
 from ..constants import COLOR_ATTRIBUTE_NAME_MAP, COLOR_ATTRIBUTES
 from ..value_formatters import format_color_value
@@ -99,7 +99,17 @@ class ColorAnimationHandler(AnimationHandler):
         Only builds TAV list if more than 2 values or explicit key_times.
         """
         values = animation.values
-        if not values or (len(values) <= 2 and not animation.key_times):
+        if not values:
+            return []
+
+        if animation.calc_mode == CalcMode.DISCRETE and (len(values) > 1 or animation.key_times):
+            return self._tav.build_discrete_tav_list(
+                values=values,
+                key_times=animation.key_times,
+                value_formatter=format_color_value,
+            )
+
+        if len(values) <= 2 and not animation.key_times:
             return []
 
         tav_elements, _ = self._tav.build_tav_list(
