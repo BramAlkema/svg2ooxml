@@ -262,6 +262,26 @@ def test_parse_animate_motion_rotate_mode() -> None:
     assert animation.motion_rotate == "auto-reverse"
 
 
+def test_parse_animate_motion_keeps_key_times_for_path() -> None:
+    parser = SMILParser()
+    svg = _parse(
+        """
+        <svg xmlns="http://www.w3.org/2000/svg">
+          <rect id="shape">
+            <animateMotion dur="1s" path="M0,0 L100,0" keyTimes="0;0.5;1" calcMode="discrete" />
+          </rect>
+        </svg>
+        """
+    )
+
+    animations = parser.parse_svg_animations(svg)
+    assert len(animations) == 1
+    animation = animations[0]
+    assert animation.animation_type is AnimationType.ANIMATE_MOTION
+    assert animation.calc_mode == CalcMode.DISCRETE
+    assert animation.key_times == [0.0, 0.5, 1.0]
+
+
 def test_parse_animate_motion_unresolved_mpath_adds_warning() -> None:
     parser = SMILParser()
     svg = _parse(

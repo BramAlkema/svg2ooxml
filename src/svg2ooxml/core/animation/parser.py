@@ -148,6 +148,7 @@ class SMILParser:
         key_splines = self._parse_key_splines(element)
         calc_mode = self._parse_calc_mode(element)
         key_times, key_splines = self._sanitize_interpolation_inputs(
+            animation_type=animation_type,
             values=values,
             calc_mode=calc_mode,
             key_times=key_times,
@@ -177,17 +178,26 @@ class SMILParser:
     def _sanitize_interpolation_inputs(
         self,
         *,
+        animation_type: AnimationType,
         values: list[str],
         calc_mode: CalcMode,
         key_times: list[float] | None,
         key_splines: list[list[float]] | None,
     ) -> tuple[list[float] | None, list[list[float]] | None]:
         """Normalize keyTimes/keySplines combinations to avoid hard parse drops."""
-        if key_times is not None and len(key_times) != len(values):
-            self.animation_summary.add_warning(
-                f"keyTimes length mismatch: expected {len(values)}, got {len(key_times)}"
-            )
-            key_times = None
+        is_motion_with_path = animation_type == AnimationType.ANIMATE_MOTION and len(values) == 1
+        if key_times is not None:
+            if is_motion_with_path:
+                if len(key_times) < 2:
+                    self.animation_summary.add_warning(
+                        "Ignoring keyTimes for animateMotion: expected at least 2 entries"
+                    )
+                    key_times = None
+            elif len(key_times) != len(values):
+                self.animation_summary.add_warning(
+                    f"keyTimes length mismatch: expected {len(values)}, got {len(key_times)}"
+                )
+                key_times = None
 
         if key_splines is not None and calc_mode != CalcMode.SPLINE:
             self.animation_summary.add_warning(
@@ -196,14 +206,23 @@ class SMILParser:
             key_splines = None
 
         if key_splines is not None:
-            expected_splines = max(len(values) - 1, 0)
+            if is_motion_with_path and key_times is not None:
+                expected_splines = max(len(key_times) - 1, 0)
+            else:
+                expected_splines = max(len(values) - 1, 0)
             if len(key_splines) != expected_splines:
                 self.animation_summary.add_warning(
                     f"keySplines length mismatch: expected {expected_splines}, got {len(key_splines)}"
                 )
                 key_splines = None
 
-        if calc_mode == CalcMode.SPLINE and key_splines and key_times is None and len(values) > 1:
+        if (
+            calc_mode == CalcMode.SPLINE
+            and key_splines
+            and key_times is None
+            and len(values) > 1
+            and not is_motion_with_path
+        ):
             # SMIL expects keyTimes with spline timing; synthesize even spacing for robustness.
             key_times = [index / (len(values) - 1) for index in range(len(values))]
 

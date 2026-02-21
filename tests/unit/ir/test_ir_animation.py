@@ -55,6 +55,18 @@ def test_animation_definition_keyframe_validation() -> None:
         )
 
 
+def test_animation_definition_allows_motion_path_key_times() -> None:
+    definition = AnimationDefinition(
+        element_id="shape",
+        animation_type=AnimationType.ANIMATE_MOTION,
+        target_attribute="position",
+        values=["M0,0 L100,0"],
+        timing=AnimationTiming(),
+        key_times=[0.0, 0.5, 1.0],
+    )
+    assert definition.key_times == [0.0, 0.5, 1.0]
+
+
 def test_animation_definition_generates_even_keyframes() -> None:
     definition = AnimationDefinition(
         element_id="shape",

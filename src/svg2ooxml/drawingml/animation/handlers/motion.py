@@ -12,7 +12,9 @@ from typing import TYPE_CHECKING
 from lxml import etree
 
 from svg2ooxml.drawingml.xml_builder import p_elem, p_sub
-from svg2ooxml.ir.animation import AnimationType
+from svg2ooxml.ir.animation import AnimationType, CalcMode
+
+from ..timing_utils import compute_paced_key_times_2d
 
 from .base import AnimationHandler
 
@@ -40,6 +42,7 @@ class MotionAnimationHandler(AnimationHandler):
 
         path_value = animation.values[0]
         points = self._parse_motion_path(path_value)
+        points = self._retime_motion_points(points, animation)
 
         if len(points) < 2:
             return None
@@ -171,6 +174,143 @@ class MotionAnimationHandler(AnimationHandler):
         if abs(value) < 1e-10:
             return "0"
         return f"{value:.6g}"
+
+    def _retime_motion_points(
+        self,
+        points: list[tuple[float, float]],
+        animation: AnimationDefinition,
+        segment_budget: int = 96,
+    ) -> list[tuple[float, float]]:
+        """Approximate keyTimes/calcMode timing by expanding path vertices."""
+        key_times = animation.key_times
+        if len(points) < 2 or key_times is None or len(key_times) < 2:
+            return points
+
+        calc_mode_value = (
+            animation.calc_mode.value
+            if isinstance(animation.calc_mode, CalcMode)
+            else str(animation.calc_mode).lower()
+        )
+        key_points = self._sample_points_at_progress(points, key_times)
+        if len(key_points) < 2:
+            return points
+
+        if calc_mode_value == CalcMode.PACED.value:
+            paced_times = compute_paced_key_times_2d(key_points)
+            if paced_times is not None:
+                key_times = paced_times
+
+        if calc_mode_value == CalcMode.DISCRETE.value:
+            return self._expand_discrete_points(
+                points=key_points,
+                key_times=key_times,
+                segment_budget=segment_budget,
+            )
+
+        return self._retime_linear_points(
+            points=key_points,
+            key_times=key_times,
+            segment_budget=segment_budget,
+        )
+
+    @staticmethod
+    def _sample_points_at_progress(
+        points: list[tuple[float, float]],
+        key_times: list[float],
+    ) -> list[tuple[float, float]]:
+        if len(points) < 2 or len(key_times) < 2:
+            return points
+
+        lengths = [0.0]
+        total = 0.0
+        for idx in range(1, len(points)):
+            x0, y0 = points[idx - 1]
+            x1, y1 = points[idx]
+            total += math.hypot(x1 - x0, y1 - y0)
+            lengths.append(total)
+
+        if total <= 1e-9:
+            return [points[0] for _ in key_times]
+
+        sampled: list[tuple[float, float]] = []
+        for fraction in key_times:
+            target = max(0.0, min(1.0, fraction)) * total
+            sampled.append(
+                MotionAnimationHandler._sample_polyline_at_distance(
+                    points=points,
+                    cumulative_lengths=lengths,
+                    target_distance=target,
+                )
+            )
+        return sampled
+
+    @staticmethod
+    def _sample_polyline_at_distance(
+        *,
+        points: list[tuple[float, float]],
+        cumulative_lengths: list[float],
+        target_distance: float,
+    ) -> tuple[float, float]:
+        if target_distance <= 0.0:
+            return points[0]
+        if target_distance >= cumulative_lengths[-1]:
+            return points[-1]
+
+        for idx in range(1, len(points)):
+            prev_dist = cumulative_lengths[idx - 1]
+            curr_dist = cumulative_lengths[idx]
+            if target_distance <= curr_dist:
+                span = curr_dist - prev_dist
+                if span <= 1e-9:
+                    return points[idx]
+                t = (target_distance - prev_dist) / span
+                x0, y0 = points[idx - 1]
+                x1, y1 = points[idx]
+                return (x0 + (x1 - x0) * t, y0 + (y1 - y0) * t)
+
+        return points[-1]
+
+    @staticmethod
+    def _retime_linear_points(
+        *,
+        points: list[tuple[float, float]],
+        key_times: list[float],
+        segment_budget: int,
+    ) -> list[tuple[float, float]]:
+        expanded: list[tuple[float, float]] = [points[0]]
+        for index in range(1, len(points)):
+            start = points[index - 1]
+            end = points[index]
+            duration = max(0.0, key_times[index] - key_times[index - 1])
+            segment_count = max(1, int(round(duration * segment_budget)))
+
+            for step in range(1, segment_count + 1):
+                t = step / segment_count
+                x = start[0] + (end[0] - start[0]) * t
+                y = start[1] + (end[1] - start[1]) * t
+                expanded.append((x, y))
+
+        return expanded
+
+    @staticmethod
+    def _expand_discrete_points(
+        *,
+        points: list[tuple[float, float]],
+        key_times: list[float],
+        segment_budget: int,
+    ) -> list[tuple[float, float]]:
+        expanded: list[tuple[float, float]] = [points[0]]
+        for index in range(1, len(points)):
+            prev = points[index - 1]
+            curr = points[index]
+            duration = max(0.0, key_times[index] - key_times[index - 1])
+            slot_count = max(1, int(round(duration * segment_budget)))
+
+            for _ in range(max(0, slot_count - 1)):
+                expanded.append(prev)
+            expanded.append(curr)
+
+        return expanded
 
     # ------------------------------------------------------------------ #
     # Path parsing                                                        #

@@ -185,6 +185,35 @@ def test_animate_motion_path_emits_point_list() -> None:
     assert 'ptsTypes=' in render_result.slide_xml
 
 
+def test_translate_discrete_calc_mode_expands_path_points() -> None:
+    svg = """
+    <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">
+      <rect id="rect1" width="10" height="10" fill="#000">
+        <animateTransform attributeName="transform" type="translate" values="0 0;10 0;10 10" keyTimes="0;0.4;1" calcMode="discrete" dur="1s" begin="0s"/>
+      </rect>
+    </svg>
+    """
+
+    render_result, _, _ = _render(svg)
+    assert "<p:animMotion" in render_result.slide_xml
+    # Discrete approximation duplicates boundary timestamps.
+    assert render_result.slide_xml.count(" L ") > 2
+
+
+def test_motion_discrete_calc_mode_expands_path_points() -> None:
+    svg = """
+    <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">
+      <rect id="rect1" width="2" height="2" fill="#000">
+        <animateMotion dur="1s" path="M0,0 L100,0" keyTimes="0;0.4;1" calcMode="discrete" />
+      </rect>
+    </svg>
+    """
+
+    render_result, _, _ = _render(svg)
+    assert "<p:animMotion" in render_result.slide_xml
+    assert render_result.slide_xml.count(" L ") > 1
+
+
 def test_begin_click_emits_onclick_condition() -> None:
     svg = """
     <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">

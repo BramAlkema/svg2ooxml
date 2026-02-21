@@ -14,7 +14,9 @@ from lxml import etree
 
 from svg2ooxml.common.conversions.scale import scale_to_ppt
 from svg2ooxml.drawingml.xml_builder import p_elem, p_sub
-from svg2ooxml.ir.animation import TransformType
+from svg2ooxml.ir.animation import CalcMode, TransformType
+
+from ..timing_utils import compute_paced_key_times_2d
 
 from .base import AnimationHandler
 
@@ -221,9 +223,28 @@ class TransformAnimationHandler(AnimationHandler):
         slide_w, slide_h = DEFAULT_SLIDE_SIZE
         start_x, start_y = translation_pairs[0]
 
+        path_pairs = list(translation_pairs)
+        key_times = animation.key_times
+        calc_mode_value = (
+            animation.calc_mode.value
+            if isinstance(animation.calc_mode, CalcMode)
+            else str(animation.calc_mode).lower()
+        )
+
+        if calc_mode_value == CalcMode.PACED.value and len(path_pairs) > 2:
+            paced_times = compute_paced_key_times_2d(path_pairs)
+            if paced_times is not None:
+                key_times = paced_times
+
+        path_pairs = self._retime_translate_pairs(
+            pairs=path_pairs,
+            key_times=key_times,
+            calc_mode=calc_mode_value,
+        )
+
         # Build M/L path string in slide-fraction coordinates
         segments: list[str] = []
-        for i, (x_px, y_px) in enumerate(translation_pairs):
+        for i, (x_px, y_px) in enumerate(path_pairs):
             dx_px = x_px - start_x
             dy_px = y_px - start_y
 
@@ -237,7 +258,7 @@ class TransformAnimationHandler(AnimationHandler):
             segments.append(f"{cmd} {self._format_coord(nx)} {self._format_coord(ny)}")
 
         path = " ".join(segments) + " E"
-        pts_types = "A" * len(translation_pairs)
+        pts_types = "A" * len(path_pairs)
 
         anim_motion = p_elem(
             "animMotion",
@@ -270,6 +291,80 @@ class TransformAnimationHandler(AnimationHandler):
         if abs(value) < 1e-10:
             return "0"
         return f"{value:.6g}"
+
+    @staticmethod
+    def _retime_translate_pairs(
+        *,
+        pairs: list[tuple[float, float]],
+        key_times: list[float] | None,
+        calc_mode: CalcMode | str,
+        segment_budget: int = 96,
+    ) -> list[tuple[float, float]]:
+        """Approximate keyTimes/calcMode timing by expanding path vertices."""
+        if len(pairs) < 2 or key_times is None or len(key_times) != len(pairs):
+            return pairs
+
+        calc_mode_value = calc_mode.value if isinstance(calc_mode, CalcMode) else str(calc_mode).lower()
+        if calc_mode_value == CalcMode.DISCRETE.value:
+            return TransformAnimationHandler._expand_discrete_pairs(
+                pairs=pairs,
+                key_times=key_times,
+                segment_budget=segment_budget,
+            )
+
+        return TransformAnimationHandler._retime_linear_pairs(
+            pairs=pairs,
+            key_times=key_times,
+            segment_budget=segment_budget,
+        )
+
+    @staticmethod
+    def _retime_linear_pairs(
+        *,
+        pairs: list[tuple[float, float]],
+        key_times: list[float],
+        segment_budget: int,
+    ) -> list[tuple[float, float]]:
+        if len(pairs) < 2:
+            return pairs
+
+        expanded: list[tuple[float, float]] = [pairs[0]]
+        for index in range(1, len(pairs)):
+            start = pairs[index - 1]
+            end = pairs[index]
+            duration = max(0.0, key_times[index] - key_times[index - 1])
+            segment_count = max(1, int(round(duration * segment_budget)))
+
+            for step in range(1, segment_count + 1):
+                t = step / segment_count
+                x = start[0] + (end[0] - start[0]) * t
+                y = start[1] + (end[1] - start[1]) * t
+                expanded.append((x, y))
+
+        return expanded
+
+    @staticmethod
+    def _expand_discrete_pairs(
+        *,
+        pairs: list[tuple[float, float]],
+        key_times: list[float],
+        segment_budget: int,
+    ) -> list[tuple[float, float]]:
+        if len(pairs) < 2:
+            return pairs
+
+        expanded: list[tuple[float, float]] = [pairs[0]]
+        for index in range(1, len(pairs)):
+            prev = pairs[index - 1]
+            curr = pairs[index]
+            duration = max(0.0, key_times[index] - key_times[index - 1])
+            slot_count = max(1, int(round(duration * segment_budget)))
+
+            for _ in range(max(0, slot_count - 1)):
+                expanded.append(prev)
+            expanded.append(curr)
+
+        return expanded
 
     # ------------------------------------------------------------------ #
     # Matrix (decompose → delegate)                                        #
