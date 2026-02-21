@@ -101,18 +101,27 @@ class NumericAnimationHandler(AnimationHandler):
         """
         values = animation.values
         key_times = animation.key_times
+        normalized = [self._normalize_value(ppt_attribute, v) for v in values]
 
         # Paced calcMode: compute keyTimes from inter-value distances
-        if animation.calc_mode == CalcMode.PACED and not key_times and len(values) > 2:
+        if animation.calc_mode == CalcMode.PACED and len(values) > 2:
             try:
                 floats = [float(v) for v in values]
-                key_times = compute_paced_key_times(floats)
+                paced_times = compute_paced_key_times(floats)
+                if paced_times is not None:
+                    key_times = paced_times
             except (ValueError, TypeError):
                 pass  # Fall through to default behavior
 
+        if animation.calc_mode == CalcMode.DISCRETE and (len(values) > 1 or key_times):
+            return self._tav.build_discrete_tav_list(
+                values=normalized,
+                key_times=key_times,
+                value_formatter=format_numeric_value,
+            )
+
         # Multi-keyframe: delegate to TAVBuilder with normalized values
         if len(values) > 2 or key_times:
-            normalized = [self._normalize_value(ppt_attribute, v) for v in values]
             tav_elements, _ = self._tav.build_tav_list(
                 values=normalized,
                 key_times=key_times,

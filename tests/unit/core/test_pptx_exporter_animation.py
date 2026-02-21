@@ -373,6 +373,37 @@ def test_numeric_animation_tav_list_emitted() -> None:
     assert '<p:tavPr accel="10000"' in render_result.slide_xml
 
 
+def test_numeric_discrete_calc_mode_emits_step_boundaries() -> None:
+    svg = """
+    <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">
+      <rect id="rect1" width="10" height="10" fill="#000">
+        <animate attributeName="x" values="0;10;20" keyTimes="0;0.4;1" calcMode="discrete" dur="1s" begin="0s"/>
+      </rect>
+    </svg>
+    """
+
+    render_result, _, _ = _render(svg)
+
+    assert render_result.slide_xml.count('tm="40000"') >= 2
+    assert render_result.slide_xml.count('tm="100000"') >= 2
+
+
+def test_numeric_paced_calc_mode_uses_distance_weighted_key_times() -> None:
+    svg = """
+    <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">
+      <rect id="rect1" width="10" height="10" fill="#000">
+        <animate attributeName="x" values="0;10;40" keyTimes="0;0.5;1" calcMode="paced" dur="1s" begin="0s"/>
+      </rect>
+    </svg>
+    """
+
+    render_result, _, _ = _render(svg)
+
+    # Distances are 10 then 30, so paced midpoint should be 25%.
+    assert 'tm="25000"' in render_result.slide_xml
+    assert 'tm="50000"' not in render_result.slide_xml
+
+
 def test_color_animation_tav_list_emitted() -> None:
     svg = """
     <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">
@@ -396,6 +427,21 @@ def test_color_animation_tav_list_emitted() -> None:
     assert 'svg2:segDur="1500"' in render_result.slide_xml
     assert '<p:tavPr accel="10000"' in render_result.slide_xml
     assert 'svg2:accel="10000"' in render_result.slide_xml
+
+
+def test_color_discrete_calc_mode_emits_step_boundaries() -> None:
+    svg = """
+    <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">
+      <rect id="rect1" width="10" height="10" fill="#000">
+        <animate attributeName="fill" values="#ff0000;#00ff00;#0000ff" keyTimes="0;0.4;1" calcMode="discrete" dur="1s" begin="0s"/>
+      </rect>
+    </svg>
+    """
+
+    render_result, _, _ = _render(svg)
+
+    assert render_result.slide_xml.count('tm="40000"') >= 2
+    assert render_result.slide_xml.count('tm="100000"') >= 2
 
 
 def test_motion_path_handles_relative_and_curves() -> None:

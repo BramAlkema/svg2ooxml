@@ -336,6 +336,27 @@ class TestBuildTAVList:
         assert "0.4200" in spline_attr
 
 
+class TestBuildDiscreteTAVList:
+    """Test discrete calcMode TAV generation."""
+
+    def test_discrete_values_emit_step_boundaries(self):
+        builder = TAVBuilder(AnimationXMLBuilder())
+        tav_list = builder.build_discrete_tav_list(
+            values=["0", "10", "20"],
+            key_times=[0.0, 0.4, 1.0],
+            value_formatter=simple_numeric_formatter,
+        )
+
+        assert len(tav_list) == 5
+        assert [tav.get("tm") for tav in tav_list] == ["0", "40000", "40000", "100000", "100000"]
+
+        flt_vals = [
+            tav.find(".//{http://schemas.openxmlformats.org/presentationml/2006/main}fltVal").get("val")
+            for tav in tav_list
+        ]
+        assert flt_vals == ["0", "0", "10", "10", "20"]
+
+
 class TestIntegration:
     """Test integrated TAV building workflows."""
 
