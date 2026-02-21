@@ -605,6 +605,40 @@ class TestResvgRouting:
         assert result is None
         mock_trace.assert_called_once_with(element, "resvg_conversion_failed")
 
+    def test_convert_use_text_target_uses_text_converter_when_resvg_shape_conversion_fails(self):
+        """Text-targeted <use> should route to the text pipeline before tracing a miss."""
+        converter = MockConverter()
+        converter._geometry_policy = {"geometry_mode": "resvg-only"}
+        converter._resvg_tree = Mock()
+
+        element = etree.Element("use")
+        element.set("href", "#text-target")
+        converter._element_index = {"text-target": etree.Element("text")}
+        text_node = type("TextNode", (), {})()
+        converter._resvg_element_lookup[element] = text_node
+        converter._text_converter = Mock()
+        converter._text_converter.convert.return_value = "text-frame"
+        converter.expand_use = Mock(return_value=["expanded-child"])
+        coord_space = CoordinateSpace()
+
+        with patch.object(converter, "_convert_via_resvg", return_value=None):
+            with patch.object(converter, "_trace_resvg_only_miss") as mock_trace:
+                result = converter._convert_use(
+                    element=element,
+                    coord_space=coord_space,
+                    current_navigation=None,
+                    traverse_callback=lambda *_: [],
+                )
+
+        assert result == "text-frame"
+        converter._text_converter.convert.assert_called_once_with(
+            element=element,
+            coord_space=coord_space,
+            resvg_node=text_node,
+        )
+        converter.expand_use.assert_not_called()
+        mock_trace.assert_not_called()
+
     def test_convert_use_non_image_target_does_not_expand_fallback(self):
         """Only image targets should use expansion fallback in resvg-only mode."""
         converter = MockConverter()
