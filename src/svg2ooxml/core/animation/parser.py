@@ -48,11 +48,11 @@ class SMILParser:
         re.IGNORECASE,
     )
     _ELEMENT_EVENT_RE = re.compile(
-        r"^([A-Za-z_][\w.\-]*)\.(click|begin|end)([+-].+)?$",
+        r"^([A-Za-z_][\w.\-]*)\.(click|begin|end)\s*([+-].+)?$",
         re.IGNORECASE,
     )
     _CLICK_OFFSET_RE = re.compile(
-        r"^click([+-].+)$",
+        r"^click\s*([+-].+)$",
         re.IGNORECASE,
     )
 
@@ -426,7 +426,7 @@ class SMILParser:
             return BeginTrigger(trigger_type=BeginTriggerType.CLICK)
         click_offset_match = self._CLICK_OFFSET_RE.match(lowered)
         if click_offset_match:
-            offset_value = click_offset_match.group(1).strip()
+            offset_value = re.sub(r"\s+", "", click_offset_match.group(1).strip())
             if not self._TIME_OFFSET_RE.match(offset_value):
                 return None
             return BeginTrigger(
@@ -446,7 +446,7 @@ class SMILParser:
         target_element_id, event_name, offset_expr = match.groups()
         delay_seconds = 0.0
         if offset_expr:
-            offset_value = offset_expr.strip()
+            offset_value = re.sub(r"\s+", "", offset_expr.strip())
             if not self._TIME_OFFSET_RE.match(offset_value):
                 return None
             delay_seconds = parse_time_value(offset_value)
