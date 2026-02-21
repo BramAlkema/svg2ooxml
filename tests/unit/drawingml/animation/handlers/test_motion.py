@@ -16,6 +16,7 @@ from svg2ooxml.drawingml.animation.xml_builders import AnimationXMLBuilder
 from svg2ooxml.drawingml.xml_builder import NS_P
 from svg2ooxml.ir.animation import (
     AnimationDefinition,
+    CalcMode,
     AnimationTiming,
     AnimationType,
 )
@@ -166,6 +167,28 @@ class TestBuild:
         path = anim_motion.get("path")
         assert path.startswith("M ")
         assert " L " in path
+
+    def test_discrete_calc_mode_expands_step_path(self, handler: MotionAnimationHandler):
+        anim = make_motion_animation(
+            values=["M0,0 L100,0"],
+            key_times=[0.0, 0.4, 1.0],
+            calc_mode=CalcMode.DISCRETE,
+        )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        anim_motion = par.find(f".//{{{NS_P}}}animMotion")
+        path = anim_motion.get("path")
+        assert path.count("L ") > 1
+        assert len(anim_motion.get("ptsTypes")) > 2
+
+    def test_paced_calc_mode_with_key_times_retimes_path(self, handler: MotionAnimationHandler):
+        anim = make_motion_animation(
+            values=["M0,0 L10,0 L40,0"],
+            key_times=[0.0, 0.9, 1.0],
+            calc_mode=CalcMode.PACED,
+        )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        anim_motion = par.find(f".//{{{NS_P}}}animMotion")
+        assert len(anim_motion.get("ptsTypes")) > 3
 
 
 # ------------------------------------------------------------------ #

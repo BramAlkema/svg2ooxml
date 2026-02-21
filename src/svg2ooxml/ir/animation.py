@@ -159,7 +159,11 @@ class AnimationDefinition:
             raise ValueError("Animation must have at least one value")
 
         if self.key_times:
-            if len(self.key_times) != len(self.values):
+            is_motion_with_path = (
+                self.animation_type == AnimationType.ANIMATE_MOTION
+                and len(self.values) == 1
+            )
+            if not is_motion_with_path and len(self.key_times) != len(self.values):
                 raise ValueError("key_times length must match values length")
             if not all(0.0 <= t <= 1.0 for t in self.key_times):
                 raise ValueError("All key_times must be between 0 and 1")

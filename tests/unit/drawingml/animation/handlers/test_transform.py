@@ -16,6 +16,7 @@ from svg2ooxml.ir.animation import (
     AnimationDefinition,
     AnimationTiming,
     AnimationType,
+    CalcMode,
     TransformType,
 )
 
@@ -416,6 +417,32 @@ class TestBuildTranslateMultiKeyframe:
         # Should NOT have path attribute
         anim_motion = par.find(f".//{{{NS_P}}}animMotion")
         assert anim_motion.get("path") is None
+
+    def test_discrete_calc_mode_expands_step_path(self, handler: TransformAnimationHandler):
+        anim = make_transform_animation(
+            transform_type=TransformType.TRANSLATE,
+            values=["0 0", "50 0", "50 50"],
+            key_times=[0.0, 0.4, 1.0],
+            calc_mode=CalcMode.DISCRETE,
+        )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        anim_motion = par.find(f".//{{{NS_P}}}animMotion")
+        path = anim_motion.get("path")
+        # Discrete mode duplicates boundary points to hold then jump.
+        assert path.count("L ") > 2
+        assert len(anim_motion.get("ptsTypes")) > 3
+
+    def test_paced_calc_mode_respects_distance_weighting(self, handler: TransformAnimationHandler):
+        anim = make_transform_animation(
+            transform_type=TransformType.TRANSLATE,
+            values=["0 0", "10 0", "40 0"],
+            key_times=[0.0, 0.9, 1.0],  # should be overridden by paced timing
+            calc_mode=CalcMode.PACED,
+        )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        anim_motion = par.find(f".//{{{NS_P}}}animMotion")
+        # Paced mode should expand intermediate samples, not keep 3-point path.
+        assert len(anim_motion.get("ptsTypes")) > 3
 
 
 # ------------------------------------------------------------------ #
