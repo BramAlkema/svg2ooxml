@@ -2,7 +2,6 @@
 
 from lxml import etree
 
-from svg2ooxml.drawingml.animation.constants import SVG2_ANIMATION_NS
 from svg2ooxml.drawingml.animation.id_allocator import TimingIDAllocator
 from svg2ooxml.drawingml.animation.xml_builders import AnimationXMLBuilder
 from svg2ooxml.drawingml.xml_builder import NS_P
@@ -64,7 +63,7 @@ class TestTAVElement:
         val_child = tav.find(".//{http://schemas.openxmlformats.org/presentationml/2006/main}val")
         assert val_child is not None
 
-    def test_tav_with_accel_decel(self):
+    def test_tav_with_accel_decel_omits_tav_pr(self):
         builder = AnimationXMLBuilder()
 
         val = builder.build_numeric_value("100")
@@ -76,12 +75,8 @@ class TestTAVElement:
         )
 
         assert tav.get("tm") == "50000"
-
-        # Check accel/decel attributes on tavPr (in p: namespace)
         tav_pr = tav.find(".//{http://schemas.openxmlformats.org/presentationml/2006/main}tavPr")
-        assert tav_pr is not None
-        assert tav_pr.get("accel") == "25000"
-        assert tav_pr.get("decel") == "25000"
+        assert tav_pr is None
 
     def test_tav_with_metadata(self):
         builder = AnimationXMLBuilder()
@@ -92,12 +87,11 @@ class TestTAVElement:
             value_elem=val,
             accel=0,
             decel=0,
-            metadata={"svg2:spline": "0.42 0 0.58 1"}
+            metadata={"svg2:spline": "0.42 0 0.58 1", "data-note": "keep"}
         )
 
-        # Check for custom namespace attribute
-        spline_attr = tav.get(f"{{{SVG2_ANIMATION_NS}}}spline")
-        assert spline_attr == "0.42 0 0.58 1"
+        assert tav.get("data-note") == "keep"
+        assert "svg2:spline" not in tav.attrib
 
     def test_tav_zero_accel_decel_not_added(self):
         builder = AnimationXMLBuilder()

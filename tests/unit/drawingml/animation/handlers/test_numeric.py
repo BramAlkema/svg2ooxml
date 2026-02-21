@@ -184,6 +184,14 @@ class TestBuild:
         assert tavs[0].get("tm") == "0"
         assert tavs[1].get("tm") == "100000"
 
+    def test_simple_non_numeric_values_use_strval(self, handler: NumericAnimationHandler):
+        anim = make_numeric_animation(target_attribute="visibility", values=["visible", "hidden"])
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        flt_vals = par.findall(f".//{{{NS_P}}}fltVal")
+        str_vals = par.findall(f".//{{{NS_P}}}strVal")
+        assert not flt_vals
+        assert [node.get("val") for node in str_vals] == ["visible", "hidden"]
+
     def test_delay_from_begin(self, handler: NumericAnimationHandler):
         anim = make_numeric_animation(
             timing=AnimationTiming(begin=0.5, duration=1.0),

@@ -448,10 +448,6 @@ def test_numeric_animation_tav_list_emitted() -> None:
     assert 'val="0"' in render_result.slide_xml
     assert 'val="95250"' in render_result.slide_xml
     assert 'val="190500"' in render_result.slide_xml
-    assert 'svg2:spline="0.2500,0.1000,0.2500,1.0000"' in render_result.slide_xml
-    assert 'svg2:segDur="500"' in render_result.slide_xml
-    assert 'svg2:accel="10000"' in render_result.slide_xml
-    assert '<p:tavPr accel="10000"' in render_result.slide_xml
 
 
 def test_numeric_discrete_calc_mode_emits_step_boundaries() -> None:
@@ -485,7 +481,7 @@ def test_numeric_paced_calc_mode_uses_distance_weighted_key_times() -> None:
     assert 'tm="50000"' not in render_result.slide_xml
 
 
-def test_color_animation_tav_list_emitted() -> None:
+def test_color_animation_uses_from_to_without_tav_list() -> None:
     svg = """
     <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">
       <rect id="rect1" width="10" height="10" fill="#000">
@@ -496,21 +492,15 @@ def test_color_animation_tav_list_emitted() -> None:
 
     render_result, _, _ = _render(svg)
 
-    assert render_result.slide_xml.count('tm="') >= 3
-    assert '<p:tav tm="0"' in render_result.slide_xml
-    assert 'tm="25000"' in render_result.slide_xml  # 0.25 * 100000
-    assert 'tm="100000"' in render_result.slide_xml
+    assert "<p:animClr" in render_result.slide_xml
+    assert "<p:tavLst" not in render_result.slide_xml
+    assert "<p:from" in render_result.slide_xml
+    assert "<p:to" in render_result.slide_xml
     assert 'a:srgbClr val="FF0000"' in render_result.slide_xml
-    assert 'a:srgbClr val="00FF00"' in render_result.slide_xml
     assert 'a:srgbClr val="0000FF"' in render_result.slide_xml
-    assert 'svg2:spline="0.4200,0.0000,0.5800,1.0000"' in render_result.slide_xml
-    assert 'svg2:segDur="500"' in render_result.slide_xml
-    assert 'svg2:segDur="1500"' in render_result.slide_xml
-    assert '<p:tavPr accel="10000"' in render_result.slide_xml
-    assert 'svg2:accel="10000"' in render_result.slide_xml
 
 
-def test_color_discrete_calc_mode_emits_step_boundaries() -> None:
+def test_color_discrete_calc_mode_still_omits_tav_list() -> None:
     svg = """
     <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">
       <rect id="rect1" width="10" height="10" fill="#000">
@@ -521,8 +511,8 @@ def test_color_discrete_calc_mode_emits_step_boundaries() -> None:
 
     render_result, _, _ = _render(svg)
 
-    assert render_result.slide_xml.count('tm="40000"') >= 2
-    assert render_result.slide_xml.count('tm="100000"') >= 2
+    assert "<p:animClr" in render_result.slide_xml
+    assert "<p:tavLst" not in render_result.slide_xml
 
 
 def test_motion_path_handles_relative_and_curves() -> None:
