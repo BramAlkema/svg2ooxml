@@ -104,14 +104,27 @@ def _run_openxml_audit(
     return result.returncode == 0, messages or None
 
 
-def _extract_resvg_only_misses(report) -> dict[str, int]:
+def _extract_resvg_only_misses(
+    report,
+    *,
+    require_element_id: bool = True,
+) -> tuple[dict[str, int], dict[str, int]]:
     misses: dict[str, int] = {}
+    reasons: dict[str, int] = {}
     for event in getattr(report, "geometry_events", []) or []:
         if getattr(event, "decision", None) != "resvg_only_skip":
             continue
+        if require_element_id and not getattr(event, "element_id", None):
+            continue
         tag = getattr(event, "tag", None) or "unknown"
         misses[tag] = misses.get(tag, 0) + 1
-    return misses
+        metadata = getattr(event, "metadata", None)
+        reason = "unknown"
+        if isinstance(metadata, dict):
+            reason = str(metadata.get("reason") or "unknown")
+        reason_key = f"{tag}:{reason}"
+        reasons[reason_key] = reasons.get(reason_key, 0) + 1
+    return misses, reasons
 
 
 def _merge_policy_overrides(*overrides: dict[str, Any] | None) -> dict[str, dict[str, Any]]:
@@ -185,6 +198,7 @@ class DeckMetrics:
     # Resvg-only geometry misses
     resvg_only_total: int = 0
     resvg_only_misses: dict[str, int] | None = None
+    resvg_only_reason_misses: dict[str, int] | None = None
 
 
 @dataclass
@@ -214,6 +228,7 @@ class CorpusReport:
     # Resvg-only geometry misses (aggregated)
     resvg_only_total: int = 0
     resvg_only_misses: dict[str, int] | None = None
+    resvg_only_reason_misses: dict[str, int] | None = None
 
     # Sampling metadata
     available_decks: int | None = None
@@ -309,10 +324,12 @@ def _run_deck_worker(payload: dict[str, Any]) -> DeckMetrics:
         geom_totals = report.geometry_totals
         paint_totals = report.paint_totals
 
-        misses = _extract_resvg_only_misses(report)
+        misses, reason_misses = _extract_resvg_only_misses(report)
         if misses:
             metrics.resvg_only_misses = misses
             metrics.resvg_only_total = sum(misses.values())
+        if reason_misses:
+            metrics.resvg_only_reason_misses = reason_misses
 
         metrics.native_count = (
             geom_totals.get("native", 0) +
@@ -594,15 +611,12 @@ class CorpusRunner:
             geom_totals = report.geometry_totals
             paint_totals = report.paint_totals
 
-            misses = _extract_resvg_only_misses(report)
+            misses, reason_misses = _extract_resvg_only_misses(report)
             if misses:
                 metrics.resvg_only_misses = misses
                 metrics.resvg_only_total = sum(misses.values())
-
-            misses = _extract_resvg_only_misses(report)
-            if misses:
-                metrics.resvg_only_misses = misses
-                metrics.resvg_only_total = sum(misses.values())
+            if reason_misses:
+                metrics.resvg_only_reason_misses = reason_misses
             
             # Basic counting logic:
             # Native: 'native', 'resvg' (if resvg produced vector), 'wordart'
@@ -732,6 +746,12 @@ class CorpusRunner:
             report = tracer.report()
             geom_totals = report.geometry_totals
             paint_totals = report.paint_totals
+            misses, reason_misses = _extract_resvg_only_misses(report)
+            if misses:
+                metrics.resvg_only_misses = misses
+                metrics.resvg_only_total = sum(misses.values())
+            if reason_misses:
+                metrics.resvg_only_reason_misses = reason_misses
 
             metrics.native_count = (
                 geom_totals.get("native", 0)
@@ -1215,10 +1235,16 @@ class CorpusRunner:
             targets_met["visual_fidelity"] = avg_ssim >= targets.get("visual_fidelity_min", 0.90)
 
         resvg_only_misses: dict[str, int] = {}
+        resvg_only_reason_misses: dict[str, int] = {}
         for result in results:
             if result.resvg_only_misses:
                 for tag, count in result.resvg_only_misses.items():
                     resvg_only_misses[tag] = resvg_only_misses.get(tag, 0) + int(count)
+            if result.resvg_only_reason_misses:
+                for key, count in result.resvg_only_reason_misses.items():
+                    resvg_only_reason_misses[key] = (
+                        resvg_only_reason_misses.get(key, 0) + int(count)
+                    )
         resvg_only_total = sum(resvg_only_misses.values())
         
         # Generate summary
@@ -1271,8 +1297,18 @@ class CorpusRunner:
             top_tags = sorted(resvg_only_misses.items(), key=lambda item: item[1], reverse=True)[:8]
             top_tags_str = ", ".join(f"{tag}={count}" for tag, count in top_tags)
             summary_lines.append(
-                f"Resvg-only geometry skips: {resvg_only_total} (top: {top_tags_str})"
+                f"Resvg-only geometry skips (element-targeted): {resvg_only_total} (top: {top_tags_str})"
             )
+            if resvg_only_reason_misses:
+                top_reasons = sorted(
+                    resvg_only_reason_misses.items(),
+                    key=lambda item: item[1],
+                    reverse=True,
+                )[:8]
+                top_reasons_str = ", ".join(f"{key}={count}" for key, count in top_reasons)
+                summary_lines.append(
+                    f"Resvg-only skip reasons (top): {top_reasons_str}"
+                )
         if sample_size:
             summary_lines.insert(
                 1,
@@ -1301,6 +1337,7 @@ class CorpusRunner:
             targets_met=targets_met,
             resvg_only_total=resvg_only_total,
             resvg_only_misses=resvg_only_misses or None,
+            resvg_only_reason_misses=resvg_only_reason_misses or None,
             summary=summary,
         )
         
