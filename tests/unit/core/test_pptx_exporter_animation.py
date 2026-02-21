@@ -214,6 +214,29 @@ def test_animate_motion_path_emits_point_list() -> None:
     assert 'ptsTypes=' in render_result.slide_xml
 
 
+def test_motion_rotate_auto_emits_fidelity_downgrade_trace() -> None:
+    svg = """
+    <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">
+      <rect id="rect1" width="2" height="2" fill="#000">
+        <animateMotion dur="1s" path="M0,0 L0,100" rotate="auto" />
+      </rect>
+    </svg>
+    """
+
+    _, _, tracer = _render(svg)
+    events = [
+        event
+        for event in tracer.report().stage_events
+        if event.stage == "animation" and event.action == "fidelity_downgrade"
+    ]
+    assert events
+    assert any(
+        event.metadata.get("reason") == "rotate_auto_approximated"
+        and event.metadata.get("rotate_mode") == "auto"
+        for event in events
+    )
+
+
 def test_translate_discrete_calc_mode_expands_path_points() -> None:
     svg = """
     <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">

@@ -117,20 +117,32 @@ class DrawingMLAnimationWriter:
             if elem is not None:
                 animation_elements.append(elem)
                 if tracer is not None:
+                    emitted_metadata: dict[str, Any] = {
+                        "element_id": animation.element_id,
+                        "animation_type": (
+                            animation.animation_type.value
+                            if hasattr(animation.animation_type, "value")
+                            else str(animation.animation_type)
+                        ),
+                        "attribute": animation.target_attribute,
+                        "fallback_mode": options.get("fallback_mode", "native"),
+                    }
                     tracer.record_stage_event(
                         stage="animation",
                         action="fragment_emitted",
-                        metadata={
-                            "element_id": animation.element_id,
-                            "animation_type": (
-                                animation.animation_type.value
-                                if hasattr(animation.animation_type, "value")
-                                else str(animation.animation_type)
-                            ),
-                            "attribute": animation.target_attribute,
-                            "fallback_mode": options.get("fallback_mode", "native"),
-                        },
+                        metadata=emitted_metadata,
                     )
+                    rotate_mode = str(getattr(animation, "motion_rotate", "")).strip().lower()
+                    if rotate_mode in {"auto", "auto-reverse"}:
+                        tracer.record_stage_event(
+                            stage="animation",
+                            action="fidelity_downgrade",
+                            metadata={
+                                "reason": "rotate_auto_approximated",
+                                "element_id": animation.element_id,
+                                "rotate_mode": rotate_mode,
+                            },
+                        )
             elif tracer is not None:
                 metadata: dict[str, Any] = {
                     "element_id": animation.element_id,
