@@ -7,8 +7,8 @@ This module determines whether animations should be skipped based on:
 
 Policy decisions are centralized here for easier testing and maintenance.
 
-Note: Event-based begin triggers (click, element.begin, element.end) are not
-yet supported. See ``docs/specs/animation-event-triggers.md`` for the roadmap.
+Note: Event-based begin triggers are partially supported through begin trigger
+mapping; unsupported cases are explicitly skipped with policy reasons.
 """
 
 from __future__ import annotations
@@ -79,13 +79,11 @@ class AnimationPolicy:
     def should_suppress_timing(self) -> bool:
         """Determine if timing XML generation should be suppressed.
 
-        Timing is suppressed when any policy constraint is violated:
-        - fallback_mode != native
-        - native_splines are disabled
-        - spline error exceeds max_spline_error threshold
+        Timing is globally suppressed only when native timing is explicitly
+        disabled via fallback mode.
 
-        Animations are still processed and emitted for tracking purposes
-        in all cases, but the timing XML is not included in the slide output.
+        Other constraints (native splines, max spline error) are handled as
+        per-fragment skip decisions in ``should_skip()``.
 
         Returns:
             True if timing should be suppressed, False otherwise
@@ -94,18 +92,6 @@ class AnimationPolicy:
         fallback_mode = str(self._options.get("fallback_mode", "native")).lower()
         if fallback_mode != "native":
             return True
-
-        # Check if native splines are disabled
-        allow_native_flag = self._coerce_bool_option(
-            self._options.get("allow_native_splines"),
-            True
-        )
-        if not allow_native_flag:
-            return True
-
-        # Note: We can't check spline error threshold here because we don't have
-        # access to the animation definitions. This will be checked when processing
-        # each animation in the writer.
 
         return False
 
@@ -145,14 +131,35 @@ class AnimationPolicy:
         Returns:
             Skip reason string or None if should not skip
         """
-        # NOTE: Policy violations (fallback_mode, native_splines disabled, spline_error)
-        # do NOT cause animations to be skipped. Instead, they cause timing XML generation
-        # to be suppressed later in the build() method via should_suppress_timing().
-        # This allows telemetry (fragment_emitted events) while preventing timing output
-        # in the slide, which is useful for tracking what would have been animated if
-        # policy constraints weren't in place.
+        fallback_mode = str(self._options.get("fallback_mode", "native")).lower()
+        if fallback_mode != "native":
+            return "fallback_mode_not_native"
 
-        # All animations are processed and emitted for tracking purposes
+        # Unsupported begin="indefinite" has no native PowerPoint equivalent.
+        begin_triggers = getattr(getattr(animation, "timing", None), "begin_triggers", None)
+        if not isinstance(begin_triggers, list):
+            begin_triggers = []
+        for trigger in begin_triggers:
+            trigger_type = getattr(getattr(trigger, "trigger_type", None), "value", None)
+            if trigger_type == "indefinite":
+                return "unsupported_begin_indefinite"
+            if trigger_type in {"element_begin", "element_end"} and not getattr(trigger, "target_element_id", None):
+                return "unsupported_begin_target_missing"
+
+        allow_native_flag = self._coerce_bool_option(
+            self._options.get("allow_native_splines"),
+            True,
+        )
+        has_splines = bool(getattr(animation, "key_splines", None))
+        if not allow_native_flag and has_splines:
+            return "native_splines_disabled"
+
+        threshold_value = self._options.get("max_spline_error")
+        if threshold_value is not None:
+            threshold = self._coerce_float_option(threshold_value, 0.0)
+            if max_error > threshold:
+                return "spline_error_exceeds_threshold"
+
         return None
 
     # ------------------------------------------------------------------ #

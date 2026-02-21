@@ -1,0 +1,77 @@
+name: W3C Animation Gate
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "src/svg2ooxml/core/animation/**"
+      - "src/svg2ooxml/drawingml/animation/**"
+      - "src/svg2ooxml/drawingml/animation_pipeline.py"
+      - "src/svg2ooxml/ir/animation.py"
+      - "tests/corpus/**"
+      - ".github/workflows/w3c-animation-gate.yml"
+
+jobs:
+  required-profiles:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/pyproject.toml', '**/requirements*.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libegl1 libgl1 libgles2
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .[render,color]
+
+      - name: Run Profile A (gradients + shapes)
+        run: |
+          ./tests/corpus/run_w3c_corpus.sh gradients --mode resvg
+          ./tests/corpus/run_w3c_corpus.sh shapes --mode resvg
+
+      - name: Run Profile B (animation sample)
+        run: |
+          python tests/corpus/add_w3c_corpus.py \
+            --category animate \
+            --limit 40 \
+            --output tests/corpus/w3c/w3c_animation_metadata.json
+
+          python tests/corpus/run_corpus.py \
+            --corpus-dir tests/svg \
+            --metadata tests/corpus/w3c/w3c_animation_metadata.json \
+            --output-dir tests/corpus/w3c/output_animation \
+            --report tests/corpus/w3c/report_animation.json \
+            --mode resvg \
+            --sample-size 20 \
+            --sample-seed 20260221
+
+      - name: Upload W3C animation gate reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: w3c-animation-gate-reports
+          path: |
+            tests/corpus/w3c/report_gradients.json
+            tests/corpus/w3c/report_shapes.json
+            tests/corpus/w3c/report_animation.json
+            tests/corpus/w3c/w3c_gradients_metadata.json
+            tests/corpus/w3c/w3c_shapes_metadata.json
+            tests/corpus/w3c/w3c_animation_metadata.json

@@ -44,6 +44,25 @@ class CalcMode(Enum):
     SPLINE = "spline"
 
 
+class BeginTriggerType(Enum):
+    """Supported SMIL begin trigger categories."""
+
+    TIME_OFFSET = "time_offset"
+    CLICK = "click"
+    ELEMENT_BEGIN = "element_begin"
+    ELEMENT_END = "element_end"
+    INDEFINITE = "indefinite"
+
+
+@dataclass(slots=True)
+class BeginTrigger:
+    """Structured begin trigger extracted from SMIL begin expressions."""
+
+    trigger_type: BeginTriggerType
+    delay_seconds: float = 0.0
+    target_element_id: str | None = None
+
+
 @dataclass(slots=True)
 class AnimationTiming:
     """Timing definition for a single animation."""
@@ -52,6 +71,7 @@ class AnimationTiming:
     duration: float = 1.0
     repeat_count: int | str = 1
     fill_mode: FillMode = FillMode.REMOVE
+    begin_triggers: list[BeginTrigger] | None = None
 
     def get_end_time(self) -> float:
         """Return the absolute end time for an animation."""
@@ -128,6 +148,7 @@ class AnimationDefinition:
     transform_type: TransformType | None = None
     additive: str = "replace"
     accumulate: str = "none"
+    motion_rotate: str | None = None
 
     def __post_init__(self) -> None:
         if not self.element_id:
@@ -221,6 +242,11 @@ class AnimationDefinition:
         """Return repeat_duration in milliseconds (for compatibility with handlers)."""
         # This is optional - return None by default
         return None
+
+    @property
+    def begin_triggers(self) -> list[BeginTrigger] | None:
+        """Return parsed begin triggers (for compatibility with handlers)."""
+        return self.timing.begin_triggers
 
     @property
     def is_motion(self) -> bool:
@@ -439,6 +465,8 @@ class AnimationSummary:
 
 
 __all__ = [
+    "BeginTrigger",
+    "BeginTriggerType",
     "AnimationComplexity",
     "AnimationDefinition",
     "AnimationKeyframe",

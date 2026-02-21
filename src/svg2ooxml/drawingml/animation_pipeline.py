@@ -84,7 +84,9 @@ class AnimationPipeline:
                     },
                 )
                 continue
-            remapped.append(replace(definition, element_id=shape_id))
+            remapped_definition = replace(definition, element_id=shape_id)
+            remapped_definition = self._remap_begin_trigger_targets(remapped_definition, shape_id=shape_id)
+            remapped.append(remapped_definition)
             animated_shape_ids.add(shape_id)
             self._trace(
                 "mapped_animation",
@@ -133,6 +135,55 @@ class AnimationPipeline:
                 },
             )
         return animation_xml
+
+    def _remap_begin_trigger_targets(
+        self,
+        definition: AnimationDefinition,
+        *,
+        shape_id: str,
+    ) -> AnimationDefinition:
+        """Remap begin trigger target element IDs to slide shape IDs."""
+        timing = getattr(definition, "timing", None)
+        begin_triggers = getattr(timing, "begin_triggers", None)
+        if not begin_triggers:
+            return definition
+
+        remapped_triggers = []
+        changed = False
+        for trigger in begin_triggers:
+            target_id = getattr(trigger, "target_element_id", None)
+            if not target_id:
+                remapped_triggers.append(trigger)
+                continue
+
+            mapped = self._shape_map.get(target_id)
+            if mapped is None:
+                trigger_type = getattr(getattr(trigger, "trigger_type", None), "value", None)
+                # Fallback for unresolved explicit click target: click defaults to current shape.
+                if trigger_type == "click":
+                    mapped = shape_id
+                else:
+                    mapped = None
+                    self._trace(
+                        "unmapped_begin_trigger_target",
+                        metadata={
+                            "element_id": getattr(definition, "element_id", None),
+                            "target_element_id": target_id,
+                            "trigger_type": trigger_type,
+                        },
+                    )
+
+            if mapped != target_id:
+                changed = True
+                remapped_triggers.append(replace(trigger, target_element_id=mapped))
+            else:
+                remapped_triggers.append(trigger)
+
+        if not changed:
+            return definition
+
+        remapped_timing = replace(timing, begin_triggers=remapped_triggers)
+        return replace(definition, timing=remapped_timing)
 
     def _trace(self, action: str, *, metadata: dict[str, object] | None = None) -> None:
         if self._trace_writer is None:

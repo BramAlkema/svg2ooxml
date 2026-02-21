@@ -153,24 +153,11 @@ class DrawingMLAnimationWriter:
         if not animation_elements:
             return ""
 
-        # Check if timing should be suppressed by policy.
-        # This includes:
-        # - fallback_mode != native
-        # - native_splines disabled
-        # - any animation exceeding max_spline_error threshold
+        # Check if timing should be globally suppressed by policy.
+        # Per-fragment suppression is handled in should_skip().
         should_suppress = False
         if self._policy:
             should_suppress = self._policy.should_suppress_timing()
-            if not should_suppress:
-                # Also check if any animation would violate spline error threshold
-                for animation in animations:
-                    max_error = self._policy.estimate_spline_error(animation)
-                    threshold_value = self._policy._options.get("max_spline_error")
-                    if threshold_value is not None:
-                        threshold = self._policy._coerce_float_option(threshold_value, 0.0)
-                        if max_error > threshold:
-                            should_suppress = True
-                            break
 
         if should_suppress:
             return ""

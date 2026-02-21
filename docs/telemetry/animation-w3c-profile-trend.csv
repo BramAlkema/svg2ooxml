@@ -1,0 +1,4 @@
+run_date,git_sha,profile,report_path,total_decks,failed_decks,avg_native_rate,avg_emf_rate,avg_raster_rate,sample_size,sample_seed
+2026-02-21,4a16e34,gradients,tests/corpus/w3c/report_gradients.json,24,0,0.8708622974,0.1223668692,0.0067708333,,
+2026-02-21,4a16e34,shapes,tests/corpus/w3c/report_shapes.json,22,0,1.0000000000,0.0000000000,0.0000000000,,
+2026-02-21,4a16e34,animate-sample,tests/corpus/w3c/report_animation.json,20,0,1.0000000000,0.0000000000,0.0000000000,20,20260221

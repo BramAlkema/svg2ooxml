@@ -108,6 +108,15 @@ class TestBuild:
         assert anim_motion.get("pathEditMode") == "relative"
         assert anim_motion.get("rAng") == "0"
 
+    def test_anim_motion_auto_rotate_sets_non_zero_rang(self, handler: MotionAnimationHandler):
+        anim = make_motion_animation(
+            values=["M0,0 L0,100"],
+            motion_rotate="auto",
+        )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        anim_motion = par.find(f".//{{{NS_P}}}animMotion")
+        assert anim_motion.get("rAng") == "5400000"
+
     def test_behavior_id(self, handler: MotionAnimationHandler):
         anim = make_motion_animation()
         par = handler.build(anim, par_id=4, behavior_id=5)

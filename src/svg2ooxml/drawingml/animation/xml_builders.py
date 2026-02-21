@@ -22,6 +22,7 @@ etree.register_namespace("svg2", SVG2_ANIMATION_NS)
 
 if TYPE_CHECKING:
     from .id_allocator import TimingIDs
+    from svg2ooxml.ir.animation import BeginTrigger
 
 __all__ = ["AnimationXMLBuilder"]
 
@@ -215,6 +216,8 @@ class AnimationXMLBuilder:
         preset_class: str | None = None,
         preset_subtype: int | None = None,
         node_type: str = "withEffect",
+        begin_triggers: list[BeginTrigger] | None = None,
+        default_target_shape: str | None = None,
     ) -> etree._Element:
         """Build ``<p:par>`` container accepting a child *element*.
 
@@ -240,12 +243,65 @@ class AnimationXMLBuilder:
         ctn = p_sub(par, "cTn", **ctn_attrs)
 
         st_cond_lst = p_sub(ctn, "stCondLst")
-        p_sub(st_cond_lst, "cond", delay=str(delay_ms))
+        if begin_triggers:
+            self._append_begin_conditions(
+                st_cond_lst=st_cond_lst,
+                begin_triggers=begin_triggers,
+                fallback_delay_ms=delay_ms,
+                default_target_shape=default_target_shape,
+            )
+        else:
+            p_sub(st_cond_lst, "cond", delay=str(delay_ms))
 
         child_tn_lst = p_sub(ctn, "childTnLst")
         child_tn_lst.append(child_element)
 
         return par
+
+    def _append_begin_conditions(
+        self,
+        *,
+        st_cond_lst: etree._Element,
+        begin_triggers: list[BeginTrigger],
+        fallback_delay_ms: int,
+        default_target_shape: str | None,
+    ) -> None:
+        """Append start conditions from parsed begin triggers."""
+        from svg2ooxml.ir.animation import BeginTriggerType
+
+        created = 0
+        for trigger in begin_triggers:
+            delay_ms = max(0, int(round(trigger.delay_seconds * 1000)))
+            trigger_type = trigger.trigger_type
+
+            if trigger_type == BeginTriggerType.TIME_OFFSET:
+                p_sub(st_cond_lst, "cond", delay=str(delay_ms))
+                created += 1
+                continue
+
+            if trigger_type == BeginTriggerType.CLICK:
+                cond = p_sub(st_cond_lst, "cond", evt="onClick", delay=str(delay_ms))
+                target_shape = trigger.target_element_id or default_target_shape
+                if target_shape:
+                    tgt_el = p_sub(cond, "tgtEl")
+                    p_sub(tgt_el, "spTgt", spid=target_shape)
+                created += 1
+                continue
+
+            if trigger_type in (BeginTriggerType.ELEMENT_BEGIN, BeginTriggerType.ELEMENT_END):
+                evt = "onBegin" if trigger_type == BeginTriggerType.ELEMENT_BEGIN else "onEnd"
+                cond = p_sub(st_cond_lst, "cond", evt=evt, delay=str(delay_ms))
+                if trigger.target_element_id:
+                    tgt_el = p_sub(cond, "tgtEl")
+                    p_sub(tgt_el, "spTgt", spid=trigger.target_element_id)
+                created += 1
+                continue
+
+            # BeginTriggerType.INDEFINITE is not represented natively.
+            # It should normally be filtered by policy; ignore if present.
+
+        if created == 0:
+            p_sub(st_cond_lst, "cond", delay=str(fallback_delay_ms))
 
     def build_behavior_core_elem(
         self,
