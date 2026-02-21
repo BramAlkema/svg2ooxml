@@ -37,7 +37,7 @@ The `SMILParser` (`src/svg2ooxml/core/animation/parser.py`) is responsible for e
 
 **Limitations/Areas for Review:**
 
-*   **Complex `begin` Event Triggers:** Advanced `begin` values (e.g., `begin="click"`, `begin="id.begin + 2s"`) might not be fully supported; current parsing focuses on time values.
+*   **`begin` Coverage is Partial (but no longer time-only):** Event-based begin triggers are supported for `click`, `click+offset` (for example `begin="click+0.5s"` and `begin="click + 0.5s"`), and element sync (`id.begin` / `id.end` with optional offsets). `begin="indefinite"` is parsed but has no native PowerPoint emission path yet.
 *   **`from/to/by` Attribute Combinations:** While `from` and `to` are handled, the `by` attribute and complex combinations of `from/to/by` might require further review.
 *   **`calcMode="paced"` Nuances:** The parser captures `CalcMode.PACED`, but its accurate interpretation requires understanding actual distances between animation values, which is an implementation detail for later stages.
 
@@ -82,7 +82,7 @@ The `DrawingMLAnimationWriter` (`src/svg2ooxml/drawingml/animation/writer.py`) o
 **Critical Aspects & Limitations:**
 
 *   **`calcMode="paced"` Implementation:** The exact mechanism for implementing `paced` interpolation in PowerPoint's animation model, especially for motion paths, may require further review.
-*   **Complex `begin`/`end` Events:** Event-based or sync-based `begin`/`end` triggers from SVG/SMIL are generally not supported natively by PowerPoint and might be simplified or ignored.
+*   **`begin="indefinite"` and some sequencing semantics:** `click`, `click+offset`, and element begin/end triggers map to `<p:cond>` events, but `indefinite` still has no native mapping and edge-case SMIL timing semantics may differ from PowerPoint.
 *   **`animateTransform type="matrix"` (Skew/Combined Transforms):** While matrix decomposition handles simple cases, complex matrices involving skew or arbitrary combinations of transforms are likely not fully supported and may lead to the animation being dropped.
 *   **SVG `rotate="auto"` in `animateMotion`:** This feature, where an element automatically rotates to follow the tangent of the motion path, is complex to replicate in PowerPoint and is not explicitly handled.
 *   **`additive` and `accumulate` Attributes:** The precise translation of these attributes into PowerPoint's animation model for various animation types may have limitations.
@@ -93,7 +93,7 @@ The `DrawingMLAnimationWriter` (`src/svg2ooxml/drawingml/animation/writer.py`) o
 ## 5. Next Steps
 
 Future work or critical review could focus on:
-*   Implementing support for complex `begin`/`end` event triggers.
+*   Extending begin-trigger coverage beyond current click/sync support (for example native handling for `begin="indefinite"` and closer SMIL multi-condition parity).
 *   Improving handling of `calcMode="paced"`.
 *   Developing more sophisticated fallbacks or approximations for unsupported `animateTransform` types (e.g., skew, arbitrary matrix combinations).
 *   Enhancing `MotionAnimationHandler` to support `rotate="auto"` or `keyPoints`.
