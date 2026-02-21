@@ -177,6 +177,7 @@ def test_parse_descending_key_times_falls_back_with_warning() -> None:
     assert animation.key_times is None
     assert parser.animation_summary.warnings
     assert any("keyTimes must be in ascending order" in warning for warning in parser.animation_summary.warnings)
+    assert parser.get_degradation_reasons().get("key_times_not_ascending") == 1
 
 
 def test_parse_key_splines_without_spline_mode_are_ignored() -> None:
@@ -219,6 +220,26 @@ def test_parse_invalid_key_splines_count_falls_back() -> None:
     assert animation.key_splines is None
     assert parser.animation_summary.warnings
     assert any("keySplines length mismatch" in warning for warning in parser.animation_summary.warnings)
+    assert parser.get_degradation_reasons().get("key_splines_length_mismatch") == 1
+
+
+def test_reset_summary_clears_degradation_reasons() -> None:
+    parser = SMILParser()
+    svg = _parse(
+        """
+        <svg xmlns="http://www.w3.org/2000/svg">
+          <rect id="shape">
+            <animate attributeName="x" values="0;10;20" keyTimes="0;0.7;0.2" dur="1s" />
+          </rect>
+        </svg>
+        """
+    )
+
+    parser.parse_svg_animations(svg)
+    assert parser.get_degradation_reasons().get("key_times_not_ascending") == 1
+
+    parser.reset_summary()
+    assert parser.get_degradation_reasons() == {}
 
 
 def test_parse_animate_motion_resolves_mpath_reference() -> None:

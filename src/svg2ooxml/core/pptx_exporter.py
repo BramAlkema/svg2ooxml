@@ -416,12 +416,14 @@ class SvgToPptxExporter:
         animations = []
         timeline_scenes: list[AnimationScene] = []
         animation_summary: AnimationSummary | None = None
+        animation_fallback_reasons: dict[str, int] = {}
         animation_policy_options: dict[str, Any] | None = None
 
         if parse_result.svg_root is not None:
             animation_parser = self._animation_parser_factory()
             animations = animation_parser.parse_svg_animations(parse_result.svg_root)
             animation_summary = animation_parser.get_animation_summary()
+            animation_fallback_reasons = animation_parser.get_degradation_reasons()
             if animations:
                 timeline_scenes = self._timeline_sampler.generate_scenes(animations)
             animation_parser.reset_summary()
@@ -454,12 +456,14 @@ class SvgToPptxExporter:
                 animations,
                 timeline_scenes,
                 animation_summary,
+                animation_fallback_reasons,
                 animation_policy_options,
             )
             raw_payload = {
                 "definitions": animations,
                 "timeline": timeline_scenes,
                 "summary": animation_summary,
+                "fallback_reasons": dict(animation_fallback_reasons),
             }
             if animation_policy_options:
                 raw_payload["policy"] = dict(animation_policy_options)
@@ -477,6 +481,12 @@ class SvgToPptxExporter:
                         "has_transforms": animation_meta["summary"]["has_transforms"],
                     },
                 )
+                for reason, count in sorted(animation_fallback_reasons.items()):
+                    tracer.record_stage_event(
+                        stage="animation",
+                        action="parse_fallback",
+                        metadata={"reason": reason, "count": count},
+                    )
 
         animation_payload = scene.metadata.get("animation_raw") if isinstance(scene.metadata, dict) else None
         if hasattr(self._writer, "set_image_service"):
@@ -546,9 +556,10 @@ def _build_animation_metadata(
     animations: list[AnimationDefinition],
     timeline_scenes: list[AnimationScene],
     summary: AnimationSummary | None,
+    fallback_reasons: Mapping[str, int] | None,
     policy: Mapping[str, Any] | None,
 ) -> dict[str, Any]:
-    summary_dict = _serialize_animation_summary(summary)
+    summary_dict = _serialize_animation_summary(summary, fallback_reasons=fallback_reasons)
     timeline_payload = [_serialize_timeline_scene(scene) for scene in timeline_scenes]
     payload = {
         "definition_count": len(animations),
@@ -586,7 +597,11 @@ def _serialize_animation_timing(timing: AnimationTiming) -> dict[str, Any]:
     }
 
 
-def _serialize_animation_summary(summary: AnimationSummary | None) -> dict[str, Any]:
+def _serialize_animation_summary(
+    summary: AnimationSummary | None,
+    *,
+    fallback_reasons: Mapping[str, int] | None = None,
+) -> dict[str, Any]:
     if summary is None:
         return {
             "total_animations": 0,
@@ -599,6 +614,7 @@ def _serialize_animation_summary(summary: AnimationSummary | None) -> dict[str, 
             "has_sequences": False,
             "element_count": 0,
             "warnings": [],
+            "fallback_reasons": {},
         }
 
     return {
@@ -612,6 +628,7 @@ def _serialize_animation_summary(summary: AnimationSummary | None) -> dict[str, 
         "has_sequences": summary.has_sequences,
         "element_count": summary.element_count,
         "warnings": list(summary.warnings),
+        "fallback_reasons": dict(fallback_reasons or {}),
     }
 
 
