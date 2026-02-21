@@ -398,18 +398,28 @@ map to PPT elements and which are unsupported.
 
 ### 5.4 Event-Based Begin Triggers
 
-SVG `begin="click"`, `begin="rect1.end+0.5s"` require a richer begin type in the
-IR. Currently `AnimationTiming.begin` is `float`.
+SVG `begin="click"`, `begin="rect1.end+0.5s"` required richer trigger metadata
+than a plain float begin time.
 
-**Decision**: Defer IR changes to a separate effort. For the rewrite, preserve the
-current `float` begin behavior. Document the mapping for future implementation:
+**Status update (implemented):**
+- `AnimationTiming` now carries `begin_triggers: list[BeginTrigger] | None` while
+  retaining `begin: float` as a backward-compatible numeric fallback.
+- Parser support includes click and sync events with offsets, including explicit
+  `begin="click+0.5s"` and whitespace variant `begin="click + 0.5s"`.
+- Writer support emits matching `<p:cond>` entries in `<p:stCondLst>`.
+
+Mapping now implemented:
 
 | SVG `begin` | PPT `<p:cond>` |
 |-------------|-----------------|
 | `"0s"`, `"2s"` | `<p:cond delay="2000"/>` |
 | `"click"` | `<p:cond evt="onClick" delay="0"><p:tgtEl><p:spTgt spid="..."/></p:tgtEl></p:cond>` |
+| `"click+0.5s"` | `<p:cond evt="onClick" delay="500"><p:tgtEl><p:spTgt spid="..."/></p:tgtEl></p:cond>` |
 | `"rect1.end"` | `<p:cond evt="onEnd" delay="0"><p:tgtEl><p:spTgt spid="rect1_id"/></p:tgtEl></p:cond>` |
 | `"rect1.end+0.5s"` | Same with `delay="500"` |
+
+`begin="indefinite"` remains parsed but not emitted as a native PowerPoint start
+condition.
 
 ### 5.5 Paced calcMode
 

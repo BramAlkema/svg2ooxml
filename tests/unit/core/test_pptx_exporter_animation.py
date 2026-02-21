@@ -298,6 +298,22 @@ def test_begin_click_with_offset_emits_onclick_condition_with_delay() -> None:
     assert 'delay="500"' in render_result.slide_xml
 
 
+def test_begin_click_with_offset_and_spaces_emits_onclick_condition_with_delay() -> None:
+    svg = """
+    <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">
+      <rect id="rect1" width="10" height="10" fill="#000">
+        <animate attributeName="opacity" values="0;1" begin="click + 0.5s" dur="1s"/>
+      </rect>
+    </svg>
+    """
+
+    render_result, _, _ = _render(svg)
+
+    assert "<p:timing" in render_result.slide_xml
+    assert 'evt="onClick"' in render_result.slide_xml
+    assert 'delay="500"' in render_result.slide_xml
+
+
 def test_begin_element_end_with_offset_emits_onend_condition() -> None:
     svg = """
     <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">
