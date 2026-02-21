@@ -230,29 +230,27 @@ class TestTAVList:
         tav_lst = par.find(f".//{{{NS_P}}}tavLst")
         assert tav_lst is None
 
-    def test_tav_for_three_values(self, handler: ColorAnimationHandler):
+    def test_no_tav_for_three_values(self, handler: ColorAnimationHandler):
         anim = make_color_animation(values=["#FF0000", "#00FF00", "#0000FF"])
         par = handler.build(anim, par_id=4, behavior_id=5)
         tav_lst = par.find(f".//{{{NS_P}}}tavLst")
-        assert tav_lst is not None
-        tavs = tav_lst.findall(f"{{{NS_P}}}tav")
-        assert len(tavs) == 3
+        assert tav_lst is None
 
-    def test_tav_with_explicit_key_times(self, handler: ColorAnimationHandler):
+    def test_no_tav_with_explicit_key_times(self, handler: ColorAnimationHandler):
         anim = make_color_animation(
             values=["#FF0000", "#00FF00", "#0000FF"],
             key_times=[0.0, 0.5, 1.0],
         )
         par = handler.build(anim, par_id=4, behavior_id=5)
         tav_lst = par.find(f".//{{{NS_P}}}tavLst")
-        assert tav_lst is not None
+        assert tav_lst is None
 
-    def test_discrete_calc_mode_emits_step_tavs(self, handler: ColorAnimationHandler):
+    def test_discrete_calc_mode_still_omits_tav(self, handler: ColorAnimationHandler):
         anim = make_color_animation(
             values=["#FF0000", "#00FF00", "#0000FF"],
             key_times=[0.0, 0.4, 1.0],
             calc_mode=CalcMode.DISCRETE,
         )
         par = handler.build(anim, par_id=4, behavior_id=5)
-        tavs = par.findall(f".//{{{NS_P}}}tav")
-        assert [tav.get("tm") for tav in tavs] == ["0", "40000", "40000", "100000", "100000"]
+        tav_lst = par.find(f".//{{{NS_P}}}tavLst")
+        assert tav_lst is None

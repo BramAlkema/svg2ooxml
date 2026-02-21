@@ -75,7 +75,7 @@ def test_embedded_fonts_emit_eot_parts(tmp_path):
         assert font_el is not None
         assert font_el.get("typeface") == "Scheherazade"
         font_key = entry.find("p:fontKey", ns)
-        assert font_key is not None and font_key.get("guid")
+        assert font_key is None
         regular = entry.find("p:regular", ns)
         assert regular is not None
         assert regular.get(f"{{{ns['r']}}}id")

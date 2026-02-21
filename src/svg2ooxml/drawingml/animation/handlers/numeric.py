@@ -137,10 +137,10 @@ class NumericAnimationHandler(AnimationHandler):
 
         from_tav = self._xml.build_tav_element(
             tm=0,
-            value_elem=self._xml.build_numeric_value(from_value),
+            value_elem=format_numeric_value(from_value),
         )
         to_tav = self._xml.build_tav_element(
             tm=100000,
-            value_elem=self._xml.build_numeric_value(to_value),
+            value_elem=format_numeric_value(to_value),
         )
         return [from_tav, to_tav]

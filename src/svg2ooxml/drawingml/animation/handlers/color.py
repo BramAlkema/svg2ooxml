@@ -68,11 +68,7 @@ class ColorAnimationHandler(AnimationHandler):
         to_elem = p_sub(anim_clr, "to")
         a_sub(to_elem, "srgbClr", val=to_color)
 
-        # Optional TAV list for multi-keyframe animations
-        tav_elements = self._build_color_tav_list(animation)
-        if tav_elements:
-            tav_lst = self._xml.build_tav_list_container(tav_elements)
-            anim_clr.append(tav_lst)
+        # Open XML schema for animClr does not allow tavLst; keep from/to only.
 
         # Wrap in <p:par>
         return self._xml.build_par_container_elem(

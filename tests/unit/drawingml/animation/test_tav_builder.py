@@ -329,11 +329,9 @@ class TestBuildTAVList:
             value_formatter=simple_numeric_formatter
         )
 
-        # Second TAV should have spline metadata
-        from svg2ooxml.drawingml.animation.constants import SVG2_ANIMATION_NS
-        spline_attr = tav_list[1].get(f"{{{SVG2_ANIMATION_NS}}}spline")
-        assert spline_attr is not None
-        assert "0.4200" in spline_attr
+        # Spline metadata is computed (needs namespace), but not serialized on XML attrs.
+        assert needs_ns is True
+        assert "svg2:spline" not in tav_list[1].attrib
 
 
 class TestBuildDiscreteTAVList:

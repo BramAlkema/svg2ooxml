@@ -55,24 +55,15 @@ class AnimationXMLBuilder:
         """Build <p:tav> time-animated value element."""
         tav = p_elem("tav", tm=str(tm))
 
-        # Add metadata attributes
+        # Metadata is currently tracing-only; avoid serializing non-schema attrs.
         if metadata:
             for key, value in metadata.items():
                 if key.startswith("svg2:"):
-                    attr_name = key.split(":", 1)[1]
-                    tav.set(f"{{{SVG2_ANIMATION_NS}}}{attr_name}", value)
-                else:
-                    tav.set(key, value)
+                    continue
+                tav.set(key, value)
 
         # Append value element
         tav.append(value_elem)
-
-        if accel > 0 or decel > 0:
-            tav_pr = p_sub(tav, "tavPr")
-            if accel > 0:
-                tav_pr.set("accel", str(accel))
-            if decel > 0:
-                tav_pr.set("decel", str(decel))
 
         return tav
 
