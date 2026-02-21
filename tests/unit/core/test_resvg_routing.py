@@ -49,6 +49,19 @@ class MockConverter(ShapeConversionMixin):
     def _trace_geometry_decision(self, element, decision, metadata):
         pass
 
+    def _apply_marker_metadata(self, element, metadata):
+        pass
+
+    def _build_marker_shapes(self, element, path_object):
+        return []
+
+    @staticmethod
+    def _normalize_href_reference(href):
+        if not href:
+            return None
+        token = href.strip()
+        return token[1:] if token.startswith("#") else token
+
 
 class TestResvgRouting:
     """Test resvg routing infrastructure."""
@@ -507,3 +520,112 @@ class TestResvgRouting:
             result = converter._convert_via_resvg(element, coord_space)
 
             assert result is None
+
+    def test_convert_degenerate_primitives_fallback_to_path_when_resvg_fails(self):
+        """Degenerate primitives should fall back to minimal native paths."""
+        converter = MockConverter()
+        converter._geometry_policy = {"geometry_mode": "resvg-only"}
+        converter._resvg_tree = Mock()
+
+        coord_space = CoordinateSpace()
+        cases = [
+            ("rect", {"x": "1", "y": "2", "width": "0", "height": "0"}, "_convert_rect"),
+            ("circle", {"cx": "3", "cy": "4", "r": "0"}, "_convert_circle"),
+            ("ellipse", {"cx": "5", "cy": "6", "rx": "0", "ry": "0"}, "_convert_ellipse"),
+            ("line", {"x1": "7", "y1": "8", "x2": "7", "y2": "8"}, "_convert_line"),
+        ]
+
+        with patch("svg2ooxml.core.ir.shape_converters.styles_runtime") as mock_styles:
+            mock_style = Mock()
+            mock_style.fill = None
+            mock_style.stroke = None
+            mock_style.opacity = 1.0
+            mock_style.effects = []
+            mock_style.metadata = {}
+            mock_styles.extract_style.return_value = mock_style
+
+            with patch.object(converter, "_convert_via_resvg", return_value=None):
+                for tag, attrs, method_name in cases:
+                    element = etree.Element(tag)
+                    for key, value in attrs.items():
+                        element.set(key, value)
+                    converter._resvg_element_lookup[element] = Mock()
+
+                    result = getattr(converter, method_name)(element=element, coord_space=coord_space)
+
+                    assert isinstance(result, Path), f"{tag} should emit Path fallback"
+                    assert len(result.segments) == 1
+
+    def test_convert_use_falls_back_to_expand_use_when_image_target_resvg_conversion_fails(self):
+        """<use> should expand image targets when mapped resvg node cannot be converted."""
+        converter = MockConverter()
+        converter._geometry_policy = {"geometry_mode": "resvg-only"}
+        converter._resvg_tree = Mock()
+
+        element = etree.Element("use")
+        element.set("href", "#img-target")
+        converter._element_index = {"img-target": etree.Element("image")}
+        converter._resvg_element_lookup[element] = Mock()
+        converter.expand_use = Mock(return_value=["expanded-child"])
+
+        with patch.object(converter, "_convert_via_resvg", return_value=None):
+            with patch.object(converter, "_trace_resvg_only_miss") as mock_trace:
+                result = converter._convert_use(
+                    element=element,
+                    coord_space=CoordinateSpace(),
+                    current_navigation=None,
+                    traverse_callback=lambda *_: [],
+                )
+
+        assert result == ["expanded-child"]
+        converter.expand_use.assert_called_once()
+        mock_trace.assert_not_called()
+
+    def test_convert_use_traces_miss_when_image_target_resvg_and_expansion_both_fail(self):
+        """<use> should still trace a miss when all conversion paths fail."""
+        converter = MockConverter()
+        converter._geometry_policy = {"geometry_mode": "resvg-only"}
+        converter._resvg_tree = Mock()
+
+        element = etree.Element("use")
+        element.set("href", "#img-target")
+        converter._element_index = {"img-target": etree.Element("image")}
+        converter._resvg_element_lookup[element] = Mock()
+        converter.expand_use = Mock(return_value=[])
+
+        with patch.object(converter, "_convert_via_resvg", return_value=None):
+            with patch.object(converter, "_trace_resvg_only_miss") as mock_trace:
+                result = converter._convert_use(
+                    element=element,
+                    coord_space=CoordinateSpace(),
+                    current_navigation=None,
+                    traverse_callback=lambda *_: [],
+                )
+
+        assert result is None
+        mock_trace.assert_called_once_with(element, "resvg_conversion_failed")
+
+    def test_convert_use_non_image_target_does_not_expand_fallback(self):
+        """Only image targets should use expansion fallback in resvg-only mode."""
+        converter = MockConverter()
+        converter._geometry_policy = {"geometry_mode": "resvg-only"}
+        converter._resvg_tree = Mock()
+
+        element = etree.Element("use")
+        element.set("href", "#rect-target")
+        converter._element_index = {"rect-target": etree.Element("rect")}
+        converter._resvg_element_lookup[element] = Mock()
+        converter.expand_use = Mock(return_value=["expanded-child"])
+
+        with patch.object(converter, "_convert_via_resvg", return_value=None):
+            with patch.object(converter, "_trace_resvg_only_miss") as mock_trace:
+                result = converter._convert_use(
+                    element=element,
+                    coord_space=CoordinateSpace(),
+                    current_navigation=None,
+                    traverse_callback=lambda *_: [],
+                )
+
+        assert result is None
+        converter.expand_use.assert_not_called()
+        mock_trace.assert_called_once_with(element, "resvg_conversion_failed")

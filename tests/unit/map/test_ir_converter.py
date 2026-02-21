@@ -314,6 +314,25 @@ def test_use_element_reuses_existing_geometry() -> None:
     assert "copyRect" in element_ids
 
 
+def test_use_image_expands_when_resvg_use_node_is_unsupported() -> None:
+    parse_result = _build_parse_result(
+        "<svg width='160' height='160' xmlns='http://www.w3.org/2000/svg'>"
+        "<defs>"
+        "  <image id='baseImage' href='https://example.com/foo.png' x='20' y='25' width='10' height='8'/>"
+        "</defs>"
+        "<use id='imageUse' href='#baseImage'/>"
+        "</svg>"
+    )
+
+    scene = _convert_with_resvg(parse_result)
+
+    assert len(scene.elements) == 1
+    image = scene.elements[0]
+    assert isinstance(image, Image)
+    assert image.href == "https://example.com/foo.png"
+    assert "imageUse" in set(image.metadata.get("element_ids", []))
+
+
 def test_use_symbol_applies_viewbox_scaling() -> None:
     parse_result = _build_parse_result(
         "<svg width='200' height='200' xmlns='http://www.w3.org/2000/svg'>"

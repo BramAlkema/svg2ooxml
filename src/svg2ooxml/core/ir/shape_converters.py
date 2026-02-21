@@ -27,8 +27,9 @@ from svg2ooxml.core.ir.shape_converters_utils import (
 )
 from svg2ooxml.core.styling import style_runtime as styles_runtime
 from svg2ooxml.core.styling.style_extractor import StyleResult
+from svg2ooxml.core.traversal.constants import DEFAULT_TOLERANCE
 from svg2ooxml.core.traversal.coordinate_space import CoordinateSpace
-from svg2ooxml.ir.geometry import Point, Rect, SegmentType
+from svg2ooxml.ir.geometry import LineSegment, Point, Rect, SegmentType
 from svg2ooxml.ir.paint import SolidPaint, Stroke
 from svg2ooxml.ir.scene import ClipRef, Group, Image, MaskInstance, MaskRef, Path
 from svg2ooxml.ir.text import Run, TextAnchor, TextFrame
@@ -75,16 +76,51 @@ class ShapeConversionMixin(ShapeResvgMixin, ShapeFallbackMixin):
             resvg_result = self._convert_via_resvg(element, coord_space)
             if resvg_result is not None:
                 return resvg_result
+            use_target = self._resolve_use_target(element)
+            use_target_tag = _local_name(getattr(use_target, "tag", "")).lower() if use_target is not None else ""
+            if use_target_tag == "image":
+                expanded_result = self.expand_use(
+                    element=element,
+                    coord_space=coord_space,
+                    current_navigation=current_navigation,
+                    traverse_callback=traverse_callback,
+                )
+                if expanded_result:
+                    return expanded_result
             self._trace_resvg_only_miss(element, "resvg_conversion_failed")
             return None
         self._trace_resvg_only_miss(element, self._resvg_miss_reason(element))
         return None
+
+    def _resolve_use_target(self, element: etree._Element) -> etree._Element | None:
+        href_attr = element.get("{http://www.w3.org/1999/xlink}href") or element.get("href")
+        if not href_attr:
+            return None
+        reference_id = self._normalize_href_reference(href_attr)
+        if reference_id is None:
+            return None
+
+        symbol_definitions = getattr(self, "_symbol_definitions", {})
+        target = symbol_definitions.get(reference_id) if isinstance(symbol_definitions, dict) else None
+        if target is not None:
+            return target
+
+        element_index = getattr(self, "_element_index", {})
+        if isinstance(element_index, dict):
+            target = element_index.get(reference_id)
+        return target if isinstance(target, etree._Element) else None
 
     def _convert_rect(self, *, element: etree._Element, coord_space: CoordinateSpace):
         if self._can_use_resvg(element):
             resvg_result = self._convert_via_resvg(element, coord_space)
             if resvg_result is not None:
                 return resvg_result
+            degenerate_fallback = self._convert_degenerate_shape_fallback(
+                element=element,
+                coord_space=coord_space,
+            )
+            if degenerate_fallback is not None:
+                return degenerate_fallback
             self._trace_resvg_only_miss(element, "resvg_conversion_failed")
             return None
         self._trace_resvg_only_miss(element, self._resvg_miss_reason(element))
@@ -95,6 +131,12 @@ class ShapeConversionMixin(ShapeResvgMixin, ShapeFallbackMixin):
             resvg_result = self._convert_via_resvg(element, coord_space)
             if resvg_result is not None:
                 return resvg_result
+            degenerate_fallback = self._convert_degenerate_shape_fallback(
+                element=element,
+                coord_space=coord_space,
+            )
+            if degenerate_fallback is not None:
+                return degenerate_fallback
             self._trace_resvg_only_miss(element, "resvg_conversion_failed")
             return None
         self._trace_resvg_only_miss(element, self._resvg_miss_reason(element))
@@ -106,6 +148,12 @@ class ShapeConversionMixin(ShapeResvgMixin, ShapeFallbackMixin):
             resvg_result = self._convert_via_resvg(element, coord_space)
             if resvg_result is not None:
                 return resvg_result
+            degenerate_fallback = self._convert_degenerate_shape_fallback(
+                element=element,
+                coord_space=coord_space,
+            )
+            if degenerate_fallback is not None:
+                return degenerate_fallback
             self._trace_resvg_only_miss(element, "resvg_conversion_failed")
             return None
         self._trace_resvg_only_miss(element, self._resvg_miss_reason(element))
@@ -117,6 +165,12 @@ class ShapeConversionMixin(ShapeResvgMixin, ShapeFallbackMixin):
             resvg_result = self._convert_via_resvg(element, coord_space)
             if resvg_result is not None:
                 return resvg_result
+            degenerate_fallback = self._convert_degenerate_shape_fallback(
+                element=element,
+                coord_space=coord_space,
+            )
+            if degenerate_fallback is not None:
+                return degenerate_fallback
             self._trace_resvg_only_miss(element, "resvg_conversion_failed")
             return None
         self._trace_resvg_only_miss(element, self._resvg_miss_reason(element))
@@ -130,6 +184,74 @@ class ShapeConversionMixin(ShapeResvgMixin, ShapeFallbackMixin):
             self._trace_resvg_only_miss(element, "resvg_conversion_failed")
             return None
         self._trace_resvg_only_miss(element, self._resvg_miss_reason(element))
+        return None
+
+    def _convert_degenerate_shape_fallback(
+        self,
+        *,
+        element: etree._Element,
+        coord_space: CoordinateSpace,
+    ):
+        """Fallback for degenerate primitive shapes when resvg cannot convert."""
+        tag = _local_name(element.tag).lower()
+        epsilon = 1e-6
+
+        if tag == "rect":
+            width = _parse_float(element.get("width"))
+            height = _parse_float(element.get("height"))
+            if width is None or height is None:
+                return None
+            if width > DEFAULT_TOLERANCE and height > DEFAULT_TOLERANCE:
+                return None
+            x = _parse_float(element.get("x"), default=0.0) or 0.0
+            y = _parse_float(element.get("y"), default=0.0) or 0.0
+            if height > DEFAULT_TOLERANCE:
+                segments = [LineSegment(Point(x, y), Point(x + epsilon, y + height))]
+            elif width > DEFAULT_TOLERANCE:
+                segments = [LineSegment(Point(x, y), Point(x + width, y + epsilon))]
+            else:
+                segments = [LineSegment(Point(x, y), Point(x + epsilon, y + epsilon))]
+            return self._segments_to_path(element, segments, coord_space)
+
+        if tag == "circle":
+            radius = _parse_float(element.get("r"))
+            if radius is None or radius > DEFAULT_TOLERANCE:
+                return None
+            cx = _parse_float(element.get("cx"), default=0.0) or 0.0
+            cy = _parse_float(element.get("cy"), default=0.0) or 0.0
+            segments = [LineSegment(Point(cx, cy), Point(cx + epsilon, cy + epsilon))]
+            return self._segments_to_path(element, segments, coord_space)
+
+        if tag == "ellipse":
+            rx = _parse_float(element.get("rx"))
+            ry = _parse_float(element.get("ry"))
+            if rx is None or ry is None:
+                return None
+            if rx > DEFAULT_TOLERANCE and ry > DEFAULT_TOLERANCE:
+                return None
+            cx = _parse_float(element.get("cx"), default=0.0) or 0.0
+            cy = _parse_float(element.get("cy"), default=0.0) or 0.0
+            if ry > DEFAULT_TOLERANCE:
+                segments = [LineSegment(Point(cx, cy - ry), Point(cx + epsilon, cy + ry))]
+            elif rx > DEFAULT_TOLERANCE:
+                segments = [LineSegment(Point(cx - rx, cy), Point(cx + rx, cy + epsilon))]
+            else:
+                segments = [LineSegment(Point(cx, cy), Point(cx + epsilon, cy + epsilon))]
+            return self._segments_to_path(element, segments, coord_space)
+
+        if tag == "line":
+            x1 = _parse_float(element.get("x1"), default=0.0) or 0.0
+            y1 = _parse_float(element.get("y1"), default=0.0) or 0.0
+            x2 = _parse_float(element.get("x2"), default=0.0) or 0.0
+            y2 = _parse_float(element.get("y2"), default=0.0) or 0.0
+            if (
+                abs(x2 - x1) > DEFAULT_TOLERANCE
+                or abs(y2 - y1) > DEFAULT_TOLERANCE
+            ):
+                return None
+            segments = [LineSegment(Point(x1, y1), Point(x2 + epsilon, y2 + epsilon))]
+            return self._segments_to_path(element, segments, coord_space)
+
         return None
 
     def _convert_polygon(self, *, element: etree._Element, coord_space: CoordinateSpace):
