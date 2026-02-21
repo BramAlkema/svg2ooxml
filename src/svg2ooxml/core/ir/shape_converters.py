@@ -76,6 +76,27 @@ class ShapeConversionMixin(ShapeResvgMixin, ShapeFallbackMixin):
             resvg_result = self._convert_via_resvg(element, coord_space)
             if resvg_result is not None:
                 return resvg_result
+            resvg_lookup = getattr(self, "_resvg_element_lookup", {})
+            resvg_node = resvg_lookup.get(element) if isinstance(resvg_lookup, dict) else None
+            if type(resvg_node).__name__ == "TextNode":
+                text_converter = getattr(self, "_text_converter", None)
+                text_convert = getattr(text_converter, "convert", None)
+                if callable(text_convert):
+                    try:
+                        text_result = text_convert(
+                            element=element,
+                            coord_space=coord_space,
+                            resvg_node=resvg_node,
+                        )
+                    except Exception as exc:  # pragma: no cover - defensive logging
+                        self._logger.debug(
+                            "Resvg text conversion failed for %s: %s",
+                            element.get("id") or "<use>",
+                            exc,
+                        )
+                    else:
+                        if text_result is not None:
+                            return text_result
             use_target = self._resolve_use_target(element)
             use_target_tag = _local_name(getattr(use_target, "tag", "")).lower() if use_target is not None else ""
             if use_target_tag == "image":
