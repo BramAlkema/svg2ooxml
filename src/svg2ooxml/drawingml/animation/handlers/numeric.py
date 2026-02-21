@@ -74,6 +74,8 @@ class NumericAnimationHandler(AnimationHandler):
             child_element=anim,
             preset_id=32,
             preset_class="emph",
+            begin_triggers=animation.begin_triggers,
+            default_target_shape=animation.element_id,
         )
 
     def _map_attribute_name(self, attribute: str) -> str:

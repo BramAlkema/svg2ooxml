@@ -11,6 +11,8 @@ from svg2ooxml.ir.animation import (
     AnimationSummary,
     AnimationTiming,
     AnimationType,
+    BeginTrigger,
+    BeginTriggerType,
     TransformType,
     format_transform_string,
 )
@@ -20,6 +22,24 @@ def test_animation_timing_end_time_indefinite() -> None:
     timing = AnimationTiming(begin=1.0, duration=2.0, repeat_count="indefinite")
     assert math.isinf(timing.get_end_time())
     assert timing.is_active_at_time(5.0)
+
+
+def test_animation_timing_can_store_begin_triggers() -> None:
+    timing = AnimationTiming(
+        begin=0.0,
+        begin_triggers=[
+            BeginTrigger(
+                trigger_type=BeginTriggerType.ELEMENT_END,
+                target_element_id="shape1",
+                delay_seconds=0.5,
+            )
+        ],
+    )
+    assert timing.begin == 0.0
+    assert timing.begin_triggers is not None
+    assert timing.begin_triggers[0].trigger_type is BeginTriggerType.ELEMENT_END
+    assert timing.begin_triggers[0].target_element_id == "shape1"
+    assert timing.begin_triggers[0].delay_seconds == pytest.approx(0.5)
 
 
 def test_animation_definition_keyframe_validation() -> None:

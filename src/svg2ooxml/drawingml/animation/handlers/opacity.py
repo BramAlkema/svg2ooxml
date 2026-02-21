@@ -65,6 +65,8 @@ class OpacityAnimationHandler(AnimationHandler):
             child_element=anim_effect,
             preset_id=10,
             preset_class="entr",
+            begin_triggers=animation.begin_triggers,
+            default_target_shape=animation.element_id,
         )
 
     def _compute_target_opacity(self, animation: AnimationDefinition) -> str:

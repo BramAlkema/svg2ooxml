@@ -6,6 +6,7 @@ paths for ``<animateMotion>`` animations.
 
 from __future__ import annotations
 
+import math
 from typing import TYPE_CHECKING
 
 from lxml import etree
@@ -46,6 +47,7 @@ class MotionAnimationHandler(AnimationHandler):
         # Convert points to normalised slide-fraction coordinates
         motion_path = self._build_motion_path_string(points)
         pts_types = "A" * len(points)
+        rotation = self._resolve_rotation_angle(animation, points)
 
         # Build <p:animMotion>
         anim_motion = p_elem(
@@ -53,7 +55,7 @@ class MotionAnimationHandler(AnimationHandler):
             origin="layout",
             path=motion_path,
             pathEditMode="relative",
-            rAng="0",
+            rAng=rotation,
             ptsTypes=pts_types,
         )
 
@@ -80,7 +82,55 @@ class MotionAnimationHandler(AnimationHandler):
             child_element=anim_motion,
             preset_id=0,
             preset_class="path",
+            begin_triggers=animation.begin_triggers,
+            default_target_shape=animation.element_id,
         )
+
+    def _resolve_rotation_angle(
+        self,
+        animation: AnimationDefinition,
+        points: list[tuple[float, float]],
+    ) -> str:
+        """Resolve animMotion rAng using motion rotate hints.
+
+        PowerPoint does not support full SVG rotate="auto" semantics on path
+        animations, so we approximate with a single tangent-derived angle.
+        """
+        rotate_mode = (animation.motion_rotate or "").strip().lower()
+        if not rotate_mode:
+            return "0"
+
+        angle_deg: float | None = None
+        if rotate_mode in {"auto", "auto-reverse"}:
+            angle_deg = self._estimate_path_tangent_angle(points)
+            if angle_deg is None:
+                return "0"
+            if rotate_mode == "auto-reverse":
+                angle_deg += 180.0
+        else:
+            try:
+                angle_deg = self._processor.parse_angle(rotate_mode)
+            except (TypeError, ValueError):
+                return "0"
+
+        return self._processor.format_ppt_angle(angle_deg)
+
+    @staticmethod
+    def _estimate_path_tangent_angle(points: list[tuple[float, float]]) -> float | None:
+        """Estimate tangent angle from the last non-zero path segment."""
+        if len(points) < 2:
+            return None
+
+        for idx in range(len(points) - 1, 0, -1):
+            x0, y0 = points[idx - 1]
+            x1, y1 = points[idx]
+            dx = x1 - x0
+            dy = y1 - y0
+            if abs(dx) < 1e-9 and abs(dy) < 1e-9:
+                continue
+            return math.degrees(math.atan2(dy, dx))
+
+        return None
 
     # ------------------------------------------------------------------ #
     # Motion path helpers                                                 #

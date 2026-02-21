@@ -78,6 +78,8 @@ class SetAnimationHandler(AnimationHandler):
             child_element=set_elem,
             preset_id=preset_id,
             preset_class=preset_class,
+            begin_triggers=animation.begin_triggers,
+            default_target_shape=animation.element_id,
         )
 
     @staticmethod

@@ -90,6 +90,8 @@ class TransformAnimationHandler(AnimationHandler):
             preset_class=preset_class,
             preset_subtype=None,
             node_type="withEffect",
+            begin_triggers=animation.begin_triggers,
+            default_target_shape=animation.element_id,
         )
 
     # ------------------------------------------------------------------ #

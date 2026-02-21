@@ -14,6 +14,8 @@ from svg2ooxml.ir.animation import (
     AnimationSummary,
     AnimationTiming,
     AnimationType,
+    BeginTrigger,
+    BeginTriggerType,
     CalcMode,
     FillMode,
     TransformType,
@@ -40,6 +42,18 @@ class SMILParser:
         "animateColor",
         "animateMotion",
         "set",
+    )
+    _TIME_OFFSET_RE = re.compile(
+        r"^[+-]?(?:\d+(?:\.\d+)?|\.\d+)(?:ms|s|min|h)?$",
+        re.IGNORECASE,
+    )
+    _ELEMENT_EVENT_RE = re.compile(
+        r"^([A-Za-z_][\w.\-]*)\.(click|begin|end)([+-].+)?$",
+        re.IGNORECASE,
+    )
+    _CLICK_OFFSET_RE = re.compile(
+        r"^click([+-].+)$",
+        re.IGNORECASE,
     )
 
     def __init__(self) -> None:
@@ -131,6 +145,7 @@ class SMILParser:
         key_splines = self._parse_key_splines(element)
         calc_mode = self._parse_calc_mode(element)
         transform_type = self._parse_transform_type(element, animation_type)
+        motion_rotate = self._parse_motion_rotate(element, animation_type)
 
         additive = element.get("additive", "replace")
         accumulate = element.get("accumulate", "none")
@@ -147,6 +162,7 @@ class SMILParser:
             transform_type=transform_type,
             additive=additive,
             accumulate=accumulate,
+            motion_rotate=motion_rotate,
         )
 
     def _get_animation_type(self, tag_name: str) -> AnimationType | None:
@@ -204,11 +220,19 @@ class SMILParser:
             path = element.get("path")
             if path:
                 return [path.strip()]
-            mpath = element.find(".//mpath")
+            mpath = (
+                element.find(".//mpath")
+                or element.find(".//svg:mpath", namespaces=self._namespace_map)
+            )
             if mpath is not None:
                 href = mpath.get("href", mpath.get("{http://www.w3.org/1999/xlink}href"))
                 if href:
-                    return [href]
+                    resolved = self._resolve_motion_path_reference(element, href.strip())
+                    if resolved is not None:
+                        return [resolved]
+                    self.animation_summary.add_warning(
+                        f"animateMotion mpath reference unresolved: {href}"
+                    )
             return ["M 0,0"]
 
         values_attr = element.get("values")
@@ -231,8 +255,35 @@ class SMILParser:
 
         return []
 
+    def _resolve_motion_path_reference(
+        self,
+        animation_element: etree._Element,
+        href: str,
+    ) -> str | None:
+        """Resolve <mpath href="#..."> references to path data."""
+        if not href.startswith("#"):
+            return None
+
+        target_id = href[1:].strip()
+        if not target_id:
+            return None
+
+        root = animation_element.getroottree().getroot()
+        matches = root.xpath(".//*[@id=$target_id]", target_id=target_id)
+        if not matches:
+            return None
+
+        target = matches[0]
+        if etree.QName(target).localname.lower() != "path":
+            return None
+
+        path_data = target.get("d")
+        if not path_data:
+            return None
+        return path_data.strip()
+
     def _parse_timing(self, element: etree._Element) -> AnimationTiming:
-        begin = parse_time_value(element.get("begin", "0s"))
+        begin, begin_triggers = self._parse_begin(element.get("begin"))
         dur_value = element.get("dur", "1s")
         duration = float("inf") if dur_value == "indefinite" else parse_time_value(dur_value)
 
@@ -253,6 +304,88 @@ class SMILParser:
             duration=duration,
             repeat_count=repeat_count,
             fill_mode=fill_mode,
+            begin_triggers=begin_triggers,
+        )
+
+    def _parse_begin(self, begin_attr: str | None) -> tuple[float, list[BeginTrigger] | None]:
+        """Parse SMIL begin expression(s) into fallback seconds and trigger metadata."""
+        if begin_attr is None:
+            return (0.0, [BeginTrigger(trigger_type=BeginTriggerType.TIME_OFFSET, delay_seconds=0.0)])
+
+        begin_text = begin_attr.strip()
+        if not begin_text:
+            return (0.0, [BeginTrigger(trigger_type=BeginTriggerType.TIME_OFFSET, delay_seconds=0.0)])
+
+        tokens = [token.strip() for token in begin_text.split(";") if token.strip()]
+        parsed: list[BeginTrigger] = []
+        for token in tokens:
+            trigger = self._parse_begin_token(token)
+            if trigger is None:
+                self.animation_summary.add_warning(f"Invalid begin expression: {token}")
+                continue
+            parsed.append(trigger)
+
+        if not parsed:
+            return (0.0, [BeginTrigger(trigger_type=BeginTriggerType.TIME_OFFSET, delay_seconds=0.0)])
+
+        # Backward-compatible numeric begin fallback used by existing timing helpers.
+        begin_seconds = 0.0
+        for trigger in parsed:
+            if trigger.trigger_type == BeginTriggerType.TIME_OFFSET and trigger.target_element_id is None:
+                begin_seconds = trigger.delay_seconds
+                break
+
+        return (begin_seconds, parsed)
+
+    def _parse_begin_token(self, token: str) -> BeginTrigger | None:
+        lowered = token.strip().lower()
+        if not lowered:
+            return None
+        if lowered == "indefinite":
+            return BeginTrigger(trigger_type=BeginTriggerType.INDEFINITE)
+        if lowered == "click":
+            return BeginTrigger(trigger_type=BeginTriggerType.CLICK)
+        click_offset_match = self._CLICK_OFFSET_RE.match(lowered)
+        if click_offset_match:
+            offset_value = click_offset_match.group(1).strip()
+            if not self._TIME_OFFSET_RE.match(offset_value):
+                return None
+            return BeginTrigger(
+                trigger_type=BeginTriggerType.CLICK,
+                delay_seconds=parse_time_value(offset_value),
+            )
+        if self._TIME_OFFSET_RE.match(lowered):
+            return BeginTrigger(
+                trigger_type=BeginTriggerType.TIME_OFFSET,
+                delay_seconds=parse_time_value(lowered),
+            )
+
+        match = self._ELEMENT_EVENT_RE.match(token.strip())
+        if not match:
+            return None
+
+        target_element_id, event_name, offset_expr = match.groups()
+        delay_seconds = 0.0
+        if offset_expr:
+            offset_value = offset_expr.strip()
+            if not self._TIME_OFFSET_RE.match(offset_value):
+                return None
+            delay_seconds = parse_time_value(offset_value)
+
+        event_name = event_name.lower()
+        if event_name == "click":
+            trigger_type = BeginTriggerType.CLICK
+        elif event_name == "begin":
+            trigger_type = BeginTriggerType.ELEMENT_BEGIN
+        elif event_name == "end":
+            trigger_type = BeginTriggerType.ELEMENT_END
+        else:
+            return None
+
+        return BeginTrigger(
+            trigger_type=trigger_type,
+            delay_seconds=delay_seconds,
+            target_element_id=target_element_id,
         )
 
     def _parse_key_times(self, element: etree._Element) -> list[float] | None:
@@ -319,6 +452,23 @@ class SMILParser:
             "matrix": TransformType.MATRIX,
         }
         return mapping.get(attr)
+
+    def _parse_motion_rotate(
+        self,
+        element: etree._Element,
+        animation_type: AnimationType,
+    ) -> str | None:
+        if animation_type != AnimationType.ANIMATE_MOTION:
+            return None
+
+        rotate = element.get("rotate")
+        if rotate is None:
+            return None
+
+        rotate = rotate.strip()
+        if not rotate:
+            return None
+        return rotate
 
     def _update_summary(self, animation: AnimationDefinition) -> None:
         if animation.timing.duration != float("inf"):

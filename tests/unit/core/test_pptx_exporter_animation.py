@@ -185,6 +185,57 @@ def test_animate_motion_path_emits_point_list() -> None:
     assert 'ptsTypes=' in render_result.slide_xml
 
 
+def test_begin_click_emits_onclick_condition() -> None:
+    svg = """
+    <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">
+      <rect id="rect1" width="10" height="10" fill="#000">
+        <animate attributeName="opacity" values="0;1" begin="click" dur="1s"/>
+      </rect>
+    </svg>
+    """
+
+    render_result, _, _ = _render(svg)
+
+    assert "<p:timing" in render_result.slide_xml
+    assert 'evt="onClick"' in render_result.slide_xml
+    assert "<p:tgtEl><p:spTgt spid=" in render_result.slide_xml
+
+
+def test_begin_click_with_offset_emits_onclick_condition_with_delay() -> None:
+    svg = """
+    <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">
+      <rect id="rect1" width="10" height="10" fill="#000">
+        <animate attributeName="opacity" values="0;1" begin="click+0.5s" dur="1s"/>
+      </rect>
+    </svg>
+    """
+
+    render_result, _, _ = _render(svg)
+
+    assert "<p:timing" in render_result.slide_xml
+    assert 'evt="onClick"' in render_result.slide_xml
+    assert 'delay="500"' in render_result.slide_xml
+
+
+def test_begin_element_end_with_offset_emits_onend_condition() -> None:
+    svg = """
+    <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">
+      <rect id="rect1" width="10" height="10" fill="#000">
+        <animate attributeName="opacity" values="0;1" begin="0s" dur="1s"/>
+      </rect>
+      <rect id="rect2" x="20" width="10" height="10" fill="#000">
+        <animate attributeName="x" values="20;30" begin="rect1.end+0.5s" dur="1s"/>
+      </rect>
+    </svg>
+    """
+
+    render_result, _, _ = _render(svg)
+
+    assert "<p:timing" in render_result.slide_xml
+    assert 'evt="onEnd"' in render_result.slide_xml
+    assert 'delay="500"' in render_result.slide_xml
+
+
 def test_numeric_attribute_animation_emits_anim() -> None:
     svg = """
     <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">
@@ -381,14 +432,13 @@ def test_policy_can_disable_native_spline_output() -> None:
     animation_policy = policy_meta.get("animation", {})
     assert animation_policy.get("fallback_mode") == "slide"
     report = tracer.report()
-    # The pipeline emits fragment_emitted events (not fragment_skipped) and
-    # strips timing from the output when fallback_mode is "slide".
-    emitted_events = [
+    # The pipeline now reports per-fragment skips when policy disables native timing.
+    skipped_events = [
         event
         for event in report.stage_events
-        if event.stage == "animation" and event.action == "fragment_emitted"
+        if event.stage == "animation" and event.action == "fragment_skipped"
     ]
-    assert emitted_events
+    assert skipped_events
 
 
 def test_policy_spline_error_fallback() -> None:
@@ -406,11 +456,10 @@ def test_policy_spline_error_fallback() -> None:
     render_result, _ = exporter._render_svg(svg, tracer, policy_overrides=overrides)  # type: ignore[attr-defined]
 
     assert "<p:timing" not in render_result.slide_xml
-    # The pipeline emits fragment_emitted events and strips timing from the
-    # output when spline error exceeds the configured threshold.
-    emitted_events = [
+    # The pipeline emits fragment_skipped events when spline error exceeds the threshold.
+    skipped_events = [
         event
         for event in tracer.report().stage_events
-        if event.stage == "animation" and event.action == "fragment_emitted"
+        if event.stage == "animation" and event.action == "fragment_skipped"
     ]
-    assert emitted_events
+    assert skipped_events

@@ -82,6 +82,8 @@ class ColorAnimationHandler(AnimationHandler):
             child_element=anim_clr,
             preset_id=7,
             preset_class="emph",
+            begin_triggers=animation.begin_triggers,
+            default_target_shape=animation.element_id,
         )
 
     def _map_color_attribute(self, attribute: str) -> str:
