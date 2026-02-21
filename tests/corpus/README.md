@@ -115,6 +115,20 @@ OPENXML_VALIDATOR=../openxml-validator \
     --openxml-min-pass-rate 0.98
 ```
 
+To run the same W3C animation gate profiles locally (required profiles or full
+animation profile), use:
+
+```bash
+# required profiles (gradients + shapes + animation sample 20/40)
+tools/run_w3c_animation_gate_local.sh required
+
+# full animation profile (40/40)
+tools/run_w3c_animation_gate_local.sh full
+
+# both
+tools/run_w3c_animation_gate_local.sh all
+```
+
 ## Corpus Metadata Schema
 
 The `corpus_metadata.json` file defines the test corpus structure:

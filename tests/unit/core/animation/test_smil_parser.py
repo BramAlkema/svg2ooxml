@@ -159,6 +159,52 @@ def test_parse_begin_click_with_offset() -> None:
     assert animation.timing.begin_triggers[0].delay_seconds == 0.5
 
 
+def test_parse_begin_click_with_offset_and_spaces() -> None:
+    parser = SMILParser()
+    svg = _parse(
+        """
+        <svg xmlns="http://www.w3.org/2000/svg">
+          <rect id="shape">
+            <animate attributeName="opacity" values="0;1" begin="click + 0.5s" dur="1s" />
+          </rect>
+        </svg>
+        """
+    )
+
+    animations = parser.parse_svg_animations(svg)
+    assert len(animations) == 1
+    animation = animations[0]
+    assert animation.timing.begin_triggers is not None
+    assert len(animation.timing.begin_triggers) == 1
+    assert animation.timing.begin_triggers[0].trigger_type is BeginTriggerType.CLICK
+    assert animation.timing.begin_triggers[0].delay_seconds == 0.5
+
+
+def test_parse_element_event_offset_with_spaces() -> None:
+    parser = SMILParser()
+    svg = _parse(
+        """
+        <svg xmlns="http://www.w3.org/2000/svg">
+          <rect id="shape">
+            <animate attributeName="opacity" values="0;1" begin="shape.click + 250ms; shape.end - 0.25s" dur="1s" />
+          </rect>
+        </svg>
+        """
+    )
+
+    animations = parser.parse_svg_animations(svg)
+    assert len(animations) == 1
+    animation = animations[0]
+    assert animation.timing.begin_triggers is not None
+    assert len(animation.timing.begin_triggers) == 2
+    assert animation.timing.begin_triggers[0].trigger_type is BeginTriggerType.CLICK
+    assert animation.timing.begin_triggers[0].target_element_id == "shape"
+    assert animation.timing.begin_triggers[0].delay_seconds == 0.25
+    assert animation.timing.begin_triggers[1].trigger_type is BeginTriggerType.ELEMENT_END
+    assert animation.timing.begin_triggers[1].target_element_id == "shape"
+    assert animation.timing.begin_triggers[1].delay_seconds == -0.25
+
+
 def test_parse_descending_key_times_falls_back_with_warning() -> None:
     parser = SMILParser()
     svg = _parse(
