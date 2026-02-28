@@ -34,6 +34,10 @@ class DisabledFilterService:
     def get_filter_content(self, _filter_id: str, *, context: Any | None = None) -> str | None:  # noqa: ARG002
         return None
 
+    @property
+    def runtime_capability(self) -> str:
+        return "disabled"
+
     def resolve_effects(self, filter_ref: str, *, context: Any | None = None) -> list[FilterEffectResult]:
         if not self._warned:
             self._logger.warning(
@@ -46,6 +50,7 @@ class DisabledFilterService:
             "disabled": True,
             "reason": self._reason,
             "fallback": "emf",
+            "runtime_capability": self.runtime_capability,
         }
         return [
             FilterEffectResult(

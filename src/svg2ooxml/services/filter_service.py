@@ -42,9 +42,14 @@ def _load_filter_pipeline():
     try:
         from svg2ooxml.filters.planner import FilterPlanner
         from svg2ooxml.filters.renderer import FilterRenderer as FilterPipelineRenderer
-    except Exception as exc:  # pragma: no cover - optional dependency missing
-        return None, None, exc
-    return FilterPlanner, FilterPipelineRenderer, None
+        return FilterPlanner, FilterPipelineRenderer, None
+    except Exception as full_error:  # pragma: no cover - optional dependency missing
+        try:
+            from svg2ooxml.filters.lightweight import LightweightFilterPlanner as FilterPlanner
+            from svg2ooxml.filters.lightweight import LightweightFilterRenderer as FilterPipelineRenderer
+        except Exception as fallback_error:  # pragma: no cover - defensive
+            return None, None, fallback_error
+        return FilterPlanner, FilterPipelineRenderer, full_error
 
 
 def _pipeline_warning_message(error: Exception | None) -> str:
@@ -79,6 +84,7 @@ class FilterService:
         self._renderer: FilterPipelineRenderer | None = None
         self._pipeline_error: Exception | None = None
         self._pipeline_warned = False
+        self._runtime_capability: str = "pending"
 
     # ------------------------------------------------------------------ #
     # Binding & cloning                                                  #
@@ -107,6 +113,7 @@ class FilterService:
         clone._raster_adapter = self._raster_adapter
         clone._pipeline_error = self._pipeline_error
         clone._pipeline_warned = self._pipeline_warned
+        clone._runtime_capability = self._runtime_capability
         if self._planner is not None:
             clone._planner = self._planner
         if self._renderer is not None and clone._planner is not None:
@@ -179,12 +186,12 @@ class FilterService:
     def resolve_effects(self, filter_ref: str, *, context: Any | None = None) -> list[FilterEffectResult]:
         """Resolve a filter reference into IR effect objects."""
         if not self._ensure_pipeline():
-            return self._disabled_effects(filter_ref)
+            return self._finalize_results(filter_ref, self._disabled_effects(filter_ref), context)
 
         descriptor = self.get(filter_ref)
         if descriptor is None:
             self._logger.debug("Filter %s is not defined; skipping effect resolution", filter_ref)
-            return []
+            return self._finalize_results(filter_ref, [], context)
 
         filter_element = self._materialize_filter(filter_ref, descriptor)
         filter_context = self._build_context(filter_element, context)
@@ -203,7 +210,7 @@ class FilterService:
         if resvg_enabled:
             resvg_result = self._render_resvg_filter(descriptor, filter_element, filter_context, filter_ref)
             if resvg_result is not None and resvg_only:
-                return [resvg_result]
+                return self._finalize_results(filter_ref, [resvg_result], filter_context)
 
         if strategy in {"auto", "native", "resvg", "resvg-only"}:
             native_results = self._render_native(filter_element, filter_context)
@@ -211,10 +218,10 @@ class FilterService:
                 results.extend(native_results)
                 emf_sources.extend(result for result in native_results if result.fallback == "emf")
                 if strategy == "native" and not resvg_preferred:
-                    return results
+                    return self._finalize_results(filter_ref, results, filter_context)
                 if strategy == "auto" and not resvg_preferred:
                     if all(result.fallback is None for result in native_results):
-                        return results
+                        return self._finalize_results(filter_ref, results, filter_context)
 
         skip_fallbacks = resvg_result is not None and not resvg_preferred and not results
 
@@ -230,7 +237,7 @@ class FilterService:
                     else:
                         results = list(computed_vector)
                     if strategy in {"vector", "emf"} and not resvg_preferred:
-                        return results
+                        return self._finalize_results(filter_ref, results, filter_context)
 
             descriptor_results = self._descriptor_fallback(
                 descriptor_payload,
@@ -258,12 +265,12 @@ class FilterService:
                 preferred_results = self._attach_emf_metadata(preferred_results, emf_sources)
             if raster_results_cache:
                 self._attach_raster_metadata(preferred_results, raster_results_cache)
-            return preferred_results
+            return self._finalize_results(filter_ref, preferred_results, filter_context)
         if resvg_result is not None and resvg_enabled:
             if not results:
-                return [resvg_result]
+                return self._finalize_results(filter_ref, [resvg_result], filter_context)
             results.append(resvg_result)
-        return results
+        return self._finalize_results(filter_ref, results, filter_context)
 
     # ------------------------------------------------------------------ #
     # Accessors                                                          #
@@ -281,6 +288,10 @@ class FilterService:
     @property
     def registry(self) -> FilterRegistry | None:
         return self._registry
+
+    @property
+    def runtime_capability(self) -> str:
+        return self._runtime_capability
 
     # ------------------------------------------------------------------ #
     # Internal helpers                                                   #
@@ -582,7 +593,8 @@ class FilterService:
         if self._renderer is not None and self._planner is not None:
             return True
         planner_cls, renderer_cls, error = _load_filter_pipeline()
-        if error or planner_cls is None or renderer_cls is None:
+        if planner_cls is None or renderer_cls is None:
+            self._runtime_capability = "disabled"
             self._pipeline_error = error
             if not self._pipeline_warned:
                 self._logger.warning(
@@ -591,6 +603,13 @@ class FilterService:
                 )
                 self._pipeline_warned = True
             return False
+        if error is not None and not self._pipeline_warned:
+            self._logger.warning(
+                "Full filter pipeline unavailable (%s). Falling back to lightweight filter pipeline.",
+                _pipeline_warning_message(error),
+            )
+            self._pipeline_warned = True
+        self._runtime_capability = "lightweight" if error is not None else "full"
         self._pipeline_error = None
         self._planner = planner_cls(logger=self._logger)
         self._renderer = renderer_cls(
@@ -607,6 +626,7 @@ class FilterService:
             "filter_id": filter_ref,
             "disabled": True,
             "reason": _pipeline_warning_message(self._pipeline_error),
+            "runtime_capability": self.runtime_capability,
         }
         return [
             FilterEffectResult(
@@ -616,6 +636,51 @@ class FilterService:
                 metadata=metadata,
             )
         ]
+
+    def _finalize_results(
+        self,
+        filter_ref: str,
+        results: list[FilterEffectResult],
+        context: Any | None,
+    ) -> list[FilterEffectResult]:
+        capability = self.runtime_capability
+        self._trace_runtime_capability(filter_ref, context, capability=capability)
+        if not results:
+            return results
+        annotated: list[FilterEffectResult] = []
+        for result in results:
+            metadata = dict(result.metadata or {})
+            metadata.setdefault("runtime_capability", capability)
+            annotated.append(replace(result, metadata=metadata))
+        return annotated
+
+    def _trace_runtime_capability(
+        self,
+        filter_ref: str,
+        context: Any | None,
+        *,
+        capability: str,
+    ) -> None:
+        tracer = None
+        if isinstance(context, FilterContext):
+            options = context.options if isinstance(context.options, dict) else {}
+            tracer = options.get("tracer") if isinstance(options, dict) else None
+        elif isinstance(context, dict):
+            tracer = context.get("tracer")
+        if tracer is None:
+            return
+        recorder = getattr(tracer, "record_stage_event", None)
+        if not callable(recorder):
+            return
+        recorder(
+            stage="filter",
+            action="runtime_capability",
+            subject=filter_ref,
+            metadata={
+                "capability": capability,
+                "strategy": self._strategy,
+            },
+        )
 
 
 __all__ = ["FilterService"]
