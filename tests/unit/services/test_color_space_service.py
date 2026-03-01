@@ -94,7 +94,8 @@ def test_color_space_service_perceptual_normalization() -> None:
     assert normalised.result.converted is True
     metadata = normalised.result.metadata
     assert metadata["policy_normalization"] == "perceptual"
-    assert "palette" in metadata
+    # Palette analysis is now skipped by default for performance
+    assert "palette" not in metadata
     perceptual_meta = metadata.get("perceptual")
     assert perceptual_meta is not None
     assert perceptual_meta.get("applied") is True

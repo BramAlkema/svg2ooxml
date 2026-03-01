@@ -46,6 +46,7 @@ class ParserConfig:
     strip_cdata: bool = False
     resolve_entities: bool = True
     apply_normalization: bool = True
+    eager_ir: bool = False
 
     def to_parser_options(self) -> ParserOptions:
         return ParserOptions(
@@ -330,20 +331,21 @@ class SVGParser:
             if source_path:
                 result.metadata["source_path"] = source_path
 
-            try:
-                from svg2ooxml.ir import convert_parser_output
+            if self._config.eager_ir:
+                try:
+                    from svg2ooxml.ir import convert_parser_output
 
-                ir_scene = convert_parser_output(
-                    result,
-                    services=services,
-                    policy_engine=policy_engine,
-                    policy_context=policy_context,
-                    logger=self._logger,
-                )
-            except Exception as exc:  # pragma: no cover - defensive logging
-                self._logger.error("IR conversion failed: %s", exc)
-            else:
-                result.metadata["ir_scene"] = ir_scene
+                    ir_scene = convert_parser_output(
+                        result,
+                        services=services,
+                        policy_engine=policy_engine,
+                        policy_context=policy_context,
+                        logger=self._logger,
+                    )
+                except Exception as exc:  # pragma: no cover - defensive logging
+                    self._logger.error("IR conversion failed: %s", exc)
+                else:
+                    result.metadata["ir_scene"] = ir_scene
 
         result.metadata["style_context"] = style_context
         result.metadata["policy_context"] = policy_context

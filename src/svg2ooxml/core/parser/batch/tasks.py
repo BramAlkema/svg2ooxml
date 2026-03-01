@@ -16,7 +16,7 @@ from svg2ooxml.io.pptx_assembly import write_pptx
 from svg2ooxml.services.fonts.providers.directory import DirectoryFontProvider
 
 from ..preprocess.services import build_parser_services
-from ..svg_parser import SVGParser
+from ..svg_parser import ParserConfig, SVGParser
 from .bundles import new_job_id, write_slide_bundle
 from .stitcher import stitch_job_bundles
 
@@ -66,7 +66,7 @@ def _convert_single_svg_impl(
                 continue
             parser_services.services.font_service.register_provider(DirectoryFontProvider((path,)))
         parser_services.services.font_service.clear_cache()
-    parser = SVGParser(services=parser_services)
+    parser = SVGParser(config=ParserConfig(eager_ir=True), services=parser_services)
 
     start = time.perf_counter()
     result = parser.parse(svg_text, source_path=str(source_path))
@@ -168,7 +168,7 @@ def _render_slide_bundle_impl(
         svg_text = str(content)
 
     parser_services = build_parser_services()
-    parser = SVGParser(services=parser_services)
+    parser = SVGParser(config=ParserConfig(eager_ir=True), services=parser_services)
 
     start = time.perf_counter()
     result = parser.parse(svg_text, source_path=str(filename))
