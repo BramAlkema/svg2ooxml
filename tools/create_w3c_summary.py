@@ -60,7 +60,8 @@ def main() -> None:
         result = exporter.convert_pages(
             pages=pages,
             output_path=output_path,
-            render_tiers=False
+            render_tiers=False,
+            parallel=True,
         )
         logger.info(f"Successfully created {output_path} with {result.slide_count} slides.")
     except Exception as exc:

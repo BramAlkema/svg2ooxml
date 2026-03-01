@@ -249,7 +249,7 @@ def convert(svg_paths: list[Path], output: Path, *, no_fonts: bool = False) -> P
         for p in svg_paths
     ]
     exporter = SvgToPptxExporter()
-    result = exporter.convert_pages(pages, output)
+    result = exporter.convert_pages(pages, output, parallel=True)
     return result.pptx_path
 
 
