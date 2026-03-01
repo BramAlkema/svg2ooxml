@@ -183,7 +183,6 @@ class StyleResolver:
         "stroke-opacity": PropertyDescriptor("stroke_opacity", str.strip),
     }
 
-    _TEXT_CSS_MAP = _TEXT_ATTRIBUTE_MAP
 
     def __init__(
         self,
@@ -244,7 +243,7 @@ class StyleResolver:
         inline = element.get("style")
         if inline:
             for name, value, _important in self._parse_inline_declarations(inline):
-                descriptor = self._TEXT_CSS_MAP.get(name)
+                descriptor = self._TEXT_ATTRIBUTE_MAP.get(name)
                 if descriptor and value is not None:
                     prev_important = importance.get(name, False)
 
@@ -616,28 +615,16 @@ class StyleResolver:
         if not matches:
             return []
 
-        def cascade_precedence(origin: CSSOrigin, important: bool) -> int:
-            """Calculate cascade precedence per CSS Cascade 4 spec."""
-
-            if important:
-                priority_map = {
-                    CSSOrigin.USER_AGENT: 0,
-                    CSSOrigin.PRESENTATION_ATTR: 1,
-                    CSSOrigin.AUTHOR: 2,
-                    CSSOrigin.INLINE: 3,
-                }
-            else:
-                priority_map = {
-                    CSSOrigin.USER_AGENT: 0,
-                    CSSOrigin.PRESENTATION_ATTR: 1,
-                    CSSOrigin.AUTHOR: 2,
-                    CSSOrigin.INLINE: 3,
-                }
-            return priority_map.get(origin, 0)
+        _cascade_priority = {
+            CSSOrigin.USER_AGENT: 0,
+            CSSOrigin.PRESENTATION_ATTR: 1,
+            CSSOrigin.AUTHOR: 2,
+            CSSOrigin.INLINE: 3,
+        }
 
         matches.sort(
             key=lambda item: (
-                cascade_precedence(item[4], item[0].important),  # Origin + importance
+                _cascade_priority.get(item[4], 0),  # Origin precedence
                 item[1],  # Specificity (ids, classes, tags)
                 item[2],  # Rule order (source order)
                 item[3],  # Declaration index
@@ -711,7 +698,7 @@ class StyleResolver:
         applied_origin = origin_map if origin_map is not None else {}
 
         for decl in self._collect_css_declarations(element):
-            descriptor = self._TEXT_CSS_MAP.get(decl.name)
+            descriptor = self._TEXT_ATTRIBUTE_MAP.get(decl.name)
             if descriptor is None:
                 continue
 

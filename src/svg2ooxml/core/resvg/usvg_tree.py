@@ -218,7 +218,7 @@ class Tree:
         return self.ids.get(node_id) if node_id else None
 
     def has_text_nodes(self) -> bool:
-        return any(isinstance(node, TextNode) for node in self.root.iter())
+        return bool(self.text_nodes)
 
     def paint_server(self, href: str) -> PaintServerNode | None:
         if href.startswith("#"):
@@ -884,16 +884,25 @@ def build_tree(document: SvgDocument, options: Options | None = None) -> Tree:
     ids: dict[str, BaseNode] = {}
     _collect_ids(root, ids)
     _expand_use_nodes(root, ids)
-    paint_servers = {
-        node_id: node
-        for node_id, node in ids.items()
-        if isinstance(node, PaintServerNode)
-    }
-    masks = {node_id: node for node_id, node in ids.items() if isinstance(node, MaskNode)}
-    clip_paths = {node_id: node for node_id, node in ids.items() if isinstance(node, ClipPathNode)}
-    markers = {node_id: node for node_id, node in ids.items() if isinstance(node, MarkerNode)}
-    filters = {node_id: node for node_id, node in ids.items() if isinstance(node, FilterNode)}
-    text_nodes = [node for node in ids.values() if isinstance(node, TextNode)]
+    paint_servers: dict[str, PaintServerNode] = {}
+    masks: dict[str, MaskNode] = {}
+    clip_paths: dict[str, ClipPathNode] = {}
+    markers: dict[str, MarkerNode] = {}
+    filters: dict[str, FilterNode] = {}
+    text_nodes: list[TextNode] = []
+    for node_id, node in ids.items():
+        if isinstance(node, PaintServerNode):
+            paint_servers[node_id] = node
+        elif isinstance(node, MaskNode):
+            masks[node_id] = node
+        elif isinstance(node, ClipPathNode):
+            clip_paths[node_id] = node
+        elif isinstance(node, MarkerNode):
+            markers[node_id] = node
+        elif isinstance(node, FilterNode):
+            filters[node_id] = node
+        if isinstance(node, TextNode):
+            text_nodes.append(node)
     tree = Tree(
         root=root,
         ids=ids,
@@ -908,36 +917,6 @@ def build_tree(document: SvgDocument, options: Options | None = None) -> Tree:
     build_text_layout(tree)
     return tree
 PaintServer = LinearGradient | RadialGradient | PatternPaint
-
-
-def _inherit_fill(fill: FillStyle | None, parent: BaseNode | None) -> FillStyle | None:
-    if fill is not None:
-        return fill
-    if parent and parent.fill is not None:
-        return replace(parent.fill)
-    return None
-
-def _inherit_stroke(stroke: StrokeStyle | None, parent: BaseNode | None) -> StrokeStyle | None:
-    if stroke is not None:
-        return stroke
-    if parent and parent.stroke is not None:
-        return replace(parent.stroke)
-    return None
-
-def _inherit_text(text_style: TextStyle | None, parent: BaseNode | None) -> TextStyle | None:
-    parent_style = parent.text_style if parent and parent.text_style is not None else None
-    if text_style is None:
-        return replace(parent_style) if parent_style is not None else None
-    if parent_style is None:
-        return text_style
-    return TextStyle(
-        font_families=text_style.font_families or parent_style.font_families,
-        font_size=text_style.font_size if text_style.font_size is not None else parent_style.font_size,
-        font_style=text_style.font_style or parent_style.font_style,
-        font_weight=text_style.font_weight or parent_style.font_weight,
-        text_decoration=text_style.text_decoration or parent_style.text_decoration,
-        letter_spacing=text_style.letter_spacing if text_style.letter_spacing is not None else parent_style.letter_spacing,
-    )
 
 
 def _inherit_fill(fill: FillStyle | None, parent: BaseNode | None) -> FillStyle | None:

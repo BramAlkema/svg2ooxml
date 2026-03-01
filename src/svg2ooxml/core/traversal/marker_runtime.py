@@ -697,34 +697,7 @@ def _marker_segments_for_element(element: etree._Element, local_name: str) -> li
 
 
 def _circle_segments(cx: float, cy: float, r: float) -> list[SegmentType]:
-    kappa = 0.5522847498307936
-    control = r * kappa
-    points = [
-        Point(cx, cy - r),
-        Point(cx + control, cy - r),
-        Point(cx + r, cy - control),
-        Point(cx + r, cy),
-        Point(cx + r, cy + control),
-        Point(cx + control, cy + r),
-        Point(cx, cy + r),
-        Point(cx - control, cy + r),
-        Point(cx - r, cy + control),
-        Point(cx - r, cy),
-        Point(cx - r, cy - control),
-        Point(cx - control, cy - r),
-        Point(cx, cy - r),
-    ]
-    segments: list[SegmentType] = []
-    for idx in range(0, len(points) - 3, 3):
-        segments.append(
-            BezierSegment(
-                start=points[idx],
-                control1=points[idx + 1],
-                control2=points[idx + 2],
-                end=points[idx + 3],
-            )
-        )
-    return segments
+    return _ellipse_segments(cx, cy, r, r)
 
 
 def _ellipse_segments(cx: float, cy: float, rx: float, ry: float) -> list[SegmentType]:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import functools
 from collections.abc import Iterable
 from typing import Any
 
@@ -15,6 +16,7 @@ from svg2ooxml.core.styling import style_runtime, use_expander
 from svg2ooxml.core.traversal import clipping
 from svg2ooxml.core.traversal.constants import DEFAULT_TOLERANCE
 from svg2ooxml.core.traversal.coordinate_space import CoordinateSpace
+from svg2ooxml.core.traversal.runtime import local_name
 from svg2ooxml.core.traversal.geometry_utils import is_axis_aligned
 from svg2ooxml.ir.effects import CustomEffect
 from svg2ooxml.ir.geometry import BezierSegment, LineSegment, SegmentType
@@ -57,6 +59,15 @@ class TraversalHooksMixin:
     _SUPPORTED_FEATURES = {
         "http://www.w3.org/TR/SVG11/feature#BasicText",
     }
+    _STRATEGY_RANK = {
+        "native": 4,
+        "resvg": 3,
+        "vector": 2,
+        "emf": 2,
+        "raster": 1,
+        "legacy": 0,
+        "auto": 0,
+    }
 
     def convert_group(self, element: etree._Element, children: list, matrix) -> Group | None:
         if not children:
@@ -78,6 +89,21 @@ class TraversalHooksMixin:
         )
         self._trace_geometry_decision(element, "native", group.metadata)
         return group
+
+    @functools.cached_property
+    def _dispatch(self) -> dict[str, Any]:
+        return {
+            "rect": self._convert_rect,
+            "circle": self._convert_circle,
+            "ellipse": self._convert_ellipse,
+            "line": self._convert_line,
+            "path": self._convert_path,
+            "polygon": self._convert_polygon,
+            "polyline": self._convert_polyline,
+            "image": self._convert_image,
+            "text": self._text_converter.convert,
+            "use": self._convert_use,
+        }
 
     def convert_element(
         self,
@@ -107,20 +133,7 @@ class TraversalHooksMixin:
                 traverse_callback=traverse_callback,
             )
 
-        dispatch = {
-            "rect": self._convert_rect,
-            "circle": self._convert_circle,
-            "ellipse": self._convert_ellipse,
-            "line": self._convert_line,
-            "path": self._convert_path,
-            "polygon": self._convert_polygon,
-            "polyline": self._convert_polyline,
-            "image": self._convert_image,
-            "text": self._text_converter.convert,
-            "use": self._convert_use,
-        }
-
-        handler = dispatch.get(tag)
+        handler = self._dispatch.get(tag)
         if handler is None:
             return None
         try:
@@ -380,21 +393,13 @@ class TraversalHooksMixin:
                 fallback="bitmap",
             )
 
+        rank_map = self._STRATEGY_RANK
+
         def _score(index: int, result: FilterEffectResult) -> tuple[int, int, int, int]:
             meta = result.metadata if isinstance(result.metadata, dict) else {}
             no_op = bool(meta.get("no_op"))
-            fallback = result.fallback
-            fallback_none = fallback is None
+            fallback_none = result.fallback is None
             strategy = (result.strategy or "").lower()
-            rank_map = {
-                "native": 4,
-                "resvg": 3,
-                "vector": 2,
-                "emf": 2,
-                "raster": 1,
-                "legacy": 0,
-                "auto": 0,
-            }
             rank = rank_map.get(strategy, 0)
             return (0 if no_op else 1, 1 if fallback_none else 0, rank, index)
 
@@ -856,13 +861,7 @@ class TraversalHooksMixin:
             return token[1:]
         return None
 
-    @staticmethod
-    def _local_name(tag: Any) -> str:
-        if not isinstance(tag, str):
-            return ""
-        if "}" in tag:
-            return tag.split("}", 1)[1]
-        return tag
+    _local_name = staticmethod(local_name)
 
     @staticmethod
     def _make_namespaced_tag(reference: etree._Element, local: str) -> str:

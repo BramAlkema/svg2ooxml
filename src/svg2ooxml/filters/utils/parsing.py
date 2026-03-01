@@ -35,6 +35,19 @@ def parse_channel(value: str | None) -> str:
     return token if token in _CHANNELS else "A"
 
 
+def parse_float_list(payload: str | None) -> list[float]:
+    """Parse a whitespace/comma-separated string of floats."""
+    if not payload:
+        return []
+    values: list[float] = []
+    for token in payload.replace(",", " ").split():
+        try:
+            values.append(float(token))
+        except ValueError:
+            continue
+    return values
+
+
 def parse_number(value: str | None, default: float = 0.0) -> float:
     if value is None:
         return default
@@ -83,6 +96,7 @@ __all__ = [
     "DisplacementMapParameters",
     "TurbulenceParameters",
     "parse_channel",
+    "parse_float_list",
     "parse_number",
     "parse_displacement_map",
     "parse_turbulence",
