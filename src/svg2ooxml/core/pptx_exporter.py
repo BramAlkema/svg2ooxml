@@ -210,15 +210,23 @@ class SvgToPptxExporter:
         tracer: ConversionTracer | None = None,
         split_fallback_variants: bool = False,
         render_tiers: bool = False,
+        parallel: bool = False,
+        max_workers: int | None = None,
     ) -> SvgToPptxMultiResult:
         """Convert multiple SVG payloads into a multi-slide PPTX."""
 
         if not pages:
             raise SvgConversionError("At least one SVG page is required for multi-slide conversion.")
 
+        packaging_tracer = tracer or ConversionTracer()
+
+        if parallel and not render_tiers and not split_fallback_variants:
+            return self._convert_pages_parallel(
+                pages, output_path, packaging_tracer, max_workers=max_workers,
+            )
+
         page_results: list[SvgPageResult] = []
         slide_count = 0
-        packaging_tracer = tracer or ConversionTracer()
 
         with self._builder.begin_streaming(tracer=packaging_tracer) as stream:
             for index, page in enumerate(pages, start=1):
@@ -497,6 +505,104 @@ class SvgToPptxExporter:
             animation_payload=animation_payload,
         )
         return render_result, scene
+
+    def _convert_pages_parallel(
+        self,
+        pages: Sequence[SvgPageSource],
+        output_path: Path,
+        packaging_tracer: ConversionTracer,
+        *,
+        max_workers: int | None = None,
+    ) -> SvgToPptxMultiResult:
+        """Render pages in parallel, then package sequentially."""
+        import os
+        from concurrent.futures import ThreadPoolExecutor
+
+        workers = max_workers or min(len(pages), os.cpu_count() or 1)
+
+        futures: list[tuple[SvgPageSource, Any]] = []
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            for page in pages:
+                overrides = (page.metadata or {}).get("policy_overrides")
+                source_path = (page.metadata or {}).get("source_path")
+                fut = pool.submit(
+                    SvgToPptxExporter._render_page_isolated,
+                    page.svg_text,
+                    filter_strategy=self._filter_strategy,
+                    geometry_mode=self._geometry_mode,
+                    policy_overrides=overrides,
+                    source_path=source_path,
+                )
+                futures.append((page, fut))
+
+        page_results: list[SvgPageResult] = []
+        slide_count = 0
+
+        with self._builder.begin_streaming(tracer=packaging_tracer) as stream:
+            for index, (page, fut) in enumerate(futures, start=1):
+                render_result, scene, report_dict = fut.result()
+
+                slide_title = (
+                    page.title
+                    or (scene.metadata.get("page_title") if isinstance(scene.metadata, dict) else None)
+                    or page.name
+                    or f"Slide {index}"
+                )
+
+                scene_metadata: dict[str, Any] | None = None
+                if isinstance(scene.metadata, dict):
+                    scene.metadata.setdefault("page_title", slide_title)
+                    scene.metadata.setdefault("trace_report", report_dict)
+                    if page.metadata:
+                        scene.metadata.setdefault("page_metadata", {}).update(page.metadata)
+                    scene.metadata.setdefault("variant", {}).setdefault("type", "base")
+                    scene_metadata = scene.metadata
+
+                stream.add_slide(render_result)
+                slide_count += 1
+                del render_result
+                page_results.append(
+                    SvgPageResult(
+                        title=slide_title,
+                        trace_report=report_dict,
+                        metadata=scene_metadata,
+                    )
+                )
+
+            pptx_path = stream.finalize(output_path)
+
+        packaging_report = packaging_tracer.report().to_dict()
+        aggregate_trace = _merge_trace_reports(
+            [result.trace_report for result in page_results] + [packaging_report]
+        )
+
+        return SvgToPptxMultiResult(
+            pptx_path=pptx_path,
+            slide_count=slide_count,
+            page_results=page_results,
+            packaging_report=packaging_report,
+            aggregated_trace_report=aggregate_trace,
+        )
+
+    @staticmethod
+    def _render_page_isolated(
+        svg_text: str,
+        *,
+        filter_strategy: str | None,
+        geometry_mode: str,
+        policy_overrides: dict[str, dict[str, Any]] | None = None,
+        source_path: str | None = None,
+    ) -> tuple[DrawingMLRenderResult, IRScene, dict[str, Any]]:
+        """Thread-safe single-page render with fresh pipeline instances."""
+        exporter = SvgToPptxExporter(
+            filter_strategy=filter_strategy,
+            geometry_mode=geometry_mode,
+        )
+        tracer = ConversionTracer()
+        render_result, scene = exporter._render_svg(
+            svg_text, tracer, policy_overrides, source_path=source_path,
+        )
+        return render_result, scene, tracer.report().to_dict()
 
     @staticmethod
     def _apply_policy_overrides(

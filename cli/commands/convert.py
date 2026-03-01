@@ -52,6 +52,11 @@ from ._convert_sources import (
     help="Render four fidelity tiers per slide (direct, mimic, EMF fallback, bitmap fallback).",
 )
 @click.option(
+    "--parallel/--no-parallel",
+    default=False,
+    help="Render slides in parallel using a thread pool.",
+)
+@click.option(
     "--export-slides",
     is_flag=True,
     help="Upload the generated PPTX to Google Slides.",
@@ -71,6 +76,7 @@ def convert(  # noqa: PLR0913  (CLI surface)
     split_pages: bool,
     split_fallback_slides: bool,
     render_tiers: bool,
+    parallel: bool,
     export_slides: bool,
     title: str | None,
     folder_id: str | None,
@@ -128,6 +134,7 @@ def convert(  # noqa: PLR0913  (CLI surface)
                 tracer=tracer,
                 split_fallback_variants=split_fallback_slides,
                 render_tiers=render_tiers,
+                parallel=parallel,
             )
             slide_count = multi_result.slide_count
             trace_payload = {
