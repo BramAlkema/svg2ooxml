@@ -7,8 +7,10 @@ from dataclasses import dataclass
 from lxml import etree
 
 # Import centralized XML builders for safe DrawingML generation
+from svg2ooxml.common.conversions.angles import degrees_to_ppt
+from svg2ooxml.common.conversions.scale import scale_to_ppt
 from svg2ooxml.drawingml.xml_builder import a_elem, a_sub, to_string
-from svg2ooxml.filters.base import Filter, FilterContext, FilterResult
+from svg2ooxml.filters.base import Filter, FilterContext, FilterResult, stitch_blip_transforms
 
 
 @dataclass
@@ -26,11 +28,10 @@ class ColorMatrixFilter(Filter):
         drawingml = self._to_drawingml(params)
         raw_values = (primitive.get("values") or "").strip()
         fallback = None
-        policy = {}
-        if isinstance(context.options, dict):
-            policy = context.options.get("policy") or {}
+        policy = context.policy
         approximation_allowed = bool(policy.get("approximation_allowed", True))
         prefer_rasterization = bool(policy.get("prefer_rasterization", False))
+        enable_native_color_transforms = bool(policy.get("enable_native_color_transforms", False))
         metadata = {
             "filter_type": self.filter_type,
             "matrix_type": params.matrix_type,
@@ -88,6 +89,8 @@ class ColorMatrixFilter(Filter):
                         fallback=None,
                         metadata=metadata,
                     )
+            if enable_native_color_transforms:
+                stitch_blip_transforms(metadata, self._blip_transform_candidates(params))
             metadata["native_support"] = False
             metadata["fallback_reason"] = f"{params.matrix_type}_requires_raster"
             metadata["approximation_allowed"] = approximation_allowed
@@ -165,6 +168,22 @@ class ColorMatrixFilter(Filter):
         ]
         tol = 1e-6
         return all(abs(a - b) <= tol for a, b in zip(values, identity, strict=True))
+
+    @staticmethod
+    def _blip_transform_candidates(params: ColorMatrixParams) -> list[dict[str, object]]:
+        if params.matrix_type == "saturate":
+            value = params.values[0] if params.values else 1.0
+            amount = max(0, min(scale_to_ppt(value), 400000))
+            return [{"tag": "satMod", "val": amount}]
+
+        if params.matrix_type == "hueRotate":
+            value = params.values[0] if params.values else 0.0
+            angle = degrees_to_ppt(value)
+            if angle == 0:
+                return []
+            return [{"tag": "hueOff", "val": angle}]
+
+        return []
 
 
 __all__ = ["ColorMatrixFilter"]

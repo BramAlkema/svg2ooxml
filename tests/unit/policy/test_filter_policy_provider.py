@@ -16,6 +16,9 @@ def test_filter_policy_provider_emits_glow_thresholds() -> None:
     assert "max_glow_alpha" in result
     assert result["max_glow_alpha"] == 0.75
     assert result["preferred_glow_strategy"] == "inherit"
+    assert result["enable_effect_dag"] is False
+    assert result["enable_native_color_transforms"] is False
+    assert result["enable_blip_effect_enrichment"] is False
 
 
 def test_filter_policy_respects_overrides() -> None:
@@ -110,6 +113,9 @@ def test_filter_policy_collects_dotted_primitive_overrides() -> None:
             "filter.primitives.feMerge.max_merge_inputs": "6",
             "filter.primitives.feConvolveMatrix.max_convolve_kernel": "13",
             "filter.primitives.feConvolveMatrix.max_convolve_order": "21",
+            "filter.enable_effect_dag": "on",
+            "filter.enable_native_color_transforms": "true",
+            "filter.enable_blip_effect_enrichment": "1",
         },
     )
 
@@ -130,3 +136,6 @@ def test_filter_policy_collects_dotted_primitive_overrides() -> None:
     convolve = primitives["feconvolvematrix"]
     assert convolve["max_convolve_kernel"] == 13
     assert convolve["max_convolve_order"] == 21
+    assert result["enable_effect_dag"] is True
+    assert result["enable_native_color_transforms"] is True
+    assert result["enable_blip_effect_enrichment"] is True

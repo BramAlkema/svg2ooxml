@@ -18,7 +18,6 @@ from svg2ooxml.drawingml.bridges.resvg_paint_bridge import (
 from svg2ooxml.elements.gradient_processor import GradientComplexity
 from svg2ooxml.elements.pattern_processor import PatternComplexity, PatternType
 from svg2ooxml.ir.effects import Effect
-from svg2ooxml.ir.numpy_compat import NUMPY_AVAILABLE, np
 from svg2ooxml.ir.paint import (
     GradientPaintRef,
     GradientStop,
@@ -29,6 +28,23 @@ from svg2ooxml.ir.paint import (
     Stroke,
     StrokeCap,
     StrokeJoin,
+)
+from svg2ooxml.core.styling.style_helpers import (
+    apply_matrix_to_point,
+    apply_stroke_opacity,
+    clean_color,
+    descriptor_stop_colors,
+    extract_url_id as _extract_url_id,
+    local_name,
+    matrix2d_to_numpy,
+    matrix_tuple_is_identity,
+    normalize_hex as _normalize_hex,
+    parse_dash_array as _parse_dash_array,
+    parse_offset,
+    parse_optional_float as _parse_optional_float,
+    parse_percentage,
+    parse_stop_color,
+    parse_style_attr,
 )
 from svg2ooxml.policy.constants import FALLBACK_EMF, geometry_fallback_for
 from svg2ooxml.services import ConversionServices
@@ -527,48 +543,10 @@ class StyleExtractor:
 
     @staticmethod
     def _clean_color(value: str | None, fallback: str | None = None) -> str | None:
-        if not value:
-            return fallback
-        normalized = _normalize_hex(value)
-        if normalized is None:
-            return fallback
-        return normalized
+        return clean_color(value, fallback)
 
-    def _apply_stroke_opacity(self, paint: SolidPaint | GradientPaintRef | PatternPaint | LinearGradientPaint | RadialGradientPaint, opacity: float):
-        opacity = max(0.0, min(1.0, opacity))
-        if isinstance(paint, SolidPaint):
-            return SolidPaint(rgb=paint.rgb, opacity=max(0.0, min(1.0, paint.opacity * opacity)))
-        if isinstance(paint, LinearGradientPaint):
-            if opacity >= 0.999:
-                return paint
-            scaled_stops = [
-                GradientStop(stop.offset, stop.rgb, max(0.0, min(1.0, stop.opacity * opacity)))
-                for stop in paint.stops
-            ]
-            return LinearGradientPaint(
-                stops=scaled_stops,
-                start=paint.start,
-                end=paint.end,
-                transform=paint.transform,
-                gradient_id=paint.gradient_id,
-            )
-        if isinstance(paint, RadialGradientPaint):
-            if opacity >= 0.999:
-                return paint
-            scaled_stops = [
-                GradientStop(stop.offset, stop.rgb, max(0.0, min(1.0, stop.opacity * opacity)))
-                for stop in paint.stops
-            ]
-            return RadialGradientPaint(
-                stops=scaled_stops,
-                center=paint.center,
-                radius=paint.radius,
-                focal_point=paint.focal_point,
-                transform=paint.transform,
-                gradient_id=paint.gradient_id,
-            )
-        # PatternPaint and GradientPaintRef don't support per-stop opacity; rely on stroke.opacity downstream.
-        return paint
+    def _apply_stroke_opacity(self, paint, opacity: float):
+        return apply_stroke_opacity(paint, opacity)
 
     def _descriptor_is_mesh(self, descriptor: Any) -> bool:
         return isinstance(descriptor, MeshGradientDescriptor)
@@ -624,7 +602,7 @@ class StyleExtractor:
 
         transform = getattr(descriptor, "transform", None)
         if isinstance(transform, tuple) and len(transform) == 6:
-            analysis_entry["has_transforms"] = not self._matrix_tuple_is_identity(transform)
+            analysis_entry["has_transforms"] = not matrix_tuple_is_identity(transform)
 
         if descriptor_colors:
             analysis_entry["colors_used"] = descriptor_colors
@@ -701,8 +679,11 @@ class StyleExtractor:
 
         if analysis is not None:
             complexity = getattr(analysis, "complexity", None)
-            powerpoint_ok = getattr(analysis, "powerpoint_compatible", True)
-            if complexity in {GradientComplexity.COMPLEX, GradientComplexity.UNSUPPORTED} or not powerpoint_ok:
+            # Keep gradient fallback decisions tied to demonstrated structural complexity.
+            # The processor's generic "powerpoint_compatible" flag is conservative and
+            # marks several supported features (e.g. spreadMethod/gradientUnits) as
+            # incompatible, which can force unnecessary EMF fallback.
+            if complexity in {GradientComplexity.COMPLEX, GradientComplexity.UNSUPPORTED}:
                 paint_policy["suggest_fallback"] = FALLBACK_EMF
                 self._maybe_set_geometry_fallback(metadata, FALLBACK_EMF)
 
@@ -790,7 +771,7 @@ class StyleExtractor:
             "units": descriptor.units,
             "content_units": descriptor.content_units,
         }
-        if descriptor.transform and not self._matrix_tuple_is_identity(descriptor.transform):
+        if descriptor.transform and not matrix_tuple_is_identity(descriptor.transform):
             geometry_entry["transform_matrix"] = descriptor.transform
         analysis_entry["geometry"] = geometry_entry
 
@@ -892,7 +873,7 @@ class StyleExtractor:
         default: str | None = None,
     ) -> str | None:
         if attribute == "__tag__":
-            return self._local_name(chain[0].tag)
+            return local_name(chain[0].tag)
         for element in chain:
             value = element.get(attribute)
             if value is not None:
@@ -927,68 +908,18 @@ class StyleExtractor:
         parsed: list[GradientStop] = []
         for stop in stops:
             offset_str = stop.get("offset", "0")
-            offset = self._parse_offset(offset_str)
-            color, stop_opacity = self._parse_stop_color(stop)
+            offset = parse_offset(offset_str)
+            color, stop_opacity = parse_stop_color(stop)
             total_opacity = max(0.0, min(1.0, stop_opacity * opacity))
             parsed.append(GradientStop(offset=offset, rgb=color, opacity=total_opacity))
         parsed.sort(key=lambda stop: stop.offset)
         return parsed
 
-    def _parse_offset(self, value: str) -> float:
-        token = value.strip()
-        if token.endswith("%"):
-            try:
-                return max(0.0, min(1.0, float(token[:-1]) / 100.0))
-            except ValueError:
-                return 0.0
-        try:
-            return max(0.0, min(1.0, float(token)))
-        except ValueError:
-            return 0.0
-
-    def _parse_stop_color(self, stop: etree._Element) -> tuple[str, float]:
-        style_attrs = self._parse_style(stop.get("style"))
-        color = stop.get("stop-color") or style_attrs.get("stop-color") or "#000000"
-        color = _normalize_hex(color) or "000000"
-        opacity_str = stop.get("stop-opacity") or style_attrs.get("stop-opacity")
-        try:
-            opacity = float(opacity_str) if opacity_str is not None else 1.0
-        except ValueError:
-            opacity = 1.0
-        opacity = max(0.0, min(1.0, opacity))
-        return color, opacity
-
     def _descriptor_stop_colors(self, descriptor: GradientDescriptor) -> list[str]:
-        stops = getattr(descriptor, "stops", ())
-        colors: set[str] = set()
-        for stop in stops:
-            color_value = getattr(stop, "color", "")
-            if not isinstance(color_value, str):
-                continue
-            token = color_value.lstrip("#").upper()
-            if token:
-                colors.add(token)
-        return sorted(colors)
-
-    def _matrix_tuple_is_identity(self, transform: Any) -> bool:
-        if not isinstance(transform, (tuple, list)) or len(transform) != 6:
-            return False
-        identity = (1.0, 0.0, 0.0, 1.0, 0.0, 0.0)
-        try:
-            return all(abs(float(value) - identity[idx]) < 1e-9 for idx, value in enumerate(transform))
-        except (TypeError, ValueError):
-            return False
+        return descriptor_stop_colors(descriptor)
 
     def _parse_style(self, style: str | None) -> dict[str, str]:
-        if not style:
-            return {}
-        declarations = {}
-        for part in style.split(";"):
-            if ":" not in part:
-                continue
-            name, value = part.split(":", 1)
-            declarations[name.strip()] = value.strip()
-        return declarations
+        return parse_style_attr(style)
 
     def _resolve_gradient_point(
         self,
@@ -1032,35 +963,13 @@ class StyleExtractor:
                 if scale:
                     return px_value / scale
             return px_value
-        return self._parse_percentage(value)
-
-    def _parse_percentage(self, value: str) -> float:
-        token = value.strip()
-        if token.endswith("%"):
-            try:
-                return float(token[:-1]) / 100.0
-            except ValueError:
-                return 0.0
-        try:
-            return float(token)
-        except ValueError:
-            return 0.0
+        return parse_percentage(value)
 
     def _apply_matrix_to_point(self, matrix: Matrix2D, point: tuple[float, float]) -> tuple[float, float]:
-        applied = matrix.transform_points([point])
-        if applied:
-            p = applied[0]
-            return (p.x, p.y)
-        return point
+        return apply_matrix_to_point(matrix, point)
 
     def _matrix2d_to_numpy(self, matrix: Matrix2D | None):
-        if matrix is None or not NUMPY_AVAILABLE:
-            return None
-        return np.array([
-            [matrix.a, matrix.c, matrix.e],
-            [matrix.b, matrix.d, matrix.f],
-            [0.0, 0.0, 1.0],
-        ])
+        return matrix2d_to_numpy(matrix)
 
     def _to_px(self, value: str, conversion, axis: str) -> float:
         if self._unit_converter is None or conversion is None:
@@ -1075,57 +984,6 @@ class StyleExtractor:
                 return float(value)
             except ValueError:
                 return 0.0
-
-    def _local_name(self, tag: str) -> str:
-        if "}" in tag:
-            return tag.split("}", 1)[1]
-        return tag
-
-def _extract_url_id(token: str) -> str | None:
-    if not token.startswith("url("):
-        return None
-    inner = token[4:-1].strip().strip('"\'')
-    if inner.startswith("#"):
-        return inner[1:]
-    return inner or None
-
-
-def _normalize_hex(token: str) -> str | None:
-    value = token.lstrip("#").strip()
-    if len(value) == 3:
-        value = "".join(ch * 2 for ch in value)
-    if len(value) != 6:
-        return None
-    try:
-        int(value, 16)
-    except ValueError:
-        return None
-    return value.upper()
-
-
-def _parse_dash_array(value: str | None) -> list[float] | None:
-    if not value:
-        return None
-    token = value.strip()
-    if not token or token.lower() == "none":
-        return None
-    parts = token.replace(",", " ").split()
-    numbers: list[float] = []
-    for part in parts:
-        try:
-            numbers.append(float(part))
-        except ValueError:
-            continue
-    return numbers or None
-
-
-def _parse_optional_float(value: str | None) -> float | None:
-    if value is None:
-        return None
-    try:
-        return float(value)
-    except ValueError:
-        return None
 
 
 __all__ = ["StyleExtractor", "StyleResult"]

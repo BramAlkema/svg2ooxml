@@ -477,9 +477,7 @@ class FilterService:
         return None
 
     def _resolve_strategy(self, context: FilterContext, descriptor: ResolvedFilter | None) -> str:
-        policy_options = {}
-        if isinstance(context.options, dict):
-            policy_options = context.options.get("policy") or {}
+        policy_options = context.policy
 
         # Prioritize policy-defined strategy if present
         policy_strategy = policy_options.get("strategy")

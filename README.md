@@ -185,8 +185,17 @@ Project status and priorities live in `docs/ROADMAP.md`.
 2. Run `pre-commit run --all-files` and `pytest` before pushing.
 3. Update documentation (`docs/`, `README.md`, `docs/porting.md`) when moving or
    renaming modules.
-4. Open a PR with the problem statement, approach, validation steps, and any
+4. Add SPDX headers to new files using `docs/licensing.md` and
+   `tools/templates/`.
+5. Open a PR with the problem statement, approach, validation steps, and any
    follow-up tasks or assets (PPTX diffs, coverage reports, etc.).
 
 Please capture outstanding migration work in `docs/porting.md` so the port stays
 coordinated across modules.
+
+## License
+
+- Source code in this repository is licensed under `AGPL-3.0-only`. See `LICENSE`.
+- Documentation and content assets are licensed under `CC BY-NC-SA 4.0`.
+  See `LICENSE-CONTENT`.
+- Contributor file-level header guidance: `docs/licensing.md`.

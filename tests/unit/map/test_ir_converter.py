@@ -663,8 +663,35 @@ def test_path_with_marker_metadata() -> None:
 
     paths = [element for element in scene.elements if isinstance(element, Path)]
     assert paths, "expected at least one path element in scene"
-    markers = paths[0].metadata.get("markers", {}) if isinstance(paths[0].metadata, dict) else {}
+    path_metadata = paths[0].metadata if isinstance(paths[0].metadata, dict) else {}
+    markers = path_metadata.get("markers", {})
     assert markers.get("end") == "arrow"
+    marker_profiles = path_metadata.get("marker_profiles", {})
+    assert marker_profiles.get("end", {}).get("type") == "triangle"
+    assert marker_profiles.get("end", {}).get("source") == "geometry"
+
+
+def test_path_with_circle_marker_adds_oval_profile() -> None:
+    svg = (
+        "<svg width='50' height='50' xmlns='http://www.w3.org/2000/svg'>"
+        "<defs>"
+        "  <marker id='dot' markerWidth='1.5' markerHeight='1.5' orient='auto'>"
+        "    <circle cx='0.75' cy='0.75' r='0.75'/>"
+        "  </marker>"
+        "</defs>"
+        "<path d='M0 0 L10 0' stroke='#000000' marker-end='url(#dot)' fill='none'/>"
+        "</svg>"
+    )
+
+    parse_result = _build_parse_result(svg)
+    scene = _convert_with_resvg(parse_result)
+
+    paths = [element for element in scene.elements if isinstance(element, Path)]
+    assert paths, "expected at least one path element in scene"
+    path_metadata = paths[0].metadata if isinstance(paths[0].metadata, dict) else {}
+    marker_profiles = path_metadata.get("marker_profiles", {})
+    assert marker_profiles.get("end", {}).get("type") == "oval"
+    assert marker_profiles.get("end", {}).get("size") == "sm"
 
 
 def test_pattern_fill_records_policy_metadata() -> None:

@@ -26,6 +26,13 @@ class FilterContext:
     pipeline_state: dict[str, FilterResult] | None = None
     tracer: RenderTracer | None = None
 
+    @property
+    def policy(self) -> dict[str, Any]:
+        """Return the policy sub-dict from options, defaulting to empty."""
+        if isinstance(self.options, dict):
+            return self.options.get("policy") or {}
+        return {}
+
     def with_primitive(self, primitive: etree._Element) -> FilterContext:
         """Return a child context referencing the current primitive."""
 
@@ -91,4 +98,14 @@ class Filter(ABC):
         return tag
 
 
-__all__ = ["Filter", "FilterContext", "FilterResult"]
+def stitch_blip_transforms(
+    metadata: dict[str, Any],
+    transforms: list[dict[str, object]],
+) -> None:
+    """Attach blip color-transform candidates to filter metadata."""
+    if transforms:
+        metadata["native_color_transform_context"] = "blip"
+        metadata["blip_color_transforms"] = transforms
+
+
+__all__ = ["Filter", "FilterContext", "FilterResult", "stitch_blip_transforms"]

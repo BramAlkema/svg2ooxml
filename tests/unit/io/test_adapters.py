@@ -5,7 +5,7 @@ from __future__ import annotations
 import zipfile
 
 from svg2ooxml.core.ir import IRScene
-from svg2ooxml.io.pptx_writer import write_pptx
+from svg2ooxml.io.pptx_assembly import write_pptx
 from svg2ooxml.io.svg_reader import read_svg_shapes
 from svg2ooxml.ir.geometry import Rect
 from svg2ooxml.ir.paint import SolidPaint

@@ -16,9 +16,10 @@ from __future__ import annotations
 import argparse
 import json
 import re
-import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any
+
+from lxml import etree as ET
 
 
 def extract_test_description(svg_path: Path) -> dict[str, Any]:

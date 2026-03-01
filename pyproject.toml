@@ -9,11 +9,14 @@ description = "SVG to Office Open XML conversion toolkit."
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [ "tinycss2>=1.2", "click>=8.1", "lxml>=4.9.0",]
+classifiers = [
+  "License :: OSI Approved :: GNU Affero General Public License v3",
+]
 [[project.authors]]
 name = "SVG2OOXML Contributors"
 
 [project.license]
-text = "TBD"
+text = "GNU Affero General Public License v3.0"
 
 [project.scripts]
 svg2ooxml = "cli.main:run_cli"
@@ -53,8 +56,12 @@ src = [ "src", "tests",]
 exclude = [ "venv",]
 
 [tool.ruff.lint]
-select = [ "E", "F", "I", "N", "UP", "B",]
+select = [ "E", "F", "I", "N", "UP", "B", "TID",]
 ignore = [ "B008", "E203", "E501", "N802", "N803", "N806", "N812",]
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"xml.etree".msg = "Use lxml.etree instead of xml.etree."
+"xml.etree.ElementTree".msg = "Use lxml.etree as ET instead of xml.etree.ElementTree."
 
 [tool.mypy]
 python_version = "3.13"

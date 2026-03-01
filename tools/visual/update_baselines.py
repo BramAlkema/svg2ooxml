@@ -46,6 +46,7 @@ RESVG_FIXTURES = {
     "blend_modes": Path("tests/visual/fixtures/resvg/blend_modes.svg"),
     "composite_filters": Path("tests/visual/fixtures/resvg/composite_filters.svg"),
     "linear_gradients": Path("tests/visual/fixtures/resvg/linear_gradients.svg"),
+    "pattern_tile_transforms": Path("tests/visual/fixtures/resvg/pattern_tile_transforms.svg"),
     "radial_gradients": Path("tests/visual/fixtures/resvg/radial_gradients.svg"),
     "text_rendering": Path("tests/visual/fixtures/resvg/text_rendering.svg"),
 }

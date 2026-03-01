@@ -29,6 +29,9 @@ class FilterPolicyProvider(PolicyProvider):
         "native_shadow",
         "approximation_allowed",
         "prefer_rasterization",
+        "enable_effect_dag",
+        "enable_native_color_transforms",
+        "enable_blip_effect_enrichment",
         "enable_telemetry",
         "telemetry_level",
     }
@@ -51,6 +54,9 @@ class FilterPolicyProvider(PolicyProvider):
             "native_shadow": True,
             "approximation_allowed": True,
             "prefer_rasterization": False,
+            "enable_effect_dag": False,
+            "enable_native_color_transforms": False,
+            "enable_blip_effect_enrichment": False,
             "enable_telemetry": True,
             "telemetry_level": "detailed",
         },
@@ -71,6 +77,9 @@ class FilterPolicyProvider(PolicyProvider):
             "native_shadow": True,
             "approximation_allowed": True,
             "prefer_rasterization": False,
+            "enable_effect_dag": False,
+            "enable_native_color_transforms": False,
+            "enable_blip_effect_enrichment": False,
             "enable_telemetry": True,
             "telemetry_level": "summary",
         },
@@ -91,6 +100,9 @@ class FilterPolicyProvider(PolicyProvider):
             "native_shadow": True,
             "approximation_allowed": False,
             "prefer_rasterization": True,
+            "enable_effect_dag": False,
+            "enable_native_color_transforms": False,
+            "enable_blip_effect_enrichment": False,
             "enable_telemetry": False,
             "telemetry_level": "off",
         },
@@ -111,6 +123,9 @@ class FilterPolicyProvider(PolicyProvider):
             "native_shadow": False,
             "approximation_allowed": False,
             "prefer_rasterization": True,
+            "enable_effect_dag": False,
+            "enable_native_color_transforms": False,
+            "enable_blip_effect_enrichment": False,
             "enable_telemetry": False,
             "telemetry_level": "off",
         },
@@ -221,6 +236,9 @@ class FilterPolicyProvider(PolicyProvider):
         result["native_shadow"] = self._coerce_bool(payload.get("native_shadow"))
         result["approximation_allowed"] = self._coerce_bool(payload.get("approximation_allowed"))
         result["prefer_rasterization"] = self._coerce_bool(payload.get("prefer_rasterization"))
+        result["enable_effect_dag"] = self._coerce_bool(payload.get("enable_effect_dag"))
+        result["enable_native_color_transforms"] = self._coerce_bool(payload.get("enable_native_color_transforms"))
+        result["enable_blip_effect_enrichment"] = self._coerce_bool(payload.get("enable_blip_effect_enrichment"))
         result["enable_telemetry"] = self._coerce_bool(payload.get("enable_telemetry"))
         result["telemetry_level"] = self._coerce_telemetry_level(payload.get("telemetry_level"))
         primitives = self._coerce_primitives(payload.get("primitives"))

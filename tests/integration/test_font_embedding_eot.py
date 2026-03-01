@@ -8,7 +8,7 @@ import pytest
 from lxml import etree
 
 from svg2ooxml.core.ir import IRScene
-from svg2ooxml.io.pptx_writer import PPTXPackageBuilder
+from svg2ooxml.io.pptx_assembly import PPTXPackageBuilder
 from svg2ooxml.ir.geometry import Point, Rect
 from svg2ooxml.ir.text import EmbeddedFontPlan, Run, TextAnchor, TextFrame
 from svg2ooxml.services.fonts import FontEmbeddingEngine, FontEmbeddingRequest

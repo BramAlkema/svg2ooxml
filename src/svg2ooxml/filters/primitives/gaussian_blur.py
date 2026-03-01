@@ -32,9 +32,7 @@ class GaussianBlurFilter(Filter):
 
     def apply(self, primitive: etree._Element, context: FilterContext) -> FilterResult:
         params = self._parse_params(primitive)
-        policy_options = {}
-        if isinstance(context.options, dict):
-            policy_options = context.options.get("policy") or {}
+        policy_options = context.policy
         allow_anisotropic = bool(policy_options.get("allow_anisotropic_native", False))
         max_bitmap_stddev = policy_options.get("max_bitmap_stddev")
         blur_strategy = self._normalize_blur_strategy(policy_options.get("blur_strategy"))

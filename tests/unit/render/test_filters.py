@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+
 import numpy as np
 import pytest
 
@@ -120,6 +122,44 @@ def test_apply_filter_merge_layers() -> None:
     assert pixel[3] == pytest.approx(1.0)
 
 
+def test_apply_filter_composite_arithmetic() -> None:
+    flood_a = FilterPrimitive(
+        tag="feFlood",
+        attributes={"flood-color": "#ff0000", "result": "a"},
+        styles={},
+    )
+    flood_b = FilterPrimitive(
+        tag="feFlood",
+        attributes={"flood-color": "#0000ff", "result": "b"},
+        styles={},
+    )
+    composite = FilterPrimitive(
+        tag="feComposite",
+        attributes={
+            "operator": "arithmetic",
+            "in": "a",
+            "in2": "b",
+            "k1": "0",
+            "k2": "0.25",
+            "k3": "0.75",
+            "k4": "0",
+        },
+        styles={},
+    )
+    filter_node = _make_filter_node([flood_a, flood_b, composite])
+    plan = plan_filter(filter_node)
+    assert plan is not None
+
+    surface = Surface.make(2, 2)
+    bounds = (0.0, 0.0, 2.0, 2.0)
+    viewport = Viewport(width=2, height=2, min_x=0.0, min_y=0.0, scale_x=1.0, scale_y=1.0)
+
+    result = apply_filter(surface, plan, bounds, viewport)
+    pixel = result.data[0, 0]
+    np.testing.assert_allclose(pixel[:3], np.array([0.25, 0.0, 0.75], dtype=np.float32), atol=1e-6)
+    assert pixel[3] == pytest.approx(1.0)
+
+
 def test_apply_filter_component_transfer_linear_and_table() -> None:
     component = FilterPrimitive(
         tag="feComponentTransfer",
@@ -204,8 +244,6 @@ def test_fe_tile_pass_through() -> None:
 
 
 def test_fe_image_embedded_data_uri() -> None:
-    skia = pytest.importorskip("skia")
-    _ = skia  # keep linters calm about unused import
     png_data = (
         "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg=="
     )
@@ -226,6 +264,43 @@ def test_fe_image_embedded_data_uri() -> None:
     pixel = result.data[0, 0]
     np.testing.assert_allclose(pixel[:3], np.array([1.0, 0.0, 0.0]), atol=1e-6)
     assert pixel[3] == pytest.approx(1.0)
+
+
+def test_fe_image_local_file_with_source_path(tmp_path) -> None:
+    png_data = base64.b64decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg=="
+    )
+    image_path = tmp_path / "pixel.png"
+    image_path.write_bytes(png_data)
+
+    image = FilterPrimitive(
+        tag="feImage",
+        attributes={"href": "pixel.png"},
+        styles={},
+    )
+    filter_node = _make_filter_node([image])
+    plan = plan_filter(filter_node, options={"source_path": str(tmp_path / "scene.svg")})
+    assert plan is not None
+
+    surface = Surface.make(1, 1)
+    bounds = (0.0, 0.0, 1.0, 1.0)
+    viewport = Viewport(width=1, height=1, min_x=0.0, min_y=0.0, scale_x=1.0, scale_y=1.0)
+
+    result = apply_filter(surface, plan, bounds, viewport)
+    pixel = result.data[0, 0]
+    np.testing.assert_allclose(pixel[:3], np.array([1.0, 0.0, 0.0]), atol=1e-6)
+    assert pixel[3] == pytest.approx(1.0)
+
+
+def test_fe_image_local_file_missing_returns_no_plan(tmp_path) -> None:
+    image = FilterPrimitive(
+        tag="feImage",
+        attributes={"href": "missing.png"},
+        styles={},
+    )
+    filter_node = _make_filter_node([image])
+    plan = plan_filter(filter_node, options={"source_path": str(tmp_path / "scene.svg")})
+    assert plan is None
 
 
 def test_apply_filter_displacement_map_shifts_pixels() -> None:

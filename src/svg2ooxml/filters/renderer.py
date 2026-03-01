@@ -231,7 +231,10 @@ class FilterRenderer:
                 trace(action, **meta)
 
         _trace("resvg_attempt")
-        plan = self._planner.build_resvg_plan(descriptor)
+        plan = self._planner.build_resvg_plan(
+            descriptor,
+            options=options_map if isinstance(options_map, Mapping) else None,
+        )
         if plan is None:
             _trace("resvg_plan_unsupported")
             return None
@@ -554,8 +557,8 @@ class FilterRenderer:
             return None
 
         # Check global promotion policy
-        policy = context.options.get("policy") if isinstance(context.options, dict) else None
-        if isinstance(policy, Mapping) and policy.get("allow_promotion") is False:
+        policy = context.policy
+        if policy.get("allow_promotion") is False:
             if trace is not None:
                 trace("resvg_promotion_policy_blocked", reason="global_allow_promotion=false")
             return None

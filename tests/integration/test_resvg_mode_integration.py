@@ -10,7 +10,8 @@ This module verifies that:
 from __future__ import annotations
 
 import zipfile
-from xml.etree import ElementTree as ET
+
+from lxml import etree as ET
 
 from svg2ooxml.core.pptx_exporter import SvgToPptxExporter
 
@@ -34,7 +35,7 @@ def test_resvg_mode_converts_circle_to_pptx(tmp_path) -> None:
     with zipfile.ZipFile(output_path, "r") as archive:
         slide_xml = archive.read("ppt/slides/slide1.xml").decode("utf-8")
 
-    root = ET.fromstring(slide_xml)
+    root = ET.fromstring(slide_xml.encode())
     ns = {"a": "http://schemas.openxmlformats.org/drawingml/2006/main"}
     fills = root.findall(".//a:solidFill/a:srgbClr", ns)
     assert any(
@@ -60,7 +61,7 @@ def test_resvg_mode_converts_ellipse_to_pptx(tmp_path) -> None:
     with zipfile.ZipFile(output_path, "r") as archive:
         slide_xml = archive.read("ppt/slides/slide1.xml").decode("utf-8")
 
-    root = ET.fromstring(slide_xml)
+    root = ET.fromstring(slide_xml.encode())
     ns = {"a": "http://schemas.openxmlformats.org/drawingml/2006/main"}
     fills = root.findall(".//a:solidFill/a:srgbClr", ns)
     assert any(
@@ -86,7 +87,7 @@ def test_resvg_mode_converts_rect_to_pptx(tmp_path) -> None:
     with zipfile.ZipFile(output_path, "r") as archive:
         slide_xml = archive.read("ppt/slides/slide1.xml").decode("utf-8")
 
-    root = ET.fromstring(slide_xml)
+    root = ET.fromstring(slide_xml.encode())
     ns = {"a": "http://schemas.openxmlformats.org/drawingml/2006/main"}
     fills = root.findall(".//a:solidFill/a:srgbClr", ns)
     assert any(
@@ -112,7 +113,7 @@ def test_resvg_mode_converts_path_to_pptx(tmp_path) -> None:
     with zipfile.ZipFile(output_path, "r") as archive:
         slide_xml = archive.read("ppt/slides/slide1.xml").decode("utf-8")
 
-    root = ET.fromstring(slide_xml)
+    root = ET.fromstring(slide_xml.encode())
     ns = {"a": "http://schemas.openxmlformats.org/drawingml/2006/main"}
     fills = root.findall(".//a:solidFill/a:srgbClr", ns)
     assert any(
@@ -139,7 +140,7 @@ def test_resvg_mode_with_transforms(tmp_path) -> None:
         slide_xml = archive.read("ppt/slides/slide1.xml").decode("utf-8")
 
     # Verify PPTX is valid and contains the shape
-    root = ET.fromstring(slide_xml)
+    root = ET.fromstring(slide_xml.encode())
     ns = {
         "a": "http://schemas.openxmlformats.org/drawingml/2006/main",
         "p": "http://schemas.openxmlformats.org/presentationml/2006/main",
@@ -192,7 +193,7 @@ def test_legacy_mode_still_works(tmp_path) -> None:
     with zipfile.ZipFile(output_path, "r") as archive:
         slide_xml = archive.read("ppt/slides/slide1.xml").decode("utf-8")
 
-    root = ET.fromstring(slide_xml)
+    root = ET.fromstring(slide_xml.encode())
     ns = {"a": "http://schemas.openxmlformats.org/drawingml/2006/main"}
     fills = root.findall(".//a:solidFill/a:srgbClr", ns)
     assert any(

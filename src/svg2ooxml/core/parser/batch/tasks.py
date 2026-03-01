@@ -12,7 +12,7 @@ from uuid import uuid4
 
 from svg2ooxml.common.tempfiles import project_temp_dir
 from svg2ooxml.drawingml.writer import DrawingMLWriter
-from svg2ooxml.io.pptx_writer import write_pptx
+from svg2ooxml.io.pptx_assembly import write_pptx
 from svg2ooxml.services.fonts.providers.directory import DirectoryFontProvider
 
 from ..preprocess.services import build_parser_services

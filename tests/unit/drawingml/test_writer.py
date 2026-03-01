@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
 from lxml import etree as ET
 
 from svg2ooxml.core.ir import IRScene
@@ -14,7 +13,13 @@ from svg2ooxml.core.pipeline.navigation import (
 from svg2ooxml.drawingml.writer import EMU_PER_PX, DrawingMLWriter
 from svg2ooxml.ir.effects import CustomEffect
 from svg2ooxml.ir.geometry import BezierSegment, LineSegment, Point, Rect
-from svg2ooxml.ir.paint import GradientStop, LinearGradientPaint, PatternPaint, SolidPaint, Stroke
+from svg2ooxml.ir.paint import (
+    GradientStop,
+    LinearGradientPaint,
+    PatternPaint,
+    SolidPaint,
+    Stroke,
+)
 from svg2ooxml.ir.scene import (
     ClipRef,
     ClipStrategy,
@@ -466,6 +471,25 @@ def test_writer_registers_filter_assets() -> None:
     assert '<a:effectLst>' in second.slide_xml
 
 
+def test_writer_preserves_effect_dag_custom_effect() -> None:
+    writer = DrawingMLWriter()
+    rect = Rectangle(bounds=Rect(0, 0, 20, 20), fill=SolidPaint("FFFFFF"))
+    rect.effects.append(
+        CustomEffect(
+            drawingml=(
+                "<a:effectDag><a:cont/><a:alphaModFix><a:cont/>"
+                "<a:effectLst><a:blur rad=\"1000\"/></a:effectLst>"
+                "</a:alphaModFix></a:effectDag>"
+            )
+        )
+    )
+
+    result = writer.render_scene([rect])
+
+    assert "<a:effectDag>" in result.slide_xml
+    assert "<a:alphaModFix>" in result.slide_xml
+
+
 def test_render_linear_gradient_fill() -> None:
     writer = DrawingMLWriter()
     gradient = LinearGradientPaint(
@@ -500,6 +524,30 @@ def test_render_path_with_arrow_markers() -> None:
 
     assert "<a:headEnd" in xml
     assert "<a:tailEnd" in xml
+    assert 'type="arrow"' in xml
+
+
+def test_render_path_with_geometry_marker_profiles() -> None:
+    writer = DrawingMLWriter()
+    segments = [LineSegment(Point(0, 0), Point(50, 0))]
+    stroke = Stroke(paint=SolidPaint("000000"), width=2.0)
+    path = IRPath(
+        segments=segments,
+        fill=None,
+        stroke=stroke,
+        metadata={
+            "markers": {"start": "m1", "end": "m2"},
+            "marker_profiles": {
+                "start": {"type": "oval", "size": "lg", "source": "geometry"},
+                "end": {"type": "diamond", "size": "sm", "source": "geometry"},
+            },
+        },
+    )
+
+    xml = writer.render_scene([path]).slide_xml
+
+    assert '<a:headEnd type="diamond" w="sm" len="sm"/>' in xml
+    assert '<a:tailEnd type="oval" w="lg" len="lg"/>' in xml
 
 
 def test_render_path_applies_marker_clip_metadata() -> None:

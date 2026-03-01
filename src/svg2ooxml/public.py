@@ -13,7 +13,7 @@ from svg2ooxml.core.pptx_exporter import (
     SvgToPptxResult,
 )
 from svg2ooxml.core.tracing.conversion import ConversionTracer
-from svg2ooxml.io.pptx_writer import PPTXPackageBuilder, write_pptx
+from svg2ooxml.io.pptx_assembly import PPTXPackageBuilder, write_pptx
 from svg2ooxml.ir.entrypoints import IRScene, convert_parser_output
 
 __all__ = [

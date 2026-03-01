@@ -82,6 +82,38 @@ def test_gradient_metadata_records_recommended_color_space() -> None:
     assert paint_policy["recommended_color_space"] in {"srgb", "linear_rgb"}
 
 
+def test_gradient_advanced_features_do_not_force_emf_fallback() -> None:
+    services = configure_services()
+    gradient_service = services.gradient_service
+    assert gradient_service is not None
+
+    gradient_xml = etree.fromstring(
+        """
+        <linearGradient gradientUnits="userSpaceOnUse" spreadMethod="reflect">
+            <stop offset="0%" stop-color="#003366"/>
+            <stop offset="100%" stop-color="#66ccff"/>
+        </linearGradient>
+        """
+    )
+
+    extractor = _extractor()
+    metadata: dict[str, object] = {}
+    descriptor = describe_gradient_element(gradient_xml)
+    gradient_service.register_gradient("g_adv", descriptor)
+    extractor._record_gradient_metadata(
+        gradient_id="g_adv",
+        descriptor=descriptor,
+        gradient_service=gradient_service,
+        services=services,
+        metadata=metadata,
+        role="fill",
+        context=None,
+    )
+
+    paint_policy = metadata["policy"]["paint"]["fill"]  # type: ignore[index]
+    assert paint_policy.get("suggest_fallback") is None
+
+
 class _StubColorSpaceService:
     def __init__(self) -> None:
         self._result = ColorSpaceResult(

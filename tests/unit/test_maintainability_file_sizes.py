@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-MAX_PYTHON_FILE_LINES = 1500
+MAX_PYTHON_FILE_LINES = 1000
 
 
 def _iter_python_files(root: Path) -> list[Path]:

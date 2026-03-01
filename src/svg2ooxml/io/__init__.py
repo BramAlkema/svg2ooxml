@@ -7,6 +7,8 @@ __all__ = [
     'ALLOWED_SLIDE_SIZE_MODES',
     'ASSETS_ROOT',
     'CONTENT_NS',
+    'FONT_STYLE_ORDER',
+    'FONT_STYLE_TAGS',
     'MASK_REL_TYPE',
     'PPTXPackageBuilder',
     'P_NS',
@@ -16,19 +18,24 @@ __all__ = [
     'R_DOC_NS',
     'SlideAssembler',
     'SlideAssembly',
+    'StreamingPackageWriter',
     'THEME_FAMILY_NS',
     'THEME_NS',
+    'content_type_for_extension',
+    'normalize_style_kind',
     'read_svg_shapes',
+    'safe_int',
     'write_pptx',
     'api',
     'emf',
+    'pptx_assembly',
     'pptx_writer',
     'svg_reader'
 ]
 
 # map symbol -> relative module
-_symbol_map = {'CONTENT_NS': 'pptx_writer', 'THEME_FAMILY_NS': 'pptx_writer', 'ALLOWED_SLIDE_SIZE_MODES': 'pptx_writer', 'PackageWriter': 'pptx_writer', 'R_DOC_NS': 'pptx_writer', 'REL_NS': 'pptx_writer', 'ASSETS_ROOT': 'pptx_writer', 'THEME_NS': 'pptx_writer', 'SlideAssembler': 'pptx_writer', 'PPTXPackageBuilder': 'pptx_writer', 'MASK_REL_TYPE': 'pptx_writer', 'P_NS': 'pptx_writer', 'write_pptx': 'pptx_writer', 'PackagingContext': 'pptx_writer', 'SlideAssembly': 'pptx_writer', 'read_svg_shapes': 'svg_reader'}
-_module_map = {'api': 'api', 'emf': 'emf', 'pptx_writer': 'pptx_writer', 'svg_reader': 'svg_reader'}
+_symbol_map = {'REL_NS': 'pptx_assembly', 'content_type_for_extension': 'pptx_assembly', 'PackagingContext': 'pptx_assembly', 'PPTXPackageBuilder': 'pptx_assembly', 'SlideAssembly': 'pptx_assembly', 'FONT_STYLE_ORDER': 'pptx_assembly', 'THEME_NS': 'pptx_assembly', 'THEME_FAMILY_NS': 'pptx_assembly', 'ASSETS_ROOT': 'pptx_assembly', 'SlideAssembler': 'pptx_assembly', 'R_DOC_NS': 'pptx_assembly', 'safe_int': 'pptx_assembly', 'P_NS': 'pptx_assembly', 'FONT_STYLE_TAGS': 'pptx_assembly', 'CONTENT_NS': 'pptx_assembly', 'MASK_REL_TYPE': 'pptx_assembly', 'normalize_style_kind': 'pptx_assembly', 'ALLOWED_SLIDE_SIZE_MODES': 'pptx_assembly', 'write_pptx': 'pptx_assembly', 'PackageWriter': 'pptx_writer', 'StreamingPackageWriter': 'pptx_writer', 'read_svg_shapes': 'svg_reader'}
+_module_map = {'api': 'api', 'emf': 'emf', 'pptx_assembly': 'pptx_assembly', 'pptx_writer': 'pptx_writer', 'svg_reader': 'svg_reader'}
 
 
 def __getattr__(name: str) -> _Any:  # PEP 562

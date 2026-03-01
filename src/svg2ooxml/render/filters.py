@@ -2,29 +2,33 @@
 
 from __future__ import annotations
 
-import base64
-import binascii
 import math
-import urllib.parse
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
 import numpy as np
 
-try:  # pragma: no cover - optional dependency guard
-    import skia
-except ImportError:  # pragma: no cover
-    skia = None
-
 from svg2ooxml.core.resvg.painting.paint import parse_color
 from svg2ooxml.core.resvg.usvg_tree import FilterNode, FilterPrimitive
+from svg2ooxml.render.filters_image import plan_image_primitive
+from svg2ooxml.render.filters_lighting import (
+    _EPSILON,
+    apply_diffuse_lighting as _apply_diffuse_lighting,
+    apply_displacement_map as _apply_displacement_map,
+    apply_specular_lighting as _apply_specular_lighting,
+)
+from svg2ooxml.render.filters_region import (
+    apply_filter_region as _apply_filter_region,
+    compute_filter_region as _compute_filter_region,
+    convert_to_colorspace as _convert_to_colorspace,
+    linear_to_srgb_surface as _linear_to_srgb_surface,
+    primitive_unit_scale as _primitive_unit_scale,
+    resolve_color_mode as _resolve_color_mode,
+)
 from svg2ooxml.render.surface import Surface
 
 _GAMMA = 2.4
-_INV_GAMMA = 1.0 / _GAMMA
-_EPSILON = 1e-6
-
 REGISTERED_FILTER_PRIMITIVES = {
     "fegaussianblur",
     "feoffset",
@@ -131,16 +135,24 @@ class FilterPlan:
     primitives: list[FilterPrimitivePlan]
 
 
-def plan_filter(filter_node: FilterNode) -> FilterPlan | None:
+def plan_filter(
+    filter_node: FilterNode,
+    *,
+    options: Mapping[str, Any] | None = None,
+) -> FilterPlan | None:
     """Return a filter plan or *None* when the filter must fall back."""
 
     try:
-        return _plan_filter(filter_node)
+        return _plan_filter(filter_node, options=options)
     except UnsupportedPrimitiveError:
         return None
 
 
-def _plan_filter(filter_node: FilterNode) -> FilterPlan:
+def _plan_filter(
+    filter_node: FilterNode,
+    *,
+    options: Mapping[str, Any] | None = None,
+) -> FilterPlan:
     available: set[str] = {"SourceGraphic", "SourceAlpha"}
     plans: list[FilterPrimitivePlan] = []
 
@@ -174,14 +186,19 @@ def _plan_filter(filter_node: FilterNode) -> FilterPlan:
             inputs = []
         elif tag_lower == "feimage":
             inputs = []
-            extra["image"] = _plan_image_primitive(primitive)
+            extra["image"] = plan_image_primitive(primitive, options=options, error_cls=UnsupportedPrimitiveError)
         elif tag_lower == "fecomposite":
             inputs.append(_normalise_input(attrs.get("in"), available, primitive, allow_default=True, label="in"))
             inputs.append(_normalise_input(attrs.get("in2"), available, primitive, allow_default=False, label="in2"))
             operator = (attrs.get("operator") or "over").lower()
-            if operator not in {"over", "in", "out", "atop", "xor"}:
+            if operator not in {"over", "in", "out", "atop", "xor", "arithmetic"}:
                 raise UnsupportedPrimitiveError(primitive.tag, f"operator {operator!r} not supported", primitive=primitive)
             extra["operator"] = operator
+            if operator == "arithmetic":
+                extra["k1"] = _parse_number(attrs.get("k1"), 0.0)
+                extra["k2"] = _parse_number(attrs.get("k2"), 0.0)
+                extra["k3"] = _parse_number(attrs.get("k3"), 0.0)
+                extra["k4"] = _parse_number(attrs.get("k4"), 0.0)
         elif tag_lower == "feblend":
             inputs.append(_normalise_input(attrs.get("in"), available, primitive, allow_default=True, label="in"))
             inputs.append(_normalise_input(attrs.get("in2"), available, primitive, allow_default=False, label="in2"))
@@ -445,77 +462,6 @@ def _parse_light(primitive: FilterPrimitive) -> dict[str, Any] | None:
     return None
 
 
-def _plan_image_primitive(primitive: FilterPrimitive) -> dict[str, Any]:
-    href = _extract_href(primitive.attributes)
-    if not href:
-        raise UnsupportedPrimitiveError(primitive.tag, "feImage requires an href attribute", primitive=primitive)
-    href = href.strip()
-    try:
-        mime, data = _decode_data_uri(href)
-    except ValueError as exc:
-        raise UnsupportedPrimitiveError(primitive.tag, str(exc), primitive=primitive) from exc
-
-    if skia is None:
-        raise UnsupportedPrimitiveError(primitive.tag, "skia is required to decode feImage data", primitive=primitive)
-    image = skia.Image.MakeFromEncoded(data)
-    if image is None:
-        raise UnsupportedPrimitiveError(primitive.tag, "failed to decode feImage payload", primitive=primitive)
-
-    try:
-        pixels = image.tobytes()
-    except Exception as exc:  # pragma: no cover - defensive
-        raise UnsupportedPrimitiveError(primitive.tag, "unable to extract feImage pixels", primitive=primitive) from exc
-    array = (
-        np.frombuffer(pixels, dtype=np.uint8)
-        .reshape(image.height(), image.width(), 4)
-        .astype(np.float32)
-        / 255.0
-    )
-
-    # Handle platform-specific color channel ordering
-    # Some Skia builds use BGRA instead of RGBA
-    if image.colorType() == skia.ColorType.kBGRA_8888_ColorType:
-        # Swap R and B channels: BGRA -> RGBA
-        array[:, :, [0, 2]] = array[:, :, [2, 0]]
-    return {
-        "surface": Surface(image.width(), image.height(), array),
-        "mime": mime,
-    }
-
-
-def _extract_href(attrs: Mapping[str, str]) -> str | None:
-    for key in ("href", "xlink:href", "{http://www.w3.org/1999/xlink}href"):
-        value = attrs.get(key)
-        if value:
-            return value
-    return None
-
-
-def _decode_data_uri(uri: str) -> tuple[str | None, bytes]:
-    if not uri.startswith("data:"):
-        raise ValueError("external feImage references are not supported")
-    header, _, payload = uri.partition(",")
-    if not payload:
-        raise ValueError("data URI is missing payload")
-    meta = header[5:]  # strip "data:"
-    is_base64 = ";base64" in meta
-    if is_base64:
-        try:
-            data = base64.b64decode(payload.strip())
-        except (ValueError, binascii.Error) as exc:
-            raise ValueError("invalid base64 payload in data URI") from exc
-    else:
-        data = urllib.parse.unquote_to_bytes(payload)
-    mime = None
-    if meta:
-        parts = [part for part in meta.split(";") if part]
-        if parts:
-            candidate = parts[0]
-            if candidate != "base64":
-                mime = candidate
-    return mime, data
-
-
 def apply_filter(
     surface: Surface,
     plan: FilterPlan,
@@ -577,7 +523,15 @@ def apply_filter(
                 if len(inputs) < 2:
                     raise UnsupportedPrimitiveError(primitive_plan.tag, "feComposite requires two inputs", primitive=primitive)
                 operator = primitive_plan.extra.get("operator", "over")
-                work_result = _apply_composite(primary, inputs[1], operator)
+                work_result = _apply_composite(
+                    primary,
+                    inputs[1],
+                    operator,
+                    k1=float(primitive_plan.extra.get("k1", 0.0)),
+                    k2=float(primitive_plan.extra.get("k2", 0.0)),
+                    k3=float(primitive_plan.extra.get("k3", 0.0)),
+                    k4=float(primitive_plan.extra.get("k4", 0.0)),
+                )
             elif tag_lower == "feblend":
                 if len(inputs) < 2:
                     raise UnsupportedPrimitiveError(primitive_plan.tag, "feBlend requires two inputs", primitive=primitive)
@@ -916,247 +870,6 @@ def _apply_turbulence(
     return surface
 
 
-def _apply_diffuse_lighting(
-    surface: Surface,
-    params: Mapping[str, Any],
-    units: PrimitiveUnitScale,
-) -> Surface:
-    light = params.get("light", {})
-    color = np.array(params.get("lighting_color", (1.0, 1.0, 1.0)), dtype=np.float32)
-    surface_scale = float(params.get("surface_scale", 1.0))
-    diffuse_constant = float(params.get("constant", 1.0))
-    kernel_length = params.get("kernel_length", (1.0, 1.0))
-
-    height_map = _height_map_from_surface(surface) * surface_scale
-    spacing_x = float(kernel_length[0]) if kernel_length else 1.0
-    spacing_y = float(kernel_length[1]) if kernel_length else 1.0
-    spacing_x = max(spacing_x, _EPSILON) * (units.scale_x or 1.0)
-    spacing_y = max(spacing_y, _EPSILON) * (units.scale_y or 1.0)
-
-    grad_y, grad_x = np.gradient(height_map, spacing_y, spacing_x, edge_order=1)
-    normal = np.stack((-grad_x, -grad_y, np.ones_like(height_map)), axis=-1)
-    norm = np.linalg.norm(normal, axis=-1, keepdims=True)
-    normal = normal / np.maximum(norm, _EPSILON)
-
-    light_vec, light_weight = _light_direction(light, surface.shape[1], surface.shape[0], units, height_map)
-    dot = np.maximum(0.0, np.sum(normal * light_vec, axis=-1)) * light_weight
-
-    intensity = diffuse_constant * dot
-    rgb = np.clip(intensity[..., None] * color, 0.0, 1.0)
-    alpha = np.clip(intensity, 0.0, 1.0)
-
-    result = Surface.make(surface.width, surface.height)
-    result.data[..., :3] = rgb * alpha[..., None]
-    result.data[..., 3] = alpha
-    return result
-
-
-def _apply_specular_lighting(
-    surface: Surface,
-    params: Mapping[str, Any],
-    units: PrimitiveUnitScale,
-) -> Surface:
-    light = params.get("light", {})
-    light_type = params.get("light_type")
-    color = np.array(params.get("lighting_color", (1.0, 1.0, 1.0)), dtype=np.float32)
-    surface_scale = float(params.get("surface_scale", 1.0))
-    specular_constant = float(params.get("constant", 1.0))
-    specular_exponent = float(params.get("exponent", 1.0))
-    kernel_length = params.get("kernel_length", (1.0, 1.0))
-
-    height_map = _height_map_from_surface(surface) * surface_scale
-    spacing_x = float(kernel_length[0]) if kernel_length else 1.0
-    spacing_y = float(kernel_length[1]) if kernel_length else 1.0
-    spacing_x = max(spacing_x, _EPSILON) * (units.scale_x or 1.0)
-    spacing_y = max(spacing_y, _EPSILON) * (units.scale_y or 1.0)
-
-    grad_y, grad_x = np.gradient(height_map, spacing_y, spacing_x, edge_order=1)
-    normal = np.stack((-grad_x, -grad_y, np.ones_like(height_map)), axis=-1)
-    norm = np.linalg.norm(normal, axis=-1, keepdims=True)
-    normal = normal / np.maximum(norm, _EPSILON)
-
-    light_vec, light_weight = _light_direction(light, surface.shape[1], surface.shape[0], units, height_map)
-    view = np.array([0.0, 0.0, 1.0], dtype=np.float32)
-    view = view / np.linalg.norm(view)
-
-    dot_nl = np.maximum(0.0, np.sum(normal * light_vec, axis=-1, keepdims=True))
-    reflection = 2.0 * dot_nl * normal - light_vec
-    reflection_norm = np.linalg.norm(reflection, axis=-1, keepdims=True)
-    reflection = reflection / np.maximum(reflection_norm, _EPSILON)
-
-    spec_amount = np.maximum(
-        0.0, reflection[..., 0] * view[0] + reflection[..., 1] * view[1] + reflection[..., 2] * view[2]
-    )
-    intensity = specular_constant * np.power(spec_amount, specular_exponent)
-    if light_type == "spot":
-        intensity *= light_weight
-    intensity *= light_weight
-    intensity = np.clip(intensity, 0.0, 1.0)
-
-    rgb = color * intensity[..., None]
-    result = Surface.make(surface.width, surface.height)
-    result.data[..., :3] = rgb
-    result.data[..., 3] = intensity.astype(np.float32)
-    result.data[..., :3] *= result.data[..., 3:4]
-    return result
-
-
-def _height_map_from_surface(surface: Surface) -> np.ndarray:
-    alpha = np.clip(surface.data[..., 3], 0.0, 1.0)
-    rgb = surface.data[..., :3]
-    safe_alpha = np.maximum(alpha, _EPSILON)
-    unpremult = np.zeros_like(rgb)
-    mask = alpha > _EPSILON
-    if np.any(mask):
-        unpremult[mask] = rgb[mask] / safe_alpha[mask, None]
-    luminance = (
-        0.2126 * unpremult[..., 0]
-        + 0.7152 * unpremult[..., 1]
-        + 0.0722 * unpremult[..., 2]
-    )
-    # fall back to alpha when no colour is present
-    height_map = np.where(mask, luminance, alpha)
-    return np.clip(height_map, 0.0, 1.0).astype(np.float32)
-
-
-def _light_direction(
-    light: Mapping[str, Any],
-    width: int,
-    height: int,
-    units: PrimitiveUnitScale,
-    height_map: np.ndarray,
-) -> tuple[np.ndarray, np.ndarray]:
-    if not light:
-        direction = np.array([0.0, 0.0, 1.0], dtype=np.float32)
-        vec = np.broadcast_to(direction, (height, width, 3)).copy()
-        weights = np.ones((height, width), dtype=np.float32)
-        return vec, weights
-
-    scale_x = units.scale_x if units.scale_x else 1.0
-    scale_y = units.scale_y if units.scale_y else 1.0
-    user_x = (np.arange(width, dtype=np.float32) + 0.5) / max(scale_x, _EPSILON)
-    user_y = (np.arange(height, dtype=np.float32) + 0.5) / max(scale_y, _EPSILON)
-    grid_x, grid_y = np.meshgrid(user_x, user_y)
-
-    if light.get("type") == "distant":
-        direction = np.array(light.get("direction", (0.0, 0.0, 1.0)), dtype=np.float32)
-        norm = np.linalg.norm(direction)
-        if norm <= _EPSILON:
-            direction = np.array([0.0, 0.0, 1.0], dtype=np.float32)
-        else:
-            direction = direction / norm
-        vec = np.broadcast_to(direction, (height, width, 3)).copy()
-        weight = np.ones((height, width), dtype=np.float32)
-        return vec, weight
-
-    light_pos = np.array(
-        [
-            float(light.get("x", 0.0)),
-            float(light.get("y", 0.0)),
-            float(light.get("z", 0.0)),
-        ],
-        dtype=np.float32,
-    )
-    surface_pos = np.stack([grid_x, grid_y, height_map], axis=-1)
-
-    to_light = light_pos - surface_pos
-    norm = np.linalg.norm(to_light, axis=-1, keepdims=True)
-    direction = to_light / np.maximum(norm, _EPSILON)
-    weight = np.ones((height, width), dtype=np.float32)
-
-    if light.get("type") == "spot":
-        axis = np.array(
-            [
-                float(light.get("points_at_x", 0.0)) - light_pos[0],
-                float(light.get("points_at_y", 0.0)) - light_pos[1],
-                float(light.get("points_at_z", 0.0)) - light_pos[2],
-            ],
-            dtype=np.float32,
-        )
-        axis_norm = np.linalg.norm(axis)
-        if axis_norm <= _EPSILON:
-            axis = np.array([0.0, 0.0, -1.0], dtype=np.float32)
-        else:
-            axis = axis / axis_norm
-        to_point = surface_pos - light_pos
-        to_point_unit = to_point / np.maximum(np.linalg.norm(to_point, axis=-1, keepdims=True), _EPSILON)
-        cos_angle = np.clip(np.sum(to_point_unit * axis, axis=-1), -1.0, 1.0)
-        limiting = light.get("limiting_cone")
-        if limiting is not None:
-            mask = cos_angle >= math.cos(limiting)
-            weight = np.where(mask, 1.0, 0.0)
-        cone_exp = float(light.get("cone_exponent", 1.0))
-        weight *= np.power(np.clip(cos_angle, 0.0, 1.0), cone_exp)
-
-    return direction.astype(np.float32), weight.astype(np.float32)
-
-
-def _apply_displacement_map(
-    source: Surface,
-    displacement: Surface,
-    scale: float,
-    x_channel: str,
-    y_channel: str,
-    units: PrimitiveUnitScale,
-) -> Surface:
-    if scale == 0.0:
-        return source.clone()
-
-    disp_data = displacement.data
-    alpha = np.clip(disp_data[..., 3], 0.0, 1.0)
-    denom = np.maximum(alpha, _EPSILON)[..., None]
-    unpremult = np.where(alpha[..., None] > _EPSILON, disp_data[..., :3] / denom, 0.0)
-
-    def _channel(value: str) -> np.ndarray:
-        if value == "A":
-            return alpha
-        index = {"R": 0, "G": 1, "B": 2}.get(value, 0)
-        return unpremult[..., index]
-
-    x_values = _channel(x_channel)
-    y_values = _channel(y_channel)
-
-    scale_x = float(scale) * units.scale_x
-    scale_y = float(scale) * units.scale_y
-
-    dx = (x_values * 2.0 - 1.0) * scale_x
-    dy = (y_values * 2.0 - 1.0) * scale_y
-
-    height, width = source.height, source.width
-    grid_x, grid_y = np.meshgrid(
-        np.arange(width, dtype=np.float32),
-        np.arange(height, dtype=np.float32),
-    )
-    sample_x = grid_x + dx.astype(np.float32)
-    sample_y = grid_y + dy.astype(np.float32)
-
-    sampled = _bilinear_sample(source.data, sample_x, sample_y)
-    return Surface(width, height, sampled.astype(np.float32))
-
-
-def _bilinear_sample(data: np.ndarray, xs: np.ndarray, ys: np.ndarray) -> np.ndarray:
-    height, width = data.shape[:2]
-    xs = np.clip(xs, 0.0, width - 1.0)
-    ys = np.clip(ys, 0.0, height - 1.0)
-
-    x0 = np.floor(xs).astype(np.int32)
-    y0 = np.floor(ys).astype(np.int32)
-    x1 = np.clip(x0 + 1, 0, width - 1)
-    y1 = np.clip(y0 + 1, 0, height - 1)
-
-    wx = (xs - x0).astype(np.float32)[..., None]
-    wy = (ys - y0).astype(np.float32)[..., None]
-
-    top_left = data[y0, x0]
-    top_right = data[y0, x1]
-    bottom_left = data[y1, x0]
-    bottom_right = data[y1, x1]
-
-    top = top_left * (1.0 - wx) + top_right * wx
-    bottom = bottom_left * (1.0 - wx) + bottom_right * wx
-    return top * (1.0 - wy) + bottom * wy
-
-
 def _place_image_surface(image: Surface, width: int, height: int) -> Surface:
     result = Surface.make(width, height)
     w = min(width, image.width)
@@ -1182,7 +895,16 @@ def _apply_flood(width: int, height: int, attrs: dict[str, str], styles: dict[st
     return surface
 
 
-def _apply_composite(a: Surface, b: Surface, operator: str) -> Surface:
+def _apply_composite(
+    a: Surface,
+    b: Surface,
+    operator: str,
+    *,
+    k1: float = 0.0,
+    k2: float = 0.0,
+    k3: float = 0.0,
+    k4: float = 0.0,
+) -> Surface:
     result = Surface.make(a.width, a.height)
     src = a.data
     dst = b.data
@@ -1206,6 +928,11 @@ def _apply_composite(a: Surface, b: Surface, operator: str) -> Surface:
     elif operator == "xor":
         out_rgb = src_rgb * (1.0 - dst_alpha) + dst_rgb * (1.0 - src_alpha)
         out_alpha = src_alpha * (1.0 - dst_alpha) + dst_alpha * (1.0 - src_alpha)
+    elif operator == "arithmetic":
+        out_rgb = k1 * src_rgb * dst_rgb + k2 * src_rgb + k3 * dst_rgb + k4
+        out_alpha = k1 * src_alpha * dst_alpha + k2 * src_alpha + k3 * dst_alpha + k4
+        out_rgb = np.clip(out_rgb, 0.0, 1.0)
+        out_alpha = np.clip(out_alpha, 0.0, 1.0)
     else:
         out_rgb = src_rgb
         out_alpha = src_alpha
@@ -1222,141 +949,6 @@ def _resolve_input_surface(images: dict[str, Surface], name: str | None, fallbac
     if surface is None:
         return fallback.clone()
     return surface.clone()
-
-
-def _primitive_unit_scale(
-    filter_node: FilterNode,
-    bounds: tuple[float, float, float, float],
-    viewport: Any,
-) -> PrimitiveUnitScale:
-    min_x, min_y, max_x, max_y = bounds
-    bbox_width = max(max_x - min_x, 0.0)
-    bbox_height = max(max_y - min_y, 0.0)
-    if bbox_width == 0.0:
-        bbox_width = viewport.width / viewport.scale_x
-    if bbox_height == 0.0:
-        bbox_height = viewport.height / viewport.scale_y
-
-    units = (filter_node.primitive_units or "userSpaceOnUse").strip()
-    if units == "objectBoundingBox":
-        scale_x = bbox_width * viewport.scale_x
-        scale_y = bbox_height * viewport.scale_y
-    else:
-        scale_x = viewport.scale_x
-        scale_y = viewport.scale_y
-
-    return PrimitiveUnitScale(scale_x=scale_x, scale_y=scale_y, bbox_width=bbox_width, bbox_height=bbox_height)
-
-
-def _compute_filter_region(
-    filter_node: FilterNode,
-    bounds: tuple[float, float, float, float],
-    viewport,
-) -> tuple[int, int, int, int]:
-    min_x, min_y, max_x, max_y = bounds
-    bbox_width = max(max_x - min_x, 0.0)
-    bbox_height = max(max_y - min_y, 0.0)
-    viewport_width = viewport.width / viewport.scale_x
-    viewport_height = viewport.height / viewport.scale_y
-    if bbox_width == 0.0:
-        bbox_width = viewport_width
-    if bbox_height == 0.0:
-        bbox_height = viewport_height
-
-    attrs = filter_node.attributes
-    units = (filter_node.filter_units or "objectBoundingBox").strip()
-
-    if units == "objectBoundingBox":
-        x_frac = _parse_fraction(attrs.get("x"), -0.1)
-        y_frac = _parse_fraction(attrs.get("y"), -0.1)
-        width_frac = _parse_fraction(attrs.get("width"), 1.2)
-        height_frac = _parse_fraction(attrs.get("height"), 1.2)
-        x = min_x + x_frac * bbox_width
-        y = min_y + y_frac * bbox_height
-        width = width_frac * bbox_width
-        height = height_frac * bbox_height
-    else:
-        default_x = min_x - 0.1 * bbox_width
-        default_y = min_y - 0.1 * bbox_height
-        default_width = bbox_width * 1.2
-        default_height = bbox_height * 1.2
-        x = _parse_user_length(attrs.get("x"), default_x, viewport_width)
-        y = _parse_user_length(attrs.get("y"), default_y, viewport_height)
-        width = _parse_user_length(attrs.get("width"), default_width, viewport_width)
-        height = _parse_user_length(attrs.get("height"), default_height, viewport_height)
-
-    if width <= 0 or height <= 0:
-        return (0, 0, viewport.width, viewport.height)
-
-    left = int(math.floor((x - viewport.min_x) * viewport.scale_x))
-    top = int(math.floor((y - viewport.min_y) * viewport.scale_y))
-    right = int(math.ceil((x + width - viewport.min_x) * viewport.scale_x))
-    bottom = int(math.ceil((y + height - viewport.min_y) * viewport.scale_y))
-
-    left = max(0, min(viewport.width, left))
-    right = max(left, min(viewport.width, right))
-    top = max(0, min(viewport.height, top))
-    bottom = max(top, min(viewport.height, bottom))
-    return left, top, right, bottom
-
-
-def _parse_fraction(value: str | None, default: float) -> float:
-    if value is None:
-        return default
-    value = value.strip()
-    if not value:
-        return default
-    try:
-        if value.endswith("%"):
-            return float(value[:-1]) / 100.0
-        return float(value)
-    except ValueError:
-        return default
-
-
-def _parse_user_length(value: str | None, default: float, viewport_length: float) -> float:
-    if value is None:
-        return default
-    value = value.strip()
-    if not value:
-        return default
-    try:
-        if value.endswith("%"):
-            pct = float(value[:-1])
-            return (pct / 100.0) * viewport_length
-        return float(value)
-    except ValueError:
-        return default
-
-
-def _apply_filter_region(surface: Surface, region: tuple[int, int, int, int], width: int, height: int) -> None:
-    x0, y0, x1, y1 = region
-    mask = np.zeros((height, width), dtype=bool)
-    mask[y0:y1, x0:x1] = True
-    surface.data[~mask] = 0.0
-
-
-def _resolve_color_mode(filter_node: FilterNode, primitive: FilterPrimitive) -> str:
-    mode = primitive.attributes.get("color-interpolation-filters")
-    if mode:
-        return mode
-    return filter_node.styles.get("color-interpolation-filters", "sRGB")
-
-
-def _convert_to_colorspace(surface: Surface, linear: bool) -> Surface:
-    if not linear:
-        return surface.clone()
-    result = surface.clone()
-    rgb = np.clip(result.data[..., :3], 0.0, 1.0)
-    result.data[..., :3] = np.power(rgb, _GAMMA)
-    return result
-
-
-def _linear_to_srgb_surface(surface: Surface) -> Surface:
-    result = surface.clone()
-    rgb = np.clip(result.data[..., :3], 0.0, 1.0)
-    result.data[..., :3] = np.power(rgb, _INV_GAMMA)
-    return result
 
 
 def _apply_blend(a: Surface, b: Surface, mode: str | None, linear: bool) -> Surface:

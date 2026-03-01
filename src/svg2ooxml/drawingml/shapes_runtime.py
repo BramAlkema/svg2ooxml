@@ -23,6 +23,7 @@ from svg2ooxml.drawingml.xml_builder import (
     srgb_color,
     to_string,
 )
+from svg2ooxml.filters.utils.dml import is_effect_dag, merge_effect_fragments
 from svg2ooxml.ir.effects import (
     BlurEffect,
     CustomEffect,
@@ -643,6 +644,13 @@ def _effect_block(effects: Iterable[Effect]) -> str:
 
     if not effect_strings:
         return ""
+
+    # Preserve alpha/composite graphs via effectDag when present.
+    if any(is_effect_dag(fragment) for fragment in effect_strings):
+        merged = merge_effect_fragments(*effect_strings, prefer_container="effectDag")
+        if merged:
+            return _format_block(merged, "        ")
+        return _format_block("".join(effect_strings), "        ")
 
     # Single effect without effectLst wrapper — return as-is
     if len(effect_strings) == 1 and "<a:effectLst" not in effect_strings[0]:
