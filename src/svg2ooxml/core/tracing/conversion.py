@@ -68,6 +68,22 @@ def _derive_resvg_metrics(stage_totals: Iterable[tuple[str, int]]) -> dict[str, 
     return {key: value for key, value in metrics.items() if value}
 
 
+# Geometry decision keys (produced by IR converters, consumed by corpus metrics)
+GEOM_NATIVE = "native"
+GEOM_EMF = "emf"
+GEOM_BITMAP = "bitmap"
+GEOM_RASTER = "raster"
+GEOM_RESVG = "resvg"
+GEOM_WORDART = "wordart"
+GEOM_POLICY_EMF = "policy_emf"
+GEOM_POLICY_RASTER = "policy_raster"
+
+# Paint decision keys
+PAINT_NATIVE = "native"
+PAINT_EMF = "emf"
+PAINT_BITMAP = "bitmap"
+
+
 @dataclass(slots=True)
 class GeometryTrace:
     tag: str

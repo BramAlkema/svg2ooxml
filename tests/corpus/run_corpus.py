@@ -43,6 +43,19 @@ sys.path.insert(0, str(project_root))
 sys.path.insert(0, str(project_root / "src"))
 
 from svg2ooxml.core.parser import ParserConfig, SVGParser  # noqa: E402
+from svg2ooxml.core.tracing.conversion import (  # noqa: E402
+    GEOM_BITMAP,
+    GEOM_EMF,
+    GEOM_NATIVE,
+    GEOM_POLICY_EMF,
+    GEOM_POLICY_RASTER,
+    GEOM_RASTER,
+    GEOM_RESVG,
+    GEOM_WORDART,
+    PAINT_BITMAP,
+    PAINT_EMF,
+    ConversionTracer,
+)
 from svg2ooxml.drawingml.writer import DrawingMLWriter  # noqa: E402
 from svg2ooxml.io.pptx_assembly import PPTXPackageBuilder  # noqa: E402
 from svg2ooxml.ir.entrypoints import convert_parser_output  # noqa: E402
@@ -184,8 +197,12 @@ class DeckMetrics:
     ssim_score: float | None = None
     visual_fidelity_passed: bool | None = None
     
-    # Performance
-    conversion_time_ms: float = 0.0
+    # Performance (per-stage timing in milliseconds)
+    parse_time_ms: float = 0.0
+    ir_convert_time_ms: float = 0.0
+    render_time_ms: float = 0.0
+    package_time_ms: float = 0.0
+    total_time_ms: float = 0.0
 
     # OpenXML audit (optional)
     openxml_valid: bool | None = None
@@ -224,6 +241,9 @@ class CorpusReport:
 
     # Summary
     summary: str
+
+    # Performance profile (aggregate, ms)
+    timing_profile: dict[str, float] | None = None
 
     # Resvg-only geometry misses (aggregated)
     resvg_only_total: int = 0
@@ -268,16 +288,18 @@ def _run_deck_worker(payload: dict[str, Any]) -> DeckMetrics:
     try:
         output_dir.mkdir(parents=True, exist_ok=True)
         svg_path = corpus_dir / svg_file
-        if not svg_path.exists():
-            raise FileNotFoundError(f"SVG file not found: {svg_path}")
-
         svg_text = svg_path.read_text(encoding="utf-8")
 
         parser = SVGParser(ParserConfig())
         writer = DrawingMLWriter()
         builder = PPTXPackageBuilder()
 
+        tracer = ConversionTracer()
+        _pc = time.perf_counter
+
+        t0 = _pc()
         parse_result = parser.parse(svg_text, source_path=str(svg_path))
+        metrics.parse_time_ms = (_pc() - t0) * 1000
         if not parse_result.success or parse_result.svg_root is None:
             raise ValueError(f"SVG parsing failed: {parse_result.error_message}")
 
@@ -290,11 +312,7 @@ def _run_deck_worker(payload: dict[str, Any]) -> DeckMetrics:
         if hasattr(writer, "set_image_service"):
             writer.set_image_service(getattr(services, "image_service", None))
 
-        from svg2ooxml.core.tracing.conversion import ConversionTracer
-        tracer = ConversionTracer()
-
-        import time
-        start_time = time.time()
+        t0 = _pc()
         policy_overrides = _normalize_policy_overrides(deck_info.get("policy_overrides"))
         scene = convert_parser_output(
             parse_result,
@@ -302,13 +320,18 @@ def _run_deck_worker(payload: dict[str, Any]) -> DeckMetrics:
             tracer=tracer,
             overrides=policy_overrides,
         )
-        metrics.conversion_time_ms = (time.time() - start_time) * 1000
+        metrics.ir_convert_time_ms = (_pc() - t0) * 1000
 
+
+        t0 = _pc()
         render_result = writer.render_scene_from_ir(scene, tracer=tracer)
+        metrics.render_time_ms = (_pc() - t0) * 1000
         pptx_path: Path | None = None
         if write_pptx:
+            t0 = _pc()
             pptx_path = output_dir / f"{deck_name}_{mode}.pptx"
             builder.build_from_results([render_result], pptx_path)
+            metrics.package_time_ms = (_pc() - t0) * 1000
 
             if openxml_audit:
                 validator_cmd = _resolve_openxml_validator(openxml_validator)
@@ -332,20 +355,20 @@ def _run_deck_worker(payload: dict[str, Any]) -> DeckMetrics:
             metrics.resvg_only_reason_misses = reason_misses
 
         metrics.native_count = (
-            geom_totals.get("native", 0) +
-            geom_totals.get("resvg", 0) +
-            geom_totals.get("wordart", 0)
+            geom_totals.get(GEOM_NATIVE, 0) +
+            geom_totals.get(GEOM_RESVG, 0) +
+            geom_totals.get(GEOM_WORDART, 0)
         )
         metrics.emf_count = (
-            geom_totals.get("emf", 0) +
-            geom_totals.get("policy_emf", 0) +
-            paint_totals.get("emf", 0)
+            geom_totals.get(GEOM_EMF, 0) +
+            geom_totals.get(GEOM_POLICY_EMF, 0) +
+            paint_totals.get(PAINT_EMF, 0)
         )
         metrics.raster_count = (
-            geom_totals.get("bitmap", 0) +
-            geom_totals.get("raster", 0) +
-            geom_totals.get("policy_raster", 0) +
-            paint_totals.get("bitmap", 0)
+            geom_totals.get(GEOM_BITMAP, 0) +
+            geom_totals.get(GEOM_RASTER, 0) +
+            geom_totals.get(GEOM_POLICY_RASTER, 0) +
+            paint_totals.get(PAINT_BITMAP, 0)
         )
         metrics.total_elements = metrics.native_count + metrics.emf_count + metrics.raster_count
         if metrics.total_elements == 0:
@@ -378,12 +401,22 @@ def _run_deck_worker(payload: dict[str, Any]) -> DeckMetrics:
                 except Exception as exc:
                     logger.warning("  Visual fidelity check failed: %s", exc)
 
+        metrics.total_time_ms = (
+            metrics.parse_time_ms + metrics.ir_convert_time_ms
+            + metrics.render_time_ms + metrics.package_time_ms
+        )
         metrics.success = True
         logger.info(
-            "  ✓ Success (native: %.1f%%, EMF: %.1f%%, raster: %.1f%%)",
+            "  ✓ Success (native: %.1f%%, EMF: %.1f%%, raster: %.1f%%) "
+            "[parse=%.0f ir=%.0f render=%.0f pkg=%.0f total=%.0fms]",
             metrics.native_rate * 100.0,
             metrics.emf_rate * 100.0,
             metrics.raster_rate * 100.0,
+            metrics.parse_time_ms,
+            metrics.ir_convert_time_ms,
+            metrics.render_time_ms,
+            metrics.package_time_ms,
+            metrics.total_time_ms,
         )
     except Exception as exc:
         metrics.success = False
@@ -552,16 +585,18 @@ class CorpusRunner:
         try:
             # Read SVG file
             svg_path = self.corpus_dir / svg_file
-            if not svg_path.exists():
-                raise FileNotFoundError(f"SVG file not found: {svg_path}")
-            
             svg_text = svg_path.read_text(encoding="utf-8")
-            
+
             # Parse SVG
+            tracer = ConversionTracer()
+            _pc = time.perf_counter
+
+            t0 = _pc()
             parse_result = self._parser.parse(svg_text, source_path=str(svg_path))
+            metrics.parse_time_ms = (_pc() - t0) * 1000
             if not parse_result.success or parse_result.svg_root is None:
                 raise ValueError(f"SVG parsing failed: {parse_result.error_message}")
-            
+
             # Configure services with appropriate mode
             filter_strategy = self.mode
             services = parse_result.services
@@ -571,13 +606,9 @@ class CorpusRunner:
                 services.filter_service.set_strategy(filter_strategy)
             if hasattr(self._writer, "set_image_service"):
                 self._writer.set_image_service(getattr(services, "image_service", None))
-            
+
             # Convert to IR
-            from svg2ooxml.core.tracing.conversion import ConversionTracer
-            tracer = ConversionTracer()
-            
-            import time
-            start_time = time.time()
+            t0 = _pc()
             policy_overrides = _normalize_policy_overrides(deck_info.get("policy_overrides"))
             scene = convert_parser_output(
                 parse_result,
@@ -585,17 +616,21 @@ class CorpusRunner:
                 tracer=tracer,
                 overrides=policy_overrides,
             )
-            conversion_time_ms = (time.time() - start_time) * 1000
-            metrics.conversion_time_ms = conversion_time_ms
-            
+            metrics.ir_convert_time_ms = (_pc() - t0) * 1000
+    
+
             # Render to DrawingML
+            t0 = _pc()
             render_result = self._writer.render_scene_from_ir(scene, tracer=tracer)
-            
+            metrics.render_time_ms = (_pc() - t0) * 1000
+
             # Build PPTX (optional)
             pptx_path: Path | None = None
             if self._write_pptx:
+                t0 = _pc()
                 pptx_path = self.output_dir / f"{deck_name}_{self.mode}.pptx"
                 self._builder.build_from_results([render_result], pptx_path)
+                metrics.package_time_ms = (_pc() - t0) * 1000
 
                 if self._openxml_cmd is not None:
                     openxml_valid, openxml_messages = _run_openxml_audit(
@@ -618,26 +653,21 @@ class CorpusRunner:
             if reason_misses:
                 metrics.resvg_only_reason_misses = reason_misses
             
-            # Basic counting logic:
-            # Native: 'native', 'resvg' (if resvg produced vector), 'wordart'
-            # EMF: 'emf', 'policy_emf'
-            # Raster: 'bitmap', 'raster', 'policy_raster'
-            
             metrics.native_count = (
-                geom_totals.get("native", 0) + 
-                geom_totals.get("resvg", 0) + 
-                geom_totals.get("wordart", 0)
+                geom_totals.get(GEOM_NATIVE, 0) +
+                geom_totals.get(GEOM_RESVG, 0) +
+                geom_totals.get(GEOM_WORDART, 0)
             )
             metrics.emf_count = (
-                geom_totals.get("emf", 0) + 
-                geom_totals.get("policy_emf", 0) +
-                paint_totals.get("emf", 0)
+                geom_totals.get(GEOM_EMF, 0) +
+                geom_totals.get(GEOM_POLICY_EMF, 0) +
+                paint_totals.get(PAINT_EMF, 0)
             )
             metrics.raster_count = (
-                geom_totals.get("bitmap", 0) + 
-                geom_totals.get("raster", 0) + 
-                geom_totals.get("policy_raster", 0) +
-                paint_totals.get("bitmap", 0)
+                geom_totals.get(GEOM_BITMAP, 0) +
+                geom_totals.get(GEOM_RASTER, 0) +
+                geom_totals.get(GEOM_POLICY_RASTER, 0) +
+                paint_totals.get(PAINT_BITMAP, 0)
             )
             metrics.total_elements = metrics.native_count + metrics.emf_count + metrics.raster_count
             
@@ -678,8 +708,23 @@ class CorpusRunner:
                 except Exception as e:
                     logger.warning(f"  Visual fidelity check failed: {e}")
             
+            metrics.total_time_ms = (
+                metrics.parse_time_ms + metrics.ir_convert_time_ms
+                + metrics.render_time_ms + metrics.package_time_ms
+            )
             metrics.success = True
-            logger.info(f"  ✓ Success (native: {metrics.native_rate:.1%}, EMF: {metrics.emf_rate:.1%}, raster: {metrics.raster_rate:.1%})")
+            logger.info(
+                "  ✓ Success (native: %.1f%%, EMF: %.1f%%, raster: %.1f%%) "
+                "[parse=%.0f ir=%.0f render=%.0f pkg=%.0f total=%.0fms]",
+                metrics.native_rate * 100.0,
+                metrics.emf_rate * 100.0,
+                metrics.raster_rate * 100.0,
+                metrics.parse_time_ms,
+                metrics.ir_convert_time_ms,
+                metrics.render_time_ms,
+                metrics.package_time_ms,
+                metrics.total_time_ms,
+            )
             
         except Exception as e:
             metrics.success = False
@@ -709,12 +754,14 @@ class CorpusRunner:
 
         try:
             svg_path = self.corpus_dir / svg_file
-            if not svg_path.exists():
-                raise FileNotFoundError(f"SVG file not found: {svg_path}")
-
             svg_text = svg_path.read_text(encoding="utf-8")
 
+            tracer = ConversionTracer()
+            _pc = time.perf_counter
+
+            t0 = _pc()
             parse_result = self._parser.parse(svg_text, source_path=str(svg_path))
+            metrics.parse_time_ms = (_pc() - t0) * 1000
             if not parse_result.success or parse_result.svg_root is None:
                 raise ValueError(f"SVG parsing failed: {parse_result.error_message}")
 
@@ -725,11 +772,7 @@ class CorpusRunner:
             elif services.filter_service is not None:
                 services.filter_service.set_strategy(filter_strategy)
 
-            from svg2ooxml.core.tracing.conversion import ConversionTracer
-            tracer = ConversionTracer()
-
-            import time
-            start_time = time.time()
+            t0 = _pc()
             policy_overrides = _normalize_policy_overrides(deck_info.get("policy_overrides"))
             scene = convert_parser_output(
                 parse_result,
@@ -737,10 +780,12 @@ class CorpusRunner:
                 tracer=tracer,
                 overrides=policy_overrides,
             )
-            conversion_time_ms = (time.time() - start_time) * 1000
-            metrics.conversion_time_ms = conversion_time_ms
+            metrics.ir_convert_time_ms = (_pc() - t0) * 1000
+    
 
+            t0 = _pc()
             render_result = self._writer.render_scene_from_ir(scene, tracer=tracer)
+            metrics.render_time_ms = (_pc() - t0) * 1000
             stream.add_slide(render_result)
 
             report = tracer.report()
@@ -754,20 +799,20 @@ class CorpusRunner:
                 metrics.resvg_only_reason_misses = reason_misses
 
             metrics.native_count = (
-                geom_totals.get("native", 0)
-                + geom_totals.get("resvg", 0)
-                + geom_totals.get("wordart", 0)
+                geom_totals.get(GEOM_NATIVE, 0)
+                + geom_totals.get(GEOM_RESVG, 0)
+                + geom_totals.get(GEOM_WORDART, 0)
             )
             metrics.emf_count = (
-                geom_totals.get("emf", 0)
-                + geom_totals.get("policy_emf", 0)
-                + paint_totals.get("emf", 0)
+                geom_totals.get(GEOM_EMF, 0)
+                + geom_totals.get(GEOM_POLICY_EMF, 0)
+                + paint_totals.get(PAINT_EMF, 0)
             )
             metrics.raster_count = (
-                geom_totals.get("bitmap", 0)
-                + geom_totals.get("raster", 0)
-                + geom_totals.get("policy_raster", 0)
-                + paint_totals.get("bitmap", 0)
+                geom_totals.get(GEOM_BITMAP, 0)
+                + geom_totals.get(GEOM_RASTER, 0)
+                + geom_totals.get(GEOM_POLICY_RASTER, 0)
+                + paint_totals.get(PAINT_BITMAP, 0)
             )
             metrics.total_elements = metrics.native_count + metrics.emf_count + metrics.raster_count
             if metrics.total_elements == 0:
@@ -778,12 +823,21 @@ class CorpusRunner:
                 metrics.emf_rate = metrics.emf_count / metrics.total_elements
                 metrics.raster_rate = metrics.raster_count / metrics.total_elements
 
+            metrics.total_time_ms = (
+                metrics.parse_time_ms + metrics.ir_convert_time_ms
+                + metrics.render_time_ms
+            )
             metrics.success = True
             logger.info(
-                "  ✓ Success (native: %.1f%%, EMF: %.1f%%, raster: %.1f%%)",
+                "  ✓ Success (native: %.1f%%, EMF: %.1f%%, raster: %.1f%%) "
+                "[parse=%.0f ir=%.0f render=%.0f total=%.0fms]",
                 metrics.native_rate * 100.0,
                 metrics.emf_rate * 100.0,
                 metrics.raster_rate * 100.0,
+                metrics.parse_time_ms,
+                metrics.ir_convert_time_ms,
+                metrics.render_time_ms,
+                metrics.total_time_ms,
             )
         except Exception as e:
             metrics.success = False
@@ -1314,8 +1368,54 @@ class CorpusRunner:
                 1,
                 f"Sampled {planned_total}/{available_total} decks (seed={sample_seed or 0})",
             )
+        # Timing profile
+        timing_profile: dict[str, float] | None = None
+        if successful:
+            n = len(successful)
+            sum_parse = sum(r.parse_time_ms for r in successful)
+            sum_ir = sum(r.ir_convert_time_ms for r in successful)
+            sum_render = sum(r.render_time_ms for r in successful)
+            sum_pkg = sum(r.package_time_ms for r in successful)
+            sum_total = sum(r.total_time_ms for r in successful)
+            timing_profile = {
+                "avg_parse_ms": sum_parse / n,
+                "avg_ir_convert_ms": sum_ir / n,
+                "avg_render_ms": sum_render / n,
+                "avg_package_ms": sum_pkg / n,
+                "avg_total_ms": sum_total / n,
+                "sum_parse_ms": sum_parse,
+                "sum_ir_convert_ms": sum_ir,
+                "sum_render_ms": sum_render,
+                "sum_package_ms": sum_pkg,
+                "sum_total_ms": sum_total,
+                "pct_parse": sum_parse / sum_total * 100 if sum_total else 0,
+                "pct_ir_convert": sum_ir / sum_total * 100 if sum_total else 0,
+                "pct_render": sum_render / sum_total * 100 if sum_total else 0,
+                "pct_package": sum_pkg / sum_total * 100 if sum_total else 0,
+            }
+            # Find top-10 slowest decks
+            by_total = sorted(successful, key=lambda r: r.total_time_ms, reverse=True)
+            timing_profile["top10_slowest"] = [
+                {
+                    "deck": r.deck_name,
+                    "total_ms": round(r.total_time_ms, 1),
+                    "parse_ms": round(r.parse_time_ms, 1),
+                    "ir_ms": round(r.ir_convert_time_ms, 1),
+                    "render_ms": round(r.render_time_ms, 1),
+                    "pkg_ms": round(r.package_time_ms, 1),
+                }
+                for r in by_total[:10]
+            ]
+            summary_lines.append(
+                f"Timing: parse={sum_parse / n:.0f}ms ({timing_profile['pct_parse']:.0f}%) "
+                f"ir={sum_ir / n:.0f}ms ({timing_profile['pct_ir_convert']:.0f}%) "
+                f"render={sum_render / n:.0f}ms ({timing_profile['pct_render']:.0f}%) "
+                f"pkg={sum_pkg / n:.0f}ms ({timing_profile['pct_package']:.0f}%) "
+                f"avg_total={sum_total / n:.0f}ms"
+            )
+
         summary = "\n".join(summary_lines)
-        
+
         report = CorpusReport(
             timestamp=datetime.now(UTC).isoformat(),
             mode=self.mode,
@@ -1338,6 +1438,7 @@ class CorpusRunner:
             resvg_only_total=resvg_only_total,
             resvg_only_misses=resvg_only_misses or None,
             resvg_only_reason_misses=resvg_only_reason_misses or None,
+            timing_profile=timing_profile,
             summary=summary,
         )
         

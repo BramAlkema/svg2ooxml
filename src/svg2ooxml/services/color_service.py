@@ -9,12 +9,10 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from svg2ooxml.services import ConversionServices
 
-from svg2ooxml.color.analysis import summarize_palette
 from svg2ooxml.color.bridge import (
     ADVANCED_COLOR_ENGINE_AVAILABLE,
     ensure_advanced_color_engine,
 )
-from svg2ooxml.color.models import Color
 from svg2ooxml.color.spaces import ColorSpaceConverter, ColorSpaceResult
 from svg2ooxml.services.image_service import ImageResource
 
@@ -81,14 +79,10 @@ class ColorSpaceService:
         metadata = dict(result.metadata)
         metadata.setdefault("policy_normalization", normalization)
 
-        analysis_payload = result.data if result.converted else resource.data
-        palette_stats = self._analyze_image_palette(analysis_payload)
-        if palette_stats:
-            metadata["palette"] = palette_stats
-
         if normalization == "perceptual":
             perceptual_meta = metadata.setdefault("perceptual", {})
-            linearized = self._linearize_image(analysis_payload, mode="RGBA")
+            payload = result.data if result.converted else resource.data
+            linearized = self._linearize_image(payload, mode="RGBA")
             if linearized is not None:
                 linear_bytes, linear_meta = linearized
                 perceptual_meta.update(linear_meta)
@@ -116,47 +110,6 @@ class ColorSpaceService:
 
     def clone(self) -> ColorSpaceService:
         return ColorSpaceService(self._converter)
-
-    def _analyze_image_palette(self, payload: bytes) -> dict[str, object] | None:
-        try:
-            from PIL import Image
-        except ImportError:  # pragma: no cover - Pillow optional
-            return None
-
-        try:
-            with Image.open(io.BytesIO(payload)) as image:
-                working = image.convert("RGBA")
-                width, height = working.size
-                max_samples = 4096
-                if width * height > max_samples:
-                    scale = (max_samples / float(width * height)) ** 0.5
-                    new_width = max(1, int(width * scale))
-                    new_height = max(1, int(height * scale))
-                    resampling = getattr(Image, "Resampling", None)
-                    resample_filter = getattr(resampling, "BILINEAR", Image.BILINEAR) if resampling else Image.BILINEAR
-                    working = working.resize((new_width, new_height), resample_filter)
-                if hasattr(working, "get_flattened_data"):
-                    pixels = list(working.get_flattened_data())
-                else:
-                    pixels = list(working.getdata())
-        except Exception:
-            return None
-
-        if not pixels:
-            return None
-
-        max_samples = min(len(pixels), 4096)
-        colours: list[Color] = []
-        for pixel in pixels[:max_samples]:
-            if len(pixel) == 4:
-                r, g, b, a = pixel
-            elif len(pixel) == 3:
-                r, g, b = pixel
-                a = 255
-            else:
-                continue
-            colours.append(Color(r / 255.0, g / 255.0, b / 255.0, a / 255.0))
-        return summarize_palette(colours)
 
     def _linearize_image(self, payload: bytes, *, mode: str) -> tuple[bytes, dict[str, object]] | None:
         if not ADVANCED_COLOR_ENGINE_AVAILABLE:

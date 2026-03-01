@@ -32,11 +32,10 @@ def test_gradient_processor_color_statistics() -> None:
 
     assert analysis.colors_used == ["#FF0000", "#008000"]
     assert analysis.color_statistics["unique"] == 2
-    assert analysis.color_statistics["max_oklab_distance"] > 0
+    assert analysis.color_statistics["complexity"] > 0
     assert analysis.color_statistics["recommended_space"] in {"srgb", "linear_rgb"}
     if ADVANCED_COLOR_ENGINE_AVAILABLE and analysis.color_statistics.get("advanced_available"):
-        assert "mean_oklch" in analysis.color_statistics
-        assert analysis.color_statistics["harmony_suggestions"]
+        assert "hue_spread" in analysis.color_statistics
 
 
 def test_pattern_processor_palette_summary() -> None:

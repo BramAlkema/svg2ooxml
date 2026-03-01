@@ -90,26 +90,13 @@ def _report_palette(colours: Sequence[Color]) -> tuple[str, dict[str, object]]:
     lines.append(f"Palette: {', '.join(stats['palette']) or '—'}")
     lines.append(f"Has transparency: {bool(stats.get('has_transparency'))}")
     lines.append(f"Recommended colour space: {stats.get('recommended_space', 'srgb')}")
-    lines.append(f"Max OKLab distance: {stats.get('max_oklab_distance', 0):.4f}")
     lines.append(f"Complexity: {stats.get('complexity', 0):.3f}")
 
     if stats.get("advanced_available"):
-        mean_l, mean_c, mean_h = stats.get("mean_oklch", (0.0, 0.0, 0.0))
         lines.append("")
         lines.append("Advanced Metrics")
         lines.append("----------------")
-        lines.append(f"Mean OKLCh: L={mean_l:.3f}, C={mean_c:.3f}, h={mean_h:.2f}")
         lines.append(f"Hue spread: {stats.get('hue_spread', 0.0):.2f}")
-        lines.append(f"Saturation variance: {stats.get('saturation_variance', 0.0):.5f}")
-        lines.append(f"Lightness stddev: {stats.get('lightness_std', 0.0):.5f}")
-        if stats.get("harmony_suggestions"):
-            lines.append(f"Harmony suggestions: {', '.join(stats['harmony_suggestions'])}")
-        if stats.get("pairwise_contrast") is not None:
-            lines.append(f"Contrast (first pair): {stats['pairwise_contrast']:.2f}:1")
-        if stats.get("lighten_preview"):
-            lines.append(f"Lighten preview: {', '.join(stats['lighten_preview'])}")
-        if stats.get("saturate_preview"):
-            lines.append(f"Saturate preview: {', '.join(stats['saturate_preview'])}")
 
     return "\n".join(lines), stats
 

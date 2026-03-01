@@ -9,6 +9,8 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
+from svg2ooxml.common.math_utils import population_variance
+
 from svg2ooxml.ir.text_path import PathPoint, TextPathFrame, TextPathSide
 
 
@@ -191,8 +193,8 @@ def _compute_features(points: list[PathPoint], path_data: str | None) -> PathFea
     amplitude = (max(ys) - min(ys)) / 2 if ys else 0.0
     mean_y = sum(ys) / len(ys) if ys else 0.0
     std_y = math.sqrt(sum((y - mean_y) ** 2 for y in ys) / len(ys)) if ys else 0.0
-    x_variance = _variance(xs)
-    y_variance = _variance(ys)
+    x_variance = population_variance(xs)
+    y_variance = population_variance(ys)
 
     return PathFeatures(
         is_closed=is_closed,
@@ -478,13 +480,6 @@ def _determine_orientation(points: Sequence[PathPoint]) -> str:
     for i in range(len(points) - 1):
         area += points[i].x * points[i + 1].y - points[i + 1].x * points[i].y
     return "clockwise" if area < 0 else "counter_clockwise"
-
-
-def _variance(values: Sequence[float]) -> float:
-    if not values:
-        return 0.0
-    mean = sum(values) / len(values)
-    return sum((value - mean) ** 2 for value in values) / len(values)
 
 
 __all__ = ["PathFeatures", "WordArtClassificationResult", "classify_text_path_warp"]
