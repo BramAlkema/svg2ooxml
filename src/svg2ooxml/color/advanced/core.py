@@ -528,7 +528,8 @@ class Color:
         if not 0.0 <= value <= 1.0:
             raise ValueError(f"Alpha must be between 0.0 and 1.0, got {value}")
 
-        new_color = Color(self._input_value)
+        new_color = object.__new__(Color)
+        new_color._input_value = self._input_value
         new_color._rgb = self._rgb
         new_color._alpha = value
         return new_color

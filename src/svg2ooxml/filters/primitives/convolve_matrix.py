@@ -9,7 +9,7 @@ from lxml import etree
 # Import centralized XML builders for safe DrawingML generation
 from svg2ooxml.drawingml.xml_builder import a_elem, a_sub, to_string
 from svg2ooxml.filters.base import Filter, FilterContext, FilterResult
-from svg2ooxml.filters.utils import parse_number
+from svg2ooxml.filters.utils import parse_float_list, parse_number
 from svg2ooxml.units.conversion import px_to_emu
 
 
@@ -90,7 +90,7 @@ class ConvolveMatrixFilter(Filter):
             oy_str = order_attr
         order_x = max(1, int(parse_number(ox_str, default=3.0)))
         order_y = max(1, int(parse_number(oy_str, default=3.0)))
-        kernel = self._parse_float_list(primitive.get("kernelMatrix"))
+        kernel = parse_float_list(primitive.get("kernelMatrix"))
         divisor = parse_number(primitive.get("divisor"), default=1.0)
         bias = parse_number(primitive.get("bias"))
         target_x = int(parse_number(primitive.get("targetX"), default=(order_x - 1) / 2))
@@ -118,17 +118,6 @@ class ConvolveMatrixFilter(Filter):
             preserve_alpha=preserve_alpha,
             kernel_unit_length=kernel_unit_length,
         )
-
-    def _parse_float_list(self, payload: str | None) -> list[float]:
-        if not payload:
-            return []
-        values: list[float] = []
-        for token in payload.replace(",", " ").split():
-            try:
-                values.append(float(token))
-            except ValueError:
-                continue
-        return values
 
     def _is_identity_kernel(self, params: ConvolveMatrixParams) -> bool:
         kernel = params.kernel

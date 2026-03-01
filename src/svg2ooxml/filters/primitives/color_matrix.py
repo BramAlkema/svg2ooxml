@@ -11,6 +11,7 @@ from svg2ooxml.common.conversions.angles import degrees_to_ppt
 from svg2ooxml.common.conversions.scale import scale_to_ppt
 from svg2ooxml.drawingml.xml_builder import a_elem, a_sub, to_string
 from svg2ooxml.filters.base import Filter, FilterContext, FilterResult, stitch_blip_transforms
+from svg2ooxml.filters.utils import parse_float_list
 
 
 @dataclass
@@ -44,7 +45,7 @@ class ColorMatrixFilter(Filter):
         if params.matrix_type == "matrix":
             values_list = list(params.values)
             if not values_list and raw_values:
-                values_list = self._parse_floats(raw_values)
+                values_list = parse_float_list(raw_values)
             metadata["values"] = values_list
             metadata["value_count"] = len(values_list)
             if not values_list or self._is_identity_matrix(values_list):
@@ -113,20 +114,10 @@ class ColorMatrixFilter(Filter):
         matrix_type = (primitive.get("type") or "matrix").strip()
         values_attr = primitive.get("values") or ""
         if matrix_type in {"matrix", "saturate", "hueRotate"} and values_attr:
-            values = self._parse_floats(values_attr)
+            values = parse_float_list(values_attr)
         else:
             values = []
         return ColorMatrixParams(matrix_type=matrix_type, values=values)
-
-    def _parse_floats(self, payload: str) -> list[float]:
-        cleaned = payload.replace(",", " ").split()
-        values: list[float] = []
-        for token in cleaned:
-            try:
-                values.append(float(token))
-            except ValueError:
-                continue
-        return values
 
     def _to_drawingml(self, params: ColorMatrixParams) -> str:
         if params.matrix_type == "saturate":

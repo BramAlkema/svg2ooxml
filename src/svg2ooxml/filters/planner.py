@@ -8,6 +8,7 @@ from collections.abc import Iterable, Mapping
 from typing import Any
 
 from svg2ooxml.filters.base import FilterContext, FilterResult
+from svg2ooxml.filters.utils import parse_float_list
 from svg2ooxml.filters.resvg_bridge import FilterPrimitiveDescriptor, ResolvedFilter, build_filter_node
 from svg2ooxml.render.filters import FilterPlan, plan_filter
 from svg2ooxml.render.rasterizer import Viewport
@@ -117,7 +118,7 @@ class FilterPlanner:
         attrs = primitive.attributes or {}
         if tag == "fegaussianblur":
             raw = self._attribute(attrs, "stdDeviation")
-            std_values = self._parse_float_list(raw)
+            std_values = parse_float_list(raw)
             if not std_values:
                 return True
             return all(abs(value) <= 1e-6 for value in std_values[:2])
@@ -129,7 +130,7 @@ class FilterPlanner:
             matrix_type = (self._attribute(attrs, "type") or "matrix").strip().lower()
             if matrix_type != "matrix":
                 return False
-            values = self._parse_float_list(self._attribute(attrs, "values"))
+            values = parse_float_list(self._attribute(attrs, "values"))
             if not values:
                 return True
             return self._is_identity_matrix(values)
@@ -287,19 +288,6 @@ class FilterPlanner:
             return float(str(value).strip())
         except (TypeError, ValueError):
             return None
-
-    @staticmethod
-    def _parse_float_list(value: str | None) -> list[float]:
-        if value is None:
-            return []
-        cleaned = str(value).replace(",", " ").split()
-        values: list[float] = []
-        for token in cleaned:
-            try:
-                values.append(float(token))
-            except ValueError:
-                continue
-        return values
 
     @staticmethod
     def _is_identity_matrix(values: list[float]) -> bool:

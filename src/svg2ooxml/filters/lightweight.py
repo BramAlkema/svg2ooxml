@@ -9,6 +9,8 @@ from typing import Any
 
 from lxml import etree
 
+from svg2ooxml.filters.utils import parse_float_list
+
 from svg2ooxml.drawingml.emf_adapter import PaletteResolver
 from svg2ooxml.drawingml.filter_renderer import (
     FilterRenderer as DrawingMLFilterRenderer,
@@ -143,19 +145,6 @@ class LightweightFilterPlanner:
             return None
 
     @staticmethod
-    def _parse_float_list(value: str | None) -> list[float]:
-        if value is None:
-            return []
-        cleaned = str(value).replace(",", " ").split()
-        values: list[float] = []
-        for token in cleaned:
-            try:
-                values.append(float(token))
-            except ValueError:
-                continue
-        return values
-
-    @staticmethod
     def _is_identity_matrix(values: list[float]) -> bool:
         if len(values) != 20:
             return False
@@ -173,7 +162,7 @@ class LightweightFilterPlanner:
         attrs = getattr(primitive, "attributes", {}) or {}
         if tag == "fegaussianblur":
             raw = self._attribute(attrs, "stdDeviation")
-            std_values = self._parse_float_list(raw)
+            std_values = parse_float_list(raw)
             if not std_values:
                 return True
             return all(abs(value) <= 1e-6 for value in std_values[:2])
@@ -185,7 +174,7 @@ class LightweightFilterPlanner:
             matrix_type = (self._attribute(attrs, "type") or "matrix").strip().lower()
             if matrix_type != "matrix":
                 return False
-            values = self._parse_float_list(self._attribute(attrs, "values"))
+            values = parse_float_list(self._attribute(attrs, "values"))
             if not values:
                 return True
             return self._is_identity_matrix(values)

@@ -8,7 +8,7 @@ from lxml import etree
 
 from svg2ooxml.common.conversions.scale import PPT_SCALE, scale_to_ppt
 from svg2ooxml.filters.base import Filter, FilterContext, FilterResult, stitch_blip_transforms
-from svg2ooxml.filters.utils import parse_number
+from svg2ooxml.filters.utils import parse_float_list, parse_number
 
 CHANNELS = {"r", "g", "b", "a"}
 
@@ -77,7 +77,7 @@ class ComponentTransferFilter(Filter):
             func_type = (node.get("type") or "identity").strip().lower()
             params: dict[str, object] = {}
             if func_type in {"table", "discrete"}:
-                params["values"] = self._parse_float_list(node.get("tableValues"))
+                params["values"] = parse_float_list(node.get("tableValues"))
             elif func_type == "linear":
                 params["slope"] = parse_number(node.get("slope"), default=1.0)
                 params["intercept"] = parse_number(node.get("intercept"))
@@ -97,17 +97,6 @@ class ComponentTransferFilter(Filter):
         if suffix not in CHANNELS:
             return None
         return suffix
-
-    def _parse_float_list(self, payload: str | None) -> list[float]:
-        if not payload:
-            return []
-        values: list[float] = []
-        for token in payload.replace(",", " ").split():
-            try:
-                values.append(float(token))
-            except ValueError:
-                continue
-        return values
 
     def _summarise_function(self, func: ComponentFunction) -> str:
         parts = [func.channel, func.func_type]
