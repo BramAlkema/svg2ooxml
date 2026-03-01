@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Iterable
 
 from svg2ooxml.drawingml.result import DrawingMLRenderResult
-from svg2ooxml.io.pptx_writer import PPTXPackageBuilder
+from svg2ooxml.io.pptx_assembly import PPTXPackageBuilder
 
 from .bundles import load_job_bundles
 

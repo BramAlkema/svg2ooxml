@@ -7,7 +7,7 @@ from pathlib import Path
 
 from svg2ooxml.core.parser import ParserConfig, SVGParser
 from svg2ooxml.drawingml.writer import DrawingMLWriter
-from svg2ooxml.io.pptx_writer import PPTXPackageBuilder
+from svg2ooxml.io.pptx_assembly import PPTXPackageBuilder
 from svg2ooxml.ir.entrypoints import convert_parser_output
 from svg2ooxml.services import configure_services
 

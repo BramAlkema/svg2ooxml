@@ -16,9 +16,22 @@ from svg2ooxml.drawingml.raster_adapter import RasterAdapter
 # Import centralized XML builders for safe DrawingML generation
 from svg2ooxml.drawingml.xml_builder import a_elem, a_sub, to_string
 from svg2ooxml.filters.base import FilterContext, FilterResult
-from svg2ooxml.filters.utils.dml import is_effect_list
+from svg2ooxml.filters.utils.dml import is_effect_container
 from svg2ooxml.ir.effects import CustomEffect
 from svg2ooxml.services.filter_types import FilterEffectResult
+
+_ALLOWED_BLIP_TAGS = frozenset({
+    "alphaModFix",
+    "alphaMod",
+    "alphaOff",
+    "satMod",
+    "satOff",
+    "hueOff",
+    "lumMod",
+    "lumOff",
+    "tint",
+    "shade",
+})
 
 HOOK_PATTERN = re.compile(r"<!--\s*svg2ooxml:(?P<name>\w+)(?P<attrs>[^>]*)-->", re.IGNORECASE)
 ATTR_PATTERN = re.compile(r"(\w+)=\"([^\"]*)\"")
@@ -74,14 +87,14 @@ class FilterRenderer:
                 drawingml = ""
 
             fragment = drawingml.strip()
-            if fragment and not fragment.startswith("<!--") and not is_effect_list(fragment):
+            if fragment and not fragment.startswith("<!--") and not is_effect_container(fragment):
                 drawingml = f"<a:effectLst>{fragment}</a:effectLst>"
 
             if not drawingml and result.fallback == "emf":
-                drawingml = self._placeholder_emf(metadata, result)
+                drawingml = self._placeholder_emf(metadata, result, policy=policy)
                 strategy = "vector"
             elif not drawingml and result.fallback in {"bitmap", "raster"}:
-                drawingml = self._placeholder_raster(metadata, result)
+                drawingml = self._placeholder_raster(metadata, result, policy=policy)
                 strategy = "raster"
             else:
                 strategy = self._strategy_from_policy(result, policy)
@@ -205,7 +218,13 @@ class FilterRenderer:
             return "vector"
         return "native"
 
-    def _placeholder_emf(self, metadata: dict[str, object], result: FilterResult) -> str:
+    def _placeholder_emf(
+        self,
+        metadata: dict[str, object],
+        result: FilterResult,
+        *,
+        policy: dict[str, object] | None,
+    ) -> str:
         try:
             asset = self._ensure_emf_asset(metadata, result)
         except Exception:  # pragma: no cover - defensive fallback
@@ -228,6 +247,7 @@ class FilterRenderer:
             blipFill = a_sub(effectLst, "blipFill", rotWithShape="0")
             blip = a_sub(blipFill, "blip")
             blip.set("{http://schemas.openxmlformats.org/officeDocument/2006/relationships}embed", placeholder_id)
+            self._apply_blip_enrichment(blip, metadata, policy)
             return to_string(effectLst)
 
 
@@ -261,6 +281,7 @@ class FilterRenderer:
         blipFill = a_sub(effectLst, "blipFill", rotWithShape="0")
         blip = a_sub(blipFill, "blip")
         blip.set("{http://schemas.openxmlformats.org/officeDocument/2006/relationships}embed", rel_id)
+        self._apply_blip_enrichment(blip, metadata, policy)
 
         if data_hex:
             extLst = a_sub(blip, "extLst")
@@ -269,7 +290,13 @@ class FilterRenderer:
 
         return to_string(effectLst)
 
-    def _placeholder_raster(self, metadata: dict[str, object], result: FilterResult) -> str:
+    def _placeholder_raster(
+        self,
+        metadata: dict[str, object],
+        result: FilterResult,
+        *,
+        policy: dict[str, object] | None,
+    ) -> str:
         from lxml import etree
 
         assets_list = metadata.get("fallback_assets")
@@ -310,6 +337,7 @@ class FilterRenderer:
             blipFill = a_sub(effectLst, "blipFill", rotWithShape="0")
             blip = a_sub(blipFill, "blip")
             blip.set("{http://schemas.openxmlformats.org/officeDocument/2006/relationships}embed", rel_id)
+            self._apply_blip_enrichment(blip, metadata, policy)
 
             if data_hex:
                 extLst = a_sub(blip, "extLst")
@@ -349,6 +377,7 @@ class FilterRenderer:
         blipFill = a_sub(effectLst, "blipFill", rotWithShape="0")
         blip = a_sub(blipFill, "blip")
         blip.set("{http://schemas.openxmlformats.org/officeDocument/2006/relationships}embed", raster.relationship_id)
+        self._apply_blip_enrichment(blip, metadata, policy)
 
         extLst = a_sub(blip, "extLst")
         ext = a_sub(extLst, "ext", uri="{svg2ooxml:raster}")
@@ -423,8 +452,46 @@ class FilterRenderer:
             if isinstance(policy_opts, dict):
                 filter_policy = policy_opts.get("filter")
                 if isinstance(filter_policy, dict):
-                    return filter_policy
+                    return {**policy_opts, **filter_policy}
+                return policy_opts
         return None
+
+    def _apply_blip_enrichment(
+        self,
+        blip,
+        metadata: dict[str, object],
+        policy: dict[str, object] | None,
+    ) -> None:
+        if not isinstance(policy, dict):
+            return
+        if not bool(policy.get("enable_blip_effect_enrichment", False)):
+            return
+        candidates = metadata.get("blip_color_transforms")
+        if not isinstance(candidates, list):
+            return
+
+        applied = False
+        for candidate in candidates:
+            if not isinstance(candidate, dict):
+                continue
+            tag = candidate.get("tag")
+            if not isinstance(tag, str) or tag not in _ALLOWED_BLIP_TAGS:
+                continue
+            attrs: dict[str, str] = {}
+            for attr_name in ("val", "amt"):
+                if attr_name not in candidate:
+                    continue
+                raw = candidate[attr_name]
+                if isinstance(raw, (int, float)):
+                    attrs[attr_name] = str(int(round(raw)))
+                elif isinstance(raw, str) and raw.strip():
+                    attrs[attr_name] = raw.strip()
+            if not attrs:
+                continue
+            a_sub(blip, tag, **attrs)
+            applied = True
+        if applied:
+            metadata["blip_effect_enrichment_applied"] = True
 
 
 __all__ = ["FilterRenderer"]

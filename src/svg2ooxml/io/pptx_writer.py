@@ -9,347 +9,75 @@ import uuid
 import zipfile
 from collections import OrderedDict
 from collections.abc import Sequence
-from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from lxml import etree as ET
 
 from svg2ooxml.common.tempfiles import temporary_directory
-from svg2ooxml.core.ir import IRScene
-from svg2ooxml.drawingml.assets import FontAsset, MediaAsset, NavigationAsset
-from svg2ooxml.drawingml.result import DrawingMLRenderResult
-from svg2ooxml.drawingml.writer import DEFAULT_SLIDE_SIZE, DrawingMLWriter
+from svg2ooxml.drawingml.assets import FontAsset, NavigationAsset
+from svg2ooxml.drawingml.writer import DEFAULT_SLIDE_SIZE
+from svg2ooxml.io.pptx_assembly import (
+    ALLOWED_SLIDE_SIZE_MODES,
+    CONTENT_NS,
+    FONT_STYLE_ORDER,
+    FONT_STYLE_TAGS,
+    MASK_REL_TYPE,
+    P_NS,
+    PackagingContext,
+    R_DOC_NS,
+    REL_NS,
+    SlideAssembler,
+    SlideAssembly,
+    THEME_FAMILY_NS,
+    THEME_NS,
+    MaskAsset,
+    MaskMeta,
+    MediaMeta,
+    PackagedFont,
+    PackagedMedia,
+    SlideEntry,
+    content_type_for_extension as _content_type_for_extension,
+    normalize_style_kind as _normalize_style_kind,
+    safe_int as _safe_int,
+)
 from svg2ooxml.ir.text import EmbeddedFontPlan
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from svg2ooxml.core.tracing import ConversionTracer
 
-ASSETS_ROOT = Path(__file__).resolve().parents[3] / "assets" / "pptx_templates"
-REL_NS = "http://schemas.openxmlformats.org/package/2006/relationships"
-CONTENT_NS = "http://schemas.openxmlformats.org/package/2006/content-types"
-P_NS = "http://schemas.openxmlformats.org/presentationml/2006/main"
-R_DOC_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
-THEME_NS = "http://schemas.openxmlformats.org/drawingml/2006/main"
-THEME_FAMILY_NS = "http://schemas.microsoft.com/office/thememl/2012/main"
-ET.register_namespace("thm15", THEME_FAMILY_NS)
-# PowerPoint masks reference normal ImagePart relationships; no dedicated mask rel type exists.
-# Examples: standard PowerPoint .rels files authored by Microsoft Office only emit the image URI.
-MASK_REL_TYPE = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image"
-FONT_STYLE_TAGS: dict[str, str] = {
-    "regular": "regular",
-    "bold": "bold",
-    "italic": "italic",
-    "boldItalic": "boldItalic",
+
+_REQUIRED_XML_PARTS: dict[str, str] = {
+    "presProps.xml": (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
+        '<p:presentationPr xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"\n'
+        '                  xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"\n'
+        '                  xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"/>'
+    ),
+    "viewProps.xml": (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
+        '<p:viewPr xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"\n'
+        '          xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"\n'
+        '          xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">\n'
+        '    <p:normalViewPr>\n'
+        '        <p:restoredLeft sz="15620"/>\n'
+        '        <p:restoredTop sz="94660"/>\n'
+        '    </p:normalViewPr>\n'
+        '</p:viewPr>'
+    ),
+    "tableStyles.xml": (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
+        '<a:tblStyleLst xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"\n'
+        '               def="{5C22544A-7EE6-4342-B048-85BDC9FD1C3A}"/>'
+    ),
 }
-FONT_STYLE_ORDER: tuple[str, ...] = ("regular", "bold", "italic", "boldItalic")
 
-
-@dataclass
-class _PackagedMedia:
-    relationship_id: str
-    filename: str
-    content_type: str
-    data: bytes
-
-    @property
-    def package_path(self) -> Path:
-        return Path("ppt") / "media" / self.filename
-
-    @property
-    def relationship_target(self) -> str:
-        return f"../media/{self.filename}"
-
-
-@dataclass
-class SlideAssembly:
-    index: int
-    filename: str
-    rel_id: str
-    slide_id: int
-    slide_xml: str
-    slide_size: tuple[int, int]
-    media: list[_PackagedMedia]
-    navigation: list[NavigationAsset] = field(default_factory=list)
-    masks: list[_MaskAsset] = field(default_factory=list)
-    font_assets: list[FontAsset] = field(default_factory=list)
-
-
-@dataclass
-class _PackagedFont:
-    filename: str
-    relationship_id: str
-    font_family: str
-    subsetted: bool
-    content_type: str
-    style_kind: str = "regular"
-    style_flags: dict[str, bool] = field(default_factory=dict)
-    guid: str | None = None
-    root_string: str | None = None
-    subset_prefix: str | None = None
-    pitch_family: int | None = None
-    charset: int | None = None
-
-
-@dataclass
-class _MaskAsset:
-    relationship_id: str
-    part_name: str
-    content_type: str
-    data: bytes
-
-    @property
-    def package_path(self) -> Path:
-        part = self.part_name.lstrip("/")
-        return Path(part)
-
-    @property
-    def relationship_target(self) -> str:
-        path = self.package_path
-        if path.parts and path.parts[0] == "ppt":
-            relative_parts = ["..", *path.parts[1:]]
-            return "/".join(relative_parts)
-        return path.as_posix()
-
-
-@dataclass(frozen=True, slots=True)
-class _SlideEntry:
-    """Lightweight slide metadata retained during streaming (no XML/binary data)."""
-
-    index: int
-    filename: str
-    rel_id: str
-    slide_id: int
-    slide_size: tuple[int, int]
-
-
-@dataclass(frozen=True, slots=True)
-class _MediaMeta:
-    """Lightweight media metadata for content-type tracking (no binary data)."""
-
-    filename: str
-    content_type: str
-
-
-@dataclass(frozen=True, slots=True)
-class _MaskMeta:
-    """Lightweight mask metadata for content-type tracking (no binary data)."""
-
-    part_name: str
-    content_type: str
-
-
-class PackagingContext:
-    """Assign unique identifiers and filenames while packaging."""
-
-    def __init__(self) -> None:
-        self._media_by_signature: dict[tuple[str, str], str] = {}
-        self._used_media_filenames: set[str] = set()
-        self._media_counter = 1
-        self._presentation_rel_counter = 2
-        self._next_slide_id = 256
-
-    def assign_media_filename(self, asset: MediaAsset, slide_index: int) -> str:
-        """Return a deterministic filename for the supplied media payload."""
-        digest = hashlib.md5(asset.data, usedforsecurity=False).hexdigest()
-        key = (asset.filename, digest)
-        existing = self._media_by_signature.get(key)
-        if existing:
-            return existing
-
-        base = asset.filename or f"media_{self._media_counter}"
-        path = Path(base)
-        stem = path.stem or "media"
-        suffix = path.suffix or self._suffix_for_content_type(asset.content_type)
-        candidate = f"{stem}{suffix}"
-
-        while candidate in self._used_media_filenames:
-            candidate = f"{stem}_{slide_index}_{self._media_counter}{suffix}"
-            self._media_counter += 1
-
-        self._media_by_signature[key] = candidate
-        self._used_media_filenames.add(candidate)
-        self._media_counter += 1
-        return candidate
-
-    def allocate_slide_entry(self) -> tuple[str, int]:
-        """Allocate presentation relationship and slide id."""
-        rel_id = f"rId{self._presentation_rel_counter}"
-        self._presentation_rel_counter += 1
-        slide_id = self._next_slide_id
-        self._next_slide_id += 1
-        return rel_id, slide_id
-
-    @staticmethod
-    def _suffix_for_content_type(content_type: str) -> str:
-        mapping = {
-            "image/png": ".png",
-            "image/jpeg": ".jpg",
-            "image/gif": ".gif",
-            "image/svg+xml": ".svg",
-            "image/x-emf": ".emf",
-        }
-        return mapping.get(content_type, ".bin")
-
-
-class SlideAssembler:
-    """Build slide-level packaging metadata from DrawingML render results."""
-
-    def __init__(self, context: PackagingContext) -> None:
-        self._context = context
-
-    def assemble_one(self, result: DrawingMLRenderResult, index: int) -> SlideAssembly:
-        """Assemble packaging metadata for a single render result."""
-        rel_id, slide_id = self._context.allocate_slide_entry()
-        slide_filename = f"slide{index}.xml"
-        media_parts: list[_PackagedMedia] = []
-        for asset in result.assets.iter_media():
-            assigned_name = self._context.assign_media_filename(asset, index)
-            media_parts.append(
-                _PackagedMedia(
-                    relationship_id=asset.relationship_id,
-                    filename=assigned_name,
-                    content_type=asset.content_type,
-                    data=asset.data,
-                )
-            )
-
-        mask_parts: list[_MaskAsset] = []
-        for mask in result.assets.iter_masks():
-            mask_parts.append(
-                _MaskAsset(
-                    relationship_id=mask["relationship_id"],
-                    part_name=mask["part_name"],
-                    content_type=mask["content_type"],
-                    data=mask["data"],
-                )
-            )
-
-        return SlideAssembly(
-            index=index,
-            filename=slide_filename,
-            rel_id=rel_id,
-            slide_id=slide_id,
-            slide_xml=result.slide_xml,
-            slide_size=result.slide_size,
-            media=media_parts,
-            navigation=list(result.assets.iter_navigation()),
-            masks=mask_parts,
-            font_assets=list(result.assets.iter_fonts()),
-        )
-
-    def assemble(self, render_results: Sequence[DrawingMLRenderResult]) -> list[SlideAssembly]:
-        return [
-            self.assemble_one(result, index)
-            for index, result in enumerate(render_results, start=1)
-        ]
-
-
-ALLOWED_SLIDE_SIZE_MODES = {"multipage", "same"}
-
-
-class PPTXPackageBuilder:
-    """Create PPTX packages using the clean-slate template library."""
-
-    def __init__(self, *, assets_root: Path | None = None, slide_size_mode: str | None = None) -> None:
-        self._assets_root = assets_root or ASSETS_ROOT
-        self._base_template = self._assets_root / "clean_slate"
-        self._content_types_template = (self._assets_root / "content_types.xml").read_text(encoding="utf-8")
-        self._slide_rels_template = (
-            self._base_template / "ppt" / "slides" / "_rels" / "slide.xml.rels"
-        ).read_text(encoding="utf-8")
-        self._writer = DrawingMLWriter(template_dir=self._assets_root)
-        if slide_size_mode is not None and slide_size_mode not in ALLOWED_SLIDE_SIZE_MODES:
-            raise ValueError(
-                f"Unsupported slide_size_mode {slide_size_mode!r}. "
-                f"Expected one of {sorted(ALLOWED_SLIDE_SIZE_MODES)}."
-            )
-        self._slide_size_mode = slide_size_mode
-
-    def build(
-        self,
-        scene: IRScene,
-        output_path: str | Path,
-        *,
-        tracer: ConversionTracer | None = None,
-        persist_trace: bool | None = None,
-    ) -> Path:
-        """Materialise a PPTX file for the supplied IR scene."""
-        return self.build_scenes([scene], output_path, tracer=tracer, persist_trace=persist_trace)
-
-    def build_scenes(
-        self,
-        scenes: Sequence[IRScene],
-        output_path: str | Path,
-        *,
-        tracer: ConversionTracer | None = None,
-        persist_trace: bool | None = None,
-    ) -> Path:
-        """Materialise a PPTX file for a sequence of IR scenes."""
-        render_results = []
-        for scene in scenes:
-            animation_payload = None
-            if isinstance(scene.metadata, dict):
-                animation_payload = scene.metadata.get("animation_raw")
-            render_results.append(
-                self._writer.render_scene_from_ir(
-                    scene,
-                    tracer=tracer,
-                    animation_payload=animation_payload,
-                )
-            )
-        return self.build_from_results(render_results, output_path, tracer=tracer, persist_trace=persist_trace)
-
-    def build_from_results(
-        self,
-        render_results: Sequence[DrawingMLRenderResult],
-        output_path: str | Path,
-        *,
-        tracer: ConversionTracer | None = None,
-        persist_trace: bool | None = None,
-        slide_size_mode: str | None = None,
-    ) -> Path:
-        """Package pre-rendered slides returned by DrawingMLWriter."""
-        if not render_results:
-            raise ValueError("At least one render result is required to build a PPTX package.")
-
-        context = PackagingContext()
-        slide_assemblies = SlideAssembler(context).assemble(render_results)
-        package_writer = PackageWriter(
-            base_template=self._base_template,
-            content_types_template=self._content_types_template,
-            slide_rels_template=self._slide_rels_template,
-            slide_size_mode=self._slide_size_mode,
-        )
-        return package_writer.write_package(
-            slide_assemblies,
-            output_path,
-            tracer=tracer,
-            persist_trace=persist_trace,
-            slide_size_mode=slide_size_mode,
-        )
-
-    def begin_streaming(
-        self,
-        *,
-        tracer: ConversionTracer | None = None,
-    ) -> StreamingPackageWriter:
-        """Create a streaming writer for incremental slide addition.
-
-        Use as a context manager::
-
-            with builder.begin_streaming() as stream:
-                stream.add_slide(result1)
-                stream.add_slide(result2)
-                path = stream.finalize(output_path)
-        """
-        return StreamingPackageWriter(
-            base_template=self._base_template,
-            content_types_template=self._content_types_template,
-            slide_rels_template=self._slide_rels_template,
-            slide_size_mode=self._slide_size_mode,
-            tracer=tracer,
-        )
+_REQUIRED_PRES_RELS: tuple[tuple[str, str], ...] = (
+    ("presProps.xml", f"{R_DOC_NS}/presProps"),
+    ("viewProps.xml", f"{R_DOC_NS}/viewProps"),
+    ("tableStyles.xml", f"{R_DOC_NS}/tableStyles"),
+    ("theme/theme1.xml", f"{R_DOC_NS}/theme"),
+)
 
 
 class _PackageWriterBase:
@@ -386,12 +114,12 @@ class _PackageWriterBase:
             return
         tracer.record_stage_event(stage=stage, action=action, metadata=metadata, subject=subject)
 
-    def _write_media_parts(self, package_root: Path, media_parts: Sequence[_PackagedMedia]) -> None:
+    def _write_media_parts(self, package_root: Path, media_parts: Sequence[PackagedMedia]) -> None:
         if not media_parts:
             return
         media_dir = package_root / "ppt" / "media"
         media_dir.mkdir(parents=True, exist_ok=True)
-        unique_media: dict[str, _PackagedMedia] = {}
+        unique_media: dict[str, PackagedMedia] = {}
         for part in media_parts:
             unique_media.setdefault(part.filename, part)
         for part in unique_media.values():
@@ -407,7 +135,7 @@ class _PackageWriterBase:
                 subject=part.relationship_id,
             )
 
-    def _write_mask_parts(self, package_root: Path, mask_parts: Sequence[_MaskAsset]) -> None:
+    def _write_mask_parts(self, package_root: Path, mask_parts: Sequence[MaskAsset]) -> None:
         if not mask_parts:
             return
         written: set[Path] = set()
@@ -429,9 +157,9 @@ class _PackageWriterBase:
         self,
         slides_dir: Path,
         slide_index: int,
-        media_parts: Sequence[_PackagedMedia],
+        media_parts: Sequence[PackagedMedia],
         navigation_assets: Sequence[NavigationAsset],
-        mask_parts: Sequence[_MaskAsset],
+        mask_parts: Sequence[MaskAsset],
     ) -> None:
         rels_path = slides_dir / "_rels" / f"slide{slide_index}.xml.rels"
         rels_root = ET.fromstring(self._slide_rels_template.encode("utf-8"))
@@ -445,7 +173,7 @@ class _PackageWriterBase:
                 f"{{{REL_NS}}}Relationship",
                 {
                     "Id": part.relationship_id,
-                    "Type": "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image",
+                    "Type": MASK_REL_TYPE,
                     "Target": part.relationship_target,
                 },
             )
@@ -491,7 +219,7 @@ class _PackageWriterBase:
         self,
         package_root: Path,
         font_assets: Sequence[FontAsset],
-    ) -> list[_PackagedFont]:
+    ) -> list[PackagedFont]:
         if not font_assets:
             return []
 
@@ -527,7 +255,7 @@ class _PackageWriterBase:
         fonts_dir = package_root / "ppt" / "fonts"
         fonts_dir.mkdir(parents=True, exist_ok=True)
 
-        packaged_fonts: list[_PackagedFont] = []
+        packaged_fonts: list[PackagedFont] = []
         used_relationships: set[str] = set()
         rel_seed = 1
         font_index = 1
@@ -585,7 +313,7 @@ class _PackageWriterBase:
             )
 
             packaged_fonts.append(
-                _PackagedFont(
+                PackagedFont(
                     filename=filename,
                     relationship_id=rel_id,
                     font_family=font_family,
@@ -607,7 +335,7 @@ class _PackageWriterBase:
         self,
         package_root: Path,
         slides: Sequence[SlideAssembly],
-        fonts: Sequence[_PackagedFont],
+        fonts: Sequence[PackagedFont],
         slide_size: tuple[int, int] | None = None,
     ) -> None:
         presentation_path = package_root / "ppt" / "presentation.xml"
@@ -658,7 +386,7 @@ class _PackageWriterBase:
                 for child in list(font_list):
                     font_list.remove(child)
 
-            font_groups: OrderedDict[str, dict[str, _PackagedFont]] = OrderedDict()
+            font_groups: OrderedDict[str, dict[str, PackagedFont]] = OrderedDict()
             for font in fonts:
                 slot = font_groups.setdefault(font.font_family, {})
                 slot[font.style_kind] = font
@@ -695,7 +423,7 @@ class _PackageWriterBase:
         rels_root = rels_tree.getroot()
 
         for rel in list(rels_root.findall(f"{{{REL_NS}}}Relationship")):
-            if rel.get("Type") == "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide":
+            if rel.get("Type") == f"{R_DOC_NS}/slide":
                 rels_root.remove(rel)
 
         existing_rel_ids = {rel.get("Id") for rel in rels_root.findall(f"{{{REL_NS}}}Relationship")}
@@ -708,7 +436,7 @@ class _PackageWriterBase:
                 f"{{{REL_NS}}}Relationship",
                 {
                     "Id": entry.rel_id,
-                    "Type": "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide",
+                    "Type": f"{R_DOC_NS}/slide",
                     "Target": f"slides/{entry.filename}",
                 },
             )
@@ -722,7 +450,7 @@ class _PackageWriterBase:
                 f"{{{REL_NS}}}Relationship",
                 {
                     "Id": font.relationship_id,
-                    "Type": "http://schemas.openxmlformats.org/officeDocument/2006/relationships/font",
+                    "Type": f"{R_DOC_NS}/font",
                     "Target": f"fonts/{font.filename}",
                 },
             )
@@ -769,157 +497,62 @@ class _PackageWriterBase:
         )
         return selected
 
-    def _write_required_presentation_parts(self, package_root: Path) -> None:
-        """Write required PPTX parts that PowerPoint expects.
+    def _inject_slide_layout_dimensions(
+        self, package_root: Path, slide_size: tuple[int, int] | None
+    ) -> None:
+        """Replace dimension placeholders in slide layout templates."""
+        if slide_size is None:
+            return
+        for layout_path in (package_root / "ppt" / "slideLayouts").glob("slideLayout*.xml"):
+            content = layout_path.read_text(encoding="utf-8")
+            content = content.replace("{SLIDE_WIDTH}", str(slide_size[0]))
+            content = content.replace("{SLIDE_HEIGHT}", str(slide_size[1]))
+            layout_path.write_text(content, encoding="utf-8")
 
-        Per ECMA-376, PowerPoint requires these files to validate properly:
-        - presProps.xml: Presentation properties
-        - viewProps.xml: View properties
-        - tableStyles.xml: Table styles
-        """
+    def _write_required_presentation_parts(self, package_root: Path) -> None:
+        """Write presProps, viewProps, tableStyles parts required by ECMA-376."""
         ppt_dir = package_root / "ppt"
         ppt_dir.mkdir(parents=True, exist_ok=True)
 
-        # presProps.xml - Minimal presentation properties
-        pres_props_content = '''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<p:presentationPr xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
-                  xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"
-                  xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"/>'''
+        for name, content in _REQUIRED_XML_PARTS.items():
+            (ppt_dir / name).write_text(content, encoding="utf-8")
+            self._trace_packaging("required_part_written", metadata={"file": name})
 
-        pres_props_path = ppt_dir / "presProps.xml"
-        pres_props_path.write_text(pres_props_content, encoding="utf-8")
-        self._trace_packaging(
-            "required_part_written",
-            metadata={"file": "presProps.xml"},
-        )
-
-        # viewProps.xml - View properties with default normal view settings
-        view_props_content = '''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<p:viewPr xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
-          xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"
-          xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
-    <p:normalViewPr>
-        <p:restoredLeft sz="15620"/>
-        <p:restoredTop sz="94660"/>
-    </p:normalViewPr>
-</p:viewPr>'''
-
-        view_props_path = ppt_dir / "viewProps.xml"
-        view_props_path.write_text(view_props_content, encoding="utf-8")
-        self._trace_packaging(
-            "required_part_written",
-            metadata={"file": "viewProps.xml"},
-        )
-
-        # tableStyles.xml - Table styles with default style reference
-        table_styles_content = '''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<a:tblStyleLst xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
-               def="{5C22544A-7EE6-4342-B048-85BDC9FD1C3A}"/>'''
-
-        table_styles_path = ppt_dir / "tableStyles.xml"
-        table_styles_path.write_text(table_styles_content, encoding="utf-8")
-        self._trace_packaging(
-            "required_part_written",
-            metadata={"file": "tableStyles.xml"},
-        )
-
-        # Update presentation.xml.rels to include relationships to these files
         rels_path = ppt_dir / "_rels" / "presentation.xml.rels"
-        if rels_path.exists():
-            rels_tree = ET.parse(rels_path)
-            rels_root = rels_tree.getroot()
+        if not rels_path.exists():
+            return
+        rels_tree = ET.parse(rels_path)
+        rels_root = rels_tree.getroot()
+        existing_rel_ids = {rel.get("Id") for rel in rels_root.findall(f"{{{REL_NS}}}Relationship")}
+        existing_targets = {rel.get("Target") for rel in rels_root.findall(f"{{{REL_NS}}}Relationship")}
 
-            existing_rel_ids = {rel.get("Id") for rel in rels_root.findall(f"{{{REL_NS}}}Relationship")}
-            existing_targets = {rel.get("Target") for rel in rels_root.findall(f"{{{REL_NS}}}Relationship")}
-
-            # Add presProps relationship if not present
-            if "presProps.xml" not in existing_targets:
-                # Find next available numeric ID
-                next_id = 1
-                while f"rId{next_id}" in existing_rel_ids:
-                    next_id += 1
-                pres_props_rel_id = f"rId{next_id}"
-
-                ET.SubElement(
-                    rels_root,
-                    f"{{{REL_NS}}}Relationship",
-                    {
-                        "Id": pres_props_rel_id,
-                        "Type": "http://schemas.openxmlformats.org/officeDocument/2006/relationships/presProps",
-                        "Target": "presProps.xml",
-                    },
-                )
-                existing_rel_ids.add(pres_props_rel_id)
-                existing_targets.add("presProps.xml")
-
-            # Add viewProps relationship if not present
-            if "viewProps.xml" not in existing_targets:
-                next_id = 1
-                while f"rId{next_id}" in existing_rel_ids:
-                    next_id += 1
-                view_props_rel_id = f"rId{next_id}"
-
-                ET.SubElement(
-                    rels_root,
-                    f"{{{REL_NS}}}Relationship",
-                    {
-                        "Id": view_props_rel_id,
-                        "Type": "http://schemas.openxmlformats.org/officeDocument/2006/relationships/viewProps",
-                        "Target": "viewProps.xml",
-                    },
-                )
-                existing_rel_ids.add(view_props_rel_id)
-                existing_targets.add("viewProps.xml")
-
-            # Add tableStyles relationship if not present
-            if "tableStyles.xml" not in existing_targets:
-                next_id = 1
-                while f"rId{next_id}" in existing_rel_ids:
-                    next_id += 1
-                table_styles_rel_id = f"rId{next_id}"
-
-                ET.SubElement(
-                    rels_root,
-                    f"{{{REL_NS}}}Relationship",
-                    {
-                        "Id": table_styles_rel_id,
-                        "Type": "http://schemas.openxmlformats.org/officeDocument/2006/relationships/tableStyles",
-                        "Target": "tableStyles.xml",
-                    },
-                )
-                existing_rel_ids.add(table_styles_rel_id)
-                existing_targets.add("tableStyles.xml")
-
-            # Add theme relationship if not present (CRITICAL for PowerPoint)
-            if "theme/theme1.xml" not in existing_targets:
-                next_id = 1
-                while f"rId{next_id}" in existing_rel_ids:
-                    next_id += 1
-                theme_rel_id = f"rId{next_id}"
-
-                ET.SubElement(
-                    rels_root,
-                    f"{{{REL_NS}}}Relationship",
-                    {
-                        "Id": theme_rel_id,
-                        "Type": "http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme",
-                        "Target": "theme/theme1.xml",
-                    },
-                )
-
-            rels_tree.write(rels_path, encoding="utf-8", xml_declaration=True)
-            self._trace_packaging(
-                "presentation_rels_updated",
-                metadata={"added_required_relationships": True},
+        for target, rel_type in _REQUIRED_PRES_RELS:
+            if target in existing_targets:
+                continue
+            next_id = 1
+            while f"rId{next_id}" in existing_rel_ids:
+                next_id += 1
+            rel_id = f"rId{next_id}"
+            ET.SubElement(
+                rels_root, f"{{{REL_NS}}}Relationship",
+                {"Id": rel_id, "Type": rel_type, "Target": target},
             )
+            existing_rel_ids.add(rel_id)
+            existing_targets.add(target)
+
+        rels_tree.write(rels_path, encoding="utf-8", xml_declaration=True)
+        self._trace_packaging(
+            "presentation_rels_updated",
+            metadata={"added_required_relationships": True},
+        )
 
     def _write_content_types(
         self,
         package_root: Path,
         slides: Sequence[SlideAssembly],
-        media_parts: Sequence[_PackagedMedia],
-        fonts: Sequence[_PackagedFont],
-        mask_parts: Sequence[_MaskAsset],
+        media_parts: Sequence[PackagedMedia],
+        fonts: Sequence[PackagedFont],
+        mask_parts: Sequence[MaskAsset],
     ) -> None:
         content_types_path = package_root / "[Content_Types].xml"
         root = ET.fromstring(self._content_types_template.encode("utf-8"))
@@ -1061,11 +694,11 @@ class StreamingPackageWriter(_PackageWriterBase):
         self._slides_dir: Path | None = None
         self._context: PackagingContext | None = None
         self._assembler: SlideAssembler | None = None
-        self._slide_entries: list[_SlideEntry] = []
-        self._media_meta: list[_MediaMeta] = []
-        self._mask_meta: list[_MaskMeta] = []
+        self._slide_entries: list[SlideEntry] = []
+        self._media_meta: list[MediaMeta] = []
+        self._mask_meta: list[MaskMeta] = []
         self._font_assets: list[FontAsset] = []
-        self._packaged_fonts: list[_PackagedFont] = []
+        self._packaged_fonts: list[PackagedFont] = []
         self._slide_index = 0
         self._begun = False
         self._finalized = False
@@ -1125,7 +758,7 @@ class StreamingPackageWriter(_PackageWriterBase):
             self._write_media_parts(self._temp_path, assembly.media)
             for part in assembly.media:
                 self._media_meta.append(
-                    _MediaMeta(filename=part.filename, content_type=part.content_type)
+                    MediaMeta(filename=part.filename, content_type=part.content_type)
                 )
 
         # Write mask binary data to disk immediately
@@ -1133,7 +766,7 @@ class StreamingPackageWriter(_PackageWriterBase):
             self._write_mask_parts(self._temp_path, assembly.masks)
             for mask in assembly.masks:
                 self._mask_meta.append(
-                    _MaskMeta(part_name=mask.part_name, content_type=mask.content_type)
+                    MaskMeta(part_name=mask.part_name, content_type=mask.content_type)
                 )
 
         # Accumulate font assets (small, few unique)
@@ -1142,7 +775,7 @@ class StreamingPackageWriter(_PackageWriterBase):
 
         # Store lightweight metadata only
         self._slide_entries.append(
-            _SlideEntry(
+            SlideEntry(
                 index=assembly.index,
                 filename=assembly.filename,
                 rel_id=assembly.rel_id,
@@ -1177,18 +810,7 @@ class StreamingPackageWriter(_PackageWriterBase):
             )
             self._write_required_presentation_parts(self._temp_path)
 
-            if presentation_slide_size:
-                for layout_path in (
-                    self._temp_path / "ppt" / "slideLayouts"
-                ).glob("slideLayout*.xml"):
-                    content = layout_path.read_text(encoding="utf-8")
-                    content = content.replace(
-                        "{SLIDE_WIDTH}", str(presentation_slide_size[0])
-                    )
-                    content = content.replace(
-                        "{SLIDE_HEIGHT}", str(presentation_slide_size[1])
-                    )
-                    layout_path.write_text(content, encoding="utf-8")
+            self._inject_slide_layout_dimensions(self._temp_path, presentation_slide_size)
 
             self._write_content_types(
                 self._temp_path,
@@ -1263,10 +885,10 @@ class PackageWriter(_PackageWriterBase):
                 if template_slide_rels.exists():
                     template_slide_rels.unlink()
 
-                all_media: list[_PackagedMedia] = []
+                all_media: list[PackagedMedia] = []
                 font_assets: list[FontAsset] = []
-                all_masks: list[_MaskAsset] = []
-                packaged_fonts: list[_PackagedFont] = []
+                all_masks: list[MaskAsset] = []
+                packaged_fonts: list[PackagedFont] = []
 
                 for slide in slides:
                     (slides_dir / slide.filename).write_text(slide.slide_xml, encoding="utf-8")
@@ -1310,9 +932,9 @@ class PackageWriter(_PackageWriterBase):
                     font_assets.extend(slide.font_assets)
                     all_masks.extend(slide.masks)
 
-                    self._write_media_parts(temp_path, all_media)
-                    self._write_mask_parts(temp_path, all_masks)
-                    packaged_fonts = self._write_font_parts(temp_path, font_assets)
+                self._write_media_parts(temp_path, all_media)
+                self._write_mask_parts(temp_path, all_masks)
+                packaged_fonts = self._write_font_parts(temp_path, font_assets)
 
                 presentation_slide_size = self._select_slide_size(
                     slides,
@@ -1322,13 +944,7 @@ class PackageWriter(_PackageWriterBase):
                 self._update_presentation_parts(temp_path, slides, packaged_fonts, presentation_slide_size)
                 self._write_required_presentation_parts(temp_path)
 
-                # Inject dimensions into slide layouts
-                if presentation_slide_size:
-                    for layout_path in (temp_path / "ppt" / "slideLayouts").glob("slideLayout*.xml"):
-                        content = layout_path.read_text(encoding="utf-8")
-                        content = content.replace("{SLIDE_WIDTH}", str(presentation_slide_size[0]))
-                        content = content.replace("{SLIDE_HEIGHT}", str(presentation_slide_size[1]))
-                        layout_path.write_text(content, encoding="utf-8")
+                self._inject_slide_layout_dimensions(temp_path, presentation_slide_size)
 
                 self._write_content_types(temp_path, slides, all_media, packaged_fonts, all_masks)
                 self._trace_packaging(
@@ -1369,51 +985,4 @@ class PackageWriter(_PackageWriterBase):
             self._tracer = prev_tracer
 
 
-def write_pptx(scene: IRScene, output_path: str | Path) -> Path:
-    """Public helper mirroring the historical API."""
-
-    builder = PPTXPackageBuilder()
-    return builder.build(scene, output_path)
-
-
-def _content_type_for_extension(extension: str) -> str:
-    """Get OOXML-compliant content type for font file extensions.
-
-    Per ECMA-376 and Office Open XML specification:
-    - TTF/OTF fonts should use 'application/x-fontdata'
-    - Obfuscated fonts use the dedicated OOXML type
-    - Web fonts (WOFF/WOFF2) use standard MIME types
-    """
-    mapping = {
-        "ttf": "application/x-fontdata",  # PowerPoint-compliant (was x-font-ttf)
-        "otf": "application/x-fontdata",  # PowerPoint-compliant (was x-font-otf)
-        "woff": "application/font-woff",
-        "woff2": "application/font-woff2",
-        "odttf": "application/vnd.openxmlformats-officedocument.obfuscatedFont",
-        "fntdata": "application/x-fontdata",
-    }
-    return mapping.get(extension.lower(), "application/octet-stream")
-
-
-def _normalize_style_kind(value: object) -> str:
-    if isinstance(value, str):
-        lowered = value.strip().lower()
-        if lowered == "bolditalic":
-            return "boldItalic"
-        if lowered in FONT_STYLE_TAGS:
-            return lowered
-    return "regular"
-
-
-def _safe_int(value: object | None) -> int | None:
-    if isinstance(value, int):
-        return value
-    if isinstance(value, str):
-        try:
-            return int(value, 0)
-        except ValueError:
-            return None
-    return None
-
-
-__all__ = ["PPTXPackageBuilder", "write_pptx"]
+__all__ = ["PackageWriter", "StreamingPackageWriter"]

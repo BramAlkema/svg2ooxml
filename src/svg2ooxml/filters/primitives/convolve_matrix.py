@@ -33,9 +33,7 @@ class ConvolveMatrixFilter(Filter):
 
     def apply(self, primitive: etree._Element, context: FilterContext) -> FilterResult:
         params = self._parse_params(primitive)
-        policy_options = {}
-        if isinstance(context.options, dict):
-            policy_options = context.options.get("policy") or {}
+        policy_options = context.policy
         approximation_allowed = bool(policy_options.get("approximation_allowed", True))
         blur_strategy = str(policy_options.get("blur_strategy") or "soft_edge").strip().lower()
 

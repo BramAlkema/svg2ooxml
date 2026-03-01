@@ -21,7 +21,7 @@ from xml.sax.saxutils import escape as xml_escape
 
 from svg2ooxml.drawingml.assets import AssetRegistry
 from svg2ooxml.drawingml.result import DrawingMLRenderResult
-from svg2ooxml.io.pptx_writer import PPTXPackageBuilder
+from svg2ooxml.io.pptx_assembly import PPTXPackageBuilder
 
 # -- Constants ----------------------------------------------------------------
 

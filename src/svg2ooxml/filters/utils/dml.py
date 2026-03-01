@@ -40,8 +40,25 @@ def is_effect_list(fragment: str | None) -> bool:
     return fragment.lstrip().startswith("<a:effectLst")
 
 
+def is_effect_dag(fragment: str | None) -> bool:
+    """Return True when *fragment* looks like a DrawingML effect DAG."""
+
+    if not fragment:
+        return False
+    return fragment.lstrip().startswith("<a:effectDag")
+
+
+def is_effect_container(fragment: str | None) -> bool:
+    """Return True when *fragment* is an effect list or effect DAG."""
+
+    if not fragment:
+        return False
+    stripped = fragment.lstrip()
+    return stripped.startswith("<a:effectLst") or stripped.startswith("<a:effectDag")
+
+
 def extract_effect_children(fragment: str) -> str:
-    """Return the inner XML of an effect list fragment."""
+    """Return the inner XML of an effect container fragment."""
 
     text = fragment.strip()
     if not text:
@@ -50,26 +67,33 @@ def extract_effect_children(fragment: str) -> str:
         return _flatten_effect_children(text)
     except Exception:
         # Fallback to the original string parsing logic if XML parsing fails.
-        if not is_effect_list(text):
+        if not is_effect_container(text):
             return text
         if text.endswith("/>"):
             return ""
         start = text.find(">")
-        end = text.rfind("</a:effectLst>")
+        if is_effect_list(text):
+            end = text.rfind("</a:effectLst>")
+            if start == -1 or end == -1 or end <= start:
+                return text
+            return text[start + 1 : end]
+        end = text.rfind("</a:effectDag>")
         if start == -1 or end == -1 or end <= start:
             return text
         return text[start + 1 : end]
 
 
 def _flatten_effect_children(fragment: str) -> str:
-    """Flatten effect list fragments into a single sequence of effect nodes."""
+    """Flatten effect container fragments into a single sequence of effect nodes."""
 
     wrapped = f'<root xmlns:a="{NS_A}">{fragment}</root>'
     temp = etree.fromstring(wrapped.encode("utf-8"))
     parts: list[str] = []
     for child in temp:
-        if _local_name(child.tag) == "effectLst":
+        if _local_name(child.tag) in {"effectLst", "effectDag"}:
             for grandchild in child:
+                if _local_name(grandchild.tag) == "cont":
+                    continue
                 parts.append(_serialize_node(grandchild))
         else:
             parts.append(_serialize_node(child))
@@ -90,30 +114,38 @@ def _local_name(tag: str | None) -> str:
     return tag
 
 
-def merge_effect_fragments(*fragments: str | None) -> str:
-    """Merge zero or more effect-list fragments into a single effect list."""
+def merge_effect_fragments(
+    *fragments: str | None,
+    prefer_container: str = "effectLst",
+) -> str:
+    """Merge zero or more fragments into a single effect container."""
 
     children: list[str] = []
+    target_container = "effectDag" if prefer_container == "effectDag" else "effectLst"
     for fragment in fragments:
         if not fragment:
             continue
-        inner = extract_effect_children(fragment) if is_effect_list(fragment) else fragment
+        if target_container != "effectDag" and is_effect_dag(fragment):
+            target_container = "effectDag"
+        inner = extract_effect_children(fragment) if is_effect_container(fragment) else fragment
         if inner:
             children.append(inner)
     if not children:
         return ""
 
-    # Build effect list using lxml
-    effectLst = a_elem("effectLst")
+    # Build effect container using lxml
+    effect_root = a_elem(target_container)
+    if target_container == "effectDag":
+        etree.SubElement(effect_root, f"{{{NS_A}}}cont")
 
     # Parse and append child XML fragments
     for child_xml in children:
         try:
-            graft_xml_fragment(effectLst, child_xml)
+            graft_xml_fragment(effect_root, child_xml)
         except Exception:
             continue
 
-    return to_string(effectLst)
+    return to_string(effect_root)
 
 
 def _format_value(value: object) -> str:
@@ -128,4 +160,11 @@ def _escape(value: str) -> str:
     return value.replace('"', "&quot;")
 
 
-__all__ = ["build_exporter_hook", "is_effect_list", "extract_effect_children", "merge_effect_fragments"]
+__all__ = [
+    "build_exporter_hook",
+    "is_effect_list",
+    "is_effect_dag",
+    "is_effect_container",
+    "extract_effect_children",
+    "merge_effect_fragments",
+]

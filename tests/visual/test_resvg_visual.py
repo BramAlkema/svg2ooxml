@@ -227,6 +227,20 @@ class TestCompositeFilters:
 
 
 @pytest.mark.visual
+class TestPatternTileTransforms:
+    """Test pattern tile transforms (scale/translate/mirror) visual output."""
+
+    def test_pattern_tile_transforms_rendering(self, tmp_path, visual_tools):
+        _run_visual_test(
+            "pattern_tile_transforms",
+            tmp_path,
+            visual_tools,
+            threshold=0.93,
+            browser_threshold=0.90,
+        )
+
+
+@pytest.mark.visual
 class TestIntegration:
     """Integration tests combining multiple resvg features."""
     
@@ -236,6 +250,7 @@ class TestIntegration:
         "radial_gradients",
         "text_rendering",
         "composite_filters",
+        "pattern_tile_transforms",
     ])
     def test_all_resvg_features(self, fixture, tmp_path, visual_tools):
         """Parametrized test running all fixtures."""
@@ -246,11 +261,13 @@ class TestIntegration:
             "radial_gradients": 0.92,  # Tolerance for DrawingML limitations
             "text_rendering": 0.82,    # Tolerance for font rendering variance
             "composite_filters": 0.95,
+            "pattern_tile_transforms": 0.93,
         }
         browser_thresholds = {
             "blend_modes": 0.84,
             "linear_gradients": 0.87,
             "text_rendering": 0.88,
+            "pattern_tile_transforms": 0.90,
         }
         threshold = thresholds.get(fixture, 0.95)
         browser_threshold = browser_thresholds.get(fixture)

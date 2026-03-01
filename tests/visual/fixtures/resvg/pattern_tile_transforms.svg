@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="560" viewBox="0 0 900 560">
+  <defs>
+    <pattern id="checker_base" patternUnits="userSpaceOnUse" width="16" height="16">
+      <rect x="0" y="0" width="16" height="16" fill="#f4f4f4"/>
+      <rect x="0" y="0" width="8" height="8" fill="#1f77b4"/>
+      <rect x="8" y="8" width="8" height="8" fill="#1f77b4"/>
+      <rect x="8" y="0" width="8" height="8" fill="#ffffff"/>
+      <rect x="0" y="8" width="8" height="8" fill="#ffffff"/>
+    </pattern>
+
+    <pattern
+      id="checker_scaled_shifted"
+      patternUnits="userSpaceOnUse"
+      width="16"
+      height="16"
+      patternTransform="translate(4, -2) scale(1.5, 0.75)"
+    >
+      <rect x="0" y="0" width="16" height="16" fill="#f4f4f4"/>
+      <rect x="0" y="0" width="8" height="8" fill="#d62728"/>
+      <rect x="8" y="8" width="8" height="8" fill="#d62728"/>
+      <rect x="8" y="0" width="8" height="8" fill="#ffffff"/>
+      <rect x="0" y="8" width="8" height="8" fill="#ffffff"/>
+    </pattern>
+
+    <pattern
+      id="checker_mirrored"
+      patternUnits="userSpaceOnUse"
+      width="16"
+      height="16"
+      patternTransform="matrix(-1 0 0 1 16 0)"
+    >
+      <rect x="0" y="0" width="16" height="16" fill="#f4f4f4"/>
+      <rect x="0" y="0" width="8" height="8" fill="#2ca02c"/>
+      <rect x="8" y="8" width="8" height="8" fill="#2ca02c"/>
+      <rect x="8" y="0" width="8" height="8" fill="#ffffff"/>
+      <rect x="0" y="8" width="8" height="8" fill="#ffffff"/>
+    </pattern>
+  </defs>
+
+  <rect width="900" height="560" fill="#ffffff"/>
+
+  <text x="150" y="70" text-anchor="middle" font-size="22" font-family="Arial">Base Tile</text>
+  <rect x="40" y="100" width="220" height="220" fill="url(#checker_base)" stroke="#666666" stroke-width="2"/>
+
+  <text x="450" y="70" text-anchor="middle" font-size="22" font-family="Arial">Scale + Translate</text>
+  <rect x="340" y="100" width="220" height="220" fill="url(#checker_scaled_shifted)" stroke="#666666" stroke-width="2"/>
+
+  <text x="750" y="70" text-anchor="middle" font-size="22" font-family="Arial">Mirror X</text>
+  <rect x="640" y="100" width="220" height="220" fill="url(#checker_mirrored)" stroke="#666666" stroke-width="2"/>
+
+  <text x="450" y="410" text-anchor="middle" font-size="20" font-family="Arial">
+    Pattern transform fixture for DrawingML tile attrs (sx/sy/tx/ty/flip)
+  </text>
+
+  <rect x="180" y="440" width="540" height="70" fill="#f8f8f8" stroke="#cccccc"/>
+  <text x="450" y="485" text-anchor="middle" font-size="18" font-family="Arial">
+    Intended for PPT render + Google Slides import parity review
+  </text>
+</svg>

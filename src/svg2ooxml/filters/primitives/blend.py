@@ -48,9 +48,7 @@ class BlendFilter(Filter):
         top_name = params.input_2 or "SourceGraphic"
         base_result = self._lookup_input(pipeline, base_name)
         top_result = self._lookup_input(pipeline, top_name)
-        policy = {}
-        if isinstance(context.options, dict):
-            policy = context.options.get("policy") or {}
+        policy = context.policy
         approximation_allowed = bool(policy.get("approximation_allowed", True))
         prefer_rasterization = bool(policy.get("prefer_rasterization", False))
 

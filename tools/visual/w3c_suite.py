@@ -36,6 +36,7 @@ SCENARIOS = {
     "filters-light-02-f": Path("tests/svg/filters-light-02-f.svg"),
     "coords-trans-09-t": Path("tests/svg/coords-trans-09-t.svg"),
     "simple-rect": Path("tests/visual/fixtures/simple_rect.svg"),
+    "pattern-tile-transforms": Path("tests/visual/fixtures/resvg/pattern_tile_transforms.svg"),
 }
 
 
@@ -340,7 +341,7 @@ def _submit_export_job(*, svg_text: str, scenario_name: str, export_options: Exp
 
 
 def _extract_dimensions(svg_text: str) -> tuple[float, float]:
-    from xml.etree import ElementTree as ET
+    from lxml import etree as ET
 
     root = ET.fromstring(svg_text)
     view_box_tokens = root.attrib.get("viewBox", "").split()

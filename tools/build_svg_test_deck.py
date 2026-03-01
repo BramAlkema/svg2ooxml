@@ -16,7 +16,8 @@ from __future__ import annotations
 import struct
 import zipfile
 from pathlib import Path
-from xml.etree import ElementTree as ET
+
+from lxml import etree as ET
 
 # -- Namespaces ---------------------------------------------------------------
 

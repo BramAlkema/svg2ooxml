@@ -19,7 +19,7 @@ from svg2ooxml.core.slide_orchestrator import (
 from svg2ooxml.core.tracing import ConversionTracer
 from svg2ooxml.drawingml.result import DrawingMLRenderResult
 from svg2ooxml.drawingml.writer import DrawingMLWriter
-from svg2ooxml.io.pptx_writer import ALLOWED_SLIDE_SIZE_MODES, PPTXPackageBuilder
+from svg2ooxml.io.pptx_assembly import ALLOWED_SLIDE_SIZE_MODES, PPTXPackageBuilder
 from svg2ooxml.ir import convert_parser_output
 from svg2ooxml.ir.animation import (
     AnimationDefinition,

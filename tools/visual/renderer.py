@@ -9,11 +9,11 @@ import plistlib
 import shutil
 import subprocess
 import zipfile
-import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Sequence
 
+from lxml import etree as ET
 from PIL import Image
 
 logger = logging.getLogger(__name__)
@@ -180,6 +180,40 @@ class LibreOfficeRenderer:
         logger.debug("Generated %d slide image(s).", len(generated))
         return RenderedSlideSet(images=tuple(generated), renderer="soffice")
 
+    def _macos_open_command(self, args: Sequence[str]) -> list[str] | None:
+        open_path = shutil.which("open")
+        app_path = self._macos_app_path()
+        if not open_path or not app_path:
+            return None
+
+        bundle_id, app_name = self._macos_bundle_info(app_path)
+        if bundle_id:
+            return [open_path, "-W", "-b", bundle_id, "--args", *args]
+        if app_name:
+            return [open_path, "-W", "-a", app_name, "--args", *args]
+        return [open_path, "-W", "-a", app_path, "--args", *args]
+
+    def _macos_app_path(self) -> str | None:
+        if not self._command_path:
+            return None
+        for parent in Path(self._command_path).parents:
+            if parent.suffix == ".app":
+                return str(parent)
+        return None
+
+    def _macos_bundle_info(self, app_path: str) -> tuple[str | None, str | None]:
+        info_path = Path(app_path) / "Contents" / "Info.plist"
+        if not info_path.exists():
+            return None, None
+        try:
+            with info_path.open("rb") as handle:
+                info = plistlib.load(handle)
+        except Exception:  # pragma: no cover - defensive
+            return None, None
+        bundle_id = info.get("CFBundleIdentifier")
+        app_name = info.get("CFBundleName") or info.get("CFBundleDisplayName")
+        return bundle_id, app_name
+
 
 class PowerPointRenderer:
     """Render PPTX files to PNG using Microsoft PowerPoint via AppleScript."""
@@ -254,40 +288,6 @@ class PowerPointRenderer:
 
         logger.debug("Generated %d slide image(s).", len(generated))
         return RenderedSlideSet(images=tuple(generated), renderer="powerpoint")
-
-    def _macos_open_command(self, args: Sequence[str]) -> list[str] | None:
-        open_path = shutil.which("open")
-        app_path = self._macos_app_path()
-        if not open_path or not app_path:
-            return None
-
-        bundle_id, app_name = self._macos_bundle_info(app_path)
-        if bundle_id:
-            return [open_path, "-W", "-b", bundle_id, "--args", *args]
-        if app_name:
-            return [open_path, "-W", "-a", app_name, "--args", *args]
-        return [open_path, "-W", "-a", app_path, "--args", *args]
-
-    def _macos_app_path(self) -> str | None:
-        if not self._command_path:
-            return None
-        for parent in Path(self._command_path).parents:
-            if parent.suffix == ".app":
-                return str(parent)
-        return None
-
-    def _macos_bundle_info(self, app_path: str) -> tuple[str | None, str | None]:
-        info_path = Path(app_path) / "Contents" / "Info.plist"
-        if not info_path.exists():
-            return None, None
-        try:
-            with info_path.open("rb") as handle:
-                info = plistlib.load(handle)
-        except Exception:  # pragma: no cover - defensive
-            return None, None
-        bundle_id = info.get("CFBundleIdentifier")
-        app_name = info.get("CFBundleName") or info.get("CFBundleDisplayName")
-        return bundle_id, app_name
 
     def _normalize_pngs(
         self,

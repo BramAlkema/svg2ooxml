@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 from lxml import etree
+from tests.unit.filters.policy import assert_assets, assert_fallback, assert_strategy
 
 from svg2ooxml.ir.effects import CustomEffect
 from svg2ooxml.services.filter_service import FilterService
 from svg2ooxml.services.filter_types import FilterEffectResult
-from tests.unit.filters.policy import assert_assets, assert_fallback, assert_strategy
 
 
 def test_composite_without_inputs_falls_back_to_bitmap() -> None:
@@ -51,6 +51,31 @@ def test_composite_combines_previous_result() -> None:
     assert composite.metadata["operator"] == "over"
     assert composite.metadata.get("native_support") is True
     assert "fallback_assets" not in composite.metadata or not composite.metadata["fallback_assets"]
+
+
+def test_composite_in_uses_effect_dag_when_policy_enabled() -> None:
+    service = FilterService()
+    filter_xml = etree.fromstring(
+        "<filter id='comp'>"
+        "  <feFlood flood-color='#FF0000' flood-opacity='0.7' result='mask'/>"
+        "  <feComposite operator='in' in='SourceGraphic' in2='mask' result='masked'/>"
+        "</filter>"
+    )
+    service.register_filter("comp", filter_xml)
+
+    results = service.resolve_effects(
+        "comp",
+        context={"policy": {"enable_effect_dag": True}},
+    )
+
+    assert len(results) >= 2
+    composite = results[1]
+    assert isinstance(composite, FilterEffectResult)
+    assert_fallback(composite, modern=None)
+    assert composite.effect.drawingml.startswith("<a:effectDag>")
+    assert "<a:alphaModFix>" in composite.effect.drawingml
+    assert composite.metadata["operator"] == "in"
+    assert composite.metadata.get("native_support") is True
 
 
 def test_blend_without_inputs_falls_back_to_bitmap() -> None:

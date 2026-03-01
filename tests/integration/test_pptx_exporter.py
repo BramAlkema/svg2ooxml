@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import zipfile
-from xml.etree import ElementTree as ET
+
+from lxml import etree as ET
 
 from svg2ooxml.core.pptx_exporter import SvgPageSource, SvgToPptxExporter
 
@@ -28,7 +29,7 @@ def test_convert_string_produces_slide_with_expected_fill(tmp_path) -> None:
     with zipfile.ZipFile(output_path, "r") as archive:
         slide_xml = archive.read("ppt/slides/slide1.xml").decode("utf-8")
 
-    root = ET.fromstring(slide_xml)
+    root = ET.fromstring(slide_xml.encode())
     ns = {"a": "http://schemas.openxmlformats.org/drawingml/2006/main"}
     fills = root.findall(".//a:solidFill/a:srgbClr", ns)
     assert any(fill.get("val") == "336699" for fill in fills), "Expected rectangle fill colour in slide XML"

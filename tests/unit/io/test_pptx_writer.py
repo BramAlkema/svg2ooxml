@@ -18,7 +18,8 @@ from svg2ooxml.core.pipeline.navigation import (
     NavigationSpec,
     SlideTarget,
 )
-from svg2ooxml.io.pptx_writer import PPTXPackageBuilder, StreamingPackageWriter
+from svg2ooxml.io.pptx_assembly import PPTXPackageBuilder
+from svg2ooxml.io.pptx_writer import StreamingPackageWriter
 from svg2ooxml.ir.effects import CustomEffect
 from svg2ooxml.ir.geometry import Point, Rect
 from svg2ooxml.ir.paint import SolidPaint

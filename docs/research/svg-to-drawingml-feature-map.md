@@ -347,7 +347,7 @@ Each non-Direct entry specifies which fallback tier(s) apply.
 
 | SVG | DrawingML | Status | Fallback | Notes |
 |-----|-----------|--------|----------|-------|
-| `<textPath>` on simple curve | `prstTxWarp` on `<a:bodyPr>` | Planned | Tier 2 | Classify path against WordArt presets. If match → editable text with warp. Beats PPT. |
+| `<textPath>` on simple curve | `prstTxWarp` on `<a:bodyPr>` | Done | Tier 2 | Implemented via path classification to WordArt presets; falls back when confidence is low. |
 | `<textPath>` on arbitrary curve | **No arbitrary text path** | Planned | Tier 2→3 | **Tier 2** — convert text glyphs to custGeom outlines positioned along path. **Tier 3** — EMF path with glyph outlines, benefits from affine transforms for rotation per glyph. |
 | `<textPath startOffset="...">` | Offset along path | Planned | Tier 2→3 | Adjust glyph start position along path. |
 | `<textPath method="stretch">` | Glyph distortion along path | Planned | Tier 2→3 | **Tier 2** — warp custGeom glyph geometry along path curvature. **Tier 3** — EMF with warped glyph outlines. |
@@ -419,7 +419,7 @@ Only when both DrawingML mimic AND EMF vector are insufficient:
 | `marker-end` (complex shape) | Expand to separate custGeom | Done | Tier 2 | |
 | `marker-mid` | Expand to custGeom per vertex | Done | Tier 2 | |
 | `orient="auto"` | Rotation per vertex tangent | Done | — | |
-| `orient="auto-start-reverse"` | Start marker flipped 180° | Planned | Tier 2 | |
+| `orient="auto-start-reverse"` | Start marker flipped 180° | Done | Tier 2 | Implemented for start markers (adds 180° relative to auto orientation). |
 | `markerUnits="strokeWidth"` | Scale marker by stroke width | Done | — | |
 | `markerUnits="userSpaceOnUse"` | Absolute marker size | Done | — | |
 | `refX`/`refY` anchor offsets | Translate marker origin | Done | — | |
@@ -439,10 +439,10 @@ Only when both DrawingML mimic AND EMF vector are insufficient:
 | `<defs>` | Resolved inline | Direct | — | |
 | `<use>` | Expanded inline | Done | — | |
 | `<symbol>` | Expanded inline | Done | — | |
-| `<switch>` with `systemLanguage` | Resolve at parse time | Planned | — | |
-| `<switch>` with `requiredFeatures` | Resolve at parse time | Planned | — | |
+| `<switch>` with `systemLanguage` | Resolve at parse time | Done | — | Implemented in switch evaluator and traversal hook selection. |
+| `<switch>` with `requiredFeatures` | Resolve at parse time | Done | — | Implemented in switch evaluator and traversal hook selection. |
 | `<foreignObject>` | **No DrawingML or EMF equivalent** | Planned | Tier 3→4 | **Tier 3** — render HTML via headless browser, embed result in EMF as `StretchDIBits` (bitmap inside vector container — preserves EMF wrapper, scalable container). **Tier 4** — embed as PNG `blipFill`. Either way the HTML content itself is rasterized, but EMF wrapper is preferable. |
-| `<a xlink:href="...">` (hyperlinks) | `<a:hlinkClick r:id="...">` | Planned | Tier 1 | |
+| `<a xlink:href="...">` (hyperlinks) | `<a:hlinkClick r:id="...">` | Done | Tier 1 | Implemented for valid action/hyperlink targets; bookmark/custom-show action URIs are intentionally not emitted. |
 | `<title>` / `<desc>` | `<p:cNvPr descr="...">` | Planned | Tier 1 | |
 | `<metadata>` | Ignored | Ignore | — | |
 | `overflow: hidden` on `<svg>` | Viewport clipping | Done | — | |

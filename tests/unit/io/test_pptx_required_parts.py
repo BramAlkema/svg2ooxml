@@ -1,9 +1,10 @@
 """Tests for required PPTX parts (presProps, viewProps, tableStyles)."""
 
 import tempfile
-import xml.etree.ElementTree as ET
 import zipfile
 from pathlib import Path
+
+from lxml import etree as ET
 
 from svg2ooxml.core.pptx_exporter import SvgPageSource, SvgToPptxExporter
 from svg2ooxml.drawingml.generator import px_to_emu
@@ -182,7 +183,7 @@ def test_font_content_type_is_powerpoint_compliant():
     Per ECMA-376, PowerPoint expects 'application/x-fontdata' for TTF/OTF fonts.
     Using 'application/x-font-ttf' causes PowerPoint to strip all fonts during repair.
     """
-    from svg2ooxml.io.pptx_writer import _content_type_for_extension
+    from svg2ooxml.io.pptx_assembly import content_type_for_extension as _content_type_for_extension
 
     # Test TTF font
     ttf_type = _content_type_for_extension("ttf")

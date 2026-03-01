@@ -8,7 +8,7 @@ from typing import Any
 
 from svg2ooxml.common.conversions.angles import degrees_to_ppt
 from svg2ooxml.common.conversions.opacity import opacity_to_ppt
-from svg2ooxml.common.conversions.scale import position_to_ppt
+from svg2ooxml.common.conversions.scale import PPT_SCALE, position_to_ppt
 from svg2ooxml.drawingml.generator import px_to_emu
 
 # Import centralized XML builders for safe DrawingML generation
@@ -55,10 +55,12 @@ def paint_to_fill(paint, *, opacity: float | None = None) -> str:
 
 def stroke_to_xml(stroke, metadata: Mapping[str, Any] | None = None) -> str:
     markers = {}
+    marker_profiles = {}
     if isinstance(metadata, Mapping):
         markers = metadata.get("markers") or {}
+        marker_profiles = metadata.get("marker_profiles") or {}
 
-    head_elem, tail_elem = marker_end_elements(markers)
+    head_elem, tail_elem = marker_end_elements(markers, marker_profiles=marker_profiles)
 
     if stroke is None or stroke.paint is None:
         # Create ln element with noFill
@@ -340,6 +342,75 @@ def radial_gradient_to_fill(paint: RadialGradientPaint) -> str:
 _RELS_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
 
 
+def _as_pattern_affine(transform: Any) -> tuple[float, float, float, float, float, float] | None:
+    """Extract SVG affine matrix values (a,b,c,d,e,f) from a 3x3 transform."""
+    if transform is None:
+        return None
+    try:
+        return (
+            float(transform[0][0]),
+            float(transform[1][0]),
+            float(transform[0][1]),
+            float(transform[1][1]),
+            float(transform[0][2]),
+            float(transform[1][2]),
+        )
+    except (IndexError, TypeError, ValueError):
+        return None
+
+
+def _clamp_int32(value: int) -> int:
+    return max(-(2**31), min(2**31 - 1, value))
+
+
+_DEFAULT_TILE_ATTRS: dict[str, str] = {
+    "tx": "0",
+    "ty": "0",
+    "sx": str(PPT_SCALE),
+    "sy": str(PPT_SCALE),
+    "flip": "none",
+    "algn": "tl",
+}
+
+
+def _tile_attrs_from_pattern_transform(transform: Any) -> dict[str, str]:
+    """Map simple pattern transforms to DrawingML tile attrs.
+
+    Supports translate/scale/mirror matrices. Rotation/skew matrices are
+    intentionally ignored to avoid applying an incomplete transform.
+    """
+    affine = _as_pattern_affine(transform)
+    if affine is None:
+        return dict(_DEFAULT_TILE_ATTRS)
+
+    a, b, c, d, e, f = affine
+    tolerance = 1e-6
+    if abs(b) > tolerance or abs(c) > tolerance:
+        return dict(_DEFAULT_TILE_ATTRS)
+
+    sx = max(1, int(round(abs(a) * PPT_SCALE)))
+    sy = max(1, int(round(abs(d) * PPT_SCALE)))
+    tx = int(round(e * PPT_SCALE))
+    ty = int(round(f * PPT_SCALE))
+
+    flip = "none"
+    if a < -tolerance and d < -tolerance:
+        flip = "xy"
+    elif a < -tolerance:
+        flip = "x"
+    elif d < -tolerance:
+        flip = "y"
+
+    return {
+        "tx": str(_clamp_int32(tx)),
+        "ty": str(_clamp_int32(ty)),
+        "sx": str(_clamp_int32(sx)),
+        "sy": str(_clamp_int32(sy)),
+        "flip": flip,
+        "algn": "tl",
+    }
+
+
 def _pattern_to_fill_elem(paint: PatternPaint, *, opacity: float | None = None):
     """Create pattern fill element (internal helper).
 
@@ -355,8 +426,8 @@ def _pattern_to_fill_elem(paint: PatternPaint, *, opacity: float | None = None):
         if opacity is not None and opacity < 0.999:
             alphaModFix = a_sub(blip, "alphaModFix")
             alphaModFix.set("amt", str(opacity_to_ppt(opacity)))
-        # Tile with 100% scale (pattern tile repeats at original size)
-        a_sub(blipFill, "tile", tx="0", ty="0", sx="100000", sy="100000", flip="none", algn="tl")
+        tile_attrs = _tile_attrs_from_pattern_transform(paint.transform)
+        a_sub(blipFill, "tile", **tile_attrs)
         return blipFill
 
     preset = (paint.preset or "pct5").strip()

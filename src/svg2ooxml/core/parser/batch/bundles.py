@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from svg2ooxml.common.tempfiles import project_temp_dir
+from svg2ooxml.io.pptx_assembly import suffix_for_content_type as _suffix_for_content_type
 from svg2ooxml.drawingml.assets import (
     AssetRegistrySnapshot,
     FontAsset,
@@ -218,17 +219,6 @@ def load_job_bundles(job_id: str, *, base_dir: Path | None = None) -> list[Drawi
 def list_job_bundle_dirs(job_id: str, *, base_dir: Path | None = None) -> list[Path]:
     root = job_dir(job_id, base_dir)
     return sorted(root.glob("slide_*"))
-
-
-def _suffix_for_content_type(content_type: str) -> str:
-    mapping = {
-        "image/png": ".png",
-        "image/jpeg": ".jpg",
-        "image/gif": ".gif",
-        "image/svg+xml": ".svg",
-        "image/x-emf": ".emf",
-    }
-    return mapping.get(content_type, ".bin")
 
 
 def _encode_json(value: Any, assets_dir: Path, prefix: str) -> Any:

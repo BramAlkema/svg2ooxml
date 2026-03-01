@@ -36,13 +36,18 @@ class FilterPlanner:
     def __init__(self, *, logger: logging.Logger | None = None) -> None:
         self._logger = logger or logging.getLogger(__name__)
 
-    def build_resvg_plan(self, descriptor: ResolvedFilter) -> FilterPlan | None:
+    def build_resvg_plan(
+        self,
+        descriptor: ResolvedFilter,
+        *,
+        options: Mapping[str, Any] | None = None,
+    ) -> FilterPlan | None:
         try:
             filter_node = build_filter_node(descriptor)
         except Exception:  # pragma: no cover - defensive
             self._logger.debug("Failed to construct filter node", exc_info=True)
             return None
-        return plan_filter(filter_node)
+        return plan_filter(filter_node, options=options)
 
     def plan_summary(self, plan: FilterPlan) -> list[dict[str, Any]]:
         return [

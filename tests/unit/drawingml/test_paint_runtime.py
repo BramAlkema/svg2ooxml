@@ -205,6 +205,50 @@ def test_pattern_tile_generates_blip_fill() -> None:
     assert 'algn="tl"' in xml
 
 
+def test_pattern_tile_applies_simple_transform_to_tile_attrs() -> None:
+    paint = PatternPaint(
+        pattern_id="pat_transform",
+        tile_image=b"fake png",
+        tile_relationship_id="rId12",
+        transform=(
+            (2.0, 0.0, 0.25),
+            (0.0, -0.5, -0.10),
+            (0.0, 0.0, 1.0),
+        ),
+    )
+    elem = _pattern_to_fill_elem(paint)
+    xml = to_string(elem)
+
+    assert "<a:tile" in xml
+    assert 'sx="200000"' in xml
+    assert 'sy="50000"' in xml
+    assert 'tx="25000"' in xml
+    assert 'ty="-10000"' in xml
+    assert 'flip="y"' in xml
+
+
+def test_pattern_tile_keeps_defaults_for_non_axis_aligned_transform() -> None:
+    paint = PatternPaint(
+        pattern_id="pat_transform_complex",
+        tile_image=b"fake png",
+        tile_relationship_id="rId13",
+        transform=(
+            (1.0, 0.2, 0.4),
+            (0.1, 1.0, 0.3),
+            (0.0, 0.0, 1.0),
+        ),
+    )
+    elem = _pattern_to_fill_elem(paint)
+    xml = to_string(elem)
+
+    assert "<a:tile" in xml
+    assert 'sx="100000"' in xml
+    assert 'sy="100000"' in xml
+    assert 'tx="0"' in xml
+    assert 'ty="0"' in xml
+    assert 'flip="none"' in xml
+
+
 def test_pattern_tile_blip_fill_with_opacity() -> None:
     """Pattern tile blipFill applies opacity via alphaModFix."""
     paint = PatternPaint(

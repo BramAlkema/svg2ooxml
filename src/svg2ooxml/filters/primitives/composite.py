@@ -6,13 +6,12 @@ from dataclasses import dataclass
 
 from lxml import etree
 
-# Import centralized XML builders for safe DrawingML generation
-from svg2ooxml.drawingml.xml_builder import a_elem, a_sub, graft_xml_fragment, to_string
 from svg2ooxml.common.conversions.opacity import opacity_to_ppt
+from svg2ooxml.drawingml.xml_builder import a_elem, a_sub, graft_xml_fragment, to_string
 from svg2ooxml.filters.base import Filter, FilterContext, FilterResult
 from svg2ooxml.filters.utils.dml import (
     extract_effect_children,
-    is_effect_list,
+    is_effect_container,
     merge_effect_fragments,
 )
 
@@ -50,11 +49,10 @@ class CompositeFilter(Filter):
 
         input_1 = self._lookup_input(pipeline, input_1_name)
         input_2 = self._lookup_input(pipeline, input_2_name)
-        policy = {}
-        if isinstance(context.options, dict):
-            policy = context.options.get("policy") or {}
+        policy = context.policy
         approximation_allowed = bool(policy.get("approximation_allowed", True))
         prefer_rasterization = bool(policy.get("prefer_rasterization", False))
+        enable_effect_dag = bool(policy.get("enable_effect_dag", False))
 
         metadata = {
             "filter_type": self.filter_type,
@@ -119,6 +117,7 @@ class CompositeFilter(Filter):
                 input_1,
                 input_2,
                 allow_approximation=approximation_allowed,
+                enable_effect_dag=enable_effect_dag,
             )
             metadata["native_support"] = drawingml != ""
             if fallback:
@@ -344,7 +343,7 @@ class CompositeFilter(Filter):
 
         if len(parts) == 1:
             fragment = parts[0]
-            if not is_effect_list(fragment):
+            if not is_effect_container(fragment):
                 fragment = f"<a:effectLst>{fragment}</a:effectLst>"
             return fragment, fallback, tuple(warnings)
 
@@ -423,6 +422,7 @@ class CompositeFilter(Filter):
         mask: FilterResult | None,
         *,
         allow_approximation: bool,
+        enable_effect_dag: bool,
     ) -> tuple[str, str | None, str | None]:
         if mask is None:
             return "", "missing_mask", None
@@ -440,8 +440,10 @@ class CompositeFilter(Filter):
         else:
             approximation = None
 
-        if not is_effect_list(mask_fragment):
-            wrapped = merge_effect_fragments(mask_fragment)
+        if not is_effect_container(mask_fragment):
+            wrapped = ""
+            if mask_fragment.lstrip().startswith("<a:"):
+                wrapped = merge_effect_fragments(mask_fragment)
             if wrapped:
                 mask_fragment = wrapped
             else:
@@ -457,19 +459,25 @@ class CompositeFilter(Filter):
         alpha_tag = self._alpha_tag_for_operator(operator)
 
         # Build outer effectLst
-        outer_effectLst = a_elem("effectLst")
+        outer_container = a_elem("effectDag" if enable_effect_dag else "effectLst")
+        if enable_effect_dag:
+            a_sub(outer_container, "cont")
 
         # Add base fragments
         if source_fragment:
-            source_children = extract_effect_children(source_fragment) if is_effect_list(source_fragment) else source_fragment
+            source_children = (
+                extract_effect_children(source_fragment)
+                if is_effect_container(source_fragment)
+                else source_fragment
+            )
             if source_children:
                 try:
-                    graft_xml_fragment(outer_effectLst, source_children)
+                    graft_xml_fragment(outer_container, source_children)
                 except Exception:
                     pass  # Skip if parsing fails
 
         # Build alpha element with inner effectLst
-        alpha_elem = a_sub(outer_effectLst, alpha_tag)
+        alpha_elem = a_sub(outer_container, alpha_tag)
         a_sub(alpha_elem, "cont")
         inner_effectLst = a_sub(alpha_elem, "effectLst")
 
@@ -479,7 +487,7 @@ class CompositeFilter(Filter):
         except Exception:
             pass  # Skip if parsing fails
 
-        return to_string(outer_effectLst), None, approximation
+        return to_string(outer_container), None, approximation
 
     def _mask_effect_from_metadata(
         self,

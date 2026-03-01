@@ -5,16 +5,16 @@ from __future__ import annotations
 import base64
 
 from lxml import etree
-
-from svg2ooxml.common.units import px_to_emu
-from svg2ooxml.services.filter_service import FilterService
-from svg2ooxml.services.filter_types import FilterEffectResult
 from tests.unit.filters.policy import (
     assert_assets,
     assert_fallback,
     assert_no_assets,
     assert_strategy,
 )
+
+from svg2ooxml.common.units import px_to_emu
+from svg2ooxml.services.filter_service import FilterService
+from svg2ooxml.services.filter_types import FilterEffectResult
 
 
 def _resolve(service: FilterService, markup: str) -> list[FilterEffectResult]:
@@ -112,6 +112,33 @@ def test_component_transfer_serialises_functions() -> None:
     asset_meta = assets[0].get("metadata", {}) if assets else {}
     assert assets[0].get("data_hex") or assets[0].get("data")
     assert asset_meta.get("filter_type") == "component_transfer"
+
+
+def test_component_transfer_enriches_blip_when_policy_enabled() -> None:
+    service = FilterService()
+    filter_xml = etree.fromstring(
+        "<filter id='f'>"
+        "  <feComponentTransfer>"
+        "    <feFuncA type='linear' slope='0.4' intercept='0'/>"
+        "  </feComponentTransfer>"
+        "</filter>"
+    )
+    service.register_filter("f", filter_xml)
+
+    results = service.resolve_effects(
+        "f",
+        context={
+            "policy": {
+                "enable_native_color_transforms": True,
+                "enable_blip_effect_enrichment": True,
+            }
+        },
+    )
+
+    assert results
+    effect = results[0]
+    assert '<a:alphaModFix amt="40000"/>' in effect.effect.drawingml
+    assert effect.metadata.get("blip_effect_enrichment_applied") is True
 
 
 def test_convolve_matrix_tracks_kernel() -> None:

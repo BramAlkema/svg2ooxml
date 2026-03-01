@@ -6,7 +6,8 @@ from dataclasses import dataclass, field
 
 from lxml import etree
 
-from svg2ooxml.filters.base import Filter, FilterContext, FilterResult
+from svg2ooxml.common.conversions.scale import PPT_SCALE, scale_to_ppt
+from svg2ooxml.filters.base import Filter, FilterContext, FilterResult, stitch_blip_transforms
 from svg2ooxml.filters.utils import parse_number
 
 CHANNELS = {"r", "g", "b", "a"}
@@ -25,6 +26,8 @@ class ComponentTransferFilter(Filter):
 
     def apply(self, primitive: etree._Element, context: FilterContext) -> FilterResult:
         functions = self._parse_functions(primitive)
+        policy = context.policy
+        enable_native_color_transforms = bool(policy.get("enable_native_color_transforms", False))
         metadata: dict[str, object] = {
             "filter_type": self.filter_type,
             "functions": [
@@ -48,6 +51,9 @@ class ComponentTransferFilter(Filter):
                 fallback=None,
                 metadata=metadata,
             )
+
+        if enable_native_color_transforms:
+            stitch_blip_transforms(metadata, self._blip_transform_candidates(functions))
 
         metadata["native_support"] = False
         drawingml = ""
@@ -155,6 +161,26 @@ class ComponentTransferFilter(Filter):
         if isinstance(value, float):
             return f"{value:.6g}"
         return str(value)
+
+    @staticmethod
+    def _blip_transform_candidates(functions: list[ComponentFunction]) -> list[dict[str, object]]:
+        # Allowlist only: alpha linear scaling without offset.
+        if len(functions) != 1:
+            return []
+        func = functions[0]
+        if func.channel != "a" or func.func_type != "linear":
+            return []
+        try:
+            slope = float(func.params.get("slope", 1.0))
+            intercept = float(func.params.get("intercept", 0.0))
+        except (TypeError, ValueError):
+            return []
+        if abs(intercept) > 1e-6:
+            return []
+        amount = max(0, min(scale_to_ppt(slope), 200000))
+        if amount == PPT_SCALE:
+            return []
+        return [{"tag": "alphaModFix", "amt": amount}]
 
 
 __all__ = ["ComponentTransferFilter"]

@@ -175,7 +175,7 @@ def default_browser_renderer() -> BrowserSvgRenderer:
 
 
 def _extract_dimensions(svg_text: str) -> Tuple[int, int]:
-    from xml.etree import ElementTree as ET
+    from lxml import etree as ET
 
     root = ET.fromstring(svg_text)
     view_box_tokens = root.attrib.get("viewBox", "").split()
