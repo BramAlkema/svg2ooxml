@@ -3,14 +3,13 @@
 from __future__ import annotations
 
 import json
+import os
 import uuid
 from dataclasses import asdict
-import os
 from pathlib import Path
 from typing import Any
 
 from svg2ooxml.common.tempfiles import project_temp_dir
-from svg2ooxml.io.pptx_assembly import suffix_for_content_type as _suffix_for_content_type
 from svg2ooxml.drawingml.assets import (
     AssetRegistrySnapshot,
     FontAsset,
@@ -18,6 +17,9 @@ from svg2ooxml.drawingml.assets import (
     NavigationAsset,
 )
 from svg2ooxml.drawingml.result import DrawingMLRenderResult
+from svg2ooxml.io.pptx_assembly import (
+    suffix_for_content_type as _suffix_for_content_type,
+)
 from svg2ooxml.ir.text import EmbeddedFontPlan
 
 ENV_BUNDLE_DIR = "SVG2OOXML_BUNDLE_DIR"
@@ -124,6 +126,7 @@ def write_slide_bundle(
         "job_id": job_id,
         "slide_index": slide_index,
         "slide_size": list(result.slide_size),
+        "shape_xml": list(result.shape_xml),
         "metrics": metrics or {},
         "media": media_entries,
         "fonts": font_entries,
@@ -146,6 +149,7 @@ def read_slide_bundle(bundle_dir: Path) -> DrawingMLRenderResult:
     slide_xml = (bundle_dir / "slide.xml").read_text(encoding="utf-8")
     slide_size_raw = data.get("slide_size") or [0, 0]
     slide_size = (int(slide_size_raw[0]), int(slide_size_raw[1]))
+    shape_xml = tuple(str(fragment) for fragment in data.get("shape_xml", []))
 
     media_assets: list[MediaAsset] = []
     for entry in data.get("media", []):
@@ -205,6 +209,7 @@ def read_slide_bundle(bundle_dir: Path) -> DrawingMLRenderResult:
         slide_xml=slide_xml,
         slide_size=slide_size,
         assets=assets,
+        shape_xml=shape_xml,
     )
 
 

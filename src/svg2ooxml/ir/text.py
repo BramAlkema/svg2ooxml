@@ -26,8 +26,10 @@ class Run:
     underline: bool = False
     strike: bool = False
     rgb: str = "000000"
+    theme_color: str | None = None
     fill_opacity: float = 1.0
     stroke_rgb: str | None = None
+    stroke_theme_color: str | None = None
     stroke_width_px: float | None = None
     stroke_opacity: float | None = None
     navigation: Any | None = None
@@ -70,8 +72,10 @@ class EnhancedRun:
     underline: bool = False
     strike: bool = False
     rgb: str = "000000"
+    theme_color: str | None = None
     fill_opacity: float = 1.0
     stroke_rgb: str | None = None
+    stroke_theme_color: str | None = None
     stroke_width_px: float | None = None
     stroke_opacity: float | None = None
     font_metadata: FontMetadata | None = None
@@ -144,8 +148,10 @@ class EnhancedRun:
             underline=self.underline,
             strike=self.strike,
             rgb=self.rgb,
+            theme_color=self.theme_color,
             fill_opacity=self.fill_opacity,
             stroke_rgb=self.stroke_rgb,
+            stroke_theme_color=self.stroke_theme_color,
             stroke_width_px=self.stroke_width_px,
             stroke_opacity=self.stroke_opacity,
             language=self.language,

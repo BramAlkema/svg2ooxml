@@ -9,11 +9,12 @@ from .assets import AssetRegistrySnapshot
 
 @dataclass(frozen=True)
 class DrawingMLRenderResult:
-    """Slide XML plus the assets required to package it."""
+    """Slide XML, shape fragments, and the assets required to package them."""
 
     slide_xml: str
     slide_size: tuple[int, int]
     assets: AssetRegistrySnapshot
+    shape_xml: tuple[str, ...] = ()
 
     @property
     def width_emu(self) -> int:

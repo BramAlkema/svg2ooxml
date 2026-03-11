@@ -27,6 +27,59 @@ def test_pattern_fill_uses_preset_and_colours() -> None:
     assert 'val="ABCDEF"' in xml
 
 
+def test_solid_fill_prefers_scheme_color_when_theme_slot_present() -> None:
+    paint = SolidPaint("4472C4", theme_color="accent1")
+
+    xml = paint_runtime.paint_to_fill(paint)
+
+    assert '<a:schemeClr val="accent1"/>' in xml
+    assert 'val="4472C4"' not in xml
+
+
+def test_solid_stroke_prefers_scheme_color_when_theme_slot_present() -> None:
+    stroke = Stroke(paint=SolidPaint("ED7D31", theme_color="accent2"), width=2.0)
+
+    xml = paint_runtime.stroke_to_xml(stroke)
+
+    assert '<a:schemeClr val="accent2"/>' in xml
+    assert 'val="ED7D31"' not in xml
+
+
+def test_gradient_stops_support_theme_slots() -> None:
+    paint = LinearGradientPaint(
+        stops=[
+            GradientStop(0.0, "4472C4", theme_color="accent1"),
+            GradientStop(1.0, "ED7D31", opacity=0.5, theme_color="accent2"),
+        ],
+        start=(0.0, 0.0),
+        end=(1.0, 0.0),
+    )
+
+    xml = paint_runtime.linear_gradient_to_fill(paint)
+
+    assert '<a:schemeClr val="accent1"><a:alpha val="100000"/></a:schemeClr>' in xml
+    assert '<a:schemeClr val="accent2"><a:alpha val="50000"/></a:schemeClr>' in xml
+    assert 'val="4472C4"' not in xml
+    assert 'val="ED7D31"' not in xml
+
+
+def test_pattern_fill_supports_theme_slots() -> None:
+    paint = PatternPaint(
+        pattern_id="pat_theme",
+        preset="pct20",
+        foreground="4472C4",
+        background="FFFFFF",
+        foreground_theme_color="accent1",
+        background_theme_color="lt1",
+    )
+
+    xml = paint_runtime.paint_to_fill(paint)
+
+    assert '<a:schemeClr val="accent1"/>' in xml
+    assert '<a:schemeClr val="lt1"/>' in xml
+    assert 'val="4472C4"' not in xml
+
+
 def test_gradient_stroke_generates_gradient_fill() -> None:
     gradient = LinearGradientPaint(
         stops=[

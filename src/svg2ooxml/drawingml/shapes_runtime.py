@@ -15,6 +15,7 @@ from svg2ooxml.drawingml.xml_builder import (
     a_elem,
     a_sub,
     blur,
+    color_choice,
     effect_list,
     glow,
     outer_shadow,
@@ -515,20 +516,24 @@ def run_fragment(run: Run, text_segment: str, navigation_factory) -> str:
         strokeFill = a_sub(ln_elem, "solidFill")
         stroke_rgb = (run.stroke_rgb or "000000").upper()
         stroke_alpha = opacity_to_ppt(run.stroke_opacity or 1.0)
-        if stroke_alpha < 100000:
-            srgbClr = a_sub(strokeFill, "srgbClr", val=stroke_rgb)
-            a_sub(srgbClr, "alpha", val=str(stroke_alpha))
-        else:
-            a_sub(strokeFill, "srgbClr", val=stroke_rgb)
+        strokeFill.append(
+            color_choice(
+                stroke_rgb,
+                alpha=stroke_alpha if stroke_alpha < 100000 else None,
+                theme_color=getattr(run, "stroke_theme_color", None),
+            )
+        )
 
     # 2. Add solidFill
     solidFill = a_sub(rPr, "solidFill")
     fill_alpha = opacity_to_ppt(run.fill_opacity)
-    if fill_alpha < 100000:
-        srgbClr = a_sub(solidFill, "srgbClr", val=rgb)
-        a_sub(srgbClr, "alpha", val=str(fill_alpha))
-    else:
-        a_sub(solidFill, "srgbClr", val=rgb)
+    solidFill.append(
+        color_choice(
+            rgb,
+            alpha=fill_alpha if fill_alpha < 100000 else None,
+            theme_color=getattr(run, "theme_color", None),
+        )
+    )
 
     # 3. Add font typefaces
     a_sub(rPr, "latin", typeface=font_family)

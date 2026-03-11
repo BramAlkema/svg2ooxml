@@ -11,9 +11,9 @@ from lxml import etree
 
 from svg2ooxml.common.geometry.algorithms import CurveTextPositioner, PathSamplingMethod
 from svg2ooxml.core.ir.font_metrics import (
-    FontMetrics as _FontMetrics,
     estimate_run_width as _estimate_run_width,
-    load_font_metrics as _load_font_metrics,
+)
+from svg2ooxml.core.ir.font_metrics import (
     resolve_font_metrics as _resolve_font_metrics,
 )
 from svg2ooxml.core.ir.smart_font_bridge import SmartFontBridge
@@ -693,8 +693,10 @@ class TextConverter:
             and first.underline == second.underline
             and first.strike == second.strike
             and first.rgb == second.rgb
+            and first.theme_color == second.theme_color
             and abs(first.fill_opacity - second.fill_opacity) <= 1e-6
             and first.stroke_rgb == second.stroke_rgb
+            and first.stroke_theme_color == second.stroke_theme_color
             and abs((first.stroke_width_px or 0.0) - (second.stroke_width_px or 0.0)) <= 1e-6
             and abs((first.stroke_opacity or 1.0) - (second.stroke_opacity or 1.0)) <= 1e-6
         )

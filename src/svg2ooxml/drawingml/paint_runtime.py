@@ -15,7 +15,9 @@ from svg2ooxml.drawingml.generator import px_to_emu
 from svg2ooxml.drawingml.xml_builder import (
     a_elem,
     a_sub,
+    color_choice,
     no_fill,
+    scheme_color,
     solid_fill,
     to_string,
 )
@@ -38,7 +40,7 @@ def paint_to_fill(paint, *, opacity: float | None = None) -> str:
         if opacity is not None:
             effective = max(0.0, min(1.0, effective * opacity))
         alpha = opacity_to_ppt(effective)
-        return to_string(solid_fill(paint.rgb, alpha=alpha))
+        return to_string(solid_fill(paint.rgb, alpha=alpha, theme_color=paint.theme_color))
     if isinstance(paint, LinearGradientPaint):
         return linear_gradient_to_fill(paint)
     if isinstance(paint, RadialGradientPaint):
@@ -46,7 +48,7 @@ def paint_to_fill(paint, *, opacity: float | None = None) -> str:
     if isinstance(paint, GradientPaintRef):
         # Create solidFill with schemeClr element
         fill = a_elem("solidFill")
-        a_sub(fill, "schemeClr", val="phClr")
+        fill.append(scheme_color("phClr"))
         return to_string(fill)
     if isinstance(paint, PatternPaint):
         return pattern_to_fill(paint, opacity=opacity)
@@ -80,7 +82,7 @@ def stroke_to_xml(stroke, metadata: Mapping[str, Any] | None = None) -> str:
     if isinstance(paint, SolidPaint):
         color = paint.rgb.upper()
         alpha = opacity_to_ppt(paint.opacity)
-        fill = solid_fill(color, alpha=alpha)
+        fill = solid_fill(color, alpha=alpha, theme_color=paint.theme_color)
         ln.append(fill)
     elif isinstance(paint, PatternPaint):
         ln.append(_pattern_to_fill_elem(paint, opacity=stroke.opacity if hasattr(stroke, 'opacity') else None))
@@ -91,7 +93,7 @@ def stroke_to_xml(stroke, metadata: Mapping[str, Any] | None = None) -> str:
     elif isinstance(paint, GradientPaintRef):
         # Create solidFill with schemeClr element
         fill = a_elem("solidFill")
-        a_sub(fill, "schemeClr", val="phClr")
+        fill.append(scheme_color("phClr"))
         ln.append(fill)
     else:
         a_sub(ln, "noFill")
@@ -252,6 +254,7 @@ def _expand_stops_for_spread(stops, spread_method: str | None):
                     offset=min(1.0, max(0.0, new_offset)),
                     rgb=stop.rgb,
                     opacity=stop.opacity,
+                    theme_color=stop.theme_color,
                 ))
         else:
             for stop in stops:
@@ -262,6 +265,7 @@ def _expand_stops_for_spread(stops, spread_method: str | None):
                     offset=min(1.0, max(0.0, new_offset)),
                     rgb=stop.rgb,
                     opacity=stop.opacity,
+                    theme_color=stop.theme_color,
                 ))
 
     # Deduplicate stops at same offset (keep first)
@@ -443,13 +447,17 @@ def _pattern_to_fill_elem(paint: PatternPaint, *, opacity: float | None = None):
 
     # Foreground color
     fgClr = a_sub(pattFill, "fgClr")
-    fg_srgbClr = a_sub(fgClr, "srgbClr", val=foreground)
-    if opacity is not None and opacity < 0.999:
-        a_sub(fg_srgbClr, "alpha", val=opacity_to_ppt(opacity))
+    fgClr.append(
+        color_choice(
+            foreground,
+            alpha=opacity_to_ppt(opacity) if opacity is not None and opacity < 0.999 else None,
+            theme_color=paint.foreground_theme_color,
+        )
+    )
 
     # Background color
     bgClr = a_sub(pattFill, "bgClr")
-    a_sub(bgClr, "srgbClr", val=background)
+    bgClr.append(color_choice(background, theme_color=paint.background_theme_color))
 
     return pattFill
 
@@ -477,8 +485,7 @@ def _gradient_stop_elem(stop):
     alpha = opacity_to_ppt(stop.opacity)
 
     gs = a_elem("gs", pos=position)
-    srgbClr = a_sub(gs, "srgbClr", val=stop.rgb.upper())
-    a_sub(srgbClr, "alpha", val=alpha)
+    gs.append(color_choice(stop.rgb, alpha=alpha, theme_color=stop.theme_color))
 
     return gs
 

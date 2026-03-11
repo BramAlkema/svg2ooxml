@@ -23,6 +23,7 @@ from svg2ooxml.ir.paint import (
 from svg2ooxml.ir.scene import (
     ClipRef,
     ClipStrategy,
+    Group,
     Image,
     MaskDefinition,
     MaskInstance,
@@ -1001,6 +1002,100 @@ def test_unclipped_path_no_overlay() -> None:
 
     assert "<p:sp>" in result.slide_xml
     assert "<p:pic>" not in result.slide_xml
+
+
+def test_render_scene_exposes_shape_fragments() -> None:
+    writer = DrawingMLWriter()
+    group = Group(
+        children=[
+            Rectangle(bounds=Rect(0, 0, 20, 10), fill=SolidPaint("4472C4")),
+            Rectangle(bounds=Rect(25, 0, 20, 10), fill=SolidPaint("ED7D31")),
+        ]
+    )
+
+    result = writer.render_scene([group])
+
+    assert len(result.shape_xml) == 2
+    assert all(fragment.startswith("<p:sp>") for fragment in result.shape_xml)
+
+
+def test_render_shapes_returns_flattened_group_fragments() -> None:
+    writer = DrawingMLWriter()
+    group = Group(
+        children=[
+            Rectangle(bounds=Rect(0, 0, 20, 10), fill=SolidPaint("4472C4")),
+            Line(
+                start=Point(0, 20),
+                end=Point(20, 20),
+                stroke=Stroke(paint=SolidPaint("ED7D31"), width=1.5),
+            ),
+        ]
+    )
+
+    fragments = writer.render_shapes([group])
+
+    assert len(fragments) == 2
+    assert "Rectangle 2" in fragments[0]
+    assert "Line 3" in fragments[1]
+
+
+def test_render_shapes_from_ir_returns_shape_fragments() -> None:
+    writer = DrawingMLWriter()
+    scene = IRScene(
+        elements=[Rectangle(bounds=Rect(0, 0, 20, 10), fill=SolidPaint("4472C4"))],
+        width_px=20,
+        height_px=10,
+    )
+
+    fragments = writer.render_shapes_from_ir(scene)
+
+    assert len(fragments) == 1
+    assert "Rectangle 2" in fragments[0]
+
+
+def test_render_scene_uses_scheme_color_for_theme_mapped_shapes() -> None:
+    writer = DrawingMLWriter()
+    rect = Rectangle(
+        bounds=Rect(0, 0, 20, 10),
+        fill=SolidPaint("4472C4", theme_color="accent1"),
+        stroke=Stroke(paint=SolidPaint("ED7D31", theme_color="accent2"), width=1.5),
+    )
+
+    xml = writer.render_scene([rect]).slide_xml
+
+    assert '<a:schemeClr val="accent1"/>' in xml
+    assert '<a:schemeClr val="accent2"/>' in xml
+    assert 'val="4472C4"' not in xml
+    assert 'val="ED7D31"' not in xml
+
+
+def test_render_textframe_uses_scheme_color_for_theme_mapped_runs() -> None:
+    writer = DrawingMLWriter()
+    frame = TextFrame(
+        origin=Point(0, 0),
+        anchor=TextAnchor.START,
+        bbox=Rect(0, 0, 100, 20),
+        runs=[
+            Run(
+                text="Theme",
+                font_family="Arial",
+                font_size_pt=12,
+                rgb="4472C4",
+                theme_color="accent1",
+                stroke_rgb="ED7D31",
+                stroke_theme_color="accent2",
+                stroke_width_px=1.0,
+                stroke_opacity=1.0,
+            )
+        ],
+    )
+
+    xml = writer.render_scene([frame]).slide_xml
+
+    assert '<a:schemeClr val="accent1"/>' in xml
+    assert '<a:schemeClr val="accent2"/>' in xml
+    assert 'val="4472C4"' not in xml
+    assert 'val="ED7D31"' not in xml
 
 
 TEST_FONT = "TestSans"

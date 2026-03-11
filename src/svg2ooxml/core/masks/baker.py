@@ -75,7 +75,14 @@ def try_bake_mask(fill: Paint, mask_ref: MaskRef | None, services: Any = None, d
                 
                 brightness = _calculate_luminance(color)
                 effective_alpha = brightness * stop_opacity
-                stops.append(GradientStop(offset=offset, rgb=fill.rgb, opacity=effective_alpha))
+                stops.append(
+                    GradientStop(
+                        offset=offset,
+                        rgb=fill.rgb,
+                        opacity=effective_alpha,
+                        theme_color=getattr(fill, "theme_color", None),
+                    )
+                )
             
             if len(stops) >= 2:
                 x1 = _parse_coord(g.get("x1", "0%"))
