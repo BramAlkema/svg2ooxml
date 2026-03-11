@@ -13,12 +13,15 @@ from .numpy_compat import np
 class SolidPaint:
     rgb: str  # RRGGBB
     opacity: float = 1.0
+    theme_color: str | None = None
 
     def __post_init__(self) -> None:
         if len(self.rgb) != 6:
             raise ValueError("rgb must be 6 hex characters")
         if not (0.0 <= self.opacity <= 1.0):
             object.__setattr__(self, "opacity", max(0.0, min(1.0, self.opacity)))
+        if self.theme_color is not None and not self.theme_color.strip():
+            raise ValueError("theme_color cannot be blank")
 
 
 @dataclass(frozen=True)
@@ -26,6 +29,7 @@ class GradientStop:
     offset: float
     rgb: str
     opacity: float = 1.0
+    theme_color: str | None = None
 
 
 @dataclass(frozen=True)
@@ -70,6 +74,8 @@ class PatternPaint:
     preset: str | None = None
     foreground: str | None = None
     background: str | None = None
+    foreground_theme_color: str | None = None
+    background_theme_color: str | None = None
     # Rasterized tile image for non-preset patterns
     tile_image: bytes | None = None
     tile_width_px: int | None = None

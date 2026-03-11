@@ -49,7 +49,6 @@ def _apply_mask_alpha(element, alpha: float):
     PowerPoint's "Convert to Shape" behavior for simple opacity masks.
     """
     from svg2ooxml.ir.paint import (
-        GradientStop,
         LinearGradientPaint,
         RadialGradientPaint,
         SolidPaint,
@@ -57,7 +56,7 @@ def _apply_mask_alpha(element, alpha: float):
 
     def _scale_stops(stops, a: float):
         return [
-            GradientStop(offset=s.offset, rgb=s.rgb, opacity=s.opacity * a)
+            replace(s, opacity=s.opacity * a)
             for s in stops
         ]
 
@@ -182,10 +181,13 @@ class DrawingMLWriter:
             self._max_shape_id = next_shape_id - 1
             placeholder = "<!-- SHAPES WILL BE INSERTED HERE -->"
             slide_width, slide_height = slide_size or DEFAULT_SLIDE_SIZE
+            shape_xml = tuple(fragments)
 
             slide_xml = self._slide_template.replace("{SLIDE_WIDTH}", str(slide_width))
             slide_xml = slide_xml.replace("{SLIDE_HEIGHT}", str(slide_height))
-            shapes_xml = "\n            ".join(fragments)
+            slide_xml = slide_xml.replace("{OFFICE_PROFILE_XMLNS}", "")
+            slide_xml = slide_xml.replace("{OFFICE_PROFILE_IGNORABLE}", "")
+            shapes_xml = "\n            ".join(shape_xml)
 
             # 2. Inject shapes into template fragments
             slide_xml = slide_xml.replace(placeholder, shapes_xml)
@@ -196,6 +198,7 @@ class DrawingMLWriter:
                 slide_xml=slide_xml,
                 slide_size=(slide_width, slide_height),
                 assets=self._assets.snapshot(),
+                shape_xml=shape_xml,
             )
             self._trace_writer(
                 "render_complete",
@@ -215,6 +218,23 @@ class DrawingMLWriter:
             self._animation_pipeline.reset(None)
             self._tracer = prev_tracer
 
+    def render_shapes(
+        self,
+        scene: SceneGraph,
+        *,
+        slide_size: tuple[int, int] | None = None,
+        tracer: ConversionTracer | None = None,
+        animation_payload: dict[str, Any] | None = None,
+    ) -> tuple[str, ...]:
+        """Return serialized DrawingML shape fragments for the supplied scene graph."""
+
+        return self.render_scene(
+            scene,
+            slide_size=slide_size,
+            tracer=tracer,
+            animation_payload=animation_payload,
+        ).shape_xml
+
     def render_scene_from_ir(
         self,
         scene: IRScene,
@@ -225,6 +245,53 @@ class DrawingMLWriter:
         animations: list | None = None, # Add animations parameter
     ) -> DrawingMLRenderResult:
         """Convenience wrapper that derives slide size from an IRScene."""
+
+        slide_size, payload = self._scene_render_args_from_ir(
+            scene,
+            default_slide_size=default_slide_size,
+            animation_payload=animation_payload,
+            animations=animations,
+        )
+        return self.render_scene(
+            scene.elements,
+            slide_size=slide_size,
+            tracer=tracer,
+            animation_payload=payload,
+        )
+
+    def render_shapes_from_ir(
+        self,
+        scene: IRScene,
+        *,
+        default_slide_size: tuple[int, int] = DEFAULT_SLIDE_SIZE,
+        tracer: ConversionTracer | None = None,
+        animation_payload: dict[str, Any] | None = None,
+        animations: list | None = None,
+    ) -> tuple[str, ...]:
+        """Convenience wrapper that derives slide size from an IRScene and returns shape fragments."""
+
+        slide_size, payload = self._scene_render_args_from_ir(
+            scene,
+            default_slide_size=default_slide_size,
+            animation_payload=animation_payload,
+            animations=animations,
+        )
+        return self.render_shapes(
+            scene.elements,
+            slide_size=slide_size,
+            tracer=tracer,
+            animation_payload=payload,
+        )
+
+    def _scene_render_args_from_ir(
+        self,
+        scene: IRScene,
+        *,
+        default_slide_size: tuple[int, int],
+        animation_payload: dict[str, Any] | None,
+        animations: list | None,
+    ) -> tuple[tuple[int, int], dict[str, Any]]:
+        """Resolve slide sizing and animation payload for IR-scene rendering."""
 
         width_px = scene.width_px or 0.0
         height_px = scene.height_px or 0.0
@@ -248,12 +315,7 @@ class DrawingMLWriter:
                 new_payload["policy"] = animation_payload["policy"]
             payload = new_payload
 
-        return self.render_scene(
-            scene.elements,
-            slide_size=slide_size,
-            tracer=tracer,
-            animation_payload=payload,
-        )
+        return slide_size, payload
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -266,7 +328,7 @@ class DrawingMLWriter:
             rendered = self._render_element(element, current_id)
             if rendered is None:
                 continue
-            fragments.append(rendered[0])
+            fragments.extend(rendered[0])
             current_id = rendered[1]
         return fragments, current_id
 
@@ -501,7 +563,7 @@ class DrawingMLWriter:
         except (TypeError, ValueError):
             return None
 
-    def _render_element(self, element, shape_id: int) -> tuple[str, int] | None:
+    def _render_element(self, element, shape_id: int) -> tuple[list[str], int] | None:
         metadata = getattr(element, "metadata", None)
         if isinstance(metadata, dict):
             self.register_filter_assets(metadata)
@@ -551,11 +613,12 @@ class DrawingMLWriter:
         if isinstance(element, TextFrame):
             if self._text_renderer is None:
                 raise RuntimeError("Text renderer not initialised for current rendering run.")
-            return self._text_renderer.render(
+            fragment, next_id = self._text_renderer.render(
                 element,
                 shape_id,
                 hyperlink_xml=hyperlink_xml,
             )
+            return [fragment], next_id
         if isinstance(element, Group):
             if hyperlink_xml:
                 if self._assets is not None:
@@ -564,7 +627,7 @@ class DrawingMLWriter:
             fragments, next_id = self._render_elements(element.children, shape_id)
             if not fragments:
                 return None
-            return "\n".join(fragments), next_id
+            return fragments, next_id
 
         if self._shape_renderer is None:
             raise RuntimeError("Shape renderer not initialised for current rendering run.")
@@ -575,7 +638,8 @@ class DrawingMLWriter:
             hyperlink_xml=hyperlink_xml,
         )
         if rendered is not None:
-            return rendered
+            fragment, next_id = rendered
+            return [fragment], next_id
 
         logger.debug("Skipping unsupported IR element type: %s", type(element).__name__)
         return None

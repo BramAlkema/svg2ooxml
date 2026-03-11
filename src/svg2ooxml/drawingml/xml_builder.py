@@ -194,29 +194,38 @@ def graft_xml_fragment(
 # ============================================================================
 
 
-def solid_fill(rgb: str, alpha: int = 100000) -> etree._Element:
-    """Create <a:solidFill> element with sRGB color.
+def scheme_color(scheme: str, alpha: int | None = None) -> etree._Element:
+    """Create <a:schemeClr> element with optional alpha."""
+    schemeClr = a_elem("schemeClr", val=scheme.strip())
 
-    Args:
-        rgb: 6-character hex color without # (e.g., "FF0000" for red)
-        alpha: Alpha value 0-100000 (default: 100000 = fully opaque)
-               100000 = 100%, 50000 = 50%, 0 = fully transparent
+    if alpha is not None:
+        a_sub(schemeClr, "alpha", val=alpha)
 
-    Returns:
-        <a:solidFill> element with nested <a:srgbClr> and optional <a:alpha>
+    return schemeClr
 
-    Example:
-        >>> fill = solid_fill("FF0000", alpha=50000)
-        >>> to_string(fill)
-        '<a:solidFill><a:srgbClr val="FF0000"><a:alpha val="50000"/></a:srgbClr></a:solidFill>'
-    """
+
+def color_choice(
+    rgb: str,
+    *,
+    alpha: int | None = None,
+    theme_color: str | None = None,
+) -> etree._Element:
+    """Create a color element, preferring theme slots when provided."""
+    if theme_color:
+        return scheme_color(theme_color, alpha=alpha)
+    return srgb_color(rgb, alpha=alpha)
+
+
+def solid_fill(rgb: str, alpha: int = 100000, *, theme_color: str | None = None) -> etree._Element:
+    """Create <a:solidFill> element with sRGB or scheme color."""
+
     solidFill = a_elem("solidFill")
-    srgbClr = a_sub(solidFill, "srgbClr", val=rgb.upper())
-
-    # Only add alpha if not fully opaque
-    if alpha < 100000:
-        a_sub(srgbClr, "alpha", val=alpha)
-
+    color = color_choice(
+        rgb,
+        alpha=alpha if alpha < 100000 else None,
+        theme_color=theme_color,
+    )
+    solidFill.append(color)
     return solidFill
 
 
@@ -417,6 +426,8 @@ __all__ = [
     "to_string",
     "graft_xml_fragment",
     # Common patterns
+    "color_choice",
+    "scheme_color",
     "solid_fill",
     "srgb_color",
     "no_fill",

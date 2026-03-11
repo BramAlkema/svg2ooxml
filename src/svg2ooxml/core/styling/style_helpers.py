@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import Any
 
 from svg2ooxml.common.geometry import Matrix2D
@@ -129,7 +130,6 @@ def local_name(tag: str) -> str:
 
 def apply_stroke_opacity(paint, opacity: float):
     from svg2ooxml.ir.paint import (
-        GradientStop,
         LinearGradientPaint,
         RadialGradientPaint,
         SolidPaint,
@@ -137,36 +137,23 @@ def apply_stroke_opacity(paint, opacity: float):
 
     opacity = max(0.0, min(1.0, opacity))
     if isinstance(paint, SolidPaint):
-        return SolidPaint(rgb=paint.rgb, opacity=max(0.0, min(1.0, paint.opacity * opacity)))
+        return replace(paint, opacity=max(0.0, min(1.0, paint.opacity * opacity)))
     if isinstance(paint, LinearGradientPaint):
         if opacity >= 0.999:
             return paint
         scaled_stops = [
-            GradientStop(stop.offset, stop.rgb, max(0.0, min(1.0, stop.opacity * opacity)))
+            replace(stop, opacity=max(0.0, min(1.0, stop.opacity * opacity)))
             for stop in paint.stops
         ]
-        return LinearGradientPaint(
-            stops=scaled_stops,
-            start=paint.start,
-            end=paint.end,
-            transform=paint.transform,
-            gradient_id=paint.gradient_id,
-        )
+        return replace(paint, stops=scaled_stops)
     if isinstance(paint, RadialGradientPaint):
         if opacity >= 0.999:
             return paint
         scaled_stops = [
-            GradientStop(stop.offset, stop.rgb, max(0.0, min(1.0, stop.opacity * opacity)))
+            replace(stop, opacity=max(0.0, min(1.0, stop.opacity * opacity)))
             for stop in paint.stops
         ]
-        return RadialGradientPaint(
-            stops=scaled_stops,
-            center=paint.center,
-            radius=paint.radius,
-            focal_point=paint.focal_point,
-            transform=paint.transform,
-            gradient_id=paint.gradient_id,
-        )
+        return replace(paint, stops=scaled_stops)
     return paint
 
 

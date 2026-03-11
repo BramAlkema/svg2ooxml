@@ -13,6 +13,7 @@ def render_picture(
     template: str,
     policy_for,
     register_media,
+    lookup_blip_extensions=None,
     hyperlink_xml: str = "",
     geometry_xml: str = "",
 ) -> str | None:
@@ -59,10 +60,19 @@ def render_picture(
     if not geometry_xml:
         geometry_xml = '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>'
 
+    blip_extensions_xml = ""
+    if callable(lookup_blip_extensions):
+        blip_extensions = lookup_blip_extensions(r_id)
+        if isinstance(blip_extensions, str):
+            blip_extensions_xml = blip_extensions
+        elif blip_extensions:
+            blip_extensions_xml = str(blip_extensions)
+
     return template.format(
         SHAPE_ID=shape_id,
         SHAPE_NAME=shape_name,
         R_ID=r_id,
+        BLIP_EXTENSIONS_XML=blip_extensions_xml,
         X_EMU=px_to_emu(origin.x),
         Y_EMU=px_to_emu(origin.y),
         WIDTH_EMU=px_to_emu(width),
