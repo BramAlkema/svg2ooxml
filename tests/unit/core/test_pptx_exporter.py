@@ -5,8 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from svg2ooxml.core.pptx_exporter import SvgPageSource, SvgToPptxExporter
-from svg2ooxml.core.tracing import ConversionTracer
+from svg2office.core.pptx_exporter import SvgPageSource, SvgToPptxExporter
+from svg2office.core.tracing import ConversionTracer
 
 
 def test_exporter_returns_trace_report(tmp_path: Path) -> None:
@@ -70,6 +70,25 @@ def test_exporter_convert_pages(tmp_path: Path) -> None:
     assert {"packaging"}.issubset(aggregated_stages)
 
 
+def test_exporter_uses_env_office_profile(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("SVG2OOXML_OFFICE_PROFILE", "office_compat")
+    exporter = SvgToPptxExporter()
+    assert exporter._office_profile == "office_compat"
+    assert exporter._writer._office_profile == "office_compat"
+
+
+def test_exporter_office_profile_arg_overrides_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("SVG2OOXML_OFFICE_PROFILE", "ecma_strict")
+    exporter = SvgToPptxExporter(office_profile="office_compat")
+    assert exporter._office_profile == "office_compat"
+    assert exporter._writer._office_profile == "office_compat"
+
+
+def test_exporter_rejects_unknown_office_profile() -> None:
+    with pytest.raises(ValueError, match="office_profile"):
+        SvgToPptxExporter(office_profile="bad-profile")
+
+
 def test_exporter_convert_pages_with_variants(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     exporter = SvgToPptxExporter()
     output_path = tmp_path / "variants.pptx"
@@ -78,15 +97,15 @@ def test_exporter_convert_pages_with_variants(monkeypatch: pytest.MonkeyPatch, t
         title="Base",
     )
 
-    from svg2ooxml.core.slide_orchestrator import FallbackVariant
+    from svg2office.core.slide_orchestrator import FallbackVariant
 
     monkeypatch.setattr(
-        "svg2ooxml.core.pptx_exporter.derive_variants_from_trace",
+        "svg2office.core.pptx_exporter.derive_variants_from_trace",
         lambda report, enable_split: [FallbackVariant(name="geometry_bitmap", policy_overrides={"geometry": {"force_bitmap": True}}, title_suffix=" (Bitmap)")] if enable_split else [],
     )
 
     monkeypatch.setattr(
-        "svg2ooxml.core.pptx_exporter.expand_page_with_variants",
+        "svg2office.core.pptx_exporter.expand_page_with_variants",
         lambda src, variants: [
             SvgPageSource(
                 svg_text=src.svg_text,

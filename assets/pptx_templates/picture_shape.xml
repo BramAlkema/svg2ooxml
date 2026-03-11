@@ -7,7 +7,7 @@
         <p:nvPr/>
     </p:nvPicPr>
     <p:blipFill>
-        <a:blip r:embed="{R_ID}"/>
+        <a:blip r:embed="{R_ID}">{BLIP_EXTENSIONS_XML}</a:blip>
 {SRC_RECT_XML}        <a:stretch>
             <a:fillRect/>
         </a:stretch>
