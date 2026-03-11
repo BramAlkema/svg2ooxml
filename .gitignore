@@ -26,6 +26,7 @@ tmp/
 .tmp_compare/
 .visual_server/
 .visual_tmp/
+/svg2ooxml.egg-info/
 reports/
 working_tmp/
 tests/corpus/output/
