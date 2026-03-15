@@ -62,6 +62,8 @@ jobs:
           pip install openxml-audit
 
       - name: Run W3C sample with OpenXML gating
+        env:
+          OPENXML_VALIDATOR: openxml-audit
         run: |
           python tests/corpus/run_corpus.py \
             --corpus-dir tests/svg \

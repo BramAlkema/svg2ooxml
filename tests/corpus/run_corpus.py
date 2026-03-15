@@ -87,11 +87,16 @@ def _resolve_openxml_validator(path_value: str | None) -> list[str] | None:
             if path.exists():
                 candidate = path
                 break
-    if not candidate.exists():
-        return None
-    if candidate.suffix == ".py":
-        return [sys.executable, str(candidate)]
-    return [str(candidate)]
+    if candidate.exists():
+        if candidate.suffix == ".py":
+            return [sys.executable, str(candidate)]
+        return [str(candidate)]
+    # Fall back to PATH lookup for installed CLI tools
+    import shutil
+    found = shutil.which(path_value)
+    if found:
+        return [found]
+    return None
 
 
 def _run_openxml_audit(
