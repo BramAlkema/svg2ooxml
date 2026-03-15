@@ -35,7 +35,7 @@ RUN mkdir -p /var/cache/svg2ooxml/fonts \
   && python3 -m venv --system-site-packages /workspace/.venv \
   && . /workspace/.venv/bin/activate \
   && python -m pip install --upgrade pip setuptools wheel \
-  && python -m pip install -r requirements-dev.txt
+  && python -m pip install -e .[dev,api,cloud,render,color,slides,payments,visual-testing]
 
 ENV VIRTUAL_ENV=/workspace/.venv \
     PATH="/workspace/.venv/bin:${PATH}"

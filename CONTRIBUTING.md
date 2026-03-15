@@ -9,7 +9,7 @@ git clone https://github.com/BramAlkema/svg2ooxml.git
 cd svg2ooxml
 ./tools/bootstrap_venv.sh
 source .venv/bin/activate
-pip install -r requirements-dev.txt
+pip install -e .[dev,render,color,slides,api,cloud]
 pre-commit install
 ```
 

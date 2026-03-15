@@ -86,7 +86,7 @@ SVG text
 ```bash
 ./tools/bootstrap_venv.sh
 source .venv/bin/activate
-pip install -r requirements-dev.txt
+pip install -e .[dev,render,color,slides,api,cloud]
 ```
 
 ```bash

@@ -1,3 +1,0 @@
-# Runtime dependencies for svg2ooxml Cloud Run deployment (API tier).
-# For other environments, see requirements-*.txt.
--e .[api,cloud,payments,slides]

@@ -11,7 +11,7 @@ svg2ooxml converts SVG markup into Office Open XML (PPTX) files. It parses SVG, 
 ```bash
 ./tools/bootstrap_venv.sh          # creates Python 3.13 venv
 source .venv/bin/activate
-pip install -r requirements-dev.txt # editable install with all extras + tooling
+pip install -e .[dev,render,color,slides,api,cloud] # editable install with all extras
 ```
 
 For a subset: `pip install -e .[slides]`, `.[render]`, `.[color]`, `.[api]`, `.[cloud]`.

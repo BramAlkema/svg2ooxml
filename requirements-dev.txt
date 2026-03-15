@@ -1,3 +1,0 @@
-# Developer stack with runtime extras and tooling in editable mode.
--e .[api,cloud,render,color,slides,payments,visual-testing,dev]
-httpx>=0.27,<0.28
