@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/BramAlkema/svg2ooxml/main/assets/logo.png" alt="svg2ooxml" width="96">
+  <img src="assets/logo.png" alt="svg2ooxml" width="96">
 </p>
 
 <h1 align="center">svg2ooxml</h1>
@@ -13,7 +13,7 @@
   <a href="https://pypi.org/project/svg2ooxml/"><img src="https://img.shields.io/pypi/dm/svg2ooxml" alt="Downloads"></a>
   <a href="https://pypi.org/project/svg2ooxml/"><img src="https://img.shields.io/pypi/pyversions/svg2ooxml" alt="Python"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-blue.svg" alt="License: AGPL-3.0"></a>
-  <a href="https://github.com/BramAlkema/svg2ooxml/actions/workflows/workflow.yml"><img src="https://github.com/BramAlkema/svg2ooxml/actions/workflows/workflow.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/BramAlkema/svg2ooxml/actions/workflows/test-suite.yml"><img src="https://img.shields.io/badge/tests-passing-brightgreen" alt="Tests"></a>
 </p>
 
 ---
