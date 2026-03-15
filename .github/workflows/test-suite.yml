@@ -7,35 +7,15 @@ jobs:
   unit:
     runs-on: ubuntu-latest
 
-    permissions:
-      contents: read
-      id-token: write
-
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
-
-      # - name: Authenticate to Google Cloud
-      #   uses: google-github-actions/auth@v2
-      #   with:
-      #     workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
-      #     service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
-
-      # - name: Setup gcloud CLI
-      #   uses: google-github-actions/setup-gcloud@v2
+        uses: actions/checkout@v5
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.13"
-
-      - name: Cache pip
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('**/pyproject.toml', '**/requirements*.txt') }}
-          restore-keys: |
-            ${{ runner.os }}-pip-
+          cache: pip
 
       - name: Install system dependencies
         run: |
@@ -48,26 +28,8 @@ jobs:
           pip install -e .[color,api,cloud,slides,render]
           if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
 
-      # - name: Get Cloud Run ID token
-      #   id: id-token
-      #   run: |
-      #     TOKEN=$(gcloud auth print-identity-token \
-      #       --impersonate-service-account=svg2ooxml-runner@powerful-layout-467812-p1.iam.gserviceaccount.com \
-      #       --audiences=https://svg2ooxml-export-sghya3t5ya-ew.a.run.app)
-      #     echo "::add-mask::$TOKEN"
-      #     echo "token=$TOKEN" >> $GITHUB_OUTPUT
-
       - name: Run test suite
-        env:
-          # Mock Firebase for tests (Firebase emulator not required for unit tests)
-          FIREBASE_AUTH_EMULATOR_HOST: localhost:9099
-          # Test encryption key (base64-encoded 32-byte key for testing)
-          TOKEN_ENCRYPTION_KEY: dGVzdC1lbmNyeXB0aW9uLWtleS0zMi1ieXRlcy10ZXN0LWtleQo=
-          # Cloud Run ID token for smoke tests
-          # FIREBASE_TOKEN: ${{ steps.id-token.outputs.token }}
-          SVG2OOXML_AUDIENCE: https://svg2ooxml-export-sghya3t5ya-ew.a.run.app
         run: |
-          # Skip pre-existing failures unrelated to current features
           python -m pytest -m "not visual" --maxfail=1 --disable-warnings \
             --ignore=tests/integration/core/test_pipeline.py \
             --ignore=tests/integration/test_filter_emf_regression.py \
@@ -80,25 +42,13 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.13"
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: "8.0.x"
-
-      - name: Cache pip
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('**/pyproject.toml', '**/requirements*.txt') }}
-          restore-keys: |
-            ${{ runner.os }}-pip-
+          cache: pip
 
       - name: Install system dependencies
         run: |
@@ -109,14 +59,9 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -e .[render,color]
-
-      - name: Build OpenXML audit tool
-        run: |
-          dotnet publish tools/openxml_audit/OpenXmlAudit.csproj -c Release -o tools/openxml_audit/bin/publish
+          pip install openxml-audit
 
       - name: Run W3C sample with OpenXML gating
-        env:
-          OPENXML_VALIDATOR: tools/openxml-audit
         run: |
           python tests/corpus/run_corpus.py \
             --corpus-dir tests/svg \
@@ -132,7 +77,7 @@ jobs:
 
       - name: Upload W3C sample report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: w3c-sample-report
           path: reports/w3c_sample_report.json
