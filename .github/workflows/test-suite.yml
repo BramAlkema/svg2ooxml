@@ -25,8 +25,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -e .[color,api,cloud,slides,render]
-          if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
+          pip install -e .[dev,color,api,cloud,slides,render]
 
       - name: Run test suite
         run: |
