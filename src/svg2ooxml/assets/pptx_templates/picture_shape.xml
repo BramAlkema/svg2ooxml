@@ -1,0 +1,23 @@
+<p:pic>
+    <p:nvPicPr>
+        <p:cNvPr id="{SHAPE_ID}" name="{SHAPE_NAME}">{HYPERLINK_XML}</p:cNvPr>
+        <p:cNvPicPr>
+            <a:picLocks noChangeAspect="1"/>
+        </p:cNvPicPr>
+        <p:nvPr/>
+    </p:nvPicPr>
+    <p:blipFill>
+        <a:blip r:embed="{R_ID}">{BLIP_EXTENSIONS_XML}</a:blip>
+{SRC_RECT_XML}        <a:stretch>
+            <a:fillRect/>
+        </a:stretch>
+    </p:blipFill>
+    <p:spPr>
+        <a:xfrm>
+            <a:off x="{X_EMU}" y="{Y_EMU}"/>
+            <a:ext cx="{WIDTH_EMU}" cy="{HEIGHT_EMU}"/>
+        </a:xfrm>
+        {GEOMETRY_XML}
+{EFFECTS_XML}
+    </p:spPr>
+</p:pic>

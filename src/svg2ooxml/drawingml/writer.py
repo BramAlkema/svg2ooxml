@@ -33,12 +33,8 @@ DEFAULT_SLIDE_SIZE = (9144000, 6858000)  # 10" x 7.5"
 logger = logging.getLogger(__name__)
 
 
-def _project_root() -> Path:
-    return Path(__file__).resolve().parents[3]
-
-
 def _assets_root() -> Path:
-    return _project_root() / "assets" / "pptx_templates"
+    return Path(__file__).resolve().parent.parent / "assets" / "pptx_templates"
 
 
 def _apply_mask_alpha(element, alpha: float):

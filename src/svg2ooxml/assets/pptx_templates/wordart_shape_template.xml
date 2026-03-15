@@ -1,0 +1,28 @@
+<p:sp
+     >
+    <p:nvSpPr>
+        <p:cNvPr id="{SHAPE_ID}" name="{SHAPE_NAME}">{HYPERLINK_XML}</p:cNvPr>
+        <p:cNvSpPr/>
+        <p:nvPr/>
+    </p:nvSpPr>
+    <p:spPr>
+        <a:xfrm>
+            <a:off x="{X_EMU}" y="{Y_EMU}"/>
+            <a:ext cx="{WIDTH_EMU}" cy="{HEIGHT_EMU}"/>
+        </a:xfrm>
+        <a:prstGeom prst="rect">
+            <a:avLst/>
+        </a:prstGeom>
+        <a:noFill/>
+    </p:spPr>
+    <p:txBody>
+        <a:bodyPr prstTxWarp="{WARP_PRESET}" wrap="none" lIns="0" tIns="0" rIns="0" bIns="0" anchor="t">
+{BODY_EXTRA}        </a:bodyPr>
+        <a:lstStyle/>
+        <a:p>
+            <a:pPr algn="{TEXT_ALIGN}"{RTL_ATTR}/>
+            {RUNS_XML}
+            <a:endParaRPr/>
+        </a:p>
+    </p:txBody>
+</p:sp>

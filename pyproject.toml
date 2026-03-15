@@ -86,6 +86,9 @@ markers = [
   "requires_network: tests that reach external network resources",
 ]
 
+[tool.setuptools.package-data]
+svg2ooxml = ["assets/pptx_templates/**/*"]
+
 [tool.setuptools.packages.find]
 where = [ "src", ".",]
 include = [ "svg2ooxml*", "cli*",]

@@ -1,0 +1,24 @@
+<p:sp>
+    <p:nvSpPr>
+        <p:cNvPr id="{SHAPE_ID}" name="Rectangle {SHAPE_ID}">{HYPERLINK_XML}</p:cNvPr>
+        <p:cNvSpPr>
+            <a:spLocks noGrp="1"/>
+        </p:cNvSpPr>
+        <p:nvPr/>
+    </p:nvSpPr>
+    <p:spPr>
+        <a:xfrm>
+            <a:off x="{X_EMU}" y="{Y_EMU}"/>
+            <a:ext cx="{WIDTH_EMU}" cy="{HEIGHT_EMU}"/>
+        </a:xfrm>
+        <a:prstGeom prst="{PRESET}">
+{AV_LIST}    </a:prstGeom>
+{FILL_XML}{STROKE_XML}{EFFECTS_XML}    </p:spPr>
+    <p:txBody>
+        <a:bodyPr/>
+        <a:lstStyle/>
+        <a:p>
+            <a:endParaRPr/>
+        </a:p>
+    </p:txBody>
+</p:sp>

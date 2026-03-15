@@ -1,0 +1,15 @@
+<p:cxnSp>
+    <p:nvCxnSpPr>
+        <p:cNvPr id="{SHAPE_ID}" name="Line {SHAPE_ID}">{HYPERLINK_XML}</p:cNvPr>
+        <p:cNvCxnSpPr>
+            <a:cxnSpLocks noGrp="1"/>
+        </p:cNvCxnSpPr>
+        <p:nvPr/>
+    </p:nvCxnSpPr>
+    <p:spPr>
+        <a:xfrm>
+            <a:off x="{X_EMU}" y="{Y_EMU}"/>
+            <a:ext cx="{WIDTH_EMU}" cy="{HEIGHT_EMU}"/>
+        </a:xfrm>
+{GEOMETRY_XML}{FILL_XML}{STROKE_XML}{EFFECTS_XML}    </p:spPr>
+</p:cxnSp>
