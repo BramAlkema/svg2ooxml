@@ -1,7 +1,0 @@
-steps:
-  # Deploy to Firebase Hosting using official Firebase CLI image
-  - name: 'us-docker.pkg.dev/firebase-cli/us/firebase'
-    entrypoint: 'bash'
-    args: ['-c', 'cd infrastructure && firebase deploy --project=powerful-layout-467812-p1 --only=hosting']
-
-timeout: 600s
