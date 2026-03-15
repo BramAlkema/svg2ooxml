@@ -2,7 +2,7 @@
 
 svg2ooxml now generates real PPTX artifacts for parser batch jobs. The batch
 helpers consume the parser, IR converter, DrawingML writer, and PPTX packager,
-using the `assets/pptx_templates/` library as the single source of truth for
+using the `assets/pptx_scaffold/` library as the single source of truth for
 static OOXML parts.
 
 ### Running the regression tests

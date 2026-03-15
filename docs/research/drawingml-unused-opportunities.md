@@ -109,7 +109,7 @@ Current code reality:
 - Filter fallback frequently emits `blipFill` placeholders/comments:
   `src/svg2ooxml/drawingml/filter_renderer.py:257`
 - Picture template accepts this path:
-  `assets/pptx_templates/picture_shape.xml`
+  `assets/pptx_scaffold/picture_shape.xml`
 
 Better DrawingML fit:
 - On `<a:blip>`, emit supported image effects (`duotone`, `clrChange`,

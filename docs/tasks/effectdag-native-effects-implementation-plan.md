@@ -86,7 +86,7 @@ Deliverables:
 
 Primary files:
 - `src/svg2ooxml/drawingml/filter_renderer.py`
-- `assets/pptx_templates/picture_shape.xml` (if template changes are needed)
+- `assets/pptx_scaffold/picture_shape.xml` (if template changes are needed)
 
 Acceptance checks:
 - XML tests for valid blip effect payloads.

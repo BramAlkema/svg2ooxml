@@ -18,7 +18,7 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
     from svg2ooxml.core.ir import IRScene
     from svg2ooxml.core.tracing import ConversionTracer
 
-ASSETS_ROOT = Path(__file__).resolve().parent.parent / "assets" / "pptx_templates"
+ASSETS_ROOT = Path(__file__).resolve().parent.parent / "assets" / "pptx_scaffold"
 REL_NS = "http://schemas.openxmlformats.org/package/2006/relationships"
 CONTENT_NS = "http://schemas.openxmlformats.org/package/2006/content-types"
 P_NS = "http://schemas.openxmlformats.org/presentationml/2006/main"

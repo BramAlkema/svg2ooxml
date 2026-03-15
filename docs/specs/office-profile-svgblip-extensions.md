@@ -30,7 +30,7 @@ Current implementation gaps:
 
 Representative code locations:
 
-- Slide root template: `assets/pptx_templates/slide_template.xml`
+- Slide root template: `assets/pptx_scaffold/slide_template.xml`
 - Picture rendering: `src/svg2office/drawingml/image.py`
 - Media registration: `src/svg2office/drawingml/writer.py`
 - Package assembly/writing: `src/svg2office/io/pptx_assembly.py`, `src/svg2office/io/pptx_writer.py`

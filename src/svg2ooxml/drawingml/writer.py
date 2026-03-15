@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 
 
 def _assets_root() -> Path:
-    return Path(__file__).resolve().parent.parent / "assets" / "pptx_templates"
+    return Path(__file__).resolve().parent.parent / "assets" / "pptx_scaffold"
 
 
 def _apply_mask_alpha(element, alpha: float):

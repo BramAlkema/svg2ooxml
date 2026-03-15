@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "svg2ooxml"
-version = "0.3.1"
+version = "0.3.2"
 description = "SVG to Office Open XML conversion toolkit."
 readme = "README.md"
 requires-python = ">=3.13"
@@ -87,7 +87,7 @@ markers = [
 ]
 
 [tool.setuptools.package-data]
-svg2ooxml = ["assets/pptx_templates/**/*"]
+svg2ooxml = ["assets/pptx_scaffold/**/*"]
 
 [tool.setuptools.packages.find]
 where = [ "src", ".",]

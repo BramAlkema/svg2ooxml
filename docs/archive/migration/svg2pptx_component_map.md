@@ -67,7 +67,7 @@ This document captures the complete surface area of the legacy `svg2pptx` codeba
 | `pipeline/` (root) | Generated reports, validation | `reports/` | Optional | |
 | `scripts/`, `tools/` | Developer tooling | `tools/` | Port essential | |
 | `tests/` (rich test suites) | Unit/integration/visual tests | `tests/` | Port gradually (new layout) | |
-| `pptx_templates/` | PPTX templates | `pptx_templates/` | Port | |
+| `pptx_scaffold/` | PPTX templates | `pptx_scaffold/` | Port | |
 | `presentationml/` | Example PPTX parts | `presentationml/` | Port | |
 
 ## Migration Strategy Outline
