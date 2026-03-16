@@ -215,8 +215,8 @@
 // SVG to Google Slides - Figma Plugin UI
 // Supabase Auth + Coolify backend
 
-const API_URL = 'https://svg2ooxml.tactcheck.com';
-const AUTH_URL = 'https://auth.supabase.tactcheck.com';
+const API_URL = localStorage.getItem('svg2ooxml_api_url') || 'https://svg2ooxml.tactcheck.com';
+const AUTH_URL = localStorage.getItem('svg2ooxml_auth_url') || 'https://auth.supabase.tactcheck.com';
 const AUTH_POLL_INTERVAL = 2000;
 const AUTH_TIMEOUT = 120000;
 

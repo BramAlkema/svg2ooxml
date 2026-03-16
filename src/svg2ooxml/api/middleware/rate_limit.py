@@ -19,6 +19,13 @@ class RateLimiter:
     def _now(self) -> float:
         return time.monotonic()
 
+    def sweep(self) -> None:
+        """Evict entries with expired rate windows."""
+        now = self._now()
+        expired = [k for k, (_, reset) in self._store.items() if now >= reset]
+        for k in expired:
+            del self._store[k]
+
     def allow(self, key: str) -> tuple[bool, float]:
         now = self._now()
         count, reset = self._store.get(key, (0, now + self.window))

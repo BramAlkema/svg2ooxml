@@ -19,6 +19,14 @@ figma.showUI(__html__, {
   themeColors: true
 });
 
+// Session storage schema — single source of truth for key names
+const SESSION_KEYS = {
+  supabaseJwt: 'supabase_jwt',
+  googleAccessToken: 'google_access_token',
+  googleRefreshToken: 'google_refresh_token',
+  email: 'email',
+};
+
 // Handle messages from the UI
 figma.ui.onmessage = async (msg) => {
   try {
@@ -27,31 +35,23 @@ figma.ui.onmessage = async (msg) => {
     }
 
     if (msg.type === 'save-session') {
-      await figma.clientStorage.setAsync('supabase_jwt', msg.supabaseJwt);
-      await figma.clientStorage.setAsync('google_access_token', msg.googleAccessToken);
-      await figma.clientStorage.setAsync('google_refresh_token', msg.googleRefreshToken);
-      await figma.clientStorage.setAsync('email', msg.email);
+      for (const [prop, key] of Object.entries(SESSION_KEYS)) {
+        await figma.clientStorage.setAsync(key, msg[prop]);
+      }
     }
 
     if (msg.type === 'clear-session') {
-      await figma.clientStorage.deleteAsync('supabase_jwt');
-      await figma.clientStorage.deleteAsync('google_access_token');
-      await figma.clientStorage.deleteAsync('google_refresh_token');
-      await figma.clientStorage.deleteAsync('email');
+      for (const key of Object.values(SESSION_KEYS)) {
+        await figma.clientStorage.deleteAsync(key);
+      }
     }
 
     if (msg.type === 'restore-session') {
-      const supabaseJwt = await figma.clientStorage.getAsync('supabase_jwt');
-      const googleAccessToken = await figma.clientStorage.getAsync('google_access_token');
-      const googleRefreshToken = await figma.clientStorage.getAsync('google_refresh_token');
-      const email = await figma.clientStorage.getAsync('email');
-      figma.ui.postMessage({
-        type: 'session-restored',
-        supabaseJwt,
-        googleAccessToken,
-        googleRefreshToken,
-        email
-      });
+      const session = { type: 'session-restored' };
+      for (const [prop, key] of Object.entries(SESSION_KEYS)) {
+        session[prop] = await figma.clientStorage.getAsync(key);
+      }
+      figma.ui.postMessage(session);
     }
 
     if (msg.type === 'export-complete') {

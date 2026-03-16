@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import time
+from contextlib import asynccontextmanager
+from typing import AsyncGenerator
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -32,7 +35,23 @@ logger = logging.getLogger(__name__)
 
 __version__ = "0.3.2"
 
-app = FastAPI(title="svg2ooxml Export API", version=__version__)
+
+async def _periodic_cleanup() -> None:
+    """Background task to evict expired auth entries and stale rate limiter keys."""
+    while True:
+        await asyncio.sleep(60)
+        _cleanup_expired()
+        rate_limiter.sweep()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    task = asyncio.create_task(_periodic_cleanup())
+    yield
+    task.cancel()
+
+
+app = FastAPI(title="svg2ooxml Export API", version=__version__, lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
