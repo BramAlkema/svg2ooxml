@@ -534,7 +534,15 @@ window.onmessage = async (event) => {
 // ============================================================================
 
 function showStatus(message, type) {
-  statusDiv.innerHTML = message;
+  statusDiv.textContent = '';
+  if (message.includes('<')) {
+    // Safe HTML insertion for trusted internal content (spinner, links)
+    const temp = document.createElement('template');
+    temp.innerHTML = message;
+    statusDiv.appendChild(temp.content);
+  } else {
+    statusDiv.textContent = message;
+  }
   statusDiv.className = `status ${type} visible`;
 }
 

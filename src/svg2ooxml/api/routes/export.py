@@ -87,7 +87,7 @@ async def export_frames(
             logger.error("PPTX conversion failed: %s", exc, exc_info=True)
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Conversion failed: {exc}",
+                detail="Conversion failed. Please try again with a simpler SVG.",
             ) from exc
 
         pptx_bytes = pptx_path.read_bytes()
@@ -104,7 +104,7 @@ async def export_frames(
             logger.error("Slides upload failed: %s", exc, exc_info=True)
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
-                detail=f"Google Slides upload failed: {exc}",
+                detail="Google Slides upload failed. Please sign in again.",
             ) from exc
 
         return {"slides_url": slides_url}

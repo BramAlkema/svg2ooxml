@@ -30,7 +30,9 @@ logger = logging.getLogger(__name__)
 # App
 # ---------------------------------------------------------------------------
 
-app = FastAPI(title="svg2ooxml Export API", version="0.3.2")
+__version__ = "0.3.2"
+
+app = FastAPI(title="svg2ooxml Export API", version=__version__)
 
 app.add_middleware(
     CORSMiddleware,
@@ -57,7 +59,7 @@ app.include_router(export_router, prefix="/api/v1", tags=["export"])
 
 @app.get("/")
 async def root():
-    return {"service": "svg2ooxml-export", "status": "healthy", "version": "0.3.2"}
+    return {"service": "svg2ooxml-export", "status": "healthy", "version": __version__}
 
 
 @app.get("/health")
@@ -199,7 +201,7 @@ async def refresh_google_token(payload: RefreshRequest):
         logger.warning("Token refresh failed: %s", exc)
         return JSONResponse(
             status_code=401,
-            content={"detail": f"Token refresh failed: {exc}"},
+            content={"detail": "Token refresh failed. Please sign in again."},
         )
 
 

@@ -34,7 +34,7 @@ def upload_to_google_slides(
         )
 
     creds = Credentials(token=access_token)
-    drive = build("drive", "v3", credentials=creds, cache_discovery=False)
+    drive = build("drive", "v3", credentials=creds, cache_discovery=True)
 
     file_metadata = {
         "name": title,
