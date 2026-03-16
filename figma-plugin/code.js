@@ -27,38 +27,38 @@ figma.ui.onmessage = async (msg) => {
     }
 
     if (msg.type === 'save-session') {
-      // Save session to Figma's clientStorage
-      await figma.clientStorage.setAsync('auth_token', msg.token);
-      await figma.clientStorage.setAsync('auth_refresh_token', msg.refreshToken);
-      await figma.clientStorage.setAsync('auth_email', msg.email);
+      await figma.clientStorage.setAsync('supabase_jwt', msg.supabaseJwt);
+      await figma.clientStorage.setAsync('google_access_token', msg.googleAccessToken);
+      await figma.clientStorage.setAsync('google_refresh_token', msg.googleRefreshToken);
+      await figma.clientStorage.setAsync('email', msg.email);
     }
 
     if (msg.type === 'clear-session') {
-      // Clear session from Figma's clientStorage
-      await figma.clientStorage.deleteAsync('auth_token');
-      await figma.clientStorage.deleteAsync('auth_refresh_token');
-      await figma.clientStorage.deleteAsync('auth_email');
+      await figma.clientStorage.deleteAsync('supabase_jwt');
+      await figma.clientStorage.deleteAsync('google_access_token');
+      await figma.clientStorage.deleteAsync('google_refresh_token');
+      await figma.clientStorage.deleteAsync('email');
     }
 
     if (msg.type === 'restore-session') {
-      // Restore session from Figma's clientStorage
-      const token = await figma.clientStorage.getAsync('auth_token');
-      const refreshToken = await figma.clientStorage.getAsync('auth_refresh_token');
-      const email = await figma.clientStorage.getAsync('auth_email');
+      const supabaseJwt = await figma.clientStorage.getAsync('supabase_jwt');
+      const googleAccessToken = await figma.clientStorage.getAsync('google_access_token');
+      const googleRefreshToken = await figma.clientStorage.getAsync('google_refresh_token');
+      const email = await figma.clientStorage.getAsync('email');
       figma.ui.postMessage({
         type: 'session-restored',
-        token: token,
-        refreshToken: refreshToken,
-        email: email
+        supabaseJwt,
+        googleAccessToken,
+        googleRefreshToken,
+        email
       });
     }
 
     if (msg.type === 'export-complete') {
-      figma.notify('✅ Exported to Google Slides!');
+      figma.notify('Exported to Google Slides!');
     }
 
     if (msg.type === 'open-url') {
-      // Open external URL (for OAuth flow)
       if (typeof msg.url === 'string') {
         figma.openExternal(msg.url);
       }
@@ -115,7 +115,6 @@ async function handleGetSVGContent() {
   for (let index = 0; index < frames.length; index += 1) {
     const frame = frames[index];
     try {
-      // Export frame as SVG
       const svg = await frame.exportAsync({
         format: 'SVG',
         svgIdAttribute: true,
@@ -169,7 +168,6 @@ async function handleGetSVGContent() {
     return;
   }
 
-  // Send SVG content to UI
   figma.ui.postMessage({
     type: 'svg-content',
     frames: svgFrames,
