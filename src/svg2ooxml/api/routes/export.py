@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import io
 import logging
 import tempfile
@@ -13,6 +14,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from ..auth.supabase import verify_supabase_token
+from ..models import SVGFrame
 from ..services.converter import render_pptx_for_frames
 from ..services.slides_publisher import upload_to_google_slides
 
@@ -20,20 +22,15 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+CONVERSION_TIMEOUT = 120  # seconds
+
 
 # ---------------------------------------------------------------------------
-# Request / response models
+# Request model
 # ---------------------------------------------------------------------------
-
-class ExportFrame(BaseModel):
-    name: str = ""
-    svg_content: str
-    width: float = Field(..., gt=0)
-    height: float = Field(..., gt=0)
-
 
 class ExportRequest(BaseModel):
-    frames: list[ExportFrame] = Field(..., min_length=1)
+    frames: list[SVGFrame] = Field(..., min_length=1)
     figma_file_name: str = "Untitled"
     output_format: str = Field("slides", pattern="^(slides|pptx)$")
     google_access_token: str | None = None
@@ -62,26 +59,20 @@ async def export_frames(
             detail="google_access_token is required for slides output",
         )
 
-    # Convert frames to the SVGFrame model expected by the converter.
-    from ..models import SVGFrame
-
-    svg_frames = [
-        SVGFrame(
-            name=f.name,
-            svg_content=f.svg_content,
-            width=f.width,
-            height=f.height,
-        )
-        for f in request.frames
-    ]
-
-    # Render PPTX in a thread (CPU-bound).
+    # Render PPTX in a thread (CPU-bound) with timeout.
     with tempfile.TemporaryDirectory() as tmpdir:
         pptx_path = Path(tmpdir) / "export.pptx"
 
         try:
-            artifacts = await run_in_threadpool(
-                render_pptx_for_frames, svg_frames, pptx_path
+            artifacts = await asyncio.wait_for(
+                run_in_threadpool(render_pptx_for_frames, request.frames, pptx_path),
+                timeout=CONVERSION_TIMEOUT,
+            )
+        except asyncio.TimeoutError:
+            logger.error("PPTX conversion timed out after %ds", CONVERSION_TIMEOUT)
+            raise HTTPException(
+                status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+                detail="Conversion timed out. Try fewer or simpler frames.",
             )
         except Exception as exc:
             logger.error("PPTX conversion failed: %s", exc, exc_info=True)

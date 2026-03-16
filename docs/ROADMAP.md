@@ -1,44 +1,52 @@
 # Project Roadmap
 
-Last updated: 2026-01-17
+Last updated: 2026-03-17
 
-## Purpose
-Provide a single, project-wide view of current status, near-term goals, and
-outstanding work across the svg2ooxml codebase.
+## Current Status (v0.4.0)
 
-## Status Snapshot (actuals)
-- Resvg migration: P1-P2 complete, P3 in progress (visual CI + telemetry
-  dashboards pending), P4 pending default flip and legacy deprecation.
-- Core pipeline: drawingml writer and pipeline remain partial; exporter gating
-  and end-to-end pipeline tests still needed.
-- Porting: modern modules are in place; legacy shims removed; docs and
-  downstream references still need a sweep.
-- Testing: visual suite exists; CI skips visual comparisons; lighting visual
-  regression fixture not yet added.
-- Telemetry: resvg metrics are aggregated into conversion summaries; dashboards
-  and resvg vs legacy split counters are pending.
-- Deployment/payment: payment integration is complete, but CI/CD is blocked
-  because the GCP project was deleted and secrets are not configured.
+- **Core pipeline**: SVG → IR → DrawingML → PPTX working. 1958 unit tests pass.
+  W3C corpus at 98%+ OpenXML compliance via `openxml-audit`.
+- **Deployment**: API live on Coolify at `svg2ooxml.tactcheck.com`. Supabase
+  Google OAuth replaces Firebase. Synchronous conversion (no job queue).
+- **PyPI**: Published as `pip install svg2ooxml`. Trusted publishing via
+  GitHub Actions OIDC.
+- **Repo**: Public at `github.com/BramAlkema/svg2ooxml`. CI: unit tests +
+  W3C sample with OpenXML validation.
+- **Figma plugin**: Rewritten for Supabase auth + Coolify backend. Pending
+  end-to-end testing.
 
-## Outstanding Work (project-wide)
-- Unblock CI/CD by restoring or replacing the GCP project, then configure secrets.
-- Wire CI visual comparisons (resvg vs legacy) and add a lighting visual fixture.
-- Ship telemetry dashboards and add resvg vs legacy split counters.
-- Define parity thresholds, flip resvg defaults, and publish deprecation notes.
-- Fill remaining DrawingML writer gaps and add end-to-end pipeline tests.
-- Complete doc and downstream reference sweep for the post-legacy module layout.
+## What was removed (v0.3–v0.4)
 
-## Near-Term Goals (next milestone)
-- Decide on infra direction (restore/replace GCP project) and unblock CI/CD.
-- Add CI visual comparisons for resvg vs legacy and publish diff artifacts.
-- Add lighting visual regression fixture to the visual suite.
-- Ship telemetry dashboards using `conversion.resvg_metrics`.
-- Define parity thresholds and complete the resvg default flip plan.
+- Firebase Auth, Firestore, Cloud Storage, Cloud Tasks
+- Stripe subscriptions / payment tiers
+- Huey/Redis background queue (conversion is synchronous now)
+- GCP Cloud Run deployment (replaced by Coolify)
+- ~27,600 lines of dead code, orphaned modules, defunct infrastructure
 
-## Sources
-- `docs/resvg_migration_plan.md`
-- `docs/specs/resvg-integration-roadmap.md`
-- `docs/porting.md`
-- `docs/refactoring_plan_2026-01-11.md`
-- `docs/telemetry/resvg_metrics.md`
-- `docs/NEXT_STEPS.md`
+## Next milestone (v0.5.0)
+
+### Blocking
+
+- [ ] End-to-end Figma plugin test (sign in → export → Slides link)
+- [ ] Google OAuth consent screen: verify status on `do-this-484623`, publish
+      if still in "Testing" mode
+- [ ] Fix issues found during plugin testing
+
+### Quality
+
+- [ ] Redeploy API with latest hardening (background cleanup, rate limiter sweep)
+- [ ] Switch CI badge from static to live GitHub Actions badge
+- [ ] Add CI visual comparisons (resvg vs legacy) and publish diff artifacts
+
+### Pipeline
+
+- [ ] Fill remaining DrawingML writer gaps
+- [ ] Add end-to-end pipeline tests
+- [ ] Define resvg parity thresholds and flip resvg to default
+
+## Future
+
+- Conversion timeout (prevent hung threads on malformed SVGs)
+- Async conversion option for large multi-frame exports
+- Font embedding improvements (WOFF2 support without FontForge)
+- Visual regression CI with LibreOffice screenshots
