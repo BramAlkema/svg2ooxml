@@ -26,25 +26,13 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.13"
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: "8.0.x"
-
-      - name: Cache pip
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('**/pyproject.toml', '**/requirements*.txt') }}
-          restore-keys: |
-            ${{ runner.os }}-pip-
+          cache: pip
 
       - name: Install system dependencies
         run: |
@@ -55,17 +43,18 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -e .[render,color]
+          pip install openxml-audit
 
       - name: Run Profile A (gradients + shapes) with OpenXML gating
         env:
-          OPENXML_VALIDATOR: tools/openxml-audit
+          OPENXML_VALIDATOR: openxml-audit
         run: |
           ./tests/corpus/run_w3c_corpus.sh gradients --mode resvg --openxml-audit --openxml-required --openxml-min-pass-rate 0.98
           ./tests/corpus/run_w3c_corpus.sh shapes --mode resvg --openxml-audit --openxml-required --openxml-min-pass-rate 0.98
 
       - name: Run Profile B (animation sample) with OpenXML gating
         env:
-          OPENXML_VALIDATOR: tools/openxml-audit
+          OPENXML_VALIDATOR: openxml-audit
         run: |
           python tests/corpus/add_w3c_corpus.py \
             --category animate \
@@ -86,7 +75,7 @@ jobs:
 
       - name: Upload W3C animation gate reports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: w3c-animation-gate-reports
           path: |
@@ -103,25 +92,13 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.13"
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: "8.0.x"
-
-      - name: Cache pip
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('**/pyproject.toml', '**/requirements*.txt') }}
-          restore-keys: |
-            ${{ runner.os }}-pip-
+          cache: pip
 
       - name: Install system dependencies
         run: |
@@ -132,10 +109,11 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -e .[render,color]
+          pip install openxml-audit
 
       - name: Run full Profile B (animation 40/40) with OpenXML gating
         env:
-          OPENXML_VALIDATOR: tools/openxml-audit
+          OPENXML_VALIDATOR: openxml-audit
         run: |
           python tests/corpus/add_w3c_corpus.py \
             --category animate \
@@ -156,7 +134,7 @@ jobs:
 
       - name: Upload full animation gate report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: w3c-animation-gate-full-report
           path: |

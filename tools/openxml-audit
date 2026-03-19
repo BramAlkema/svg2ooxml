@@ -2,11 +2,27 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-PUBLISH_DIR="$ROOT/tools/openxml_audit/bin/publish"
-DLL="$PUBLISH_DIR/OpenXmlAudit.dll"
+PYTHON_BIN="${PYTHON_BIN:-python3}"
 
-if [[ ! -f "$DLL" ]]; then
-  dotnet publish "$ROOT/tools/openxml_audit/OpenXmlAudit.csproj" -c Release -o "$PUBLISH_DIR"
+if ! command -v "$PYTHON_BIN" >/dev/null 2>&1; then
+  if command -v python >/dev/null 2>&1; then
+    PYTHON_BIN="python"
+  else
+    echo "Python not found. Install python3 or set PYTHON_BIN." >&2
+    exit 1
+  fi
 fi
 
-dotnet "$DLL" "$@"
+if "$PYTHON_BIN" -c "import openxml_audit.cli" >/dev/null 2>&1; then
+  exec "$PYTHON_BIN" -m openxml_audit.cli "$@"
+fi
+
+SIBLING_SRC="$ROOT/../openxml-audit/src"
+if [[ -d "$SIBLING_SRC" ]]; then
+  export PYTHONPATH="$SIBLING_SRC${PYTHONPATH:+:$PYTHONPATH}"
+  exec "$PYTHON_BIN" -m openxml_audit.cli "$@"
+fi
+
+echo "openxml-audit is not installed." >&2
+echo "Install it with 'pip install openxml-audit' or set OPENXML_VALIDATOR to a valid CLI path." >&2
+exit 1

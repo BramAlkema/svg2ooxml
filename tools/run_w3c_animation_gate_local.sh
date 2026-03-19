@@ -14,10 +14,15 @@ if ! command -v "$PYTHON_BIN" >/dev/null 2>&1; then
   fi
 fi
 
-OPENXML_VALIDATOR_PATH="${OPENXML_VALIDATOR:-$PROJECT_ROOT/tools/openxml-audit}"
-if [[ ! -e "$OPENXML_VALIDATOR_PATH" ]]; then
+DEFAULT_OPENXML_VALIDATOR="$PROJECT_ROOT/tools/openxml-audit"
+if command -v openxml-audit >/dev/null 2>&1; then
+  DEFAULT_OPENXML_VALIDATOR="openxml-audit"
+fi
+
+OPENXML_VALIDATOR_PATH="${OPENXML_VALIDATOR:-$DEFAULT_OPENXML_VALIDATOR}"
+if [[ "$OPENXML_VALIDATOR_PATH" != "openxml-audit" && ! -e "$OPENXML_VALIDATOR_PATH" ]]; then
   echo "OpenXML validator not found: $OPENXML_VALIDATOR_PATH" >&2
-  echo "Set OPENXML_VALIDATOR to a valid validator path." >&2
+  echo "Install 'openxml-audit' or set OPENXML_VALIDATOR to a valid validator path." >&2
   exit 1
 fi
 export OPENXML_VALIDATOR="$OPENXML_VALIDATOR_PATH"
