@@ -27,7 +27,6 @@ import multiprocessing as mp
 import os
 import queue
 import random
-import subprocess
 import time
 import sys
 from dataclasses import asdict, dataclass
@@ -42,6 +41,10 @@ sys.path.insert(0, str(project_root))
 # Add src to path for imports
 sys.path.insert(0, str(project_root / "src"))
 
+from svg2ooxml.common.openxml_audit import (  # noqa: E402
+    resolve_openxml_validator as _resolve_openxml_validator,
+    run_openxml_audit as _run_openxml_audit,
+)
 from svg2ooxml.core.parser import ParserConfig, SVGParser  # noqa: E402
 from svg2ooxml.core.tracing.conversion import (  # noqa: E402
     GEOM_BITMAP,
@@ -75,51 +78,6 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(message)s",
 )
 logger = logging.getLogger(__name__)
-
-
-def _resolve_openxml_validator(path_value: str | None) -> list[str] | None:
-    if not path_value:
-        return None
-    candidate = Path(path_value).expanduser()
-    if candidate.is_dir():
-        for name in ("openxml-validator", "openxml-validator.py", "openxml-audit", "openxml-audit.py"):
-            path = candidate / name
-            if path.exists():
-                candidate = path
-                break
-    if candidate.exists():
-        if candidate.suffix == ".py":
-            return [sys.executable, str(candidate)]
-        return [str(candidate)]
-    # Fall back to PATH lookup for installed CLI tools
-    import shutil
-    found = shutil.which(path_value)
-    if found:
-        return [found]
-    return None
-
-
-def _run_openxml_audit(
-    pptx_path: Path,
-    validator_cmd: list[str] | None,
-    timeout_s: float | None,
-) -> tuple[bool | None, list[str] | None]:
-    if validator_cmd is None:
-        return None, None
-    try:
-        result = subprocess.run(
-            [*validator_cmd, str(pptx_path)],
-            capture_output=True,
-            text=True,
-            timeout=timeout_s,
-        )
-    except Exception as exc:  # pragma: no cover - defensive
-        return False, [str(exc)]
-    output = "\n".join([result.stdout.strip(), result.stderr.strip()]).strip()
-    messages = [line for line in output.splitlines() if line.strip()]
-    if len(messages) > 25:
-        messages = messages[:25]
-    return result.returncode == 0, messages or None
 
 
 def _extract_resvg_only_misses(

@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import os
-import subprocess
-import sys
 import time
 from pathlib import Path
 from typing import Any, Iterable
+
+from svg2ooxml.common.openxml_audit import (
+    resolve_openxml_validator as _resolve_openxml_validator,
+    run_openxml_audit as _run_openxml_audit,
+)
 
 from .bundles import new_job_id
 from .tasks import (
@@ -119,8 +122,10 @@ def stitch_and_audit_job(
         openxml_valid, openxml_messages = _run_openxml_audit(
             Path(pptx_path),
             openxml_cmd,
-            timeout_s=openxml_timeout_s,
-            policy=openxml_policy,
+            openxml_timeout_s,
+            validator_path_value=openxml_validator or os.getenv("OPENXML_VALIDATOR"),
+            strict=(openxml_policy != "permissive"),
+            subprocess_args=["--policy", openxml_policy],
         )
         if openxml_required and openxml_valid is False:
             return {
@@ -186,47 +191,6 @@ def convert_svg_batch_parallel(
         openxml_policy=openxml_policy,
         openxml_required=openxml_required,
     )
-
-
-def _resolve_openxml_validator(path_value: str | None) -> list[str] | None:
-    if not path_value:
-        return None
-    candidate = Path(path_value).expanduser()
-    if candidate.is_dir():
-        for name in ("openxml-validator", "openxml-validator.py", "openxml-audit", "openxml-audit.py"):
-            path = candidate / name
-            if path.exists():
-                candidate = path
-                break
-    if not candidate.exists():
-        return None
-    if candidate.suffix == ".py":
-        return [sys.executable, str(candidate)]
-    return [str(candidate)]
-
-
-def _run_openxml_audit(
-    pptx_path: Path,
-    validator_cmd: list[str],
-    *,
-    timeout_s: float | None,
-    policy: str = "strict",
-) -> tuple[bool | None, list[str] | None]:
-    try:
-        result = subprocess.run(
-            [*validator_cmd, "--policy", policy, str(pptx_path)],
-            capture_output=True,
-            text=True,
-            timeout=timeout_s,
-        )
-    except Exception as exc:  # pragma: no cover - defensive
-        return False, [str(exc)]
-    output = "\n".join([result.stdout.strip(), result.stderr.strip()]).strip()
-    messages = [line for line in output.splitlines() if line.strip()]
-    if len(messages) > 25:
-        messages = messages[:25]
-    return result.returncode == 0, messages or None
-
 
 __all__ = [
     "enqueue_slide_bundles",
