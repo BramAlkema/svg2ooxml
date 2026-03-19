@@ -20,6 +20,7 @@ svg2ooxml = "cli.main:run_cli"
 [project.optional-dependencies]
 dev = [
   "black>=24.0",
+  "httpx>=0.27",
   "isort>=5.12",
   "mypy>=1.8",
   "pre-commit>=3.5",
