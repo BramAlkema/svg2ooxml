@@ -323,7 +323,7 @@ Each non-Direct entry specifies which fallback tier(s) apply.
 | `text-decoration: line-through` | `strike="sngStrike"` on `<a:rPr>` | Done | — | |
 | `text-decoration: overline` | **No DrawingML overline** | Planned | Tier 2→3 | **Tier 2** — draw separate thin line shape above baseline. **Tier 3** — EMF `Polyline` positioned above text. |
 | `letter-spacing` | `spc` on `<a:rPr>` | Done | — | |
-| `word-spacing` | **No DrawingML attribute** | Planned | Tier 2 | Insert extra space chars or apply `spc` on space-character runs. |
+| `word-spacing` | Approximated via `spc` inflation | Done | Tier 2 | Word-spacing distributed as proportional extra spc across the run. |
 
 ### 7.2 Text Layout & Positioning
 
@@ -331,8 +331,8 @@ Each non-Direct entry specifies which fallback tier(s) apply.
 |-----|-----------|--------|----------|-------|
 | `text-anchor: start/middle/end` | `algn` on `<a:pPr>` | Direct | — | |
 | `direction: rtl` | `rtl="1"` on `<a:pPr>` | Done | — | |
-| `writing-mode: vertical-rl` | `vert="vert"` on `<a:bodyPr>` | Investigate | Tier 1 | Verify CJK rendering. |
-| `writing-mode: vertical-lr` | `vert="vert270"` on `<a:bodyPr>` | Investigate | Tier 1 | |
+| `writing-mode: vertical-rl` | `vert="vert"` on `<a:bodyPr>` | Done | Tier 1 | Parsed from SVG element/CSS, emitted on bodyPr. Validated with .NET SDK. |
+| `writing-mode: vertical-lr` | `vert="vert270"` on `<a:bodyPr>` | Done | Tier 1 | Same as vertical-rl. |
 | `dominant-baseline` | **Limited vertical alignment** | Planned | Tier 2 | Map to vertical offset on text position. Approximate. |
 | `alignment-baseline` | **Limited** | Planned | Tier 2 | Same. |
 | `baseline-shift: super` | `baseline` on `<a:rPr>` | Done | Tier 1 | Emitted when IR Run has non-zero `baseline_shift`. Validated with .NET SDK. |
@@ -340,7 +340,7 @@ Each non-Direct entry specifies which fallback tier(s) apply.
 | Per-character `dx`/`dy` arrays | **No per-char offset in DrawingML** | Planned | Tier 2→3 | **Tier 2** — split into individual single-character text boxes, absolutely positioned. Preserves appearance, loses text editability. **Tier 3** — EMF can record text with per-character `dx` array via `ExtTextOut` with character widths. Native per-character positioning. |
 | Per-character `x`/`y` absolute arrays | **No per-char absolute positioning** | Planned | Tier 2→3 | Same as `dx`/`dy`. **Tier 3** — EMF `ExtTextOut` calls per character with absolute positions. |
 | Per-character `rotate` | **No per-glyph rotation** | Planned | Tier 2→3 | **Tier 2** — individual rotated text boxes. **Tier 3** — EMF `SetWorldTransform` rotation per character + `ExtTextOut`. Or convert to custGeom outlines (Tier 2) / EMF path outlines (Tier 3). |
-| `textLength` + `lengthAdjust="spacing"` | **No text length forcing** | Planned | Tier 2 | Compute effective `letter-spacing` → `spc`. |
+| `textLength` + `lengthAdjust="spacing"` | Computed `spc` | Done | Tier 2 | Effective letter-spacing = (targetWidth - naturalWidth) / (charCount - 1). |
 | `textLength` + `lengthAdjust="spacingAndGlyphs"` | **No glyph scaling** | Planned | Tier 2→3 | **Tier 2** — approximate with `spc` + font size adjustment. **Tier 3** — EMF `SetWorldTransform` with non-uniform scale on text. |
 
 ### 7.3 Text Path
