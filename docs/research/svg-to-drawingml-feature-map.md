@@ -201,7 +201,7 @@ Each non-Direct entry specifies which fallback tier(s) apply.
 | `stroke-dasharray` | `<a:custDash>` with `<a:ds d="..." sp="...">` | Direct | — | |
 | `stroke-dashoffset` | Rotate `custDash` array | Done | Tier 2 | `_apply_dash_offset()` in `paint_runtime.py` rotates the dash/gap array by the offset before emitting `<a:custDash>`. Pure arithmetic, zero visual loss. |
 | `stroke-opacity` | `<a:alpha>` on stroke fill | Direct | — | |
-| `paint-order: stroke fill markers` | **No DrawingML equivalent** — always fill-then-stroke | Planned | Tier 2 | Emit stroke as a separate shape behind the fill shape (two shapes). |
+| `paint-order: stroke fill markers` | Shape duplication: stroke-only + fill-only | Done | Tier 2 | When stroke before fill, emits two shapes at same position via `dataclasses.replace()`. Parsed from CSS and attribute. |
 | `vector-effect: non-scaling-stroke` | Default DrawingML behavior | Done | — | DrawingML `<a:ln w>` doesn't scale with shape transforms — matches non-scaling-stroke by default. |
 
 ### 1.3 Opacity
