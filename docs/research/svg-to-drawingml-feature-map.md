@@ -337,9 +337,9 @@ Each non-Direct entry specifies which fallback tier(s) apply.
 | `alignment-baseline` | Y-offset from font metrics | Done | Tier 2 | Same mechanism as dominant-baseline. |
 | `baseline-shift: super` | `baseline` on `<a:rPr>` | Done | Tier 1 | Emitted when IR Run has non-zero `baseline_shift`. Validated with .NET SDK. |
 | `baseline-shift: sub` | `baseline` on `<a:rPr>` | Done | Tier 1 | Same as super — negative baseline_shift value. |
-| Per-character `dx`/`dy` arrays | **No per-char offset in DrawingML** | Planned | Tier 2→3 | **Tier 2** — split into individual single-character text boxes, absolutely positioned. Preserves appearance, loses text editability. **Tier 3** — EMF can record text with per-character `dx` array via `ExtTextOut` with character widths. Native per-character positioning. |
-| Per-character `x`/`y` absolute arrays | **No per-char absolute positioning** | Planned | Tier 2→3 | Same as `dx`/`dy`. **Tier 3** — EMF `ExtTextOut` calls per character with absolute positions. |
-| Per-character `rotate` | **No per-glyph rotation** | Planned | Tier 2→3 | **Tier 2** — individual rotated text boxes. **Tier 3** — EMF `SetWorldTransform` rotation per character + `ExtTextOut`. Or convert to custGeom outlines (Tier 2) / EMF path outlines (Tier 3). |
+| Per-character `dx`/`dy` arrays | Glyph outlines via Skia | Done | Tier 2 | Each character rendered as custGeom shape at computed position. Uses Skia for glyph paths and metrics. |
+| Per-character `x`/`y` absolute arrays | Glyph outlines via Skia | Done | Tier 2 | Same infrastructure as dx/dy with absolute positioning. |
+| Per-character `rotate` | Rotated glyph outlines via Skia | Done | Tier 2 | Each glyph rotated by specified angle before emitting as custGeom. |
 | `textLength` + `lengthAdjust="spacing"` | Computed `spc` | Done | Tier 2 | Effective letter-spacing = (targetWidth - naturalWidth) / (charCount - 1). |
 | `textLength` + `lengthAdjust="spacingAndGlyphs"` | **No glyph scaling** | Planned | Tier 2→3 | **Tier 2** — approximate with `spc` + font size adjustment. **Tier 3** — EMF `SetWorldTransform` with non-uniform scale on text. |
 
