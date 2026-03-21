@@ -2,8 +2,20 @@
 
 from __future__ import annotations
 
+import html
+
 from svg2ooxml.drawingml.generator import px_to_emu
 from svg2ooxml.ir.scene import Image
+
+
+def _descr_attr(metadata) -> str:
+    """Return ` descr="..."` attribute string if element has a description."""
+    if not isinstance(metadata, dict):
+        return ""
+    desc = metadata.get("description")
+    if not desc:
+        return ""
+    return f' descr="{html.escape(str(desc), quote=True)}"'
 
 
 def render_picture(
@@ -81,6 +93,7 @@ def render_picture(
         HYPERLINK_XML=_indent_block(hyperlink_xml),
         SRC_RECT_XML=src_rect_xml,
         GEOMETRY_XML=geometry_xml,
+        DESCR_ATTR=_descr_attr(image.metadata),
     )
 
 

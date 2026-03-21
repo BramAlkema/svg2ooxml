@@ -1,6 +1,6 @@
 <p:cxnSp>
     <p:nvCxnSpPr>
-        <p:cNvPr id="{SHAPE_ID}" name="Line {SHAPE_ID}">{HYPERLINK_XML}</p:cNvPr>
+        <p:cNvPr id="{SHAPE_ID}" name="Line {SHAPE_ID}"{DESCR_ATTR}>{HYPERLINK_XML}</p:cNvPr>
         <p:cNvCxnSpPr>
             <a:cxnSpLocks noGrp="1"/>
         </p:cNvCxnSpPr>

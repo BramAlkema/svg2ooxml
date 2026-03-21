@@ -37,6 +37,16 @@ from svg2ooxml.ir.effects import (
 from svg2ooxml.ir.geometry import LineSegment, Rect
 from svg2ooxml.ir.scene import Path as IRPath
 from svg2ooxml.ir.shapes import Circle, Ellipse, Line, Polygon, Polyline, Rectangle
+
+
+def _descr_attr(metadata) -> str:
+    """Return ` descr="..."` attribute string if element has a description."""
+    if not isinstance(metadata, dict):
+        return ""
+    desc = metadata.get("description")
+    if not desc:
+        return ""
+    return f' descr="{html.escape(str(desc), quote=True)}"'
 from svg2ooxml.ir.text import Run, TextAnchor, TextFrame, WordArtCandidate
 from svg2ooxml.policy.constants import FALLBACK_BITMAP
 
@@ -65,6 +75,7 @@ def render_rectangle(
         STROKE_XML=_format_block(stroke_to_xml(rect.stroke, metadata=rect.metadata), "        "),
         HYPERLINK_XML=hyperlink_xml,
         EFFECTS_XML=_effect_block(rect.effects),
+        DESCR_ATTR=_descr_attr(rect.metadata),
     )
 
 
@@ -93,6 +104,7 @@ def render_circle(
         stroke_xml=_format_block(stroke_to_xml(circle.stroke, metadata=circle.metadata), "        "),
         effects_xml=_effect_block(circle.effects),
         hyperlink_xml=hyperlink_xml,
+        descr_attr=_descr_attr(circle.metadata),
     )
 
 
@@ -120,6 +132,7 @@ def render_ellipse(
         stroke_xml=_format_block(stroke_to_xml(ellipse.stroke, metadata=ellipse.metadata), "        "),
         effects_xml=_effect_block(ellipse.effects),
         hyperlink_xml=hyperlink_xml,
+        descr_attr=_descr_attr(ellipse.metadata),
     )
 
 
@@ -133,6 +146,7 @@ def render_preset_shape(
     stroke_xml: str,
     effects_xml: str,
     hyperlink_xml: str = "",
+    descr_attr: str = "",
 ) -> str:
     return template.format(
         SHAPE_ID=shape_id,
@@ -145,6 +159,7 @@ def render_preset_shape(
         STROKE_XML=stroke_xml,
         EFFECTS_XML=effects_xml,
         HYPERLINK_XML=hyperlink_xml,
+        DESCR_ATTR=descr_attr,
     )
 
 
@@ -194,6 +209,7 @@ def render_path(
         STROKE_XML=stroke_xml,
         HYPERLINK_XML=hyperlink_xml,
         EFFECTS_XML=_effect_block(path.effects),
+        DESCR_ATTR=_descr_attr(path.metadata),
     )
 
 
@@ -231,6 +247,7 @@ def render_line(
         STROKE_XML=_format_block(stroke_to_xml(line.stroke, metadata=line.metadata), "        "),
         EFFECTS_XML=_effect_block(line.effects),
         HYPERLINK_XML=hyperlink_xml,
+        DESCR_ATTR=_descr_attr(line.metadata),
     )
 
 
@@ -355,6 +372,7 @@ def render_textframe(
         RTL_ATTR=' rtl="1"' if rtl else "",
         RUNS_XML=runs_xml,
         HYPERLINK_XML=hyperlink_xml,
+        DESCR_ATTR=_descr_attr(getattr(frame, "metadata", None)),
     )
 
 
@@ -412,6 +430,7 @@ def render_wordart(
         BODY_EXTRA=body_extra,
         RUNS_XML=runs_xml,
         HYPERLINK_XML=hyperlink_xml,
+        DESCR_ATTR=_descr_attr(getattr(frame, "metadata", None)),
     )
 
 
@@ -635,6 +654,7 @@ def _render_polygonal_shape(
         STROKE_XML=_format_block(stroke_xml, "        "),
         EFFECTS_XML=_effect_block(getattr(shape, "effects", [])),
         HYPERLINK_XML=hyperlink_xml,
+        DESCR_ATTR=_descr_attr(getattr(shape, "metadata", None)),
     )
 
 

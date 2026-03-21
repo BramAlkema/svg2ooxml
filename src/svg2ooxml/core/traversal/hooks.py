@@ -170,6 +170,17 @@ class TraversalHooksMixin:
         if title:
             metadata.setdefault("attributes", {})["title"] = title
 
+        # Extract <title> and <desc> child elements for accessibility (cNvPr descr)
+        desc_parts: list[str] = []
+        ns = element.nsmap.get(None, "")
+        for tag in ("title", "desc"):
+            qualified = "{%s}%s" % (ns, tag) if ns else tag
+            child = element.find(qualified)
+            if child is not None and child.text and child.text.strip():
+                desc_parts.append(child.text.strip())
+        if desc_parts:
+            metadata["description"] = " — ".join(desc_parts)
+
         if navigation_spec is not None:
             try:
                 metadata["navigation"] = navigation_spec.as_dict()

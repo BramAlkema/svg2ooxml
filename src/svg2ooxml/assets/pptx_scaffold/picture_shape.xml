@@ -1,6 +1,6 @@
 <p:pic>
     <p:nvPicPr>
-        <p:cNvPr id="{SHAPE_ID}" name="{SHAPE_NAME}">{HYPERLINK_XML}</p:cNvPr>
+        <p:cNvPr id="{SHAPE_ID}" name="{SHAPE_NAME}"{DESCR_ATTR}>{HYPERLINK_XML}</p:cNvPr>
         <p:cNvPicPr>
             <a:picLocks noChangeAspect="1"/>
         </p:cNvPicPr>
