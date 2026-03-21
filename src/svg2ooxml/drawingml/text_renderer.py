@@ -60,6 +60,14 @@ class DrawingMLTextRenderer:
         if candidate is not None:
             is_confident = candidate.confidence >= threshold
 
+        # Per-character positioning: use glyph outline renderer
+        meta = getattr(element, "metadata", None) or {}
+        per_char = meta.get("per_char") if isinstance(meta, dict) else None
+        if per_char and element.runs:
+            glyph_xml = self._render_per_char_glyphs(element, shape_id, per_char)
+            if glyph_xml:
+                return glyph_xml
+
         if (
             candidate is not None
             and is_confident
@@ -110,6 +118,51 @@ class DrawingMLTextRenderer:
                 return xml, shape_id + 2
 
         return xml, shape_id + 1
+
+    def _render_per_char_glyphs(
+        self, element, shape_id: int, per_char: dict,
+    ) -> tuple[str, int] | None:
+        """Render per-character positioned text as glyph outlines."""
+        from svg2ooxml.drawingml.glyph_renderer import (
+            SKIA_AVAILABLE,
+            compute_glyph_placements,
+            render_positioned_glyphs,
+        )
+
+        if not SKIA_AVAILABLE:
+            return None
+
+        run = element.runs[0]
+        text = run.text
+        if not text.strip():
+            return None
+
+        bbox = element.bbox
+        placements = compute_glyph_placements(
+            text,
+            run.font_family,
+            run.font_size_pt,
+            bbox.x,
+            bbox.y + bbox.height,  # baseline ≈ bottom of bbox
+            dx=per_char.get("dx"),
+            dy=per_char.get("dy"),
+            abs_x=per_char.get("abs_x"),
+            abs_y=per_char.get("abs_y"),
+            rotate=per_char.get("rotate"),
+        )
+
+        xml, next_id = render_positioned_glyphs(
+            text,
+            run.font_family,
+            run.font_size_pt,
+            placements,
+            shape_id_start=shape_id,
+            fill_rgb=run.rgb,
+            fill_opacity=run.fill_opacity,
+        )
+        if xml:
+            return xml, next_id
+        return None
 
 
 def _build_overline_shape(element, shape_id: int) -> str:

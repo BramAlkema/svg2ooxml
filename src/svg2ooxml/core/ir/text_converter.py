@@ -148,6 +148,30 @@ class TextConverter:
                 wm = _re.search(r"writing-mode\s*:\s*([^;]+)", style_attr)
                 if wm:
                     writing_mode = wm.group(1).strip().lower()
+        # Per-character positioning: dx/dy/x/y/rotate arrays
+        _per_char_attrs: dict[str, list[float]] = {}
+        for attr_name in ("dx", "dy", "rotate"):
+            raw = element.get(attr_name, "").strip()
+            if raw:
+                try:
+                    vals = [float(v) for v in raw.replace(",", " ").split() if v]
+                    if vals:
+                        _per_char_attrs[attr_name] = vals
+                except ValueError:
+                    pass
+        # x/y arrays (multiple values = per-character absolute positioning)
+        for attr_name in ("x", "y"):
+            raw = element.get(attr_name, "").strip()
+            if raw and " " in raw:
+                try:
+                    vals = [float(v) for v in raw.replace(",", " ").split() if v]
+                    if len(vals) > 1:
+                        _per_char_attrs[f"abs_{attr_name}"] = vals
+                except ValueError:
+                    pass
+        if _per_char_attrs:
+            metadata["per_char"] = _per_char_attrs
+
         # font-stretch → append width keyword to font family
         font_stretch = element.get("font-stretch", "").strip().lower()
         if not font_stretch:
