@@ -180,7 +180,7 @@ Each non-Direct entry specifies which fallback tier(s) apply.
 | `fill: none` | No fill element | Direct | — | |
 | `fill-opacity` | `<a:alpha>` on fill color | Direct | — | |
 | `fill-rule: nonzero` | Default winding in custGeom | Direct | — | |
-| `fill-rule: evenodd` | Compound subpaths in single `<a:path>` | Investigate | Tier 1→3 | DrawingML compound paths should use alternate fill. If PPT/GSlides don't honor it, EMF supports `SetPolyFillMode(ALTERNATE)` natively. |
+| `fill-rule: evenodd` | EMF `SetPolyFillMode(ALTERNATE)` | Done | Tier 1→3 | Implemented in clip_service, emf_path_adapter, clip_overlay. EMF uses ALTERNATE fill mode. |
 | `color` / `currentColor` | Resolved at parse time | Direct | — | Substituted before DrawingML emission |
 
 ### 1.2 Stroke
@@ -188,8 +188,8 @@ Each non-Direct entry specifies which fallback tier(s) apply.
 | SVG | DrawingML | Status | Fallback | Notes |
 |-----|-----------|--------|----------|-------|
 | `stroke` solid | `<a:ln>` with `solidFill` | Direct | — | |
-| `stroke` gradient | `<a:ln>` with `gradFill` | Investigate | Tier 1→2→3 | DrawingML spec allows `gradFill` inside `<a:ln>`. If renderers ignore it: **Tier 2** — expand stroke to filled custGeom path, apply gradient to the resulting shape's fill. If that's too complex: **Tier 3** — EMF doesn't support gradients either, so stroke-to-fill expansion is the only vector path. |
-| `stroke` pattern | `<a:ln>` with `pattFill`/`blipFill` | Investigate | Tier 2→3 | Likely unsupported in renderers. **Tier 2** — stroke-to-fill expansion, apply pattern to resulting shape. **Tier 3** — EMF supports DIB pattern brushes on pens natively. |
+| `stroke` gradient | `<a:ln>` with `gradFill` | Done | Tier 1 | `stroke_to_xml()` emits `gradFill` inside `<a:ln>` for LinearGradientPaint/RadialGradientPaint strokes. |
+| `stroke` pattern | `<a:ln>` with pattern fill | Done | Tier 1 | `stroke_to_xml()` emits `_pattern_to_fill_elem()` inside `<a:ln>` for PatternPaint strokes. |
 | `stroke-width` | `<a:ln w="...">` (EMUs) | Direct | — | |
 | `stroke-linecap: butt` | `cap="flat"` | Direct | — | |
 | `stroke-linecap: round` | `cap="rnd"` | Direct | — | |
@@ -376,7 +376,7 @@ Each non-Direct entry specifies which fallback tier(s) apply.
 | `feGaussianBlur`+`feMerge` (glow) | `<a:glow rad="...">` | Planned | Tier 2 | Detect glow pattern: blur + merge with original. |
 | `feColorMatrix(saturate)` | `<a:satMod>` | Planned | Tier 2 | Partial — only works on solid fills. |
 | `feColorMatrix(hueRotate)` | `<a:hueOff>` | Planned | Tier 2 | Very approximate. |
-| `feFlood`+`feBlend(multiply)` | `<a:duotone>` | Investigate | Tier 2 | DrawingML duotone may approximate some overlays. |
+| `feFlood`+`feBlend(multiply)` | Raster fallback | Done | Tier 4 | Handled via filter rasterization pipeline. Native `<a:duotone>` mapping not attempted. |
 
 ### 8.2 EMF Vector Fallback (Tier 3)
 
@@ -386,8 +386,8 @@ geometry is still vector-representable:
 | SVG Filter | EMF Strategy | Status | Notes |
 |------------|-------------|--------|-------|
 | `feColorMatrix(luminanceToAlpha)` | EMF path with computed alpha fill | Planned | Pre-compute luminance → alpha for each shape's fill color, emit as EMF with adjusted fills. Only works for simple (non-gradient) fills. |
-| `feDiffuseLighting` (simple) | EMF + `scene3d`/`sp3d` hybrid | Investigate | Simple top-down lighting → try DrawingML 3D lighting first (Tier 2). If too different, EMF with pre-shaded fills. |
-| `feSpecularLighting` (simple) | EMF + 3D hybrid | Investigate | Same as diffuse. |
+| `feDiffuseLighting` (simple) | Raster fallback via resvg | Done | Tier 4 | Handled by `lighting.py` primitive — rasterized via resvg. |
+| `feSpecularLighting` (simple) | Raster fallback via resvg | Done | Tier 4 | Same as diffuse — rasterized via resvg. |
 | `feComponentTransfer(gamma)` on solid fills | EMF with pre-computed colors | Planned | Apply gamma to each shape's fill color before emission. Exact for solid fills. |
 | Filter on pure-geometry shapes (no gradients) | EMF with geometry + adjusted fills | Planned | When filtered content has no gradients/images, compute filter effect on fill colors and emit geometry as EMF with modified colors. |
 | Filter EMF diagnostic icons | Current schematic visualizations | Done | Present behavior: symbolic EMF icons (96×64px) showing filter type. Not pixel-accurate but vector. ADR-018 plans enrichment. |
