@@ -318,10 +318,10 @@ Each non-Direct entry specifies which fallback tier(s) apply.
 | `font-style: italic` | `i="1"` on `<a:rPr>` | Direct | — | |
 | `font-style: oblique` | `i="1"` on `<a:rPr>` | Direct | — | No oblique vs italic distinction. |
 | `font-variant: small-caps` | `cap="small"` on `<a:rPr>` | Done | Tier 1 | Parsed from SVG element, emitted on `<a:rPr>`. Validated with .NET SDK. |
-| `font-stretch` | **No DrawingML font width** | Planned | Tier 2 | Select condensed/expanded font variant if available. Otherwise no substitute. |
+| `font-stretch` | Font family suffix | Done | Tier 2 | Appends width keyword (Condensed, Expanded, etc.) to font family name. |
 | `text-decoration: underline` | `u="sng"` on `<a:rPr>` | Done | — | |
 | `text-decoration: line-through` | `strike="sngStrike"` on `<a:rPr>` | Done | — | |
-| `text-decoration: overline` | **No DrawingML overline** | Planned | Tier 2→3 | **Tier 2** — draw separate thin line shape above baseline. **Tier 3** — EMF `Polyline` positioned above text. |
+| `text-decoration: overline` | Separate line shape above baseline | Done | Tier 2 | Emits `<p:cxnSp>` line positioned at text top. Color matches text fill. |
 | `letter-spacing` | `spc` on `<a:rPr>` | Done | — | |
 | `word-spacing` | Approximated via `spc` inflation | Done | Tier 2 | Word-spacing distributed as proportional extra spc across the run. |
 
@@ -333,8 +333,8 @@ Each non-Direct entry specifies which fallback tier(s) apply.
 | `direction: rtl` | `rtl="1"` on `<a:pPr>` | Done | — | |
 | `writing-mode: vertical-rl` | `vert="vert"` on `<a:bodyPr>` | Done | Tier 1 | Parsed from SVG element/CSS, emitted on bodyPr. Validated with .NET SDK. |
 | `writing-mode: vertical-lr` | `vert="vert270"` on `<a:bodyPr>` | Done | Tier 1 | Same as vertical-rl. |
-| `dominant-baseline` | **Limited vertical alignment** | Planned | Tier 2 | Map to vertical offset on text position. Approximate. |
-| `alignment-baseline` | **Limited** | Planned | Tier 2 | Same. |
+| `dominant-baseline` | Y-offset from font metrics | Done | Tier 2 | Maps central/hanging/text-bottom etc. to y-offset using approximate ascent/descent. |
+| `alignment-baseline` | Y-offset from font metrics | Done | Tier 2 | Same mechanism as dominant-baseline. |
 | `baseline-shift: super` | `baseline` on `<a:rPr>` | Done | Tier 1 | Emitted when IR Run has non-zero `baseline_shift`. Validated with .NET SDK. |
 | `baseline-shift: sub` | `baseline` on `<a:rPr>` | Done | Tier 1 | Same as super — negative baseline_shift value. |
 | Per-character `dx`/`dy` arrays | **No per-char offset in DrawingML** | Planned | Tier 2→3 | **Tier 2** — split into individual single-character text boxes, absolutely positioned. Preserves appearance, loses text editability. **Tier 3** — EMF can record text with per-character `dx` array via `ExtTextOut` with character widths. Native per-character positioning. |
