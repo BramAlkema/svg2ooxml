@@ -199,7 +199,7 @@ Each non-Direct entry specifies which fallback tier(s) apply.
 | `stroke-linejoin: bevel` | `<a:bevel>` child of `<a:ln>` | Direct | — | |
 | `stroke-miterlimit` | `<a:miter lim="...">` | Direct | — | Value × 100,000 |
 | `stroke-dasharray` | `<a:custDash>` with `<a:ds d="..." sp="...">` | Direct | — | |
-| `stroke-dashoffset` | **No DrawingML equivalent** | Planned | Tier 2→3 | **Tier 2** — rotate the dash/gap array: consume offset from first dash length, shift remaining entries. Pure arithmetic, zero visual loss. **Tier 3** — EMF custom dash patterns support offset natively. |
+| `stroke-dashoffset` | Rotate `custDash` array | Done | Tier 2 | `_apply_dash_offset()` in `paint_runtime.py` rotates the dash/gap array by the offset before emitting `<a:custDash>`. Pure arithmetic, zero visual loss. |
 | `stroke-opacity` | `<a:alpha>` on stroke fill | Direct | — | |
 | `paint-order: stroke fill markers` | **No DrawingML equivalent** — always fill-then-stroke | Planned | Tier 2 | Emit stroke as a separate shape behind the fill shape (two shapes). |
 | `vector-effect: non-scaling-stroke` | **No DrawingML equivalent** | Planned | Tier 2 | Divide `stroke-width` by effective transform scale. Exact at authored zoom. |
@@ -230,7 +230,7 @@ Each non-Direct entry specifies which fallback tier(s) apply.
 | `<stop stop-color="..." offset="...">` | `<a:gs pos="...">` in `<a:gsLst>` | Direct | — | |
 | `stop-opacity` | `<a:alpha>` on gradient stop color | Direct | — | |
 | `gradientUnits="objectBoundingBox"` | Default DrawingML behavior | Direct | — | |
-| `gradientUnits="userSpaceOnUse"` | **No direct mapping** | Planned | Tier 2 | Transform coordinates from userSpace to bbox-relative [0,1] range. Exact when gradient covers the shape. EMF has no gradients so Tier 3 is not useful here. |
+| `gradientUnits="userSpaceOnUse"` | Normalize to bbox-relative [0,1] | Done | Tier 2 | `_normalize_gradient_units()` in `paint_runtime.py` converts absolute coords to bbox-relative before emitting DrawingML. All 16 userSpaceOnUse test SVGs pass. |
 | `gradientTransform` (pure rotation) | `<a:lin ang="...">` | Planned | Tier 2 | Decompose matrix → extract rotation → set `ang`. Exact. |
 | `gradientTransform` (uniform scale) | Adjust stop positions | Planned | Tier 2 | Scale stop `offset` values proportionally. Exact. |
 | `gradientTransform` (non-uniform scale) | Adjust stops + direction | Planned | Tier 2 | Scale positions and adjust angle for aspect ratio. Close approximation. |
@@ -238,7 +238,7 @@ Each non-Direct entry specifies which fallback tier(s) apply.
 | `spreadMethod="pad"` | Default DrawingML behavior | Direct | — | |
 | `spreadMethod="reflect"` | Expand stops in `gsLst` | Done | Tier 2 | Mirror gradient stops to fill [0,1]. |
 | `spreadMethod="repeat"` | Expand stops in `gsLst` | Done | Tier 2 | Duplicate stops N times to fill [0,1]. |
-| `fx`/`fy` (focal point ≠ center) | **Limited mapping** | Planned | Tier 2 | Approximate by shifting `fillToRect` values. Lossy for extreme off-center. EMF has no gradients. |
+| `fx`/`fy` (focal point ≠ center) | Shift `fillToRect` center | Done | Tier 2 | Gradient center blended 50% toward focal point. Lossy for extreme off-center but visible improvement. |
 | `fr` (focal radius, SVG2) | **No DrawingML concept** | Planned | Tier 2 | Add flat-color stop from center to `fr`, then gradient from `fr` to `r`. |
 | `color-interpolation: linearRGB` | **DrawingML uses sRGB** | Planned | Tier 2 | Pre-compute intermediate stops by sampling in linearRGB, convert to sRGB, insert as explicit stops. 10–20 extra stops ≈ indistinguishable. |
 
@@ -251,11 +251,11 @@ Each non-Direct entry specifies which fallback tier(s) apply.
 | `translate(tx, ty)` | `<a:off x="..." y="...">` | Direct | — | |
 | `rotate(angle)` | `<a:xfrm rot="...">` | Direct | — | Degrees × 60,000 |
 | `scale(sx, sy)` | `<a:ext cx="..." cy="...">` | Direct | — | |
-| `skewX(angle)` | **No `xfrm` skew** | Planned | Tier 2→3 | **Tier 2** — bake skew into custGeom path coordinates (multiply each point by skew matrix). Exact for paths. **Tier 3** — EMF supports `SetWorldTransform` with full affine matrix including skew. Use for complex cases (images, groups). |
-| `skewY(angle)` | **No `xfrm` skew** | Planned | Tier 2→3 | Same as `skewX`. |
+| `skewX(angle)` | Bake into custGeom path coordinates | Done | Tier 2 | `is_axis_aligned()` detects skew → falls through to path converter which applies full CTM via `_transform_segments()`. All 12 skew test SVGs pass. |
+| `skewY(angle)` | Bake into custGeom path coordinates | Done | Tier 2 | Same as `skewX`. |
 | `matrix(a,b,c,d,e,f)` (no skew) | Decompose to translate+rotate+scale | Direct | — | |
-| `matrix(a,b,c,d,e,f)` (with skew) | Decompose + bake residual | Planned | Tier 2→3 | **Tier 2** — extract translate+rotate+scale into `xfrm`, bake residual skew into geometry. **Tier 3** — EMF `SetWorldTransform` handles full matrix natively for complex element types. |
-| Nested transforms with accumulated skew | Skew compounds non-linearly | Planned | Tier 2→3 | Flatten full transform matrix at each leaf, then decompose. |
+| `matrix(a,b,c,d,e,f)` (with skew) | Full CTM baked into custGeom | Done | Tier 2 | Path converter applies full matrix. Same mechanism as skewX/Y. |
+| Nested transforms with accumulated skew | CTM flattened at each leaf | Done | Tier 2 | Traversal flattens full CTM stack; path converter applies it to geometry. |
 
 ---
 
