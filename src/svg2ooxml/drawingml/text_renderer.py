@@ -61,12 +61,19 @@ class DrawingMLTextRenderer:
             is_confident = candidate.confidence >= threshold
 
         # Per-character positioning: use glyph outline renderer
+        # Per-character positioning: prefer native text with spc when dx is
+        # uniform, otherwise fall back to glyph outlines.
         meta = getattr(element, "metadata", None) or {}
         per_char = meta.get("per_char") if isinstance(meta, dict) else None
         if per_char and element.runs:
-            glyph_xml = self._render_per_char_glyphs(element, shape_id, per_char)
-            if glyph_xml:
-                return glyph_xml
+            # Try native text with letter-spacing if dx is uniform and no
+            # dy/rotate/absolute positioning — keeps text editable.
+            if self._can_use_native_spacing(per_char, element):
+                pass  # fall through to normal text rendering below
+            else:
+                glyph_xml = self._render_per_char_glyphs(element, shape_id, per_char)
+                if glyph_xml:
+                    return glyph_xml
 
         if (
             candidate is not None
@@ -118,6 +125,31 @@ class DrawingMLTextRenderer:
                 return xml, shape_id + 2
 
         return xml, shape_id + 1
+
+    @staticmethod
+    def _can_use_native_spacing(per_char: dict, element) -> bool:
+        """Return True when per-char attributes can be approximated with spc.
+
+        Native text is preferred because it keeps text editable and uses
+        font embedding (FontForge → EOT) instead of glyph outlines.
+
+        Conditions: only dx (no dy/rotate/abs positioning), and all dx
+        values are approximately equal (uniform spacing adjustment).
+        """
+        if per_char.get("dy") or per_char.get("rotate"):
+            return False
+        if per_char.get("abs_x") or per_char.get("abs_y"):
+            return False
+        dx = per_char.get("dx")
+        if not dx:
+            return True  # no offsets at all
+        # Check if dx values are uniform (all same ± 10%)
+        if len(dx) <= 1:
+            return True
+        avg = sum(dx) / len(dx)
+        if avg == 0:
+            return all(abs(v) < 0.5 for v in dx)
+        return all(abs(v - avg) / max(abs(avg), 0.01) < 0.1 for v in dx)
 
     def _render_per_char_glyphs(
         self, element, shape_id: int, per_char: dict,

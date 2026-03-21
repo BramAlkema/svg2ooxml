@@ -170,7 +170,30 @@ class TextConverter:
                 except ValueError:
                     pass
         if _per_char_attrs:
-            metadata["per_char"] = _per_char_attrs
+            # If only dx with uniform values, convert to letter_spacing
+            # to keep text native + editable (font embedding via FontForge)
+            dx_only = (
+                "dx" in _per_char_attrs
+                and "dy" not in _per_char_attrs
+                and "rotate" not in _per_char_attrs
+                and "abs_x" not in _per_char_attrs
+                and "abs_y" not in _per_char_attrs
+            )
+            if dx_only:
+                dx_vals = _per_char_attrs["dx"]
+                if len(dx_vals) >= 1:
+                    avg_dx = sum(dx_vals) / len(dx_vals)
+                    is_uniform = all(
+                        abs(v - avg_dx) / max(abs(avg_dx), 0.01) < 0.1
+                        for v in dx_vals
+                    ) if avg_dx != 0 else all(abs(v) < 0.5 for v in dx_vals)
+                    if is_uniform and abs(avg_dx) > 0.01:
+                        base_ls = updated.letter_spacing or 0.0
+                        updated = _replace(updated, letter_spacing=base_ls + avg_dx)
+                        runs = [updated]
+                        _per_char_attrs = {}  # clear — handled as native spc
+            if _per_char_attrs:
+                metadata["per_char"] = _per_char_attrs
 
         # font-stretch → append width keyword to font family
         font_stretch = element.get("font-stretch", "").strip().lower()
