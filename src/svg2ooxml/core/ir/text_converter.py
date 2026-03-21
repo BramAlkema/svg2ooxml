@@ -139,6 +139,32 @@ class TextConverter:
         elif writing_mode in ("tb-lr", "vertical-lr"):
             metadata["writing_mode"] = "vert270"
 
+        # textLength → compute effective letter-spacing
+        text_length_attr = element.get("textLength")
+        if text_length_attr and text_content.strip():
+            try:
+                target_width = float(text_length_attr)
+                char_count = len(text_content.strip())
+                if char_count > 1 and target_width > 0:
+                    # Estimate natural width from bbox (will be computed below)
+                    metadata["_text_length_target"] = target_width
+                    length_adjust = element.get("lengthAdjust", "spacing").strip().lower()
+                    metadata["_length_adjust"] = length_adjust
+            except ValueError:
+                pass
+
+        # Apply textLength letter-spacing using the estimated bbox
+        target_width = metadata.pop("_text_length_target", None)
+        if target_width is not None and bbox.width > 0:
+            char_count = len(text_content.strip())
+            if char_count > 1:
+                natural_width = bbox.width
+                extra_total = target_width - natural_width
+                extra_per_gap = extra_total / (char_count - 1)
+                base_ls = updated.letter_spacing or 0.0
+                updated = _replace(updated, letter_spacing=base_ls + extra_per_gap)
+                runs = [updated]
+
         if run_policy:
             policy_meta = metadata.setdefault("policy", {}).setdefault("text", {})
             policy_meta.update(run_policy)
