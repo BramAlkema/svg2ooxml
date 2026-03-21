@@ -317,7 +317,7 @@ Each non-Direct entry specifies which fallback tier(s) apply.
 | `font-weight` (numeric 100–900) | `b="1"` for ≥600 | Direct | — | Binary bold. Intermediate weights → font variant selection. |
 | `font-style: italic` | `i="1"` on `<a:rPr>` | Direct | — | |
 | `font-style: oblique` | `i="1"` on `<a:rPr>` | Direct | — | No oblique vs italic distinction. |
-| `font-variant: small-caps` | `cap="small"` on `<a:rPr>` | Investigate | Tier 1 | Verify rendering in PPT/GSlides. |
+| `font-variant: small-caps` | `cap="small"` on `<a:rPr>` | Done | Tier 1 | Parsed from SVG element, emitted on `<a:rPr>`. Validated with .NET SDK. |
 | `font-stretch` | **No DrawingML font width** | Planned | Tier 2 | Select condensed/expanded font variant if available. Otherwise no substitute. |
 | `text-decoration: underline` | `u="sng"` on `<a:rPr>` | Done | — | |
 | `text-decoration: line-through` | `strike="sngStrike"` on `<a:rPr>` | Done | — | |
@@ -360,7 +360,7 @@ Each non-Direct entry specifies which fallback tier(s) apply.
 | `direction: ltr` | Default | Done | — | |
 | Auto-detect RTL from content | `rtl="1"` based on Unicode BiDi | Done | — | |
 | `unicode-bidi: bidi-override` | **Paragraph-level only** | Planned | Tier 2→3 | **Tier 2** — split mixed-direction runs into separate paragraphs. **Tier 3** — EMF text with explicit character order. |
-| `xml:lang` / `lang` | `lang` on `<a:rPr>` | Planned | Tier 1 | Map BCP-47 tags. Auto-detect from Unicode script. |
+| `xml:lang` / `lang` | `lang` on `<a:rPr>` | Done | Tier 1 | Extracted from SVG `xml:lang` attribute, emitted on `<a:rPr>`. |
 
 ---
 
