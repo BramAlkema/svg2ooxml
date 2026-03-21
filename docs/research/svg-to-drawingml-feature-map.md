@@ -210,14 +210,14 @@ Each non-Direct entry specifies which fallback tier(s) apply.
 |-----|-----------|--------|----------|-------|
 | `opacity` on element | `<a:alpha>` on fill AND stroke | Direct | — | |
 | `opacity` on `<g>` (no child overlap) | Individual child `<a:alpha>` | Done | Tier 2 | Shapes inherit alpha when children don't overlap. |
-| `opacity` on `<g>` (children overlap) | **No DrawingML or EMF group alpha** | Planned | Tier 4 | EMF has no per-shape opacity either. Must render group to PNG via resvg/Skia, embed as `blipFill` with `<a:alpha>`. Loses editability for that group. |
-| `isolation: isolate` | **No equivalent** | Planned | Tier 2→4 | Only matters with blend modes. If no blend modes present, ignore. Otherwise, rasterize the isolated group (Tier 4). |
+| `opacity` on `<g>` (children overlap) | Rasterize group to PNG via Skia | Done | Tier 4 | `_rasterize_group()` renders children to offscreen Skia surface, embeds as `p:pic` with `alphaModFix`. Falls back to per-child alpha when Skia unavailable. |
+| `isolation: isolate` | Parsed; rasterize when blend modes present | Done | Tier 2→4 | Parsed in style extractor. No-op without blend modes. With blend modes, group rasterization via Skia handles isolation implicitly. |
 
 ### 1.4 Blend Modes
 
 | SVG | DrawingML | Status | Fallback | Notes |
 |-----|-----------|--------|----------|-------|
-| `mix-blend-mode` (all values) | **No DrawingML or EMF support** | Planned | Tier 4 | Neither DrawingML nor EMF supports CSS blend modes. Pre-composite the blended result as PNG. Applies to: `multiply`, `screen`, `overlay`, `darken`, `lighten`, `color-dodge`, `color-burn`, `hard-light`, `soft-light`, `difference`, `exclusion`, `hue`, `saturation`, `color`, `luminosity`. |
+| `mix-blend-mode` (all values) | Rasterize via Skia | Done | Tier 4 | Parsed in style extractor. When present, element is rasterized to PNG. Falls back to normal rendering without Skia. Covers all 16 blend modes. |
 
 ---
 

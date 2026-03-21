@@ -105,6 +105,14 @@ class DrawingMLShapeRenderer:
         # Apply clip bounds approximation (xfrm intersection).
         element = _apply_clip_bounds(element, metadata)
 
+        # mix-blend-mode: rasterize to PNG since DrawingML has no blend modes.
+        if metadata.get("mix_blend_mode") and self._rasterizer is not None:
+            rasterized = self._maybe_rasterize(
+                element, shape_id, metadata, hyperlink_xml=hyperlink_xml,
+            )
+            if rasterized is not None:
+                return rasterized
+
         # Paint-order reversal: when "stroke" comes before "fill", emit
         # a stroke-only shape behind a fill-only shape.
         if _is_stroke_first(metadata) and _has_fill_and_stroke(element):

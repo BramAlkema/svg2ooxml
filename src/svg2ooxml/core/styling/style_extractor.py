@@ -111,6 +111,14 @@ class StyleExtractor:
         if paint_order and paint_order != "normal":
             metadata["paint_order"] = paint_order
 
+        # Parse mix-blend-mode and isolation
+        blend_mode = paint_style.get("mix_blend_mode") or element.get("mix-blend-mode", "").strip()
+        if blend_mode and blend_mode != "normal":
+            metadata["mix_blend_mode"] = blend_mode
+        isolation = paint_style.get("isolation") or element.get("isolation", "").strip()
+        if isolation == "isolate":
+            metadata["isolation"] = "isolate"
+
         return StyleResult(fill=fill, stroke=stroke, opacity=opacity, effects=effects, metadata=metadata)
 
     def _compute_paint_style_with_inheritance(
