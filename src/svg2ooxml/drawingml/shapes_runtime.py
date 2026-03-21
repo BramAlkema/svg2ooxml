@@ -459,10 +459,18 @@ def build_runs_xml(runs: Iterable[Run], register_navigation=None) -> str:
 
 
 def _resolve_runs_xml(frame: TextFrame, register_navigation) -> str:
-    resvg_runs = _resvg_runs_xml(frame, register_navigation)
-    if resvg_runs:
-        return resvg_runs
-    runs_xml = build_runs_xml(frame.runs or [], register_navigation=register_navigation)
+    # Prefer IR runs when they carry attributes (lang, font_variant) that
+    # the pre-built resvg runs_xml would miss.
+    ir_runs = frame.runs or []
+    has_enriched_attrs = any(
+        getattr(r, "language", None) or getattr(r, "font_variant", None)
+        for r in ir_runs
+    )
+    if not has_enriched_attrs:
+        resvg_runs = _resvg_runs_xml(frame, register_navigation)
+        if resvg_runs:
+            return resvg_runs
+    runs_xml = build_runs_xml(ir_runs, register_navigation=register_navigation)
     if not runs_xml:
         runs_xml = build_runs_xml(
             [Run(text="", font_family="Arial", font_size_pt=12.0)],
@@ -509,6 +517,9 @@ def run_fragment(run: Run, text_segment: str, navigation_factory) -> str:
     if getattr(run, "letter_spacing", None) is not None:
         spacing_value = int(round(float(run.letter_spacing) * 1000))
         attributes.append(f'spc="{spacing_value}"')
+    font_variant = getattr(run, "font_variant", None)
+    if font_variant == "small-caps":
+        attributes.append('cap="small"')
     baseline_shift = getattr(run, "baseline_shift", 0.0)
     if baseline_shift:
         # DrawingML baseline is percentage × 1000 (e.g. 30000 = 30% superscript)

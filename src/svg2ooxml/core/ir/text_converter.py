@@ -90,6 +90,24 @@ class TextConverter:
             return None
 
         run = self._run_from_resvg_node(resvg_node, text_content)
+        # Attach xml:lang and font-variant from the SVG element
+        from dataclasses import replace as _replace
+        lang = element.get("{http://www.w3.org/XML/1998/namespace}lang") or element.get("lang")
+        if lang and not run.language:
+            run = _replace(run, language=lang.strip())
+
+        # font-variant: small-caps → cap="small" on rPr
+        font_variant = element.get("font-variant", "").strip().lower()
+        if not font_variant:
+            style_attr = element.get("style", "")
+            if "font-variant" in style_attr:
+                import re
+                m = re.search(r"font-variant\s*:\s*([^;]+)", style_attr)
+                if m:
+                    font_variant = m.group(1).strip().lower()
+        if font_variant == "small-caps":
+            run = _replace(run, font_variant="small-caps")
+
         updated, run_policy = self.apply_policy(run)
         runs = [updated]
 
@@ -104,6 +122,8 @@ class TextConverter:
         metadata: dict[str, Any] = {}
         self._attach_resvg_text_metadata(resvg_node, metadata)
         self._context.attach_policy_metadata(metadata, "text")
+        if font_variant == "small-caps":
+            metadata["font_variant"] = "small-caps"
         if run_policy:
             policy_meta = metadata.setdefault("policy", {}).setdefault("text", {})
             policy_meta.update(run_policy)

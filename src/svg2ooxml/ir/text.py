@@ -40,6 +40,7 @@ class Run:
     east_asian_font: str | None = None
     complex_script_font: str | None = None
     theme_font: str | None = None
+    font_variant: str | None = None
 
     def __post_init__(self) -> None:
         if self.font_size_pt <= 0:
