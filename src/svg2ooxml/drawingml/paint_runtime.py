@@ -420,9 +420,24 @@ def linear_gradient_to_fill(paint: LinearGradientPaint) -> str:
 
 
 def _radial_gradient_to_fill_elem(paint: RadialGradientPaint):
-    """Create radial gradient fill element (internal helper)."""
+    """Create radial gradient fill element (internal helper).
+
+    Maps SVG radial gradient (cx, cy, r, fx, fy) to DrawingML ``fillToRect``.
+    When a focal point is provided and differs from the center, the gradient
+    circle is shifted towards the focal point to approximate the SVG rendering.
+    """
     cx, cy = paint.center
     radius = max(paint.radius, 1e-6)
+
+    # Apply focal point offset: shift the gradient center toward (fx, fy)
+    # to approximate SVG's focal-point asymmetry.
+    if paint.focal_point is not None:
+        fx, fy = paint.focal_point
+        # Blend center towards focal point (50% shift gives a visible
+        # approximation without moving the circle edge off the shape).
+        cx = cx + (fx - cx) * 0.5
+        cy = cy + (fy - cy) * 0.5
+
     left = position_to_ppt(max(0.0, cx - radius))
     top = position_to_ppt(max(0.0, cy - radius))
     right = position_to_ppt(max(0.0, 1.0 - (cx + radius)))
