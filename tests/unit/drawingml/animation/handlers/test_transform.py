@@ -260,6 +260,159 @@ class TestBuildRotate:
         assert anim_rot.get("by") == "0"
 
 
+class TestMultiKeyframeRotate:
+    """Multi-keyframe rotate splits into sequential segments."""
+
+    def test_three_values_produces_two_anim_rot(self, handler: TransformAnimationHandler):
+        anim = make_transform_animation(
+            transform_type=TransformType.ROTATE, values=["0", "360", "0"]
+        )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        rots = par.findall(f".//{{{NS_P}}}animRot")
+        assert len(rots) == 2
+
+    def test_three_values_deltas(self, handler: TransformAnimationHandler):
+        anim = make_transform_animation(
+            transform_type=TransformType.ROTATE, values=["0", "360", "0"]
+        )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        rots = par.findall(f".//{{{NS_P}}}animRot")
+        # First segment: 0→360 = +21600000, second: 360→0 = -21600000
+        assert rots[0].get("by") == "21600000"
+        assert rots[1].get("by") == "-21600000"
+
+    def test_four_values_produces_three_segments(self, handler: TransformAnimationHandler):
+        anim = make_transform_animation(
+            transform_type=TransformType.ROTATE, values=["0", "90", "180", "0"]
+        )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        rots = par.findall(f".//{{{NS_P}}}animRot")
+        assert len(rots) == 3
+        assert rots[0].get("by") == "5400000"   # 90°
+        assert rots[1].get("by") == "5400000"   # 90°
+        assert rots[2].get("by") == "-10800000"  # -180°
+
+    def test_key_times_affect_segment_durations(self, handler: TransformAnimationHandler):
+        anim = make_transform_animation(
+            transform_type=TransformType.ROTATE,
+            values=["0", "360", "0"],
+            key_times=[0.0, 0.75, 1.0],
+        )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        # Duration 1000ms total. Segments: 75% = 750ms, 25% = 250ms
+        seg_pars = par.findall(f".//{{{NS_P}}}cTn/{{{NS_P}}}childTnLst/{{{NS_P}}}par")
+        seg0_dur = seg_pars[0].find(f"{{{NS_P}}}cTn").get("dur")
+        seg1_dur = seg_pars[1].find(f"{{{NS_P}}}cTn").get("dur")
+        assert seg0_dur == "750"
+        assert seg1_dur == "250"
+
+    def test_returns_par_element(self, handler: TransformAnimationHandler):
+        anim = make_transform_animation(
+            transform_type=TransformType.ROTATE, values=["0", "180", "0"]
+        )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        assert par.tag == f"{{{NS_P}}}par"
+
+    def test_outer_par_has_preset(self, handler: TransformAnimationHandler):
+        anim = make_transform_animation(
+            transform_type=TransformType.ROTATE, values=["0", "360", "0"]
+        )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        ctn = par.find(f"{{{NS_P}}}cTn")
+        assert ctn.get("presetID") == "8"
+        assert ctn.get("presetClass") == "emph"
+
+
+class TestRotateWithOrbit:
+    """Rotation with cx/cy center generates companion orbital motion."""
+
+    def test_orbit_produces_anim_motion(self, handler: TransformAnimationHandler):
+        anim = make_transform_animation(
+            transform_type=TransformType.ROTATE,
+            values=["0 40 40", "360 40 40"],
+            element_center_px=(80.0, 80.0),
+        )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        motions = par.findall(f".//{{{NS_P}}}animMotion")
+        assert len(motions) == 1
+
+    def test_orbit_motion_has_path(self, handler: TransformAnimationHandler):
+        anim = make_transform_animation(
+            transform_type=TransformType.ROTATE,
+            values=["0 40 40", "90 40 40"],
+            element_center_px=(80.0, 80.0),
+        )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        motion = par.find(f".//{{{NS_P}}}animMotion")
+        path = motion.get("path")
+        assert path.startswith("M 0 0")
+        assert "L " in path
+
+    def test_no_orbit_when_center_matches(self, handler: TransformAnimationHandler):
+        """No motion path when shape center ≈ rotation center."""
+        anim = make_transform_animation(
+            transform_type=TransformType.ROTATE,
+            values=["0 80 80", "360 80 80"],
+            element_center_px=(80.0, 80.0),
+        )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        motions = par.findall(f".//{{{NS_P}}}animMotion")
+        assert len(motions) == 0
+
+    def test_no_orbit_without_center_info(self, handler: TransformAnimationHandler):
+        """No motion path when element_center_px is not available."""
+        anim = make_transform_animation(
+            transform_type=TransformType.ROTATE,
+            values=["0 40 40", "360 40 40"],
+        )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        motions = par.findall(f".//{{{NS_P}}}animMotion")
+        assert len(motions) == 0
+
+    def test_no_orbit_without_cxcy(self, handler: TransformAnimationHandler):
+        """No motion path when values have no cx/cy."""
+        anim = make_transform_animation(
+            transform_type=TransformType.ROTATE,
+            values=["0", "360"],
+            element_center_px=(80.0, 80.0),
+        )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        motions = par.findall(f".//{{{NS_P}}}animMotion")
+        assert len(motions) == 0
+
+    def test_multi_keyframe_with_orbit(self, handler: TransformAnimationHandler):
+        """Multi-keyframe rotate with cx/cy adds orbit as extra child."""
+        anim = make_transform_animation(
+            transform_type=TransformType.ROTATE,
+            values=["0 40 40", "360 40 40", "0 40 40"],
+            element_center_px=(80.0, 80.0),
+        )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        rots = par.findall(f".//{{{NS_P}}}animRot")
+        motions = par.findall(f".//{{{NS_P}}}animMotion")
+        assert len(rots) == 2  # multi-keyframe split
+        assert len(motions) == 1  # orbital companion
+
+    def test_orbit_path_has_nonzero_values(self, handler: TransformAnimationHandler):
+        """Orbit path coordinates should be non-trivial for offset center."""
+        anim = make_transform_animation(
+            transform_type=TransformType.ROTATE,
+            values=["0 0 0", "360 0 0"],
+            element_center_px=(100.0, 100.0),
+        )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        motion = par.find(f".//{{{NS_P}}}animMotion")
+        path = motion.get("path")
+        # Should have non-zero coordinates (shape orbits around origin)
+        parts = path.split("L ")[1:]  # skip M 0 0
+        coords = [p.strip().rstrip(" E").split() for p in parts]
+        has_nonzero = any(
+            abs(float(c[0])) > 1e-6 or abs(float(c[1])) > 1e-6
+            for c in coords if len(c) == 2
+        )
+        assert has_nonzero
+
+
 # ------------------------------------------------------------------ #
 # build — translate                                                   #
 # ------------------------------------------------------------------ #

@@ -6,9 +6,12 @@ elements for ``<animateTransform>`` animations (scale, rotate, translate, matrix
 
 from __future__ import annotations
 
+import logging
 import math
 import re
 from typing import TYPE_CHECKING
+
+_logger = logging.getLogger(__name__)
 
 from lxml import etree
 
@@ -64,7 +67,25 @@ class TransformAnimationHandler(AnimationHandler):
             preset_class = "emph"
             preset_id = 6  # Grow/Shrink
         elif transform_type == TransformType.ROTATE:
-            angles = [self._processor.parse_angle(v) for v in animation.values]
+            parsed = [self._parse_rotate_value(v) for v in animation.values]
+            angles = [p[0] for p in parsed]
+            rotation_center = self._extract_rotation_center(parsed)
+
+            if len(angles) > 2:
+                return self._build_multi_keyframe_rotate(
+                    animation, par_id, behavior_id, angles,
+                    rotation_center=rotation_center,
+                )
+
+            # Check if we need a companion orbital motion path
+            orbit_offset = self._compute_orbit_offset(
+                rotation_center, animation.element_center_px,
+            )
+            if orbit_offset is not None:
+                return self._build_rotate_with_orbit(
+                    animation, par_id, behavior_id, angles, orbit_offset,
+                )
+
             child = self._build_rotate_element(animation, behavior_id, angles)
             preset_class = "emph"
             preset_id = 8  # Spin
@@ -138,6 +159,55 @@ class TransformAnimationHandler(AnimationHandler):
         return anim_scale
 
     # ------------------------------------------------------------------ #
+    # Rotate helpers                                                       #
+    # ------------------------------------------------------------------ #
+
+    @staticmethod
+    def _parse_rotate_value(value: str) -> tuple[float, float | None, float | None]:
+        """Parse ``"angle [cx cy]"`` → ``(angle, cx, cy)``."""
+        from svg2ooxml.common.conversions.transforms import parse_numeric_list
+
+        nums = parse_numeric_list(value)
+        if len(nums) >= 3:
+            return (nums[0], nums[1], nums[2])
+        if nums:
+            return (nums[0], None, None)
+        return (0.0, None, None)
+
+    @staticmethod
+    def _extract_rotation_center(
+        parsed: list[tuple[float, float | None, float | None]],
+    ) -> tuple[float, float] | None:
+        """Return consistent (cx, cy) if all values share the same center."""
+        cx, cy = None, None
+        for _, vcx, vcy in parsed:
+            if vcx is not None and vcy is not None:
+                if cx is None:
+                    cx, cy = vcx, vcy
+                elif abs(vcx - cx) > 1e-6 or abs(vcy - cy) > 1e-6:
+                    # Varying centers across keyframes — use first
+                    return (cx, cy)
+        if cx is not None and cy is not None:
+            return (cx, cy)
+        return None
+
+    @staticmethod
+    def _compute_orbit_offset(
+        rotation_center: tuple[float, float] | None,
+        element_center_px: tuple[float, float] | None,
+    ) -> tuple[float, float] | None:
+        """Return (dx, dy) offset from rotation center to shape center, or None."""
+        if rotation_center is None or element_center_px is None:
+            return None
+        cx, cy = rotation_center
+        sx, sy = element_center_px
+        dx, dy = sx - cx, sy - cy
+        # Skip if shape center ≈ rotation center (no orbit needed)
+        if abs(dx) < 0.5 and abs(dy) < 0.5:
+            return None
+        return (dx, dy)
+
+    # ------------------------------------------------------------------ #
     # Rotate                                                               #
     # ------------------------------------------------------------------ #
 
@@ -166,6 +236,242 @@ class TransformAnimationHandler(AnimationHandler):
         anim_rot.append(cBhvr)
 
         return anim_rot
+
+    def _build_rotate_with_orbit(
+        self,
+        animation: AnimationDefinition,
+        par_id: int,
+        behavior_id: int,
+        angles: list[float],
+        orbit_offset: tuple[float, float],
+    ) -> etree._Element:
+        """Build ``<p:par>`` with spin + orbital motion playing simultaneously."""
+        delta_deg = angles[-1] - angles[0]
+        rotation_delta = self._processor.format_ppt_angle(delta_deg)
+
+        anim_rot = p_elem("animRot", by=rotation_delta)
+        anim_rot.append(self._xml.build_behavior_core_elem(
+            behavior_id=behavior_id,
+            duration_ms=animation.duration_ms,
+            target_shape=animation.element_id,
+            additive=animation.additive,
+            fill_mode=animation.fill_mode,
+            repeat_count=animation.repeat_count,
+        ))
+
+        anim_motion = self._build_orbital_motion_element(
+            animation, behavior_id + 2, angles, orbit_offset,
+        )
+
+        outer_par = p_elem("par")
+        outer_ctn = p_sub(
+            outer_par, "cTn",
+            id=str(par_id),
+            dur=str(animation.duration_ms),
+            fill="hold",
+            nodeType="withEffect",
+            grpId="0",
+            presetID="8",
+            presetClass="emph",
+        )
+        outer_st = p_sub(outer_ctn, "stCondLst")
+        p_sub(outer_st, "cond", delay=str(animation.begin_ms))
+        outer_children = p_sub(outer_ctn, "childTnLst")
+        outer_children.append(anim_rot)
+        if anim_motion is not None:
+            outer_children.append(anim_motion)
+
+        return outer_par
+
+    def _build_orbital_motion_element(
+        self,
+        animation: AnimationDefinition,
+        behavior_id: int,
+        angles: list[float],
+        orbit_offset: tuple[float, float],
+    ) -> etree._Element | None:
+        """Build ``<p:animMotion>`` for the circular orbit around a rotation center.
+
+        *orbit_offset* is (dx, dy) from rotation center to shape center in px.
+        *angles* are the full keyframe angle sequence (may be 2+ values).
+        """
+        from svg2ooxml.drawingml.writer import DEFAULT_SLIDE_SIZE
+
+        slide_w, slide_h = DEFAULT_SLIDE_SIZE
+        dx_px, dy_px = orbit_offset
+        start_deg = angles[0]
+        total_sweep = angles[-1] - start_deg
+
+        # Build arc path with line segments
+        n_steps = max(8, int(abs(total_sweep) / 45.0) * 2)
+        if n_steps < 2:
+            return None
+
+        segments: list[str] = ["M 0 0"]
+        for step in range(1, n_steps + 1):
+            # For multi-keyframe, interpolate through all angles
+            t = step / n_steps
+            # Linear interpolation through the full angle sequence
+            if len(angles) > 2 and animation.key_times and len(animation.key_times) == len(angles):
+                theta_deg = self._interpolate_angles(angles, animation.key_times, t)
+            else:
+                theta_deg = start_deg + total_sweep * t
+            theta_rad = math.radians(theta_deg) - math.radians(start_deg)
+            cos_t, sin_t = math.cos(theta_rad), math.sin(theta_rad)
+            mx_px = dx_px * (cos_t - 1) - dy_px * sin_t
+            my_px = dx_px * sin_t + dy_px * (cos_t - 1)
+            mx_emu = self._units.to_emu(mx_px, axis="x")
+            my_emu = self._units.to_emu(my_px, axis="y")
+            segments.append(f"L {self._format_coord(mx_emu / slide_w)} {self._format_coord(my_emu / slide_h)}")
+
+        path = " ".join(segments) + " E"
+        pts_types = "A" * (n_steps + 1)
+
+        anim_motion = p_elem(
+            "animMotion",
+            origin="layout",
+            path=path,
+            pathEditMode="relative",
+            rAng="0",
+            ptsTypes=pts_types,
+        )
+        cBhvr = self._xml.build_behavior_core_elem(
+            behavior_id=behavior_id,
+            duration_ms=animation.duration_ms,
+            target_shape=animation.element_id,
+            attr_name_list=["ppt_x", "ppt_y"],
+            additive=animation.additive,
+            fill_mode=animation.fill_mode,
+            repeat_count=animation.repeat_count,
+        )
+        anim_motion.append(cBhvr)
+        p_sub(anim_motion, "rCtr", x="0", y="0")
+        return anim_motion
+
+    @staticmethod
+    def _interpolate_angles(
+        angles: list[float],
+        key_times: list[float],
+        t: float,
+    ) -> float:
+        """Linearly interpolate through keyframed angles at normalised time *t*."""
+        if t <= 0.0:
+            return angles[0]
+        if t >= 1.0:
+            return angles[-1]
+        for i in range(len(key_times) - 1):
+            if t <= key_times[i + 1]:
+                seg_t = (t - key_times[i]) / max(1e-9, key_times[i + 1] - key_times[i])
+                return angles[i] + (angles[i + 1] - angles[i]) * seg_t
+        return angles[-1]
+
+    def _build_multi_keyframe_rotate(
+        self,
+        animation: AnimationDefinition,
+        par_id: int,
+        behavior_id: int,
+        angles: list[float],
+        *,
+        rotation_center: tuple[float, float] | None = None,
+    ) -> etree._Element:
+        """Build a ``<p:par>`` with sequenced ``<p:animRot>`` segments.
+
+        Splits N angles into N-1 segments so that multi-keyframe rotations
+        like ``0 → 360 → 0`` produce two visible rotation steps instead of
+        collapsing to ``by="0"``.
+        """
+        n_segments = len(angles) - 1
+        total_ms = animation.duration_ms
+
+        # Compute per-segment durations from key_times or equal split
+        if animation.key_times and len(animation.key_times) == len(angles):
+            kt = animation.key_times
+            seg_durations = [
+                max(1, int(round((kt[i + 1] - kt[i]) * total_ms)))
+                for i in range(n_segments)
+            ]
+        else:
+            base = total_ms // n_segments
+            seg_durations = [base] * n_segments
+            seg_durations[-1] += total_ms - sum(seg_durations)
+
+        # Outer <p:par> — same structure as build_par_container_elem
+        outer_par = p_elem("par")
+        outer_ctn = p_sub(
+            outer_par, "cTn",
+            id=str(par_id),
+            dur=str(total_ms),
+            fill="hold",
+            nodeType="withEffect",
+            grpId="0",
+            presetID="8",
+            presetClass="emph",
+        )
+        outer_st = p_sub(outer_ctn, "stCondLst")
+        p_sub(outer_st, "cond", delay=str(animation.begin_ms))
+        outer_children = p_sub(outer_ctn, "childTnLst")
+
+        bid = behavior_id
+        delay_acc = 0
+
+        for i in range(n_segments):
+            delta_deg = angles[i + 1] - angles[i]
+            rotation_delta = self._processor.format_ppt_angle(delta_deg)
+            seg_dur = seg_durations[i]
+
+            anim_rot = p_elem("animRot", by=rotation_delta)
+            seg_fill = animation.fill_mode if i == n_segments - 1 else "hold"
+            cBhvr = self._xml.build_behavior_core_elem(
+                behavior_id=bid,
+                duration_ms=seg_dur,
+                target_shape=animation.element_id,
+                additive=animation.additive,
+                fill_mode=seg_fill,
+                repeat_count=None,
+            )
+            anim_rot.append(cBhvr)
+
+            # Each segment in its own <p:par> with cumulative delay
+            seg_par = p_elem("par")
+            seg_ctn = p_sub(
+                seg_par, "cTn",
+                id=str(bid + 1),
+                dur=str(seg_dur),
+                fill="hold",
+            )
+            seg_st = p_sub(seg_ctn, "stCondLst")
+            p_sub(seg_st, "cond", delay=str(delay_acc))
+            seg_child_lst = p_sub(seg_ctn, "childTnLst")
+            seg_child_lst.append(anim_rot)
+
+            outer_children.append(seg_par)
+            delay_acc += seg_dur
+            bid += 2
+
+        # Add orbital motion if rotation center ≠ shape center
+        orbit_offset = self._compute_orbit_offset(
+            rotation_center, animation.element_center_px,
+        )
+        if orbit_offset is not None:
+            orbit_motion = self._build_orbital_motion_element(
+                animation, bid, angles, orbit_offset,
+            )
+            if orbit_motion is not None:
+                # Wrap in par with delay=0 so it plays for the full duration
+                orbit_par = p_elem("par")
+                orbit_ctn = p_sub(
+                    orbit_par, "cTn",
+                    id=str(bid + 1),
+                    dur=str(total_ms),
+                    fill="hold",
+                )
+                orbit_st = p_sub(orbit_ctn, "stCondLst")
+                p_sub(orbit_st, "cond", delay="0")
+                orbit_child = p_sub(orbit_ctn, "childTnLst")
+                orbit_child.append(orbit_motion)
+                outer_children.append(orbit_par)
+
+        return outer_par
 
     # ------------------------------------------------------------------ #
     # Translate                                                            #

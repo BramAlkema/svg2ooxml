@@ -460,6 +460,8 @@ class SvgToPptxExporter:
             policy_meta = scene.metadata.setdefault("policy", {})
             policy_meta["animation"] = dict(animation_policy_options)
         if animations:
+            animations = _enrich_animations_with_element_centers(animations, scene)
+            scene.animations = animations
             animation_meta = _build_animation_metadata(
                 animations,
                 timeline_scenes,
@@ -743,6 +745,52 @@ def _serialize_timeline_scene(scene: AnimationScene) -> dict[str, Any]:
         "time": scene.time,
         "element_states": {element_id: dict(properties) for element_id, properties in scene.element_states.items()},
     }
+
+
+def _enrich_animations_with_element_centers(
+    animations: list[AnimationDefinition],
+    scene: IRScene,
+) -> list[AnimationDefinition]:
+    """Populate ``element_center_px`` on rotate animations from scene graph bboxes.
+
+    This is needed so the rotate handler can compute orbital motion paths when
+    the SVG rotation center (cx, cy) differs from the shape center.
+    """
+    from dataclasses import replace as _replace
+
+    from svg2ooxml.ir.animation import TransformType
+    from svg2ooxml.ir.scene import Group, Path
+
+    # Build element_id → bbox center lookup from scene graph
+    center_map: dict[str, tuple[float, float]] = {}
+
+    def _walk(elements: list) -> None:
+        for el in elements:
+            meta = getattr(el, "metadata", None)
+            if isinstance(meta, dict):
+                for eid in meta.get("element_ids", []):
+                    if isinstance(eid, str) and eid not in center_map:
+                        bbox = getattr(el, "bbox", None)
+                        if bbox is not None:
+                            center_map[eid] = (
+                                bbox.x + bbox.width / 2.0,
+                                bbox.y + bbox.height / 2.0,
+                            )
+            if isinstance(el, Group):
+                _walk(getattr(el, "children", []))
+
+    _walk(scene.elements)
+
+    enriched = []
+    for anim in animations:
+        if (
+            anim.transform_type == TransformType.ROTATE
+            and anim.element_center_px is None
+            and anim.element_id in center_map
+        ):
+            anim = _replace(anim, element_center_px=center_map[anim.element_id])
+        enriched.append(anim)
+    return enriched
 
 
 __all__ = [

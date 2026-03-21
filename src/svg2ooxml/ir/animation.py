@@ -149,6 +149,7 @@ class AnimationDefinition:
     additive: str = "replace"
     accumulate: str = "none"
     motion_rotate: str | None = None
+    element_center_px: tuple[float, float] | None = None
 
     def __post_init__(self) -> None:
         if not self.element_id:
