@@ -202,7 +202,7 @@ Each non-Direct entry specifies which fallback tier(s) apply.
 | `stroke-dashoffset` | Rotate `custDash` array | Done | Tier 2 | `_apply_dash_offset()` in `paint_runtime.py` rotates the dash/gap array by the offset before emitting `<a:custDash>`. Pure arithmetic, zero visual loss. |
 | `stroke-opacity` | `<a:alpha>` on stroke fill | Direct | — | |
 | `paint-order: stroke fill markers` | **No DrawingML equivalent** — always fill-then-stroke | Planned | Tier 2 | Emit stroke as a separate shape behind the fill shape (two shapes). |
-| `vector-effect: non-scaling-stroke` | **No DrawingML equivalent** | Planned | Tier 2 | Divide `stroke-width` by effective transform scale. Exact at authored zoom. |
+| `vector-effect: non-scaling-stroke` | Default DrawingML behavior | Done | — | DrawingML `<a:ln w>` doesn't scale with shape transforms — matches non-scaling-stroke by default. |
 
 ### 1.3 Opacity
 
@@ -443,7 +443,7 @@ Only when both DrawingML mimic AND EMF vector are insufficient:
 | `<switch>` with `requiredFeatures` | Resolve at parse time | Done | — | Implemented in switch evaluator and traversal hook selection. |
 | `<foreignObject>` | **No DrawingML or EMF equivalent** | Planned | Tier 3→4 | **Tier 3** — render HTML via headless browser, embed result in EMF as `StretchDIBits` (bitmap inside vector container — preserves EMF wrapper, scalable container). **Tier 4** — embed as PNG `blipFill`. Either way the HTML content itself is rasterized, but EMF wrapper is preferable. |
 | `<a xlink:href="...">` (hyperlinks) | `<a:hlinkClick r:id="...">` | Done | Tier 1 | Implemented for valid action/hyperlink targets; bookmark/custom-show action URIs are intentionally not emitted. |
-| `<title>` / `<desc>` | `<p:cNvPr descr="...">` | Planned | Tier 1 | |
+| `<title>` / `<desc>` | `<p:cNvPr descr="...">` | Done | Tier 1 | Extracted in traversal hooks, emitted as `descr` attribute on all shape templates. |
 | `<metadata>` | Ignored | Ignore | — | |
 | `overflow: hidden` on `<svg>` | Viewport clipping | Done | — | |
 | `overflow: visible` on nested `<svg>` | No clipping | Done | Tier 2 | Handled — no clip applied when overflow is visible. | |
