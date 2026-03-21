@@ -145,7 +145,7 @@ def classify_text_path_warp(
         best = max(wave_candidates, key=lambda c: c.confidence, default=None)
     else:
         best = max(candidates, key=lambda c: c.confidence, default=None)
-    if not best or best.confidence < 0.55:
+    if not best or best.confidence < 0.40:
         return None
 
     feature_summary = _summarise_features(features)
@@ -255,16 +255,20 @@ def _classify_arch_family(text_path: TextPathFrame, features: PathFeatures) -> l
         or features.y_range < 1e-3
         or features.peak_count > 1
         or features.trough_count > 1
-        or features.zero_crossings > 1
+        or features.zero_crossings > 2  # arches naturally cross mean Y twice
     ):
         return []
 
     orientation = _side_orientation(text_path)
-    baseline = features.mean_y
     amplitude = features.amplitude
 
-    confidence = min(0.95, max(0.0, 1.0 - abs(baseline) / max(amplitude, 1e-6)))
-    if confidence < 0.55:
+    # Confidence based on how arch-like the curve is: single peak or trough,
+    # consistent curvature direction, reasonable amplitude relative to span.
+    y_span = features.y_range
+    arch_ratio = amplitude / max(y_span, 1e-6)  # how much of the range is the arch
+    curvature_consistency = max(0.0, 1.0 - features.curvature_sign_changes * 0.3)
+    confidence = min(0.95, (arch_ratio + curvature_consistency) / 2)
+    if confidence < 0.4:
         return []
 
     preset = "textArchUp" if orientation > 0 else "textArchDown"

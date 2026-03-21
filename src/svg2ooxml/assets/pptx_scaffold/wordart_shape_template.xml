@@ -16,7 +16,8 @@
         <a:noFill/>
     </p:spPr>
     <p:txBody>
-        <a:bodyPr prstTxWarp="{WARP_PRESET}" wrap="none" lIns="0" tIns="0" rIns="0" bIns="0" anchor="t"{VERT_ATTR}>
+        <a:bodyPr wrap="none" lIns="0" tIns="0" rIns="0" bIns="0" anchor="t"{VERT_ATTR}>
+            <a:prstTxWarp prst="{WARP_PRESET}"><a:avLst/></a:prstTxWarp>
 {BODY_EXTRA}        </a:bodyPr>
         <a:lstStyle/>
         <a:p>

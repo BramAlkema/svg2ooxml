@@ -381,7 +381,7 @@ def test_render_wordart_frame_uses_warp_template() -> None:
     xml = writer.render_scene([frame]).slide_xml
 
     assert "WordArt 2" in xml
-    assert 'prstTxWarp="textWave1"' in xml
+    assert 'prst="textWave1"' in xml
     assert "WAVE" in xml
     assert "<a:normAutofit/>" in xml
 

@@ -5,6 +5,7 @@ from svg2ooxml.ir.text import Run
 from svg2ooxml.policy import PolicyContext
 from svg2ooxml.policy.providers.text import TextPolicyProvider
 from svg2ooxml.policy.targets import PolicyTarget
+from svg2ooxml.policy.text_policy import _build_balanced_decision
 from svg2ooxml.services import ConversionServices
 
 
@@ -59,5 +60,5 @@ def test_balanced_policy_preserves_effects_and_marks_outline() -> None:
     assert updated.font_family == "Handwritten"
     assert metadata["rendering_behavior"] == "outline"
     assert metadata["wordart_detection"]["enabled"] is True
-    assert metadata["wordart_detection"]["confidence_threshold"] == 0.7
+    assert metadata["wordart_detection"]["confidence_threshold"] == _build_balanced_decision().wordart.confidence_threshold
     assert metadata["prefer_vector_fallback"] is True

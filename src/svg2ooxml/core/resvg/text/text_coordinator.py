@@ -76,7 +76,7 @@ class TextRenderCoordinator:
         font_service: FontService | None = None,
         embedding_engine: FontEmbeddingEngine | None = None,
         paint_resolver: object | None = None,
-        wordart_confidence_threshold: float = 0.55,
+        wordart_confidence_threshold: float = 0.45,
     ) -> None:
         """Initialize text rendering coordinator.
 
@@ -216,7 +216,18 @@ class TextRenderCoordinator:
             return None
 
         try:
-            runs = [Run(text=text_content, font_family="Arial", font_size_pt=12.0)]
+            # Extract actual font properties from text style
+            text_style = getattr(node, "text_style", None)
+            font_family = "Arial"
+            font_size = 12.0
+            if text_style:
+                families = getattr(text_style, "font_families", None)
+                if families:
+                    font_family = families[0] or font_family
+                size = getattr(text_style, "font_size", None)
+                if isinstance(size, (int, float)) and size > 0:
+                    font_size = float(size)
+            runs = [Run(text=text_content, font_family=font_family, font_size_pt=font_size)]
             text_path_frame = TextPathFrame(
                 runs=runs,
                 path_reference="detected-path",
@@ -230,8 +241,18 @@ class TextRenderCoordinator:
         except Exception:
             return None
 
-        if classification is None or classification.confidence < self._wordart_threshold:
-            return None
+        # Always use WordArt for textPath — an approximate warp with the
+        # correct embedded font is better than flat text or outlines.
+        if classification is None:
+            # Default to textArchUp for unclassified curves
+            from svg2ooxml.common.geometry.algorithms.wordart_classifier import WordArtClassificationResult
+            classification = WordArtClassificationResult(
+                preset="textArchUp",
+                confidence=0.3,
+                parameters={},
+                reason="Default arch preset for unclassified textPath",
+                features={},
+            )
 
         try:
             content = self._generator.generate_wordart_text_body(

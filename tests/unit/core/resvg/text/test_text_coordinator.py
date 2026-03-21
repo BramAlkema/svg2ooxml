@@ -392,17 +392,17 @@ class TestTextRenderCoordinator:
         assert result.strategy == "emf"
         assert result.content is None
 
-    def test_textpath_with_low_confidence_falls_back_to_emf(self):
-        """Test that textPath with low-confidence classification falls back to EMF."""
+    def test_textpath_with_low_confidence_still_uses_wordart(self):
+        """Test that textPath always uses WordArt (default preset if no match)."""
         from svg2ooxml.ir.text_path import PathPoint
 
-        # Very high threshold so classification won't meet it
         coordinator = TextRenderCoordinator(wordart_confidence_threshold=0.99)
         node = MockTextNode(
             text_content="Text", attributes={"textPath": "#p"}
         )
 
-        # Simple flat line (classified as textPlain with confidence < 0.99)
+        # Simple flat line — even with high threshold, WordArt is preferred
+        # over EMF because an approximate warp with embedded font is better.
         points = [
             PathPoint(x=float(i * 10), y=0.0, tangent_angle=0.0, distance_along_path=float(i * 10))
             for i in range(10)
@@ -410,7 +410,7 @@ class TestTextRenderCoordinator:
 
         result = coordinator.render(node, path_points=points)
 
-        assert result.strategy == "emf"
+        assert result.strategy == "wordart"
 
     def test_textpath_wordart_records_telemetry(self):
         """Test that WordArt rendering records correct telemetry."""

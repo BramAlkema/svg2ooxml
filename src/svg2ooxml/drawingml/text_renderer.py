@@ -58,7 +58,7 @@ class DrawingMLTextRenderer:
 
         is_confident = False
         if candidate is not None:
-            is_confident = candidate.confidence >= threshold
+            is_confident = candidate.confidence >= threshold or prefer_native
 
         # Per-character positioning: use glyph outline renderer
         # Per-character positioning: prefer native text with spc when dx is
