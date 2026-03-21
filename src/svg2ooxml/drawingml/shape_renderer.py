@@ -12,7 +12,27 @@ from svg2ooxml.ir.paint import PatternPaint, RadialGradientPaint, SolidPaint
 from svg2ooxml.ir.scene import Group, Image
 from svg2ooxml.ir.scene import Path as IRPath
 from svg2ooxml.ir.shapes import Circle, Ellipse, Line, Polygon, Polyline, Rectangle
+from svg2ooxml.ir.paint import Stroke
 from svg2ooxml.policy.constants import FALLBACK_BITMAP, FALLBACK_RASTERIZE
+
+
+def _is_stroke_first(metadata: dict[str, object]) -> bool:
+    """Return True when paint-order puts stroke before fill."""
+    po = metadata.get("paint_order")
+    if not isinstance(po, str):
+        return False
+    tokens = po.lower().split()
+    try:
+        si = tokens.index("stroke")
+        fi = tokens.index("fill")
+        return si < fi
+    except ValueError:
+        # "stroke" alone means "stroke fill markers"
+        return tokens[0] == "stroke" if tokens else False
+
+
+def _has_fill_and_stroke(element) -> bool:
+    return getattr(element, "fill", None) is not None and getattr(element, "stroke", None) is not None
 
 from . import paint_runtime, shapes_runtime
 from .animation_pipeline import AnimationPipeline
@@ -84,6 +104,13 @@ class DrawingMLShapeRenderer:
 
         # Apply clip bounds approximation (xfrm intersection).
         element = _apply_clip_bounds(element, metadata)
+
+        # Paint-order reversal: when "stroke" comes before "fill", emit
+        # a stroke-only shape behind a fill-only shape.
+        if _is_stroke_first(metadata) and _has_fill_and_stroke(element):
+            return self._render_reversed_paint_order(
+                element, shape_id, metadata, hyperlink_xml=hyperlink_xml,
+            )
 
         if isinstance(element, Rectangle):
             rasterized = self._maybe_rasterize(
@@ -263,6 +290,44 @@ class DrawingMLShapeRenderer:
         if isinstance(element, Group):
             return None
         return None
+
+    def _render_reversed_paint_order(
+        self,
+        element,
+        shape_id: int,
+        metadata: dict[str, object],
+        *,
+        hyperlink_xml: str,
+    ) -> tuple[str, int] | None:
+        """Emit stroke-only shape behind fill-only shape for reversed paint order."""
+        # Create stroke-only copy (no fill)
+        stroke_element = replace(element, fill=None)
+        # Create fill-only copy (no stroke)
+        fill_element = replace(element, stroke=None)
+
+        # Clear paint_order from metadata to avoid infinite recursion
+        clean_meta = dict(metadata)
+        clean_meta.pop("paint_order", None)
+
+        # Render stroke-only first (behind)
+        stroke_result = self.render(
+            stroke_element, shape_id, clean_meta, hyperlink_xml="",
+        )
+        if stroke_result is None:
+            # Stroke-only failed, fall back to normal render
+            return self.render(element, shape_id, clean_meta, hyperlink_xml=hyperlink_xml)
+
+        stroke_xml, next_id = stroke_result
+
+        # Render fill-only on top
+        fill_result = self.render(
+            fill_element, next_id, clean_meta, hyperlink_xml=hyperlink_xml,
+        )
+        if fill_result is None:
+            return stroke_xml, next_id
+
+        fill_xml, final_id = fill_result
+        return stroke_xml + fill_xml, final_id
 
     def _maybe_filter_fallback(
         self,

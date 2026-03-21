@@ -106,6 +106,11 @@ class StyleExtractor:
         opacity = max(0.0, min(1.0, opacity))
         effects = self._resolve_effects(element, services, metadata, context)
 
+        # Parse paint-order (SVG2): "stroke fill markers", "fill stroke", etc.
+        paint_order = paint_style.get("paint_order") or element.get("paint-order", "").strip()
+        if paint_order and paint_order != "normal":
+            metadata["paint_order"] = paint_order
+
         return StyleResult(fill=fill, stroke=stroke, opacity=opacity, effects=effects, metadata=metadata)
 
     def _compute_paint_style_with_inheritance(
