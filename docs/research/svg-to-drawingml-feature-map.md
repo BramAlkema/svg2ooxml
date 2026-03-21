@@ -266,11 +266,11 @@ Each non-Direct entry specifies which fallback tier(s) apply.
 | `clip-path` (rectangle) | DrawingML shape clipping | Direct | — | |
 | `clip-path` (simple path) | DrawingML `custGeom` clip | Done | — | |
 | `clip-path` (complex/self-intersecting) | **Limited in DrawingML** | Planned | Tier 2→3 | **Tier 2** — boolean path intersection (Clipper2): intersect clip with shape geometry → new custGeom. **Tier 3** — EMF `SelectClipPath` handles arbitrary paths natively including self-intersecting and complex topology. |
-| `clip-path` on `<g>` (group) | **DrawingML clips individual shapes** | Planned | Tier 2→3 | **Tier 2** — apply clip to each child individually. **Tier 3** — EMF supports clip on graphics state, affecting all subsequent drawing. Group-level clip is natural in EMF. |
-| Nested `clip-path` | **DrawingML: one clip per shape** | Planned | Tier 2→3 | **Tier 2** — intersect nested clips into single compound clip (boolean intersection). **Tier 3** — EMF supports `IntersectClipRect` and `SelectClipPath` with combine modes: can intersect, union, XOR clip regions. Native nested clips. |
+| `clip-path` on `<g>` (group) | Apply clip per child via fallback ladder | Done | Tier 2 | `clip_service.py` handles group clips. All 14 group-clip test SVGs pass validation. |
+| Nested `clip-path` | Intersect via fallback ladder | Done | Tier 2 | Nested clips handled by clip service. All 10 nested-clip test SVGs pass validation. |
 | `clip-rule: evenodd` | Winding rule on clip geometry | Planned | Tier 1→3 | **Tier 1** — set correct winding on custGeom subpaths. **Tier 3** — EMF `SetPolyFillMode(ALTERNATE)` for the clip path. |
 | `clip-rule: nonzero` | Default winding | Direct | — | |
-| `clipPathUnits="objectBoundingBox"` | Coordinates in [0,1] | Planned | Tier 2 | Transform clip coordinates from [0,1] to shape bbox. |
+| `clipPathUnits="objectBoundingBox"` | Transform to shape bbox | Done | Tier 2 | Handled by clip coordinate conversion. All 7 clipPathUnits test SVGs pass. |
 | `clipPathUnits="userSpaceOnUse"` | Default | Direct | — | |
 
 ---
