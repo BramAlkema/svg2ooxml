@@ -124,6 +124,21 @@ class TextConverter:
         self._context.attach_policy_metadata(metadata, "text")
         if font_variant == "small-caps":
             metadata["font_variant"] = "small-caps"
+
+        # writing-mode → vert attribute on bodyPr
+        writing_mode = element.get("writing-mode", "").strip().lower()
+        if not writing_mode:
+            style_attr = element.get("style", "")
+            if "writing-mode" in style_attr:
+                import re as _re
+                wm = _re.search(r"writing-mode\s*:\s*([^;]+)", style_attr)
+                if wm:
+                    writing_mode = wm.group(1).strip().lower()
+        if writing_mode in ("tb", "tb-rl", "vertical-rl"):
+            metadata["writing_mode"] = "vert"
+        elif writing_mode in ("tb-lr", "vertical-lr"):
+            metadata["writing_mode"] = "vert270"
+
         if run_policy:
             policy_meta = metadata.setdefault("policy", {}).setdefault("text", {})
             policy_meta.update(run_policy)

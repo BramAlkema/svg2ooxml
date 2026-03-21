@@ -47,6 +47,16 @@ def _descr_attr(metadata) -> str:
     if not desc:
         return ""
     return f' descr="{html.escape(str(desc), quote=True)}"'
+
+
+def _vert_attr(metadata) -> str:
+    """Return ` vert="vert"` or ` vert="vert270"` for vertical writing mode."""
+    if not isinstance(metadata, dict):
+        return ""
+    wm = metadata.get("writing_mode")
+    if wm in ("vert", "vert270"):
+        return f' vert="{wm}"'
+    return ""
 from svg2ooxml.ir.text import Run, TextAnchor, TextFrame, WordArtCandidate
 from svg2ooxml.policy.constants import FALLBACK_BITMAP
 
@@ -373,6 +383,7 @@ def render_textframe(
         RUNS_XML=runs_xml,
         HYPERLINK_XML=hyperlink_xml,
         DESCR_ATTR=_descr_attr(getattr(frame, "metadata", None)),
+        VERT_ATTR=_vert_attr(getattr(frame, "metadata", None)),
     )
 
 
@@ -431,6 +442,7 @@ def render_wordart(
         RUNS_XML=runs_xml,
         HYPERLINK_XML=hyperlink_xml,
         DESCR_ATTR=_descr_attr(getattr(frame, "metadata", None)),
+        VERT_ATTR=_vert_attr(getattr(frame, "metadata", None)),
     )
 
 
@@ -514,8 +526,18 @@ def run_fragment(run: Run, text_segment: str, navigation_factory) -> str:
     if getattr(run, "kerning", None) is not None:
         kern_value = int(round(float(run.kerning) * 1000))
         attributes.append(f'kern="{kern_value}"')
-    if getattr(run, "letter_spacing", None) is not None:
-        spacing_value = int(round(float(run.letter_spacing) * 1000))
+    effective_spacing = getattr(run, "letter_spacing", None)
+    word_spacing = getattr(run, "word_spacing", None)
+    if word_spacing is not None and text_segment:
+        # Approximate word-spacing by distributing it as extra letter-spacing
+        # proportional to the number of spaces vs total characters.
+        space_count = text_segment.count(" ")
+        if space_count > 0 and len(text_segment) > 1:
+            extra_per_char = (float(word_spacing) * space_count) / (len(text_segment) - 1)
+            base = float(effective_spacing) if effective_spacing is not None else 0.0
+            effective_spacing = base + extra_per_char
+    if effective_spacing is not None:
+        spacing_value = int(round(float(effective_spacing) * 1000))
         attributes.append(f'spc="{spacing_value}"')
     font_variant = getattr(run, "font_variant", None)
     if font_variant == "small-caps":

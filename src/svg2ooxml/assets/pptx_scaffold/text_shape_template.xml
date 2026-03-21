@@ -18,7 +18,7 @@
         <a:noFill/>
     </p:spPr>
     <p:txBody>
-        <a:bodyPr wrap="none" lIns="0" tIns="0" rIns="0" bIns="0" anchor="t"/>
+        <a:bodyPr wrap="none" lIns="0" tIns="0" rIns="0" bIns="0" anchor="t"{VERT_ATTR}/>
         <a:lstStyle/>
         <a:p>
             <a:pPr algn="{TEXT_ALIGN}"{RTL_ATTR}/>
