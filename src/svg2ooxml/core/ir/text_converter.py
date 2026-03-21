@@ -115,6 +115,20 @@ class TextConverter:
         anchor = self._resvg_text_anchor(resvg_node)
         direction = self._resvg_text_direction(resvg_node)
 
+        # dominant-baseline / alignment-baseline → y-offset
+        font_size = updated.font_size_pt
+        dom_baseline = (element.get("dominant-baseline") or "").strip().lower()
+        align_baseline = (element.get("alignment-baseline") or "").strip().lower()
+        baseline = dom_baseline or align_baseline
+        if baseline in ("central", "middle"):
+            origin_y += font_size * 0.4  # shift down by ~half ascent
+        elif baseline == "hanging":
+            origin_y += font_size * 0.8  # shift down by full ascent
+        elif baseline in ("text-bottom", "after-edge"):
+            origin_y -= font_size * 0.2  # shift up by descent
+        elif baseline in ("text-top", "before-edge"):
+            origin_y += font_size * 0.8
+
         font_service = self._context.services.resolve("font")
         bbox = self._estimate_text_bbox(runs, origin_x, origin_y, font_service=font_service)
         bbox = self._apply_text_anchor(bbox, anchor)
@@ -134,6 +148,42 @@ class TextConverter:
                 wm = _re.search(r"writing-mode\s*:\s*([^;]+)", style_attr)
                 if wm:
                     writing_mode = wm.group(1).strip().lower()
+        # font-stretch → append width keyword to font family
+        font_stretch = element.get("font-stretch", "").strip().lower()
+        if not font_stretch:
+            style_attr = element.get("style", "")
+            if "font-stretch" in style_attr:
+                import re as _re3
+                fs = _re3.search(r"font-stretch\s*:\s*([^;]+)", style_attr)
+                if fs:
+                    font_stretch = fs.group(1).strip().lower()
+        _STRETCH_MAP = {
+            "ultra-condensed": " UltraCondensed",
+            "extra-condensed": " ExtraCondensed",
+            "condensed": " Condensed",
+            "semi-condensed": " SemiCondensed",
+            "semi-expanded": " SemiExpanded",
+            "expanded": " Expanded",
+            "extra-expanded": " ExtraExpanded",
+            "ultra-expanded": " UltraExpanded",
+        }
+        suffix = _STRETCH_MAP.get(font_stretch)
+        if suffix and updated.font_family:
+            updated = _replace(updated, font_family=updated.font_family + suffix)
+            runs = [updated]
+
+        # text-decoration: overline (DrawingML has no overline — store for line shape)
+        text_deco = element.get("text-decoration", "").lower()
+        if not text_deco:
+            style_attr = element.get("style", "")
+            if "text-decoration" in style_attr:
+                import re as _re2
+                td = _re2.search(r"text-decoration\s*:\s*([^;]+)", style_attr)
+                if td:
+                    text_deco = td.group(1).strip().lower()
+        if "overline" in text_deco:
+            metadata["overline"] = True
+
         if writing_mode in ("tb", "tb-rl", "vertical-rl"):
             metadata["writing_mode"] = "vert"
         elif writing_mode in ("tb-lr", "vertical-lr"):
