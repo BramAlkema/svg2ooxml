@@ -19,25 +19,46 @@ try:  # pragma: no cover - real numpy branch exercised in integration
 except ImportError:  # pragma: no cover - fallback is simple deterministic code
     NUMPY_AVAILABLE = False
 
+    class _DummyArray(tuple):
+        """Tuple subclass that supports numpy-like .shape, [row,col], and .tolist()."""
+
+        @property
+        def shape(self):
+            if self and isinstance(self[0], tuple):
+                return (len(self), len(self[0]))
+            return (len(self),)
+
+        def __getitem__(self, key):
+            if isinstance(key, tuple) and len(key) == 2:
+                row, col = key
+                return super().__getitem__(row)[col]
+            return super().__getitem__(key)
+
+        def tolist(self):
+            return [list(row) if isinstance(row, tuple) else row for row in self]
+
     class _DummyNumpy:
         """Minimal numpy shim used when numpy is unavailable."""
 
         ndarray = tuple
+        float64 = float
 
         @staticmethod
         def array(data: Iterable[float], dtype=None):
             items = list(data)
             if not items:
-                return tuple()
+                return _DummyArray()
             first = items[0]
             if isinstance(first, (list, tuple)):
-                return tuple(_DummyNumpy.array(item, dtype=dtype) for item in items)
-            return tuple(float(x) for x in items)
+                return _DummyArray(
+                    _DummyArray(float(x) for x in item) for item in items
+                )
+            return _DummyArray(float(x) for x in items)
 
         @staticmethod
         def identity(n: int):
-            return tuple(
-                tuple(1.0 if i == j else 0.0 for j in range(n))
+            return _DummyArray(
+                _DummyArray(1.0 if i == j else 0.0 for j in range(n))
                 for i in range(n)
             )
 
