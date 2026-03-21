@@ -37,6 +37,22 @@ def _assets_root() -> Path:
     return Path(__file__).resolve().parent.parent / "assets" / "pptx_scaffold"
 
 
+def _children_overlap(children) -> bool:
+    """Return True if any two children have overlapping bounding boxes."""
+    bboxes = []
+    for child in children:
+        bbox = getattr(child, "bbox", None)
+        if bbox is not None and bbox.width > 0 and bbox.height > 0:
+            bboxes.append(bbox)
+    for i in range(len(bboxes)):
+        for j in range(i + 1, len(bboxes)):
+            a, b = bboxes[i], bboxes[j]
+            if (a.x < b.x + b.width and a.x + a.width > b.x
+                    and a.y < b.y + b.height and a.y + a.height > b.y):
+                return True
+    return False
+
+
 def _apply_mask_alpha(element, alpha: float):
     """Multiply mask alpha into an element's fill and stroke paint opacities.
 
@@ -620,6 +636,22 @@ class DrawingMLWriter:
                 if self._assets is not None:
                     self._assets.add_diagnostic("Group-level navigation is not yet supported; hyperlink ignored.")
                 logger.warning("Navigation on group elements is not supported; skipping hyperlink metadata.")
+
+            # Group opacity with overlapping children: rasterize to avoid
+            # double-blending artifacts from per-child alpha application.
+            if (
+                element.opacity < 1.0
+                and self._rasterizer is not None
+                and _children_overlap(element.children)
+            ):
+                raster = self._rasterizer.rasterize(element)
+                if raster is not None:
+                    fragment = self._emit_raster_group(
+                        raster, element, shape_id, metadata,
+                    )
+                    if fragment is not None:
+                        return [fragment], shape_id + 1
+
             fragments, next_id = self._render_elements(element.children, shape_id)
             if not fragments:
                 return None
@@ -675,6 +707,47 @@ class DrawingMLWriter:
                 scope=asset.scope,
                 text=asset.text,
             ),
+        )
+
+    def _emit_raster_group(self, raster, group, shape_id, metadata) -> str | None:
+        """Emit a rasterized group as an image shape with alpha."""
+        from svg2ooxml.drawingml.generator import px_to_emu
+
+        # Register PNG data directly as a media asset
+        rid = f"rId{self._next_media_index}"
+        filename = f"image{self._next_media_index}.png"
+        self._next_media_index += 1
+        self._assets.add_media(
+            relationship_id=rid,
+            filename=filename,
+            data=raster.data,
+            content_type="image/png",
+            source="rasterized_group",
+        )
+
+        bounds = raster.bounds
+        alpha_ppt = int(round(group.opacity * 100000))
+        alpha_attr = f'<a:alphaModFix amt="{alpha_ppt}"/>' if alpha_ppt < 100000 else ""
+
+        return (
+            f'<p:pic>'
+            f'<p:nvPicPr>'
+            f'<p:cNvPr id="{shape_id}" name="Group {shape_id}"/>'
+            f'<p:cNvPicPr><a:picLocks noChangeAspect="1"/></p:cNvPicPr>'
+            f'<p:nvPr/>'
+            f'</p:nvPicPr>'
+            f'<p:blipFill>'
+            f'<a:blip r:embed="{rid}">{alpha_attr}</a:blip>'
+            f'<a:stretch><a:fillRect/></a:stretch>'
+            f'</p:blipFill>'
+            f'<p:spPr>'
+            f'<a:xfrm>'
+            f'<a:off x="{px_to_emu(bounds.x)}" y="{px_to_emu(bounds.y)}"/>'
+            f'<a:ext cx="{px_to_emu(bounds.width)}" cy="{px_to_emu(bounds.height)}"/>'
+            f'</a:xfrm>'
+            f'<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>'
+            f'</p:spPr>'
+            f'</p:pic>'
         )
 
     def _build_animation_xml(self) -> str:

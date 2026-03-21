@@ -49,7 +49,7 @@ class Rasterizer:
 
     def rasterize(self, element) -> RasterResult | None:
         if isinstance(element, Group):
-            return None
+            return self._rasterize_group(element)
         if isinstance(element, Image):
             return None
 
@@ -121,6 +121,82 @@ class Rasterizer:
             height_px=height_px,
             bounds=bounds,
         )
+
+    def _rasterize_group(self, group: Group) -> RasterResult | None:
+        """Rasterize a group by drawing all children onto one surface."""
+        bounds = group.bbox
+        if bounds.width <= 0 or bounds.height <= 0:
+            return None
+
+        width_px = max(int(math.ceil(bounds.width * self._scale)), 1)
+        height_px = max(int(math.ceil(bounds.height * self._scale)), 1)
+
+        try:
+            info = skia.ImageInfo.Make(
+                width_px, height_px,
+                skia.ColorType.kRGBA_8888_ColorType,
+                skia.AlphaType.kPremul_AlphaType,
+            )
+            surface = skia.Surface(info)
+        except (AttributeError, TypeError):  # pragma: no cover
+            surface = skia.Surface(
+                width_px, height_px,
+                colorType=skia.ColorType.kRGBA_8888_ColorType,
+            )
+
+        canvas = surface.getCanvas()
+        canvas.clear(skia.ColorTRANSPARENT)
+        canvas.scale(self._scale, self._scale)
+        canvas.translate(-bounds.x, -bounds.y)
+
+        drawn_any = False
+        for child in group.children:
+            if self._draw_element(canvas, child):
+                drawn_any = True
+
+        if not drawn_any:
+            return None
+
+        image = surface.makeImageSnapshot()
+        try:
+            data = image.encodeToData()
+        except TypeError:  # pragma: no cover
+            data = image.encodeToData()
+        if not data:
+            return None
+
+        return RasterResult(
+            data=bytes(data),
+            width_px=width_px,
+            height_px=height_px,
+            bounds=bounds,
+        )
+
+    def _draw_element(self, canvas, element) -> bool:
+        """Draw a single IR element onto a canvas. Returns True on success."""
+        geometry_bounds = self._element_bounds(element)
+        if isinstance(element, Rectangle):
+            return self._draw_rectangle(canvas, element, geometry_bounds)
+        if isinstance(element, Circle):
+            return self._draw_circle(canvas, element, geometry_bounds)
+        if isinstance(element, Ellipse):
+            return self._draw_ellipse(canvas, element, geometry_bounds)
+        if isinstance(element, IRPath):
+            return self._draw_path(canvas, element, geometry_bounds)
+        if isinstance(element, Group):
+            # Nested group: draw children recursively with group opacity
+            canvas.save()
+            if element.opacity < 1.0:
+                paint = skia.Paint()
+                paint.setAlpha(int(round(element.opacity * 255)))
+                canvas.saveLayerAlpha(None, int(round(element.opacity * 255)))
+            for child in element.children:
+                self._draw_element(canvas, child)
+            if element.opacity < 1.0:
+                canvas.restore()  # layer
+            canvas.restore()
+            return True
+        return False
 
     # ------------------------------------------------------------------ #
     # Drawing helpers
