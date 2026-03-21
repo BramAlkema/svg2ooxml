@@ -490,6 +490,11 @@ def run_fragment(run: Run, text_segment: str, navigation_factory) -> str:
     if getattr(run, "letter_spacing", None) is not None:
         spacing_value = int(round(float(run.letter_spacing) * 1000))
         attributes.append(f'spc="{spacing_value}"')
+    baseline_shift = getattr(run, "baseline_shift", 0.0)
+    if baseline_shift:
+        # DrawingML baseline is percentage × 1000 (e.g. 30000 = 30% superscript)
+        baseline_pct = int(round(baseline_shift * 1000))
+        attributes.append(f'baseline="{baseline_pct}"')
     language = getattr(run, "language", None)
     if language:
         attributes.append(f'lang="{html.escape(language, quote=True)}"')
