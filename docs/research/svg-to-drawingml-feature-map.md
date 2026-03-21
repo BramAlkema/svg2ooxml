@@ -341,16 +341,16 @@ Each non-Direct entry specifies which fallback tier(s) apply.
 | Per-character `x`/`y` absolute arrays | Glyph outlines via Skia | Done | Tier 2 | Same infrastructure as dx/dy with absolute positioning. |
 | Per-character `rotate` | Rotated glyph outlines via Skia | Done | Tier 2 | Each glyph rotated by specified angle before emitting as custGeom. |
 | `textLength` + `lengthAdjust="spacing"` | Computed `spc` | Done | Tier 2 | Effective letter-spacing = (targetWidth - naturalWidth) / (charCount - 1). |
-| `textLength` + `lengthAdjust="spacingAndGlyphs"` | **No glyph scaling** | Planned | Tier 2→3 | **Tier 2** — approximate with `spc` + font size adjustment. **Tier 3** — EMF `SetWorldTransform` with non-uniform scale on text. |
+| `textLength` + `lengthAdjust="spacingAndGlyphs"` | Approximated via `spc` + font size | Done | Tier 2 | Same spacing mechanism as `lengthAdjust="spacing"`. Glyph scaling approximated. |
 
 ### 7.3 Text Path
 
 | SVG | DrawingML | Status | Fallback | Notes |
 |-----|-----------|--------|----------|-------|
 | `<textPath>` on simple curve | `prstTxWarp` on `<a:bodyPr>` | Done | Tier 2 | Implemented via path classification to WordArt presets; falls back when confidence is low. |
-| `<textPath>` on arbitrary curve | **No arbitrary text path** | Planned | Tier 2→3 | **Tier 2** — convert text glyphs to custGeom outlines positioned along path. **Tier 3** — EMF path with glyph outlines, benefits from affine transforms for rotation per glyph. |
-| `<textPath startOffset="...">` | Offset along path | Planned | Tier 2→3 | Adjust glyph start position along path. |
-| `<textPath method="stretch">` | Glyph distortion along path | Planned | Tier 2→3 | **Tier 2** — warp custGeom glyph geometry along path curvature. **Tier 3** — EMF with warped glyph outlines. |
+| `<textPath>` on arbitrary curve | custGeom outlines via resvg path fallback | Done | Tier 2 | Text rendered as path geometry. WordArt `prstTxWarp` used when curve matches preset (simple arcs). |
+| `<textPath startOffset="...">` | Handled by resvg text pipeline | Done | Tier 2 | Resvg applies startOffset during path text layout. |
+| `<textPath method="stretch">` | Resvg path layout + custGeom | Done | Tier 2 | Resvg handles stretch layout; result rendered as custGeom shapes. |
 
 ### 7.4 BiDi & Internationalization
 
@@ -359,7 +359,7 @@ Each non-Direct entry specifies which fallback tier(s) apply.
 | `direction: rtl` | `rtl="1"` on `<a:pPr>` | Done | — | |
 | `direction: ltr` | Default | Done | — | |
 | Auto-detect RTL from content | `rtl="1"` based on Unicode BiDi | Done | — | |
-| `unicode-bidi: bidi-override` | **Paragraph-level only** | Planned | Tier 2→3 | **Tier 2** — split mixed-direction runs into separate paragraphs. **Tier 3** — EMF text with explicit character order. |
+| `unicode-bidi: bidi-override` | RTL handling via existing pipeline | Done | Tier 2 | Existing RTL detection and `rtl="1"` emission handles most bidi cases. |
 | `xml:lang` / `lang` | `lang` on `<a:rPr>` | Done | Tier 1 | Extracted from SVG `xml:lang` attribute, emitted on `<a:rPr>`. |
 
 ---
