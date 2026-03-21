@@ -459,9 +459,9 @@ fallbacks. They affect how SVG properties are resolved, not how they are emitted
 |-----|--------|-------|
 | `<style>` blocks / class/ID/attribute selectors | Done | Full CSS cascade via tinycss2. |
 | `@font-face` web fonts | Done | Download and embed in PPTX. |
-| `@media` queries | Planned | Evaluate at SVG viewport dimensions. |
+| `@media` queries | Done | `_process_media_rule` evaluates min/max-width/height against viewport, includes matching child rules. |
 | `@import` | Planned | Fetch and merge imported stylesheets. |
-| CSS custom properties (`var()`) | Planned | Substitute during cascade. |
+| CSS custom properties (`var()`) | Done | `:root` custom properties collected, `var()` references substituted during declaration parsing via `_resolve_var`. |
 | `calc()` | Planned | Evaluate during property resolution. |
 | `inherit` / `initial` / `unset` | Done/Planned | Resolved by cascade. |
 | Inline `style` + presentation attributes | Done | |

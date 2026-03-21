@@ -201,6 +201,9 @@ class StyleResolver:
             else _DEFAULT_UNITLESS_FONT_SCALE
         )
         self._css_rules: list[CSSRule] = []
+        self._custom_properties: dict[str, str] = {}
+        self._viewport_width: float | None = None
+        self._viewport_height: float | None = None
 
     # ------------------------------------------------------------------ #
     # Text styling                                                       #
@@ -544,6 +547,10 @@ class StyleResolver:
             except Exception:
                 continue
             for rule in stylesheet:
+                if rule.type == "at-rule" and rule.lower_at_keyword == "media":
+                    # @media: evaluate against viewport and include child rules
+                    order = self._process_media_rule(rule, order)
+                    continue
                 if rule.type != "qualified-rule":
                     continue
                 selector_text = tinycss2.serialize(rule.prelude).strip()
@@ -552,6 +559,11 @@ class StyleResolver:
                 declarations = self._parse_rule_declarations(rule)
                 if not declarations:
                     continue
+                # Collect custom properties from :root
+                if selector_text == ":root":
+                    for decl in declarations:
+                        if decl.name.startswith("--"):
+                            self._custom_properties[decl.name] = decl.value
                 selectors = self._compile_selectors(selector_text)
                 if not selectors:
                     continue
@@ -562,6 +574,75 @@ class StyleResolver:
                 )
                 self._css_rules.append(css_rule)
                 order += 1
+
+    def _process_media_rule(self, rule, order: int) -> int:
+        """Evaluate @media query and include matching child rules."""
+        # Simple evaluation: check min-width/max-width/min-height/max-height
+        # against viewport dimensions. Include all rules if no viewport set.
+        query = tinycss2.serialize(rule.prelude).strip().lower()
+        if not self._media_matches(query):
+            return order
+        if rule.content is None:
+            return order
+        # Parse child rules from @media block
+        try:
+            child_rules = tinycss2.parse_rule_list(
+                rule.content, skip_whitespace=True, skip_comments=True,
+            )
+        except Exception:
+            return order
+        for child in child_rules:
+            if child.type != "qualified-rule":
+                continue
+            selector_text = tinycss2.serialize(child.prelude).strip()
+            if not selector_text:
+                continue
+            declarations = self._parse_rule_declarations(child)
+            if not declarations:
+                continue
+            selectors = self._compile_selectors(selector_text)
+            if not selectors:
+                continue
+            self._css_rules.append(CSSRule(
+                selectors=tuple(selectors),
+                declarations=tuple(declarations),
+                order=order,
+            ))
+            order += 1
+        return order
+
+    def _media_matches(self, query: str) -> bool:
+        """Evaluate a simple media query against viewport dimensions."""
+        import re as _re
+        # No viewport set → include everything
+        if self._viewport_width is None and self._viewport_height is None:
+            return True
+        w = self._viewport_width or 0.0
+        h = self._viewport_height or 0.0
+        # Check min-width, max-width, min-height, max-height
+        for m in _re.finditer(r"(min|max)-(width|height)\s*:\s*([\d.]+)", query):
+            bound_type, dim, val_str = m.group(1), m.group(2), m.group(3)
+            val = float(val_str)
+            actual = w if dim == "width" else h
+            if bound_type == "min" and actual < val:
+                return False
+            if bound_type == "max" and actual > val:
+                return False
+        return True
+
+    def _resolve_var(self, value: str) -> str:
+        """Substitute var(--name, fallback) references in a property value."""
+        import re as _re
+        def _replace(m):
+            inner = m.group(1).strip()
+            parts = inner.split(",", 1)
+            name = parts[0].strip()
+            fallback = parts[1].strip() if len(parts) > 1 else ""
+            resolved = self._custom_properties.get(name)
+            if resolved is not None:
+                return resolved
+            return fallback or name
+        return _re.sub(r"var\(([^)]+)\)", _replace, value)
 
     def _parse_rule_declarations(self, rule) -> list[CSSDeclaration]:
         try:
@@ -581,6 +662,9 @@ class StyleResolver:
             value = tinycss2.serialize(decl.value).strip()
             if not name or not value:
                 continue
+            # Substitute var() references
+            if "var(" in value:
+                value = self._resolve_var(value)
             resolved.append(CSSDeclaration(name=name, value=value, important=bool(decl.important)))
         return resolved
 
