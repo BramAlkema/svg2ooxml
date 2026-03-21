@@ -99,7 +99,7 @@ def stroke_to_xml(stroke, metadata: Mapping[str, Any] | None = None) -> str:
         a_sub(ln, "noFill")
 
     # Add dash pattern
-    dash_elem = _dash_elem(stroke.dash_array, stroke.width)
+    dash_elem = _dash_elem(stroke.dash_array, stroke.width, dash_offset=stroke.dash_offset)
     if dash_elem is not None:
         ln.append(dash_elem)
 
@@ -135,12 +135,16 @@ def _dash_elem(
     dash_array: list[float] | None,
     stroke_width: float = 1.0,
     *,
+    dash_offset: float = 0.0,
     ppt_compat: bool = False,
 ):
     """Create dash pattern element using custDash for precise rendering.
 
     Converts SVG dash-array values (in user units) to DrawingML custDash
     with ds (dash-stop) elements.
+
+    *dash_offset* shifts the start of the dash pattern by consuming from
+    the leading entries, matching SVG ``stroke-dashoffset`` semantics.
 
     When ``ppt_compat`` is False (default, spec-compliant): ``d`` and ``sp``
     are ST_PositivePercentage — percentage of line width (100000 = 100%).
@@ -157,6 +161,10 @@ def _dash_elem(
     # SVG spec: odd-length arrays are doubled to make even pairs
     if len(values) % 2 == 1:
         values = values + values
+
+    # Apply dash offset by rotating the pattern
+    if dash_offset and values:
+        values = _apply_dash_offset(values, dash_offset)
 
     width = max(stroke_width, 0.01)  # avoid division by zero
 
@@ -177,6 +185,57 @@ def _dash_elem(
         a_sub(cust, "ds", d=d_val, sp=sp_val)
 
     return cust if len(cust) > 0 else None
+
+
+def _apply_dash_offset(values: list[float], offset: float) -> list[float]:
+    """Rotate a dash/gap array by *offset* user units.
+
+    Positive offset shifts the pattern start forward (consumes from the
+    leading dash).  Negative offset shifts backward.  The result always
+    has even length (dash, gap, dash, gap, ...).
+
+    Algorithm: find the split point, take the remainder of the split entry
+    as the new head, append the full cycle, then handle the dash/gap
+    alignment at the boundary.
+    """
+    pattern_length = sum(values)
+    if pattern_length <= 0:
+        return values
+
+    offset = offset % pattern_length
+    if offset < 1e-9:
+        return values
+
+    # Find which entry the offset falls into
+    consumed = 0.0
+    split_idx = 0
+    for i, v in enumerate(values):
+        if consumed + v > offset + 1e-9:
+            split_idx = i
+            break
+        consumed += v
+    else:
+        return values
+
+    into = offset - consumed
+    remainder = values[split_idx] - into
+
+    # Rotate: [partial_split_entry, entries_after..., entries_before..., consumed_portion]
+    after = list(values[split_idx + 1:])
+    before = list(values[:split_idx])
+    rotated = [remainder] + after + before + [into]
+
+    # rotated[0] has the same dash/gap type as values[split_idx].
+    # If split_idx is even → starts on dash (correct).
+    # If split_idx is odd → starts on gap — prepend a zero-length dash.
+    if split_idx % 2 == 1:
+        rotated = [0.0] + rotated
+
+    # Ensure even length (append zero-gap if needed)
+    if len(rotated) % 2 == 1:
+        rotated.append(0.0)
+
+    return rotated
 
 
 def clip_rect_to_xml(clip_meta: Mapping[str, Any]) -> str:
