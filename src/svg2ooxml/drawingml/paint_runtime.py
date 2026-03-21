@@ -34,7 +34,53 @@ from svg2ooxml.ir.paint import (
 from .markers import marker_end_elements
 
 
-def paint_to_fill(paint, *, opacity: float | None = None) -> str:
+def _normalize_gradient_units(paint, shape_bbox):
+    """Convert userSpaceOnUse gradient coordinates to bbox-relative [0,1].
+
+    DrawingML gradients are always relative to the shape bounding box.
+    When ``gradient_units`` is ``"userSpaceOnUse"``, the coordinates are
+    in absolute SVG user units and must be normalised.
+
+    Returns the paint unchanged if units are objectBoundingBox (default)
+    or if no bbox is available.
+    """
+    from dataclasses import replace
+
+    units = getattr(paint, "gradient_units", None)
+    if units != "userSpaceOnUse" or shape_bbox is None:
+        return paint
+
+    bx, by = shape_bbox.x, shape_bbox.y
+    bw = max(shape_bbox.width, 1e-6)
+    bh = max(shape_bbox.height, 1e-6)
+
+    if isinstance(paint, LinearGradientPaint):
+        sx, sy = paint.start
+        ex, ey = paint.end
+        return replace(
+            paint,
+            start=((sx - bx) / bw, (sy - by) / bh),
+            end=((ex - bx) / bw, (ey - by) / bh),
+            gradient_units="objectBoundingBox",
+        )
+
+    if isinstance(paint, RadialGradientPaint):
+        cx, cy = paint.center
+        r = paint.radius
+        kwargs: dict[str, Any] = {
+            "center": ((cx - bx) / bw, (cy - by) / bh),
+            "radius": r / max(bw, bh),
+            "gradient_units": "objectBoundingBox",
+        }
+        if paint.focal_point is not None:
+            fx, fy = paint.focal_point
+            kwargs["focal_point"] = ((fx - bx) / bw, (fy - by) / bh)
+        return replace(paint, **kwargs)
+
+    return paint
+
+
+def paint_to_fill(paint, *, opacity: float | None = None, shape_bbox=None) -> str:
     if isinstance(paint, SolidPaint):
         effective = paint.opacity
         if opacity is not None:
@@ -42,8 +88,10 @@ def paint_to_fill(paint, *, opacity: float | None = None) -> str:
         alpha = opacity_to_ppt(effective)
         return to_string(solid_fill(paint.rgb, alpha=alpha, theme_color=paint.theme_color))
     if isinstance(paint, LinearGradientPaint):
+        paint = _normalize_gradient_units(paint, shape_bbox)
         return linear_gradient_to_fill(paint)
     if isinstance(paint, RadialGradientPaint):
+        paint = _normalize_gradient_units(paint, shape_bbox)
         return radial_gradient_to_fill(paint)
     if isinstance(paint, GradientPaintRef):
         # Create solidFill with schemeClr element

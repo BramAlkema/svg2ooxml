@@ -61,7 +61,7 @@ def render_rectangle(
         HEIGHT_EMU=px_to_emu(bounds.height),
         PRESET=preset,
         AV_LIST=av_list,
-        FILL_XML=_format_block(paint_to_fill(rect.fill), "        "),
+        FILL_XML=_format_block(paint_to_fill(rect.fill, shape_bbox=bounds), "        "),
         STROKE_XML=_format_block(stroke_to_xml(rect.stroke, metadata=rect.metadata), "        "),
         HYPERLINK_XML=hyperlink_xml,
         EFFECTS_XML=_effect_block(rect.effects),
@@ -89,7 +89,7 @@ def render_circle(
         shape_id=shape_id,
         preset="ellipse",
         template=template,
-        fill_xml=_format_block(paint_to_fill(circle.fill), "        "),
+        fill_xml=_format_block(paint_to_fill(circle.fill, shape_bbox=bounds), "        "),
         stroke_xml=_format_block(stroke_to_xml(circle.stroke, metadata=circle.metadata), "        "),
         effects_xml=_effect_block(circle.effects),
         hyperlink_xml=hyperlink_xml,
@@ -116,7 +116,7 @@ def render_ellipse(
         shape_id=shape_id,
         preset="ellipse",
         template=template,
-        fill_xml=_format_block(paint_to_fill(ellipse.fill), "        "),
+        fill_xml=_format_block(paint_to_fill(ellipse.fill, shape_bbox=bounds), "        "),
         stroke_xml=_format_block(stroke_to_xml(ellipse.stroke, metadata=ellipse.metadata), "        "),
         effects_xml=_effect_block(ellipse.effects),
         hyperlink_xml=hyperlink_xml,
@@ -160,7 +160,7 @@ def render_path(
     logger: logging.Logger,
     hyperlink_xml: str = "",
 ) -> str:
-    fill_xml = _format_block(paint_to_fill(path.fill), "        ")
+    fill_xml = _format_block(paint_to_fill(path.fill, shape_bbox=path.bbox), "        ")
     stroke_xml = _format_block(stroke_to_xml(path.stroke, metadata=path.metadata), "        ")
     policy_geom = policy_for(path.metadata, "geometry")
     shape_name = f"Path {shape_id}"
@@ -615,7 +615,7 @@ def _render_polygonal_shape(
 
     shape_name = f"{'Polygon' if closed else 'Polyline'} {shape_id}"
 
-    fill_xml = paint_to_fill(getattr(shape, "fill", None))
+    fill_xml = paint_to_fill(getattr(shape, "fill", None), shape_bbox=bounds)
     stroke_xml = stroke_to_xml(getattr(shape, "stroke", None), metadata=getattr(shape, "metadata", None))
 
     return template.format(
