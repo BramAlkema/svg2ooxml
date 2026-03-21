@@ -479,8 +479,8 @@ needed — conversion happens before DrawingML emission.
 | `currentColor` | Direct | Resolved from `color` property. |
 | `color-interpolation: linearRGB` | Done | Extra interpolated stops in linearRGB→sRGB. 6/6 SVGs pass. |
 | `color-profile` / ICC | Ignore | Convert to sRGB. Lossy for wide-gamut. |
-| `oklab()` / `oklch()` (CSS Color 4) | Planned | Convert to sRGB at parse time. |
-| System colors | Planned | Map to sensible defaults. |
+| `oklab()` / `oklch()` (CSS Color 4) | Done | Parsed via `_parse_oklab`/`_parse_oklch` in color parser, converted to sRGB using existing OKLab module. |
+| System colors | Done | `_SYSTEM_COLORS` dict in color parser maps CSS system color keywords to sRGB hex defaults. |
 
 ---
 
@@ -494,7 +494,7 @@ Not applicable to OOXML output — rendering decisions are made by the viewer
 | `image-rendering` | Ignore | Viewer controls interpolation. |
 | `shape-rendering` | Ignore | Viewer controls anti-aliasing. |
 | `text-rendering` | Ignore | Viewer controls font hinting. |
-| `color-interpolation-filters` | Planned | Affects filter rasterization color space, not output format. |
+| `color-interpolation-filters` | Done | Parsed in `resolve_color_mode()` in filter pipeline. Affects rasterization color space selection. |
 
 ---
 

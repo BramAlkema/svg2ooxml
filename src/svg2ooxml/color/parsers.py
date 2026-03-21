@@ -12,6 +12,20 @@ from .names import CSS3_NAMES_TO_HEX
 _HEX_RE = re.compile(r"^#?(?P<value>[0-9a-fA-F]{3,8})$")
 _RGB_RE = re.compile(r"rgba?\((?P<body>.+)\)")
 _HSL_RE = re.compile(r"hsla?\((?P<body>.+)\)")
+_OKLAB_RE = re.compile(r"oklab\((?P<body>.+)\)")
+_OKLCH_RE = re.compile(r"oklch\((?P<body>.+)\)")
+
+# CSS system colors → sensible sRGB defaults
+_SYSTEM_COLORS: dict[str, str] = {
+    "canvas": "ffffff", "canvastext": "000000",
+    "linktext": "0000ee", "visitedtext": "551a8b", "activetext": "ff0000",
+    "buttonface": "f0f0f0", "buttontext": "000000", "buttonborder": "767676",
+    "field": "ffffff", "fieldtext": "000000",
+    "highlight": "3390ff", "highlighttext": "ffffff",
+    "selecteditem": "3390ff", "selecteditemtext": "ffffff",
+    "mark": "ffff00", "marktext": "000000",
+    "graytext": "808080", "accentcolor": "0078d4", "accentcolortext": "ffffff",
+}
 
 
 def coerce_color(value) -> Color | None:
@@ -70,9 +84,22 @@ def parse_color(
     if hsl_match:
         return _parse_hsl(hsl_match.group("body"))
 
+    oklab_match = _OKLAB_RE.match(lowered)
+    if oklab_match:
+        return _parse_oklab(oklab_match.group("body"))
+
+    oklch_match = _OKLCH_RE.match(lowered)
+    if oklch_match:
+        return _parse_oklch(oklch_match.group("body"))
+
     hex_value = CSS3_NAMES_TO_HEX.get(lowered)
     if hex_value:
         return _parse_hex(hex_value[1:])
+
+    # CSS system colors
+    system_hex = _SYSTEM_COLORS.get(lowered)
+    if system_hex:
+        return _parse_hex(system_hex)
 
     return None
 
@@ -186,6 +213,53 @@ def _hue_to_rgb(p: float, q: float, t: float) -> float:
 
 def _clamp(value: float) -> float:
     return max(0.0, min(1.0, value))
+
+
+def _parse_oklab(body: str) -> Color | None:
+    """Parse ``oklab(L a b [/ alpha])`` → Color (sRGB)."""
+    from .oklab import oklab_to_rgb
+
+    parts = re.split(r"[/,\s]+", body.strip())
+    parts = [p for p in parts if p]
+    if len(parts) < 3:
+        return None
+    try:
+        l_val = float(parts[0].rstrip("%"))
+        # CSS oklab: L is 0–1 (or 0%–100%), a/b are roughly -0.4–0.4
+        if parts[0].endswith("%"):
+            l_val /= 100.0
+        a_val = float(parts[1])
+        b_val = float(parts[2])
+        alpha = float(parts[3].rstrip("%")) if len(parts) > 3 else 1.0
+        if parts[3].endswith("%") if len(parts) > 3 else False:
+            alpha /= 100.0
+    except (ValueError, IndexError):
+        return None
+    r, g, b = oklab_to_rgb(l_val, a_val, b_val)
+    return Color(_clamp(r), _clamp(g), _clamp(b), _clamp(alpha))
+
+
+def _parse_oklch(body: str) -> Color | None:
+    """Parse ``oklch(L C H [/ alpha])`` → Color (sRGB)."""
+    from .oklab import oklch_to_rgb
+
+    parts = re.split(r"[/,\s]+", body.strip())
+    parts = [p for p in parts if p]
+    if len(parts) < 3:
+        return None
+    try:
+        l_val = float(parts[0].rstrip("%"))
+        if parts[0].endswith("%"):
+            l_val /= 100.0
+        c_val = float(parts[1])
+        h_val = float(parts[2].rstrip("deg"))
+        alpha = float(parts[3].rstrip("%")) if len(parts) > 3 else 1.0
+        if parts[3].endswith("%") if len(parts) > 3 else False:
+            alpha /= 100.0
+    except (ValueError, IndexError):
+        return None
+    r, g, b = oklch_to_rgb(l_val, c_val, h_val)
+    return Color(_clamp(r), _clamp(g), _clamp(b), _clamp(alpha))
 
 
 __all__ = ["parse_color"]
