@@ -85,7 +85,16 @@ ATTRIBUTE_NAME_MAP: dict[str, str] = {
 
     # Line width → ln_w
     "stroke-width": "ln_w",
+
+    # Dash offset animation → Wipe entrance (line drawing effect)
+    "stroke-dashoffset": "style.visibility",
 }
+
+# Attributes that should use Wipe entrance animation instead of <p:anim>
+WIPE_ATTRIBUTES: frozenset[str] = frozenset({
+    "stroke-dashoffset",
+})
+
 """Map SVG attribute names to PowerPoint attribute names.
 
 SVG uses various attribute names (x, cx, left, etc.) that all map to

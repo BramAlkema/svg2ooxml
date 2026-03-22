@@ -33,6 +33,16 @@ class ParsedAnimation:
     definition: AnimationDefinition
 
 
+def _parse_optional_duration_ms(value: str | None) -> int | None:
+    """Parse an optional SMIL duration to milliseconds, or None."""
+    if not value or value == "indefinite":
+        return None
+    try:
+        return int(round(parse_time_value(value) * 1000))
+    except (ValueError, TypeError):
+        return None
+
+
 class SMILParser:
     """Parse SMIL animation elements within an SVG DOM."""
 
@@ -168,6 +178,11 @@ class SMILParser:
 
         additive = element.get("additive", "replace")
         accumulate = element.get("accumulate", "none")
+        restart = element.get("restart")  # "always", "whenNotActive", "never"
+
+        # min/max duration constraints
+        min_ms = _parse_optional_duration_ms(element.get("min"))
+        max_ms = _parse_optional_duration_ms(element.get("max"))
 
         return AnimationDefinition(
             element_id=element_id,
@@ -182,6 +197,9 @@ class SMILParser:
             additive=additive,
             accumulate=accumulate,
             motion_rotate=motion_rotate,
+            restart=restart if restart in ("always", "whenNotActive", "never") else None,
+            min_ms=min_ms,
+            max_ms=max_ms,
         )
 
     def _sanitize_interpolation_inputs(

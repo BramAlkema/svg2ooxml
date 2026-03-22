@@ -193,6 +193,48 @@ class DrawingMLAnimationWriter:
         if self._policy is None:
             self._policy = AnimationPolicy(options)
 
+        # Bake accumulate="sum" into expanded keyframe values
+        # Each repetition builds on the previous end value
+        if (
+            animation.accumulate == "sum"
+            and animation.repeat_count not in (None, "indefinite", 1, "1")
+            and len(animation.values) >= 2
+        ):
+            try:
+                from dataclasses import replace as _repl
+                repeat_n = int(animation.repeat_count)
+                if repeat_n > 1:
+                    base_vals = animation.values
+                    expanded: list[str] = list(base_vals)
+                    # For numeric values, accumulate by adding end-start delta
+                    try:
+                        start_f = float(base_vals[0])
+                        end_f = float(base_vals[-1])
+                        delta = end_f - start_f
+                        for rep in range(1, repeat_n):
+                            offset = delta * rep
+                            expanded.extend(
+                                str(float(v) + offset) for v in base_vals[1:]
+                            )
+                        animation = _repl(animation, values=expanded, accumulate="none")
+                    except ValueError:
+                        pass  # non-numeric — can't accumulate
+            except (ValueError, TypeError):
+                pass
+
+        # Apply min/max duration constraints from SMIL
+        if animation.min_ms is not None or animation.max_ms is not None:
+            from dataclasses import replace as _replace
+            dur = animation.duration_ms
+            if animation.min_ms is not None:
+                dur = max(dur, animation.min_ms)
+            if animation.max_ms is not None:
+                dur = min(dur, animation.max_ms)
+            if dur != animation.duration_ms:
+                animation = _replace(animation, timing=_replace(
+                    animation.timing, duration=dur / 1000.0,
+                ))
+
         max_error = self._policy.estimate_spline_error(animation)
         should_skip, skip_reason = self._policy.should_skip(animation, max_error)
         if should_skip:

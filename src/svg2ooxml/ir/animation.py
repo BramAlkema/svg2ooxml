@@ -150,6 +150,9 @@ class AnimationDefinition:
     accumulate: str = "none"
     motion_rotate: str | None = None
     element_center_px: tuple[float, float] | None = None
+    restart: str | None = None  # "always", "whenNotActive", "never"
+    min_ms: int | None = None
+    max_ms: int | None = None
 
     def __post_init__(self) -> None:
         if not self.element_id:

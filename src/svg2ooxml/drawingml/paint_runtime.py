@@ -222,14 +222,12 @@ def _dash_elem(
         space_px = values[i + 1] if i + 1 < len(values) else 0
         if ppt_compat:
             # Absolute hundredths-of-a-point (px * 72/96 * 100000)
-            d_val = max(0, int(round(dash_px * 75000)))
-            sp_val = max(0, int(round(space_px * 75000)))
+            d_val = max(1, int(round(dash_px * 75000)))
+            sp_val = max(1, int(round(space_px * 75000)))
         else:
             # Spec-compliant: percentage of line width (100000 = 100%)
-            d_val = max(0, int(round(dash_px / width * 100000)))
-            sp_val = max(0, int(round(space_px / width * 100000)))
-        if d_val == 0 and sp_val == 0:
-            continue
+            d_val = max(1, int(round(dash_px / width * 100000)))
+            sp_val = max(1, int(round(space_px / width * 100000)))
         a_sub(cust, "ds", d=d_val, sp=sp_val)
 
     return cust if len(cust) > 0 else None

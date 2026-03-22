@@ -13,7 +13,7 @@ from lxml import etree
 from svg2ooxml.drawingml.xml_builder import p_elem
 from svg2ooxml.ir.animation import AnimationType, CalcMode
 
-from ..constants import ATTRIBUTE_NAME_MAP, COLOR_ATTRIBUTES, FADE_ATTRIBUTES
+from ..constants import ATTRIBUTE_NAME_MAP, COLOR_ATTRIBUTES, FADE_ATTRIBUTES, WIPE_ATTRIBUTES
 from ..timing_utils import compute_paced_key_times
 from ..value_formatters import format_numeric_value
 from .base import AnimationHandler
@@ -44,6 +44,10 @@ class NumericAnimationHandler(AnimationHandler):
         behavior_id: int,
     ) -> etree._Element | None:
         """Build ``<p:par>`` containing ``<p:anim>`` with TAV keyframes."""
+        # stroke-dashoffset animation → Wipe entrance (line drawing effect)
+        if animation.target_attribute in WIPE_ATTRIBUTES:
+            return self._build_wipe_entrance(animation, par_id, behavior_id)
+
         ppt_attribute = self._map_attribute_name(animation.target_attribute)
 
         # Build <p:anim>
@@ -74,6 +78,49 @@ class NumericAnimationHandler(AnimationHandler):
             child_element=anim,
             preset_id=32,
             preset_class="emph",
+            begin_triggers=animation.begin_triggers,
+            default_target_shape=animation.element_id,
+        )
+
+    def _build_wipe_entrance(
+        self,
+        animation: AnimationDefinition,
+        par_id: int,
+        behavior_id: int,
+    ) -> etree._Element:
+        """Build Wipe entrance animation for stroke-dashoffset (line drawing).
+
+        SVG line-drawing effect animates stroke-dashoffset from path length
+        to 0. PowerPoint Wipe (presetID=22) entrance with direction subtype
+        produces a similar reveal effect.
+        """
+        from svg2ooxml.drawingml.xml_builder import p_sub
+
+        # Determine wipe direction: dashoffset going to 0 = left-to-right wipe
+        # Subtype 1=left, 2=top, 3=right, 4=bottom
+        subtype = 1
+
+        # Build a <p:set> to make shape visible + Wipe entrance
+        set_elem = p_elem("set")
+        cBhvr = self._xml.build_behavior_core_elem(
+            behavior_id=behavior_id,
+            duration_ms=1,
+            target_shape=animation.element_id,
+            attr_name_list=["style.visibility"],
+        )
+        set_elem.append(cBhvr)
+        to_elem = p_sub(set_elem, "to")
+        p_sub(to_elem, "strVal", val="visible")
+
+        return self._xml.build_par_container_elem(
+            par_id=par_id,
+            duration_ms=animation.duration_ms,
+            delay_ms=animation.begin_ms,
+            child_element=set_elem,
+            preset_id=22,  # Wipe
+            preset_class="entr",
+            preset_subtype=subtype,
+            node_type="withEffect",
             begin_triggers=animation.begin_triggers,
             default_target_shape=animation.element_id,
         )
