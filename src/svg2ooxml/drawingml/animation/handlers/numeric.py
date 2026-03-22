@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 
 from lxml import etree
 
-from svg2ooxml.drawingml.xml_builder import p_elem
+from svg2ooxml.drawingml.xml_builder import p_elem, p_sub
 from svg2ooxml.ir.animation import AnimationType, CalcMode
 
 from ..constants import ATTRIBUTE_NAME_MAP, COLOR_ATTRIBUTES, FADE_ATTRIBUTES, WIPE_ATTRIBUTES
@@ -94,8 +94,6 @@ class NumericAnimationHandler(AnimationHandler):
         to 0. PowerPoint Wipe (presetID=22) entrance with direction subtype
         produces a similar reveal effect.
         """
-        from svg2ooxml.drawingml.xml_builder import p_sub
-
         # Determine wipe direction: dashoffset going to 0 = left-to-right wipe
         # Subtype 1=left, 2=top, 3=right, 4=bottom
         subtype = 1

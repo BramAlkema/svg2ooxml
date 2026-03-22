@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Mapping, Sequence
+from dataclasses import replace
 from typing import TYPE_CHECKING, Any
 
 from lxml import etree
@@ -193,47 +194,8 @@ class DrawingMLAnimationWriter:
         if self._policy is None:
             self._policy = AnimationPolicy(options)
 
-        # Bake accumulate="sum" into expanded keyframe values
-        # Each repetition builds on the previous end value
-        if (
-            animation.accumulate == "sum"
-            and animation.repeat_count not in (None, "indefinite", 1, "1")
-            and len(animation.values) >= 2
-        ):
-            try:
-                from dataclasses import replace as _repl
-                repeat_n = int(animation.repeat_count)
-                if repeat_n > 1:
-                    base_vals = animation.values
-                    expanded: list[str] = list(base_vals)
-                    # For numeric values, accumulate by adding end-start delta
-                    try:
-                        start_f = float(base_vals[0])
-                        end_f = float(base_vals[-1])
-                        delta = end_f - start_f
-                        for rep in range(1, repeat_n):
-                            offset = delta * rep
-                            expanded.extend(
-                                str(float(v) + offset) for v in base_vals[1:]
-                            )
-                        animation = _repl(animation, values=expanded, accumulate="none")
-                    except ValueError:
-                        pass  # non-numeric — can't accumulate
-            except (ValueError, TypeError):
-                pass
-
-        # Apply min/max duration constraints from SMIL
-        if animation.min_ms is not None or animation.max_ms is not None:
-            from dataclasses import replace as _replace
-            dur = animation.duration_ms
-            if animation.min_ms is not None:
-                dur = max(dur, animation.min_ms)
-            if animation.max_ms is not None:
-                dur = min(dur, animation.max_ms)
-            if dur != animation.duration_ms:
-                animation = _replace(animation, timing=_replace(
-                    animation.timing, duration=dur / 1000.0,
-                ))
+        animation = self._bake_accumulate(animation)
+        animation = self._clamp_duration(animation)
 
         max_error = self._policy.estimate_spline_error(animation)
         should_skip, skip_reason = self._policy.should_skip(animation, max_error)
@@ -251,6 +213,57 @@ class DrawingMLAnimationWriter:
             return result, None
         except Exception as e:
             return None, {"reason": f"handler_error: {str(e)}"}
+
+    @staticmethod
+    def _bake_accumulate(animation: AnimationDefinition) -> AnimationDefinition:
+        """Bake accumulate="sum" into expanded keyframe values.
+
+        Each repetition builds on the previous end value by adding the
+        end-start delta for numeric values.
+        """
+        if animation.accumulate != "sum":
+            return animation
+        if animation.repeat_count in (None, "indefinite", 1, "1"):
+            return animation
+        if len(animation.values) < 2:
+            return animation
+        try:
+            repeat_n = int(animation.repeat_count)
+        except (ValueError, TypeError):
+            return animation
+        if repeat_n <= 1:
+            return animation
+
+        base_vals = animation.values
+        try:
+            start_f = float(base_vals[0])
+            end_f = float(base_vals[-1])
+        except ValueError:
+            return animation  # non-numeric — can't accumulate
+
+        delta = end_f - start_f
+        expanded: list[str] = list(base_vals)
+        for rep in range(1, repeat_n):
+            offset = delta * rep
+            expanded.extend(str(float(v) + offset) for v in base_vals[1:])
+        return replace(animation, values=expanded, accumulate="none")
+
+    @staticmethod
+    def _clamp_duration(animation: AnimationDefinition) -> AnimationDefinition:
+        """Apply min/max duration constraints from SMIL."""
+        if animation.min_ms is None and animation.max_ms is None:
+            return animation
+        dur = animation.duration_ms
+        if animation.min_ms is not None:
+            dur = max(dur, animation.min_ms)
+        if animation.max_ms is not None:
+            dur = min(dur, animation.max_ms)
+        if dur == animation.duration_ms:
+            return animation
+        return replace(
+            animation,
+            timing=replace(animation.timing, duration=dur / 1000.0),
+        )
 
     def _find_handler(self, animation: AnimationDefinition) -> AnimationHandler | None:
         for handler in self._handlers:

@@ -37,6 +37,8 @@ from svg2ooxml.ir.effects import (
 from svg2ooxml.ir.geometry import LineSegment, Rect
 from svg2ooxml.ir.scene import Path as IRPath
 from svg2ooxml.ir.shapes import Circle, Ellipse, Line, Polygon, Polyline, Rectangle
+from svg2ooxml.ir.text import Run, TextAnchor, TextFrame, WordArtCandidate
+from svg2ooxml.policy.constants import FALLBACK_BITMAP
 
 
 def _descr_attr(metadata) -> str:
@@ -68,8 +70,6 @@ def _rot_attr(metadata) -> str:
         ppt_angle = int(round(float(deg) * 60000))
         return f' rot="{ppt_angle}"'
     return ""
-from svg2ooxml.ir.text import Run, TextAnchor, TextFrame, WordArtCandidate
-from svg2ooxml.policy.constants import FALLBACK_BITMAP
 
 
 def render_rectangle(

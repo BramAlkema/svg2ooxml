@@ -2,20 +2,8 @@
 
 from __future__ import annotations
 
-import html
-
 from svg2ooxml.drawingml.generator import px_to_emu
 from svg2ooxml.ir.scene import Image
-
-
-def _descr_attr(metadata) -> str:
-    """Return ` descr="..."` attribute string if element has a description."""
-    if not isinstance(metadata, dict):
-        return ""
-    desc = metadata.get("description")
-    if not desc:
-        return ""
-    return f' descr="{html.escape(str(desc), quote=True)}"'
 
 
 def render_picture(
@@ -30,6 +18,7 @@ def render_picture(
     geometry_xml: str = "",
 ) -> str | None:
     """Render an IR image element into a picture shape."""
+    from .shapes_runtime import _descr_attr, _effect_block  # lazy to avoid cycle
 
     if image.data is None and image.href is None:
         return None
@@ -54,8 +43,6 @@ def render_picture(
 
     effects_xml = ""
     if isinstance(getattr(image, "effects", []), list):
-        from .shapes_runtime import _effect_block  # lazy import to avoid cycle
-
         effects_xml = _indent_block(_effect_block(getattr(image, "effects", [])))
 
     # srcRect from clip bounds (thousandths of percent).
