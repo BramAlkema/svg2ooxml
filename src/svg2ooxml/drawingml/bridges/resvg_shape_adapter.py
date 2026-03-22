@@ -74,6 +74,10 @@ class ResvgShapeAdapter:
     def from_path_node(self, node: PathNode) -> list[SegmentType]:
         """Convert a resvg PathNode to IR segments.
 
+        Preserves cubic bezier curves as BezierSegments instead of flattening
+        them to line segments.  Quadratic curves and arcs are promoted to cubics
+        (DrawingML only supports cubic beziers).
+
         ✅ node.transform IS applied! Transform is baked into segment coordinates.
 
         Args:
@@ -86,13 +90,9 @@ class ResvgShapeAdapter:
             ResvgShapeAdapterError: If path has no geometry
         """
         if node.geometry is None:
-            # Fallback: if no normalized geometry, path is unusable
             raise ResvgShapeAdapterError(f"PathNode {node.id or '(unnamed)'} has no geometry")
 
-        # Convert normalized path to primitives, then to IR segments
-        tolerance = 0.25  # Curve flattening tolerance (same as path_normalizer default)
-        primitives = node.geometry.to_primitives(tolerance)
-        segments = self._primitives_to_segments(primitives)
+        segments = self._commands_to_segments(node.geometry)
 
         # Apply node transform to all segments
         if node.transform is not None and not self._is_identity(node.transform):
@@ -374,6 +374,124 @@ class ResvgShapeAdapter:
             control2=Point(cx + rx, cy - ky),
             end=right,
         ))
+
+        return segments
+
+    def _commands_to_segments(self, geometry) -> list[SegmentType]:
+        """Convert NormalizedPath commands directly to IR segments, preserving curves.
+
+        Unlike ``to_primitives`` (which flattens cubics to lines), this reads
+        the raw ``PathCommand`` list and emits ``BezierSegment`` for cubic and
+        quadratic curves.  Arcs are first decomposed into cubic segments.
+        """
+        from svg2ooxml.core.resvg.geometry.path_commands import (
+            ARC_TO, CLOSE, CUBIC_TO, LINE_TO, MOVE_TO,
+            QUAD_TO, SMOOTH_CUBIC_TO, SMOOTH_QUAD_TO,
+        )
+        from svg2ooxml.core.resvg.geometry.path_normalizer import (
+            _arc_to_cubic_segments,
+        )
+
+        matrix = geometry.transform
+        segments: list[SegmentType] = []
+        cx, cy = 0.0, 0.0
+        sx, sy = 0.0, 0.0  # subpath start
+        prev_cubic_ctrl: tuple[float, float] | None = None
+        prev_quad_ctrl: tuple[float, float] | None = None
+
+        def _t(x: float, y: float) -> Point:
+            """Apply geometry transform and return a Point."""
+            tx, ty = matrix.apply_to_point(x, y)
+            return Point(tx, ty)
+
+        for cmd in geometry.commands:
+            op = cmd.command
+            pts = cmd.points
+
+            if op == MOVE_TO:
+                cx, cy = pts[0], pts[1]
+                sx, sy = cx, cy
+                prev_cubic_ctrl = prev_quad_ctrl = None
+            elif op == LINE_TO:
+                segments.append(LineSegment(_t(cx, cy), _t(pts[0], pts[1])))
+                cx, cy = pts[0], pts[1]
+                prev_cubic_ctrl = prev_quad_ctrl = None
+            elif op == CUBIC_TO:
+                p1x, p1y = pts[0], pts[1]
+                p2x, p2y = pts[2], pts[3]
+                ex, ey = pts[4], pts[5]
+                segments.append(BezierSegment(
+                    start=_t(cx, cy), control1=_t(p1x, p1y),
+                    control2=_t(p2x, p2y), end=_t(ex, ey),
+                ))
+                prev_cubic_ctrl = (p2x, p2y)
+                prev_quad_ctrl = None
+                cx, cy = ex, ey
+            elif op == SMOOTH_CUBIC_TO:
+                if prev_cubic_ctrl is None:
+                    r = (cx, cy)
+                else:
+                    r = (2*cx - prev_cubic_ctrl[0], 2*cy - prev_cubic_ctrl[1])
+                p2x, p2y = pts[0], pts[1]
+                ex, ey = pts[2], pts[3]
+                segments.append(BezierSegment(
+                    start=_t(cx, cy), control1=_t(r[0], r[1]),
+                    control2=_t(p2x, p2y), end=_t(ex, ey),
+                ))
+                prev_cubic_ctrl = (p2x, p2y)
+                prev_quad_ctrl = None
+                cx, cy = ex, ey
+            elif op == QUAD_TO:
+                # Promote quadratic to cubic
+                qx, qy = pts[0], pts[1]
+                ex, ey = pts[2], pts[3]
+                c1x = cx + (2/3)*(qx - cx)
+                c1y = cy + (2/3)*(qy - cy)
+                c2x = ex + (2/3)*(qx - ex)
+                c2y = ey + (2/3)*(qy - ey)
+                segments.append(BezierSegment(
+                    start=_t(cx, cy), control1=_t(c1x, c1y),
+                    control2=_t(c2x, c2y), end=_t(ex, ey),
+                ))
+                prev_quad_ctrl = (qx, qy)
+                prev_cubic_ctrl = None
+                cx, cy = ex, ey
+            elif op == SMOOTH_QUAD_TO:
+                if prev_quad_ctrl is None:
+                    r = (cx, cy)
+                else:
+                    r = (2*cx - prev_quad_ctrl[0], 2*cy - prev_quad_ctrl[1])
+                ex, ey = pts[0], pts[1]
+                c1x = cx + (2/3)*(r[0] - cx)
+                c1y = cy + (2/3)*(r[1] - cy)
+                c2x = ex + (2/3)*(r[0] - ex)
+                c2y = ey + (2/3)*(r[1] - ey)
+                segments.append(BezierSegment(
+                    start=_t(cx, cy), control1=_t(c1x, c1y),
+                    control2=_t(c2x, c2y), end=_t(ex, ey),
+                ))
+                prev_quad_ctrl = r
+                prev_cubic_ctrl = None
+                cx, cy = ex, ey
+            elif op == ARC_TO:
+                rx, ry, rotation, large, sweep, ex, ey = pts
+                arc_cubics = _arc_to_cubic_segments(
+                    (cx, cy), (rx, ry, rotation, large, sweep, ex, ey),
+                )
+                for seg in arc_cubics:
+                    segments.append(BezierSegment(
+                        start=_t(seg[0][0], seg[0][1]),
+                        control1=_t(seg[1][0], seg[1][1]),
+                        control2=_t(seg[2][0], seg[2][1]),
+                        end=_t(seg[3][0], seg[3][1]),
+                    ))
+                prev_cubic_ctrl = prev_quad_ctrl = None
+                cx, cy = ex, ey
+            elif op == CLOSE:
+                if abs(cx - sx) > 1e-6 or abs(cy - sy) > 1e-6:
+                    segments.append(LineSegment(_t(cx, cy), _t(sx, sy)))
+                cx, cy = sx, sy
+                prev_cubic_ctrl = prev_quad_ctrl = None
 
         return segments
 
