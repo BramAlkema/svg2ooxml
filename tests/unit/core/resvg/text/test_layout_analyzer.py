@@ -410,7 +410,7 @@ class TestTextLayoutAnalyzer:
         grandchild_span = MockTextNode(
             tag="tspan",
             text_content="!",
-            attributes={"rotate": "45"},
+            attributes={"rotate": "45 90"},  # varying rotation = complex
         )
 
         child_span = MockTextNode(

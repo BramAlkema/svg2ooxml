@@ -170,6 +170,12 @@ class TextConverter:
                 except ValueError:
                     pass
         if _per_char_attrs:
+            # Uniform rotation → xfrm rot on shape (keeps text native)
+            rotate_vals = _per_char_attrs.get("rotate")
+            if rotate_vals and len(set(rotate_vals)) == 1:
+                metadata["text_rotation_deg"] = rotate_vals[0]
+                del _per_char_attrs["rotate"]  # consumed
+
             # If only dx with uniform values, convert to letter_spacing
             # to keep text native + editable (font embedding via FontForge)
             dx_only = (

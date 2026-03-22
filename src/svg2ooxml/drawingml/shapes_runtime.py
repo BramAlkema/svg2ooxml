@@ -57,6 +57,17 @@ def _vert_attr(metadata) -> str:
     if wm in ("vert", "vert270"):
         return f' vert="{wm}"'
     return ""
+
+
+def _rot_attr(metadata) -> str:
+    """Return ` rot="angle"` for text shape rotation (degrees × 60000)."""
+    if not isinstance(metadata, dict):
+        return ""
+    deg = metadata.get("text_rotation_deg")
+    if deg is not None and abs(float(deg)) > 0.01:
+        ppt_angle = int(round(float(deg) * 60000))
+        return f' rot="{ppt_angle}"'
+    return ""
 from svg2ooxml.ir.text import Run, TextAnchor, TextFrame, WordArtCandidate
 from svg2ooxml.policy.constants import FALLBACK_BITMAP
 
@@ -384,6 +395,7 @@ def render_textframe(
         HYPERLINK_XML=hyperlink_xml,
         DESCR_ATTR=_descr_attr(getattr(frame, "metadata", None)),
         VERT_ATTR=_vert_attr(getattr(frame, "metadata", None)),
+        ROT_ATTR=_rot_attr(getattr(frame, "metadata", None)),
     )
 
 
@@ -443,6 +455,7 @@ def render_wordart(
         HYPERLINK_XML=hyperlink_xml,
         DESCR_ATTR=_descr_attr(getattr(frame, "metadata", None)),
         VERT_ATTR=_vert_attr(getattr(frame, "metadata", None)),
+        ROT_ATTR=_rot_attr(getattr(frame, "metadata", None)),
     )
 
 

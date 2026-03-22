@@ -68,7 +68,7 @@ class DrawingMLTextRenderer:
         if per_char and element.runs:
             # Try native text with letter-spacing if dx is uniform and no
             # dy/rotate/absolute positioning — keeps text editable.
-            if self._can_use_native_spacing(per_char, element):
+            if self._can_use_native_text(per_char, element):
                 pass  # fall through to normal text rendering below
             else:
                 glyph_xml = self._render_per_char_glyphs(element, shape_id, per_char)
@@ -127,19 +127,32 @@ class DrawingMLTextRenderer:
         return xml, shape_id + 1
 
     @staticmethod
-    def _can_use_native_spacing(per_char: dict, element) -> bool:
-        """Return True when per-char attributes can be approximated with spc.
+    def _can_use_native_text(per_char: dict, element) -> bool:
+        """Return True when per-char attributes can use native DrawingML.
 
         Native text is preferred because it keeps text editable and uses
         font embedding (FontForge → EOT) instead of glyph outlines.
 
-        Conditions: only dx (no dy/rotate/abs positioning), and all dx
-        values are approximately equal (uniform spacing adjustment).
+        Handles:
+        - Uniform dx → letter-spacing (spc)
+        - Uniform rotate → xfrm rot on shape (stored in metadata)
+        - No dy/abs positioning needed
         """
-        if per_char.get("dy") or per_char.get("rotate"):
+        if per_char.get("dy"):
             return False
         if per_char.get("abs_x") or per_char.get("abs_y"):
             return False
+
+        # Uniform rotation → can use <a:xfrm rot="..."> on the text shape
+        rotate = per_char.get("rotate")
+        if rotate:
+            if len(set(rotate)) == 1:
+                # All same angle — store for xfrm emission
+                meta = getattr(element, "metadata", None)
+                if isinstance(meta, dict):
+                    meta["text_rotation_deg"] = rotate[0]
+            else:
+                return False  # varying rotation needs glyph outlines
         dx = per_char.get("dx")
         if not dx:
             return True  # no offsets at all

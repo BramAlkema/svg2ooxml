@@ -397,9 +397,16 @@ class TextLayoutAnalyzer:
         """
         attrs = getattr(node, "attributes", {}) or {}
 
-        # Check for rotate attribute (per-character rotation)
-        if "rotate" in attrs:
-            return True
+        # Check for rotate attribute — uniform rotation (all same value)
+        # is handled via xfrm rot on the shape, not complex positioning.
+        rotate_attr = attrs.get("rotate", "").strip()
+        if rotate_attr:
+            try:
+                vals = [float(v) for v in rotate_attr.replace(",", " ").split() if v]
+                if len(set(vals)) > 1:
+                    return True  # varying rotation — truly complex
+            except ValueError:
+                return True
 
         # Check for complex x/y positioning
         x_attr = attrs.get("x", "")
