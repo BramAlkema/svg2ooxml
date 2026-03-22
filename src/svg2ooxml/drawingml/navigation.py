@@ -50,12 +50,15 @@ def register_navigation(
     if spec is None:
         return None
 
-    asset_data, nav_elem = _build_navigation_asset(
+    result = _build_navigation_asset(
         spec,
         allocate_rel_id=allocate_rel_id,
         scope=scope,
         text=text,
     )
+    if result is None:
+        return None
+    asset_data, nav_elem = result
 
     if asset_data is not None:
         add_asset(asset_data)
@@ -77,6 +80,10 @@ def _build_navigation_asset(
     target_mode: str | None = None
 
     if spec.kind == NavigationKind.EXTERNAL and spec.href:
+        # Reject dangerous URI schemes — only allow http(s), mailto, tel
+        href_lower = spec.href.strip().lower()
+        if href_lower.startswith(("javascript:", "data:", "vbscript:", "file:")):
+            return None
         relationship_id = allocate_rel_id()
         relationship_type = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink"
         target = spec.href
