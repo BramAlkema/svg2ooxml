@@ -22,18 +22,31 @@ Convert animated SVGs to native PowerPoint — programmatically, at scale, witho
 
 svg2ooxml parses SVG markup, builds a typed intermediate representation, renders native DrawingML XML fragments, and packages them into valid `.pptx` files. 97% of the SVG feature set is covered. 525 W3C test SVGs pass OpenXML validation.
 
-## Why not just use PowerPoint's SVG import?
+## Comparison
 
-| | PowerPoint SVG import | svg2ooxml |
-|---|---|---|
-| **Animations** | Discarded — static shapes only | Full SMIL → native PowerPoint timing, motion paths, keyframes |
-| **Runs headless** | No — requires Windows + Office license | Yes — Python on Linux, macOS, or container |
-| **Batch conversion** | ~2/min via COM automation | ~800/min (75ms each), no Office needed |
-| **Font embedding** | Uses installed system fonts | Subsets + embeds via FontForge (EOT) |
-| **CSS var() / calc()** | Not evaluated | Fully resolved |
-| **Per-character positioning** | Flattened | dx/dy/rotate preserved via glyph outlines or native spacing |
-| **Accessibility** | title/desc discarded | Mapped to `cNvPr descr` |
-| **Programmable** | VBA/COM only | Python API, CLI, REST API |
+| Feature | svg2ooxml | [svg2pptx](https://pypi.org/project/svg2pptx/) | PowerPoint SVG import | [CairoSVG](https://pypi.org/project/cairosvg/) | LibreOffice |
+|---|---|---|---|---|---|
+| **Output format** | Native OOXML shapes | Native shapes (python-pptx) | Native shapes | PDF / PNG | Embedded image |
+| **Animations** | Full SMIL → PowerPoint timing | None | None | N/A | None |
+| **Gradients** | Linear, radial, pattern, transforms | None (first color only) | Basic | Good (raster) | Raster |
+| **Filters** | Blur, shadow, color matrix + fallbacks | None | Partial | Good (raster) | Raster |
+| **Clipping & masking** | Full fallback ladder | None | Basic | Good (raster) | Raster |
+| **Text on curves** | WordArt with font embedding | None | Basic | Good (raster) | Raster |
+| **CSS var() / calc()** | Resolved | None | None | None | None |
+| **Per-char dx/dy/rotate** | Glyph outlines or native spacing | None | Flattened | Good (raster) | Raster |
+| **Font embedding** | FontForge → EOT subset | System fonts | System fonts | N/A | N/A |
+| **Bezier curves** | Exact (custGeom) | Approximated (line segments) | Exact | Exact (raster) | Raster |
+| **Runs headless** | Yes (Python, Linux, container) | Yes | No (Windows + Office) | Yes | Yes (CLI) |
+| **Batch speed** | ~800/min (75ms each) | Unknown | ~2/min (COM) | Fast (raster) | ~10/min |
+| **OOXML validated** | 525/525 W3C SVGs pass | Unknown | N/A | N/A | N/A |
+| **Security** | URI sanitization, SSRF blocking | None documented | N/A | N/A | N/A |
+| **Accessibility** | title/desc → cNvPr descr | None | Discarded | N/A | N/A |
+| **License** | AGPL-3.0 + Commercial | MIT | Proprietary | LGPL | MPL |
+| **Price** | Free / from $5k/yr | Free | ~$150/yr (Office) | Free | Free |
+
+**Key differentiators:** svg2ooxml is the only solution that converts SVG animations to native PowerPoint timing, handles the full CSS cascade (`var()`, `calc()`, `@media`), and validates output against both Python and .NET OOXML validators. Output is editable shapes, not rasterized images.
+
+**Where others are better:** CairoSVG and LibreOffice produce pixel-perfect raster output because they use full rendering engines. svg2ooxml maps SVG features to the closest DrawingML equivalent, which may differ visually for complex filter chains. PowerPoint's native import has access to the actual text layout engine, so its text positioning may be more precise for system fonts.
 
 ## Features
 
