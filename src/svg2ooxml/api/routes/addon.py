@@ -20,7 +20,7 @@ from pydantic import BaseModel, Field
 
 from ..auth.api_key import verify_api_key
 from ..models import SVGFrame
-from ..services.converter import render_pptx_for_frames
+from ..services.converter import ConversionArtifacts, render_pptx_for_frames
 from ..services.slides_publisher import upload_to_google_slides
 
 logger = logging.getLogger(__name__)
@@ -85,6 +85,62 @@ class AddonConvertRequest(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+def _log_conversion_trace(
+    filename: str,
+    width: float,
+    height: float,
+    artifacts: ConversionArtifacts,
+) -> None:
+    """Log structured conversion diagnostics for debugging."""
+    trace = artifacts.aggregated_trace
+    packaging = artifacts.packaging_report
+    fonts = artifacts.font_diagnostics
+
+    geom = trace.get("geometry_totals", {}) if isinstance(trace, dict) else {}
+    paint = trace.get("paint_totals", {}) if isinstance(trace, dict) else {}
+    stage = trace.get("stage_totals", {}) if isinstance(trace, dict) else {}
+    resvg = trace.get("resvg_metrics", {}) if isinstance(trace, dict) else {}
+
+    logger.info(
+        "Conversion complete: file=%s size=%.0fx%.0f slides=%d "
+        "geometry=%s paint=%s resvg=%s missing_fonts=%s",
+        filename,
+        width,
+        height,
+        artifacts.slide_count,
+        geom or "{}",
+        paint or "{}",
+        resvg or "{}",
+        fonts.missing_fonts or "none",
+    )
+
+    # Log individual stage events at debug level for detailed diagnostics
+    if isinstance(trace, dict):
+        for event in trace.get("stage_events", []):
+            if isinstance(event, dict):
+                logger.debug(
+                    "  stage: %s action=%s subject=%s meta=%s",
+                    event.get("stage"),
+                    event.get("action"),
+                    event.get("subject"),
+                    event.get("metadata"),
+                )
+        for event in trace.get("geometry_events", []):
+            if isinstance(event, dict) and event.get("decision") != "native":
+                logger.info(
+                    "  fallback: tag=%s decision=%s id=%s meta=%s",
+                    event.get("tag"),
+                    event.get("decision"),
+                    event.get("element_id"),
+                    event.get("metadata"),
+                )
+
+    if packaging:
+        stage_totals = packaging.get("stage_totals", {})
+        if stage_totals:
+            logger.debug("  packaging stages: %s", stage_totals)
+
+
 @router.post("/convert")
 async def addon_convert(
     request: AddonConvertRequest,
@@ -122,7 +178,7 @@ async def addon_convert(
         pptx_path = Path(tmpdir) / "export.pptx"
 
         try:
-            await asyncio.wait_for(
+            artifacts = await asyncio.wait_for(
                 run_in_threadpool(render_pptx_for_frames, [frame], pptx_path),
                 timeout=CONVERSION_TIMEOUT,
             )
@@ -139,6 +195,8 @@ async def addon_convert(
             ) from exc
 
         pptx_bytes = pptx_path.read_bytes()
+
+    _log_conversion_trace(filename, width, height, artifacts)
 
     if request.output_format == "slides":
         try:
