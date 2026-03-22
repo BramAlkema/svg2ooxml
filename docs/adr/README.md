@@ -96,6 +96,31 @@ Prioritizes SMIL semantic parity (begin triggers, mpath resolution, motion
 rotation). Animation-focused W3C execution profiles as release gates.
 Per-fragment degrade/omit behavior instead of timing suppression.
 
+### Multi-Keyframe & Orbital Rotation
+Multi-keyframe rotate (e.g., 0→360→0) splits into sequential `<p:animRot>`
+segments. Rotation with cx/cy center emits companion `<p:animMotion>` orbital
+arc. stroke-dashoffset animation maps to Wipe entrance effect. SMIL
+min/max/restart/accumulate parsed and applied.
+
+---
+
+## Text Rendering Strategy
+
+### Three-Tier Text Pipeline
+1. **Native DrawingML** (preferred) — editable text with FontForge→EOT font
+   embedding. Used for uniform spacing (`spc`), uniform rotation (`xfrm rot`),
+   writing-mode (`vert`), baselines, and standard text properties.
+2. **WordArt `prstTxWarp`** — text on curves. Always used for `textPath`;
+   default preset (`textArchUp`) when no classifier match. Keeps text editable.
+3. **Glyph outlines via Skia** (last resort) — per-character custGeom shapes
+   for non-uniform dx/dy/rotate. Vector quality, not editable. Skia Font
+   objects cached by (family, size).
+
+### WordArt-First Policy
+WordArt preferred over outlines for textPath: `prefer_native_wordart=True`,
+lowered confidence threshold, fixed `prstTxWarp` schema (child element, not
+attribute). Classifier relaxed for arch detection.
+
 ---
 
 ## Quality & Testing

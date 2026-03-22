@@ -83,7 +83,7 @@ SVG text
 
 ### Test Layout
 
-Tests mirror production code: `tests/unit/`, `tests/integration/`, `tests/visual/`, `tests/smoke/`. Unit and integration markers are auto-applied by conftest based on directory. Visual tests produce artifacts in `reports/visual/` and require `skia-python` + LibreOffice.
+Tests mirror production code: `tests/unit/`, `tests/integration/`, `tests/visual/`, `tests/smoke/`. Unit and integration markers are auto-applied by conftest based on directory. Visual tests produce artifacts in `reports/visual/` and require `skia-python` + LibreOffice. Kelvin Lawrence corpus (`tests/corpus/kelvin_lawrence/`) downloads on demand — run `python -m tests.corpus.kelvin_lawrence.download_corpus` to prefetch.
 
 ## Project-Specific Notes
 
