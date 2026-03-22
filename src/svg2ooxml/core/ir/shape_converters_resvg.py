@@ -527,112 +527,131 @@ class ShapeResvgMixin:
                 self._trace_geometry_decision(element, "resvg", ellipse.metadata)
                 return ellipse
 
-        if node_type == "GenericNode":
+        if node_type in ("GenericNode", "GroupNode"):
             children = getattr(resvg_node, "children", []) or []
             if children:
-                group_children: list[Any] = []
                 node_transform_lookup = getattr(self, "_resvg_node_transform_lookup", {})
-                for child in children:
-                    child_global = node_transform_lookup.get(id(child)) or getattr(child, "transform", None)
-                    if child_global is not None:
-                        child_global = self._matrix2d_from_resvg(child_global)
-                    if (
-                        use_global_override is not None
-                        and original_global_transform is not None
-                        and child_global is not None
-                    ):
-                        try:
-                            relative = child_global.multiply(
-                                self._matrix2d_from_resvg(original_global_transform).inverse()
+
+                def _convert_resvg_children(nodes, parent_style):
+                    """Recursively convert resvg child nodes, flattening nested groups."""
+                    result_shapes: list[Any] = []
+                    for child in nodes:
+                        child_global = node_transform_lookup.get(id(child)) or getattr(child, "transform", None)
+                        if child_global is not None:
+                            child_global = self._matrix2d_from_resvg(child_global)
+                        if (
+                            use_global_override is not None
+                            and original_global_transform is not None
+                            and child_global is not None
+                        ):
+                            try:
+                                relative = child_global.multiply(
+                                    self._matrix2d_from_resvg(original_global_transform).inverse()
+                                )
+                                child_global = use_global_override.multiply(relative)
+                            except Exception:
+                                pass
+                        child_proxy = GlobalTransformProxy(child, child_global)
+                        child_style = _apply_resvg_paint_overrides(child, parent_style)
+                        child_metadata = dict(metadata)
+                        child_node_type = type(child).__name__
+
+                        # Recurse into nested groups
+                        if child_node_type in ("GenericNode", "GroupNode"):
+                            nested = getattr(child, "children", []) or []
+                            if nested:
+                                nested_shapes = _convert_resvg_children(nested, child_style)
+                                if nested_shapes:
+                                    sub_group = Group(
+                                        children=nested_shapes,
+                                        opacity=child_style.opacity if child_style.opacity != 1.0 else 1.0,
+                                        metadata=child_metadata,
+                                    )
+                                    result_shapes.append(sub_group)
+                            continue
+
+                        if child_node_type == "RectNode":
+                            rectangle = self._resvg_rect_to_rectangle(
+                                element=element,
+                                resvg_node=child_proxy,
+                                style=child_style,
+                                metadata=child_metadata,
+                                clip_ref=clip_ref,
+                                mask_ref=mask_ref,
+                                mask_instance=mask_instance,
                             )
-                            child_global = use_global_override.multiply(relative)
-                        except Exception:
-                            pass
-                    child_proxy = GlobalTransformProxy(child, child_global)
-                    child_style = _apply_resvg_paint_overrides(child, style)
-                    child_metadata = dict(metadata)
-                    child_node_type = type(child).__name__
+                            if rectangle is not None:
+                                result_shapes.append(rectangle)
+                                continue
+                        if child_node_type == "CircleNode":
+                            circle = self._resvg_circle_to_circle(
+                                element=element,
+                                resvg_node=child_proxy,
+                                style=child_style,
+                                metadata=child_metadata,
+                                clip_ref=clip_ref,
+                                mask_ref=mask_ref,
+                                mask_instance=mask_instance,
+                            )
+                            if circle is not None:
+                                result_shapes.append(circle)
+                                continue
+                        if child_node_type == "EllipseNode":
+                            ellipse = self._resvg_ellipse_to_ellipse(
+                                element=element,
+                                resvg_node=child_proxy,
+                                style=child_style,
+                                metadata=child_metadata,
+                                clip_ref=clip_ref,
+                                mask_ref=mask_ref,
+                                mask_instance=mask_instance,
+                            )
+                            if ellipse is not None:
+                                result_shapes.append(ellipse)
+                                continue
 
-                    if child_node_type == "RectNode":
-                        rectangle = self._resvg_rect_to_rectangle(
-                            element=element,
-                            resvg_node=child_proxy,
-                            style=child_style,
-                            metadata=child_metadata,
-                            clip_ref=clip_ref,
-                            mask_ref=mask_ref,
-                            mask_instance=mask_instance,
-                        )
-                        if rectangle is not None:
-                            group_children.append(rectangle)
-                            continue
-                    if child_node_type == "CircleNode":
-                        circle = self._resvg_circle_to_circle(
-                            element=element,
-                            resvg_node=child_proxy,
-                            style=child_style,
-                            metadata=child_metadata,
-                            clip_ref=clip_ref,
-                            mask_ref=mask_ref,
-                            mask_instance=mask_instance,
-                        )
-                        if circle is not None:
-                            group_children.append(circle)
-                            continue
-                    if child_node_type == "EllipseNode":
-                        ellipse = self._resvg_ellipse_to_ellipse(
-                            element=element,
-                            resvg_node=child_proxy,
-                            style=child_style,
-                            metadata=child_metadata,
-                            clip_ref=clip_ref,
-                            mask_ref=mask_ref,
-                            mask_instance=mask_instance,
-                        )
-                        if ellipse is not None:
-                            group_children.append(ellipse)
-                            continue
-
-                    adapter = ResvgShapeAdapter()
-                    try:
-                        if child_node_type == "PathNode":
-                            segments = adapter.from_path_node(child_proxy)
-                        elif child_node_type == "RectNode":
-                            segments = adapter.from_rect_node(child_proxy)
-                        elif child_node_type == "CircleNode":
-                            segments = adapter.from_circle_node(child_proxy)
-                        elif child_node_type == "EllipseNode":
-                            segments = adapter.from_ellipse_node(child_proxy)
-                        elif child_node_type == "LineNode":
-                            segments = adapter.from_line_node(child_proxy)
-                        elif child_node_type == "PolyNode":
-                            segments = adapter.from_poly_node(child_proxy)
-                        else:
+                        adapter = ResvgShapeAdapter()
+                        try:
+                            if child_node_type == "PathNode":
+                                segments = adapter.from_path_node(child_proxy)
+                            elif child_node_type == "RectNode":
+                                segments = adapter.from_rect_node(child_proxy)
+                            elif child_node_type == "CircleNode":
+                                segments = adapter.from_circle_node(child_proxy)
+                            elif child_node_type == "EllipseNode":
+                                segments = adapter.from_ellipse_node(child_proxy)
+                            elif child_node_type == "LineNode":
+                                segments = adapter.from_line_node(child_proxy)
+                            elif child_node_type == "PolyNode":
+                                segments = adapter.from_poly_node(child_proxy)
+                            else:
+                                segments = None
+                        except Exception as exc:
+                            self._logger.debug(
+                                "Resvg adapter failed for %s child: %s",
+                                element.get("id") or f"<{child_node_type}>",
+                                exc,
+                            )
                             segments = None
-                    except Exception as exc:
-                        self._logger.debug(
-                            "Resvg adapter failed for %s child: %s",
-                            element.get("id") or f"<{child_node_type}>",
-                            exc,
-                        )
-                        segments = None
 
-                    if segments:
-                        child_shape = self._resvg_segments_to_path(
-                            element=element,
-                            segments=segments,
-                            coord_space=CoordinateSpace(),
-                            style=child_style,
-                            metadata=child_metadata,
-                            clip_ref=clip_ref,
-                            mask_ref=mask_ref,
-                            mask_instance=mask_instance,
-                        )
-                        if isinstance(child_shape, list):
-                            group_children.extend(child_shape)
-                        elif child_shape is not None:
-                            group_children.append(child_shape)
+                        if segments:
+                            child_shape = self._resvg_segments_to_path(
+                                element=element,
+                                segments=segments,
+                                coord_space=CoordinateSpace(),
+                                style=child_style,
+                                metadata=child_metadata,
+                                clip_ref=clip_ref,
+                                mask_ref=mask_ref,
+                                mask_instance=mask_instance,
+                            )
+                            if isinstance(child_shape, list):
+                                result_shapes.extend(child_shape)
+                            elif child_shape is not None:
+                                result_shapes.append(child_shape)
+                    return result_shapes
 
+                group_children = _convert_resvg_children(children, style)
                 if group_children:
                     group = Group(
                         children=group_children,
