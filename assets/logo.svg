@@ -1,28 +1,59 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="512" y2="512" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#6366f1"/>
-      <stop offset="100%" stop-color="#8b5cf6"/>
+      <stop offset="0%" stop-color="#4f46e5"/>
+      <stop offset="100%" stop-color="#7c3aed"/>
     </linearGradient>
-    <linearGradient id="arrow" x1="200" y1="256" x2="312" y2="256" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#e0e7ff"/>
-      <stop offset="100%" stop-color="#ffffff"/>
+    <linearGradient id="accent" x1="0" y1="200" x2="0" y2="380" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#c7d2fe"/>
     </linearGradient>
   </defs>
 
-  <!-- Rounded square background -->
-  <rect width="512" height="512" rx="96" fill="url(#bg)"/>
+  <!-- Background -->
+  <rect width="512" height="512" rx="108" fill="url(#bg)"/>
 
-  <!-- SVG bracket left -->
-  <text x="60" y="290" font-family="SF Mono, Menlo, Consolas, monospace" font-size="160" font-weight="700" fill="#e0e7ff" opacity="0.9">&lt;/&gt;</text>
+  <!-- SVG diamond/path shape (left) -->
+  <g transform="translate(56, 136)">
+    <!-- SVG path symbol — a bezier curve -->
+    <path d="M30 120 C30 40, 120 40, 120 120 C120 200, 30 200, 30 120 Z"
+          stroke="url(#accent)" stroke-width="10" fill="none" stroke-linecap="round"/>
+    <!-- Control point dots -->
+    <circle cx="30" cy="120" r="8" fill="#c7d2fe"/>
+    <circle cx="120" cy="120" r="8" fill="#c7d2fe"/>
+    <!-- Control handles -->
+    <line x1="30" y1="120" x2="30" y2="40" stroke="#c7d2fe" stroke-width="3" opacity="0.5"/>
+    <line x1="120" y1="120" x2="120" y2="40" stroke="#c7d2fe" stroke-width="3" opacity="0.5"/>
+    <circle cx="30" cy="40" r="5" fill="#c7d2fe" opacity="0.6"/>
+    <circle cx="120" cy="40" r="5" fill="#c7d2fe" opacity="0.6"/>
+  </g>
 
-  <!-- Arrow -->
-  <path d="M295 232 L340 256 L295 280" stroke="url(#arrow)" stroke-width="14" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  <!-- Arrow (center) -->
+  <g transform="translate(226, 220)">
+    <line x1="0" y1="36" x2="50" y2="36" stroke="#ffffff" stroke-width="10" stroke-linecap="round"/>
+    <path d="M38 16 L58 36 L38 56" stroke="#ffffff" stroke-width="10" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  </g>
 
-  <!-- PPTX slide icon -->
-  <rect x="370" y="186" width="100" height="140" rx="10" fill="#ffffff" opacity="0.95"/>
-  <rect x="382" y="198" width="76" height="50" rx="4" fill="#6366f1" opacity="0.25"/>
-  <rect x="382" y="258" width="50" height="6" rx="3" fill="#6366f1" opacity="0.4"/>
-  <rect x="382" y="272" width="65" height="6" rx="3" fill="#6366f1" opacity="0.25"/>
-  <rect x="382" y="286" width="40" height="6" rx="3" fill="#6366f1" opacity="0.15"/>
+  <!-- PPTX slide (right) -->
+  <g transform="translate(316, 136)">
+    <!-- Slide frame -->
+    <rect width="148" height="108" rx="8" fill="#ffffff" opacity="0.95"/>
+    <!-- Title bar area -->
+    <rect x="12" y="12" width="124" height="36" rx="4" fill="#4f46e5" opacity="0.15"/>
+    <!-- Title text line -->
+    <rect x="20" y="22" width="60" height="6" rx="3" fill="#4f46e5" opacity="0.5"/>
+    <rect x="20" y="34" width="40" height="4" rx="2" fill="#4f46e5" opacity="0.3"/>
+    <!-- Content shapes representing converted SVG -->
+    <circle cx="40" cy="72" r="14" fill="#7c3aed" opacity="0.3"/>
+    <rect x="64" y="60" width="28" height="24" rx="3" fill="#4f46e5" opacity="0.25"/>
+    <path d="M104 60 L118 84 L90 84 Z" fill="#6366f1" opacity="0.25"/>
+    <!-- Bullet lines -->
+    <rect x="12" y="96" width="80" height="3" rx="1.5" fill="#4f46e5" opacity="0.12"/>
+  </g>
+
+  <!-- Small "play" triangle on the slide indicating animation -->
+  <g transform="translate(434, 208)">
+    <circle cx="0" cy="0" r="16" fill="#ffffff" opacity="0.9"/>
+    <path d="M-5 -8 L8 0 L-5 8 Z" fill="#4f46e5"/>
+  </g>
 </svg>
