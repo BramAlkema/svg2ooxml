@@ -80,9 +80,15 @@ def _build_navigation_asset(
     target_mode: str | None = None
 
     if spec.kind == NavigationKind.EXTERNAL and spec.href:
-        # Reject dangerous URI schemes — only allow http(s), mailto, tel
+        # Reject dangerous URI schemes and internal network targets
         href_lower = spec.href.strip().lower()
         if href_lower.startswith(("javascript:", "data:", "vbscript:", "file:")):
+            return None
+        # Block cloud metadata and private network SSRF targets
+        if any(ip in href_lower for ip in (
+            "169.254.169.254", "metadata.google", "metadata.azure",
+            "localhost", "127.0.0.1", "0.0.0.0", "[::1]",
+        )):
             return None
         relationship_id = allocate_rel_id()
         relationship_type = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink"
