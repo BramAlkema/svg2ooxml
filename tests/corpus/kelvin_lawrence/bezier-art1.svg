@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns='http://www.w3.org/2000/svg' version='1.1' width='800' height='800'>
+<g stroke='blue' fill='none'>
+<path d='M300,300 C500,300,400,473,300,300' />
+<path d='M300,300 C400,473,200,473,300,300' />
+<path d='M300,300 C200,473,100,300,300,300' />
+<path d='M300,300 C100,300,200,127,300,300' />
+<path d='M300,300 C200,127,400,127,300,300' />
+<path d='M300,300 C400,127,500,300,300,300' />
+</g>
+</svg>

@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns='http://www.w3.org/2000/svg' version='1.1' width='600' height='500'>
+
+<defs>
+  <filter id="f1">
+    <feColorMatrix 
+      type="matrix" 
+      result="res0" 
+      values=".5  0  0  0  0
+               0 .5  0  0  0
+               0  0 .5  0  0 
+               0  0  0  1  0 "/>
+  </filter>
+</defs>
+
+<rect  x="50"  y="100" width="100" height="100" fill="#ff0000" />   
+<rect  x="150" y="100" width="100" height="100" fill="#00ff00" />   
+<rect  x="50"  y="200" width="100" height="100" fill="#0000ff" />   
+<rect  x="150" y="200" width="100" height="100" fill="#ffff00" />
+
+<g  filter="url(#f1)">  
+  <rect  x="300" y="100" width="100" height="100" fill="#ff0000" />   
+  <rect  x="400" y="100" width="100" height="100" fill="#00ff00" />   
+  <rect  x="300" y="200" width="100" height="100" fill="#0000ff" />   
+  <rect  x="400" y="200" width="100" height="100" fill="#ffff00" />
+</g>
+
+<g fill="black">
+<text x="50"  y="80">Reference colors</text>
+<text x="300" y="80">Effect of matrix</text>
+<text x="300" y="320">RGBA1' = Matrix * RGBA1</text>
+<text x="300" y="350">[0.5 0 0 0 0,0 0.5 0 0 0,0 0 0.5 0 0,0 0 0 1 0]</text>
+</svg>

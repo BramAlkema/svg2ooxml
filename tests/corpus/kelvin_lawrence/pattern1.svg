@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns='http://www.w3.org/2000/svg' version='1.1' width='1000' height='1000'>
+<defs>
+  <pattern id="pat1" x="0" y="0" width="30" height="30" patternUnits="userSpaceOnUse">
+    <rect width="30" height="30" fill="yellow"/>
+    <path fill="none" stroke="blue" d="M0,0 L 30,30 M0,30 L 30,0"/>
+</pattern>
+</defs>
+
+<circle cx="150" cy="150" r="100" fill="url(#pat1)" />
+<rect x="300" y="100" width="200" height="100" fill="url(#pat1)" />
+<path d="M525 250 h 200 l-100 -200 z" fill="url(#pat1)"
+</svg>

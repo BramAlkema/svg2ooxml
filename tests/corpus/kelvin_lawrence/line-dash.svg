@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns='http://www.w3.org/2000/svg' version='1.1' width='1000' height='1000'>
+<g style="shape-rendering:auto; stroke-width:14; stroke:#0000FF">
+<path d="M50, 50h200" style="stroke-linecap:round; stroke-dasharray:30 30"/>
+<path d="M50,100h200" style="stroke-linecap:square; stroke-dasharray:30 30"/>
+<path d="M50,150h200" style="stroke-linecap:butt; stroke-dasharray:30 30"/>
+<path d="M50,200h200" style="stroke-linecap:butt; stroke-dasharray:30 5"/>
+<path d="M50,250h200" style="stroke-linecap:butt; stroke-dasharray:5 5"/>
+<path d="M50,300h200" style="stroke-linecap:butt; stroke-dasharray:15 15"/>
+<path d="M50,350h200" style="stroke-linecap:butt; stroke-dasharray:10 15"/>
+<path d="M50,400h200" style="stroke-linecap:butt; stroke-dasharray:20 5 10 5"/>
+</g>
+<g style="shape-rendering:auto; stroke-width:6; stroke:#008000">
+<path d="M300, 50h200" style="stroke-linecap:round; stroke-dasharray:30 20 15 20"/>
+<path d="M300,100h200" style="stroke-linecap:square; stroke-dasharray:30 20 15 20"/>
+<path d="M300,150h200" style="stroke-linecap:butt; stroke-dasharray:10 5 20 5"/>
+<path d="M300,200h200" style="stroke-linecap:butt; stroke-dasharray:40 5 25 5"/>
+<path d="M300,250h200" style="stroke-linecap:butt; stroke-dasharray:5 5"/>
+<path d="M300,300h200" style="stroke-linecap:butt; stroke-dasharray:15 15"/>
+<path d="M300,350h200" style="stroke-linecap:butt; stroke-dasharray:10 15"/>
+<path d="M300,400h200" style="stroke-linecap:butt; stroke-dasharray:20 5 10 5"/>
+</g>
+
+
+</svg>

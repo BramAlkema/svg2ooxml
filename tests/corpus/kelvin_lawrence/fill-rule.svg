@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns='http://www.w3.org/2000/svg' version='1.1' width='1000' height='1000'>
+ 
+<path stroke='none' fill='blue' fill-rule='evenodd'  transform='translate(-160,0)'
+     d="M 200,200 A 150,150,0,1,1,500,200 A 150,150,0,1,1,200,200 z       
+        M 220,200 A 130,130,0,1,1,480,200 A 130,130,0,1,1,220,200 z"/>    
+
+<path stroke='none' fill='blue' fill-rule='winding' transform='translate(180,0)'
+     d="M 200,200 A 150,150,0,1,1,500,200 A 150,150,0,1,1,200,200 z       
+        M 220,200 A 130,130,0,1,1,480,200 A 130,130,0,1,1,220,200 z"/>     
+
+<path stroke='blue' fill='none' transform='translate(-160,340)'
+     d="M 200,200 A 150,150,0,1,1,500,200 A 150,150,0,1,1,200,200 z       
+        M 220,200 A 130,130,0,1,1,480,200 A 130,130,0,1,1,220,200 z"/>       
+     
+</svg>

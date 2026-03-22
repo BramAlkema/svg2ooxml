@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns='http://www.w3.org/2000/svg' version='1.1' width='1000' height='1000'>
+
+<!-- <rect x='100' y='100' width='200' height='200' stroke="green" fill='none'/> -->  
+ 
+<path stroke='blue' fill='yellow'
+     d="M 100,100 A 100,100,0,1,1,300,100
+        A 100,100,0,1,1,300,300
+        A 100,100,0,1,1,100,300
+        A 100,100,0,1,1,100,100 "/>
+
+<circle cx='200' cy='200' r='50' fill='#fff' stroke='blue' />
+</svg>

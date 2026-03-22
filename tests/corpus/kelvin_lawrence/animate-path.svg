@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns='http://www.w3.org/2000/svg' version='1.1' width='1000' height='1000'>
+<
+<path d="M100,250 C 100,50 400,50 400,250 C 400,400 700,400 700,250
+         C700,50 400,50 400,250 C 400,400,100,400, 100,250"
+      fill="none" stroke="#009" stroke-width="13" />
+
+<path d="M-25,-12.5 L-25,12.5 L25,0 z" fill="lightblue"
+stroke="#999" stroke-width="3" stroke-linejoin="round">
+  <animateMotion dur="7s" repeatCount="indefinite" 
+                 path="M100,250 C 100,50 400,50 400,250 C 400,400 700,400 700,250 
+                       C 700,50 400,50 400,250 C 400,400,100,400, 100,250" 
+		 rotate="auto" />
+</path>
+
+</svg>

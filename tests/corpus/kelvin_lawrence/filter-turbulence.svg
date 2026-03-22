@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns='http://www.w3.org/2000/svg' version='1.1' width='1000' height='1000'>
+
+<defs>
+  <filter id="t1">
+    <feTurbulence baseFrequency=".01"/>
+  </filter> 
+
+  <filter id="t2">
+    <feTurbulence baseFrequency=".02"/>
+  </filter>
+
+  <filter id="t3">
+    <feTurbulence baseFrequency=".03"/>
+  </filter>
+
+  <filter id="t4">
+    <feTurbulence baseFrequency=".04"/>
+  </filter>
+
+  <filter id="t5">
+    <feTurbulence baseFrequency=".05"/>
+  </filter>
+
+  <filter id="t6">
+    <feTurbulence baseFrequency=".06"/>
+  </filter> 
+</defs>
+
+<rect x="50"  y="50" height="200" width="200" filter="url(#t1)"/>
+<rect x="300" y="50" height="200" width="200" filter="url(#t2)"/>
+<rect x="550" y="50" height="200" width="200" filter="url(#t3)"/>
+<text x="50"  y="290" fill="black">baseFrequency = 0.01</text>
+<text x="300" y="290" fill="black">baseFrequency = 0.02</text>
+<text x="550" y="290" fill="black">baseFrequency = 0.03</text>
+
+<rect x="50"  y="350" height="200" width="200" filter="url(#t4)"/>
+<rect x="300" y="350" height="200" width="200" filter="url(#t5)"/>
+<rect x="550" y="350" height="200" width="200" filter="url(#t6)"/>
+<text x="50"  y="590" fill="black">baseFrequency = 0.04</text>
+<text x="300" y="590" fill="black">baseFrequency = 0.05</text>
+<text x="550" y="590" fill="black">baseFrequency = 0.06</text>
+
+</svg>

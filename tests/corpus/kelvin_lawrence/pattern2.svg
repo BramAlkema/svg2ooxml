@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns:xlink="http://www.w3.org/1999/xlink" xmlns="http://www.w3.org/2000/svg" xmlns='http://www.w3.org/2000/svg' version='1.1' width='1000' height='1000'>
+<defs>
+  <pattern id="leaves" x="0" y="0" width="300" height="200" patternUnits="userSpaceOnUse">
+    <image width="300" height="200" xlink:href="./Leaves.jpg" />
+  </pattern>  
+</defs>
+
+<circle cx="150" cy="150" r="100" fill="url(#leaves)" />
+<rect x="300" y="100" width="200" height="100" fill="url(#leaves)" />
+<path d="M525 250 h 200 l-100 -200 z" fill="url(#leaves)"
+</svg>

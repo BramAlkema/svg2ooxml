@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns='http://www.w3.org/2000/svg' version='1.1' width='1000' height='1000'>
+<defs>
+  <linearGradient id="g1" x1="0%" y1="0%" x2="100%" y2="0%">
+    <stop offset="0%" stop-color="yellow">
+      <animate attributeName="stop-color" 
+        attributeType="XML" 
+      	dur="13s" values="yellow;green;blue;green;yellow"
+      	repeatCount="indefinite" />       
+    </stop>
+    <stop offset="100%" stop-color="red"/>
+  </linearGradient> 
+
+   <linearGradient id="g2" x1="0%" y1="0%" x2="0%" y2="100%">
+    
+    <stop offset="0%" stop-color="black">
+     <animate attributeName="stop-color" 
+        attributeType="XML" 
+      	dur="30s" values="black;blue;black"
+      	repeatCount="indefinite" />   
+    </stop>     
+    <stop offset="100%" stop-color="yellow">
+      <animate attributeName="stop-color" 
+        attributeType="XML" 
+      	dur="30s" values="black;orange;blue;orange;black"
+      	repeatCount="indefinite" />       
+    </stop>     
+  </linearGradient> 
+</defs>
+
+
+<rect x="50" y="100" width="450" height="150" fill="url(#g1)" />
+<g stroke-width="10" stroke="brown">  
+  <rect x="50" y="300" width="450" height="450" fill="url(#g2)" />
+  <line x1="50" y1="525" x2="500" y2="525" />
+  <line x1="275" y1="300" x2="275" y2="750" />
+</g>
+</svg>

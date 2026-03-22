@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns='http://www.w3.org/2000/svg' version='1.1' width='1000' height='1000'>
+<g fill-opacity='1.0' fill='none' stroke='blue' stroke-width='2'>
+<polyline  stroke='rgb(208,3,67)' points='600,300,700,400,600,500,500,400,500,400,600,300,700,400'/>
+<polyline  stroke='rgb(242,151,108)' points='200,300,300,400,200,500,100,400,100,400,200,300,300,400'/>
+<polyline  stroke='rgb(60,86,45)' points='400,100,500,200,400,300,300,200,300,200,400,100,500,200'/>
+<polyline  stroke='rgb(124,58,16)' points='400,500,500,600,400,700,300,600,300,600,400,500,500,600'/>
+<polyline  stroke='rgb(127,22,76)' points='400,200,600,400,400,600,200,400,200,400,400,200,600,400'/>
+</g>
+</svg>

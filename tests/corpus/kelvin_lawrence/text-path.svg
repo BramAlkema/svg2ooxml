@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns:xlink="http://www.w3.org/1999/xlink" xmlns="http://www.w3.org/2000/svg" xmlns='http://www.w3.org/2000/svg' version='1.1' width='1000' height='1000'>
+
+<defs>
+  <path id="p1" d="M200,300 a175,175,0,0,1,350,0" />
+</defs>
+
+<use xlink:href="#p1" fill="none" stroke="blue"  />
+<text font-family="Verdana" font-size="30" fill="green" >
+  <textPath xlink:href="#p1">Some text drawn on a curved path!</textPath>
+</text>
+
+</svg>

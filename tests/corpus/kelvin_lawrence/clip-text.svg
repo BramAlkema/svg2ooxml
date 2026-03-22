@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns='http://www.w3.org/2000/svg' version='1.1' width='1000' height='1000'>
+
+<defs>
+  <clipPath id="clip1" >
+    <text style="font-size:130;font-weight:bold" x="10" y="170">Clip!</text>
+  </clipPath>
+
+  <linearGradient id="grad1" gradientUnits="userSpaceOnUse"
+                    x1="0" y1="100" x2="0" y2="180" >
+    <stop offset="0%" stop-color="cyan" />
+    <stop offset="50%" stop-color="yellow" />
+    <stop offset="100%" stop-color="cyan" />
+  </linearGradient>
+</defs>
+ 
+<g clip-path="URL(#clip1)" >
+  <rect fill="URL(#grad1)" x="0" y="70" stroke="black"  width="300" height="200"/>
+  <g font-size="12" font-weight="bold">
+    <text x="20" y="90">We had everything before us, we had nothing before us,</text>
+    <text x="20" y="100">we were all going direct to Heaven, we were all going direct the other way�</text>
+    <text x="20" y="110">in short, the period was so far like the present period,</text>
+    <text x="20" y="120">that some of its noisiest authorities insisted on its being received</text>
+    <text x="20" y="130">for good or for evil, in the superlative degree of comparison only.</text>
+    <text x="20" y="140">There were a king with a large jaw and a queen with a plain face,</text>
+    <text x="20" y="150">on the throne of England; there were a king with a large jaw </text>
+    <text x="20" y="160">and a queen with a fair face, on the throne of France. In both countries</text>
+    <text x="20" y="170">it was clearer than crystal to the lords of the State preserves of</text>
+    <text x="20" y="180">loaves and fishes, that things in general were settled for ever.</text>
+  </g>
+</g>
+</svg>

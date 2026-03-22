@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns='http://www.w3.org/2000/svg' version='1.1' width='1000' height='1000'>
+ <g transform="translate(300,300)" >
+<path d="m-100,-50,200,50,-200,50,50,-50 z"
+      fill="lightblue" stroke="#999" stroke-width="10" stroke-linejoin="miter"
+      stroke-miterlimit="6">
+      <animateTransform attributeName="transform" attributeType="XML"
+             type="rotate" from="0" to="360" begin="0s" dur="5s"
+             repeatCount="indefinite" />
+    </path>
+</g>
+</svg>

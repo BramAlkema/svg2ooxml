@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns='http://www.w3.org/2000/svg' version='1.1' width='1000' height='1000'>
+<text x='200' y='200' font-size='24' xml:space='preserve' transform='translate(200,200) rotate(0) translate(-200,-200)'>      Rotated text</text>
+<text x='200' y='200' font-size='24' xml:space='preserve' transform='translate(200,200) rotate(20) translate(-200,-200)'>      Rotated text</text>
+<text x='200' y='200' font-size='24' xml:space='preserve' transform='translate(200,200) rotate(40) translate(-200,-200)'>      Rotated text</text>
+<text x='200' y='200' font-size='24' xml:space='preserve' transform='translate(200,200) rotate(60) translate(-200,-200)'>      Rotated text</text>
+<text x='200' y='200' font-size='24' xml:space='preserve' transform='translate(200,200) rotate(80) translate(-200,-200)'>      Rotated text</text>
+<text x='200' y='200' font-size='24' xml:space='preserve' transform='translate(200,200) rotate(100) translate(-200,-200)'>      Rotated text</text>
+<text x='200' y='200' font-size='24' xml:space='preserve' transform='translate(200,200) rotate(120) translate(-200,-200)'>      Rotated text</text>
+<text x='200' y='200' font-size='24' xml:space='preserve' transform='translate(200,200) rotate(140) translate(-200,-200)'>      Rotated text</text>
+<text x='200' y='200' font-size='24' xml:space='preserve' transform='translate(200,200) rotate(160) translate(-200,-200)'>      Rotated text</text>
+<text x='200' y='200' font-size='24' xml:space='preserve' transform='translate(200,200) rotate(180) translate(-200,-200)'>      Rotated text</text>
+<text x='200' y='200' font-size='24' xml:space='preserve' transform='translate(200,200) rotate(200) translate(-200,-200)'>      Rotated text</text>
+<text x='200' y='200' font-size='24' xml:space='preserve' transform='translate(200,200) rotate(220) translate(-200,-200)'>      Rotated text</text>
+<text x='200' y='200' font-size='24' xml:space='preserve' transform='translate(200,200) rotate(240) translate(-200,-200)'>      Rotated text</text>
+<text x='200' y='200' font-size='24' xml:space='preserve' transform='translate(200,200) rotate(260) translate(-200,-200)'>      Rotated text</text>
+<text x='200' y='200' font-size='24' xml:space='preserve' transform='translate(200,200) rotate(280) translate(-200,-200)'>      Rotated text</text>
+<text x='200' y='200' font-size='24' xml:space='preserve' transform='translate(200,200) rotate(300) translate(-200,-200)'>      Rotated text</text>
+<text x='200' y='200' font-size='24' xml:space='preserve' transform='translate(200,200) rotate(320) translate(-200,-200)'>      Rotated text</text>
+<text x='200' y='200' font-size='24' xml:space='preserve' transform='translate(200,200) rotate(340) translate(-200,-200)'>      Rotated text</text>
+</svg>
