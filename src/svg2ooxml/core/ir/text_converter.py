@@ -90,8 +90,11 @@ class TextConverter:
             return None
 
         run = self._run_from_resvg_node(resvg_node, text_content)
-        # Attach xml:lang and font-variant from the SVG element
         from dataclasses import replace as _replace
+
+        # Parse style attribute once for all CSS property lookups below
+        style_attr = element.get("style", "")
+
         lang = element.get("{http://www.w3.org/XML/1998/namespace}lang") or element.get("lang")
         if lang and not run.language:
             run = _replace(run, language=lang.strip())
@@ -99,7 +102,6 @@ class TextConverter:
         # font-variant: small-caps → cap="small" on rPr
         font_variant = element.get("font-variant", "").strip().lower()
         if not font_variant:
-            style_attr = element.get("style", "")
             if "font-variant" in style_attr:
                 import re
                 m = re.search(r"font-variant\s*:\s*([^;]+)", style_attr)
@@ -142,7 +144,6 @@ class TextConverter:
         # writing-mode → vert attribute on bodyPr
         writing_mode = element.get("writing-mode", "").strip().lower()
         if not writing_mode:
-            style_attr = element.get("style", "")
             if "writing-mode" in style_attr:
                 import re as _re
                 wm = _re.search(r"writing-mode\s*:\s*([^;]+)", style_attr)
@@ -204,7 +205,6 @@ class TextConverter:
         # font-stretch → append width keyword to font family
         font_stretch = element.get("font-stretch", "").strip().lower()
         if not font_stretch:
-            style_attr = element.get("style", "")
             if "font-stretch" in style_attr:
                 import re as _re3
                 fs = _re3.search(r"font-stretch\s*:\s*([^;]+)", style_attr)
@@ -228,7 +228,6 @@ class TextConverter:
         # text-decoration: overline (DrawingML has no overline — store for line shape)
         text_deco = element.get("text-decoration", "").lower()
         if not text_deco:
-            style_attr = element.get("style", "")
             if "text-decoration" in style_attr:
                 import re as _re2
                 td = _re2.search(r"text-decoration\s*:\s*([^;]+)", style_attr)

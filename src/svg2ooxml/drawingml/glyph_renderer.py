@@ -16,6 +16,20 @@ except Exception:
     skia = None  # type: ignore
     SKIA_AVAILABLE = False
 
+# Cache Skia Font objects by (family, size) — typeface creation is ~0.4ms each
+_font_cache: dict[tuple[str, float], object] = {}
+
+
+def _get_font(family: str, size_pt: float):
+    """Get or create a cached Skia Font."""
+    key = (family, size_pt)
+    font = _font_cache.get(key)
+    if font is None:
+        typeface = skia.Typeface(family)
+        font = skia.Font(typeface, size_pt)
+        _font_cache[key] = font
+    return font
+
 
 @dataclass(frozen=True)
 class GlyphPlacement:
@@ -43,8 +57,7 @@ def render_positioned_glyphs(
     if not SKIA_AVAILABLE or not text or not placements:
         return "", shape_id_start
 
-    typeface = skia.Typeface(font_family)
-    font = skia.Font(typeface, font_size_pt)
+    font = _get_font(font_family, font_size_pt)
 
     glyphs = font.textToGlyphs(text)
     fragments: list[str] = []
@@ -119,8 +132,7 @@ def compute_glyph_placements(
     if not SKIA_AVAILABLE:
         return []
 
-    typeface = skia.Typeface(font_family)
-    font = skia.Font(typeface, font_size_pt)
+    font = _get_font(font_family, font_size_pt)
     glyphs = font.textToGlyphs(text)
     widths = font.getWidths(glyphs)
 
