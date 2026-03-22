@@ -176,8 +176,10 @@ def _parse_path_data(path_data: str | None) -> Iterable[PathCommand]:
                     y += current[1]
                 current = (x, y)
                 start = current
-                commands.append(PathCommand(MOVE_TO if not commands else LINE_TO, (x, y)))
+                commands.append(PathCommand(MOVE_TO, (x, y)))
                 prev_ctrl = None
+                # SVG spec: subsequent coordinate pairs after M are implicit LineTo
+                command = LINE_TO
             elif command == LINE_TO:
                 x, y = numbers[idx], numbers[idx + 1]
                 idx += 2
