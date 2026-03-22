@@ -344,11 +344,15 @@ class _PackageWriterBase:
         ns = {"p": P_NS, "r": R_DOC_NS}
 
         # Update slide dimensions if provided
+        # ECMA-376: sldSz cx/cy minimum is 914400 EMU (1 inch)
+        _MIN_SLIDE_EMU = 914400
         if slide_size is not None:
             slide_sz = root.find("p:sldSz", ns)
             if slide_sz is not None:
-                slide_sz.set("cx", str(slide_size[0]))
-                slide_sz.set("cy", str(slide_size[1]))
+                cx = max(slide_size[0], _MIN_SLIDE_EMU)
+                cy = max(slide_size[1], _MIN_SLIDE_EMU)
+                slide_sz.set("cx", str(cx))
+                slide_sz.set("cy", str(cy))
                 self._trace_packaging(
                     "presentation_dimensions_updated",
                     metadata={

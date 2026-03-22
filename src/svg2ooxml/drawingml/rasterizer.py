@@ -174,7 +174,10 @@ class Rasterizer:
 
     def _draw_element(self, canvas, element) -> bool:
         """Draw a single IR element onto a canvas. Returns True on success."""
-        geometry_bounds = self._element_bounds(element)
+        try:
+            geometry_bounds = self._element_bounds(element)
+        except TypeError:
+            return False  # unsupported element type (e.g. TextFrame)
         if isinstance(element, Rectangle):
             return self._draw_rectangle(canvas, element, geometry_bounds)
         if isinstance(element, Circle):

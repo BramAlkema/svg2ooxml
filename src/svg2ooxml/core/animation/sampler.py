@@ -41,15 +41,24 @@ class TimelineSampler:
         duration = self._calculate_duration(animations, target_duration)
         samples = self._generate_time_samples(animations, duration)
 
-        # Pre-compute grouping once (same for every timestamp)
+        # Batch evaluation: resolve all timestamps per (element, attribute)
+        # group in one pass, avoiding redundant active-time checks.
         self._conflict_resolver.clear_cache()
         grouped = _group_by_element_and_attribute(animations)
 
-        scenes: list[AnimationScene] = []
-        for timestamp in samples:
-            scene = self._generate_scene_at_time_fast(grouped, timestamp)
-            if scene.element_states:
-                scenes.append(scene)
+        # Pre-build empty scenes for each timestamp
+        scene_map: dict[int, AnimationScene] = {}
+        for i, ts in enumerate(samples):
+            scene_map[i] = AnimationScene(time=ts)
+
+        # Batch: for each group, evaluate all timestamps
+        for (element_id, attribute), anims in grouped.items():
+            for i, ts in enumerate(samples):
+                value = self._conflict_resolver.resolve(anims, ts, attribute)
+                if value:
+                    scene_map[i].set_element_property(element_id, attribute, value)
+
+        scenes = [s for s in scene_map.values() if s.element_states]
 
         if self.config.optimize_static_periods:
             scenes = self._optimizer.optimize(scenes)

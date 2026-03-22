@@ -228,7 +228,10 @@ class AnimationDefinition:
     @property
     def duration_ms(self) -> int:
         """Return duration in milliseconds (for compatibility with handlers)."""
-        return int(self.timing.duration * 1000)
+        dur = self.timing.duration
+        if dur == float("inf") or dur > 1e9:
+            return 2_147_483_647  # max 32-bit signed int (~24 days)
+        return int(dur * 1000)
 
     @property
     def begin_ms(self) -> int:

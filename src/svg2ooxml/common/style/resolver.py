@@ -665,6 +665,9 @@ class StyleResolver:
             # Substitute var() references
             if "var(" in value:
                 value = self._resolve_var(value)
+            # Evaluate calc() expressions
+            if "calc(" in value:
+                value = _resolve_calc(value)
             resolved.append(CSSDeclaration(name=name, value=value, important=bool(decl.important)))
         return resolved
 
@@ -927,6 +930,51 @@ def _matches_simple_selector(part: SelectorPart, element: etree._Element) -> boo
             if token not in classes:
                 return False
     return True
+
+
+def _resolve_calc(value: str) -> str:
+    """Evaluate calc() expressions in a CSS property value.
+
+    Handles simple arithmetic (+, -, *, /) with px, em, %, and unitless
+    numbers. Returns the computed value with the dominant unit, or the
+    original string if evaluation fails.
+    """
+    import re as _re
+
+    def _eval_calc(match):
+        expr = match.group(1).strip()
+        # Extract numbers with optional units
+        tokens = _re.findall(r"([+\-*/])|([.\d]+)\s*(%|px|em|rem|pt)?", expr)
+        if not tokens:
+            return match.group(0)
+
+        # Evaluate: convert everything to a flat number, track unit
+        result = 0.0
+        op = "+"
+        unit = ""
+        for tok_op, tok_num, tok_unit in tokens:
+            if tok_op:
+                op = tok_op
+                continue
+            if not tok_num:
+                continue
+            val = float(tok_num)
+            if tok_unit:
+                unit = tok_unit
+            if op == "+":
+                result += val
+            elif op == "-":
+                result -= val
+            elif op == "*":
+                result *= val
+            elif op == "/" and val != 0:
+                result /= val
+
+        # Format: drop decimals if integer
+        formatted = f"{result:g}"
+        return f"{formatted}{unit}"
+
+    return _re.sub(r"calc\(([^)]+)\)", _eval_calc, value)
 
 
 __all__ = ["StyleContext", "StyleResolver"]

@@ -254,6 +254,8 @@ class DrawingMLAnimationWriter:
         if animation.min_ms is None and animation.max_ms is None:
             return animation
         dur = animation.duration_ms
+        if dur == float("inf"):
+            return animation
         if animation.min_ms is not None:
             dur = max(dur, animation.min_ms)
         if animation.max_ms is not None:
