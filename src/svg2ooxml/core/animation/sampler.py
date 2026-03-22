@@ -41,9 +41,13 @@ class TimelineSampler:
         duration = self._calculate_duration(animations, target_duration)
         samples = self._generate_time_samples(animations, duration)
 
+        # Pre-compute grouping once (same for every timestamp)
+        self._conflict_resolver.clear_cache()
+        grouped = _group_by_element_and_attribute(animations)
+
         scenes: list[AnimationScene] = []
         for timestamp in samples:
-            scene = self._generate_scene_at_time(animations, timestamp)
+            scene = self._generate_scene_at_time_fast(grouped, timestamp)
             if scene.element_states:
                 scenes.append(scene)
 
@@ -145,14 +149,20 @@ class TimelineSampler:
         animations: list[AnimationDefinition],
         timestamp: float,
     ) -> AnimationScene:
+        grouped = _group_by_element_and_attribute(animations)
+        return self._generate_scene_at_time_fast(grouped, timestamp)
+
+    def _generate_scene_at_time_fast(
+        self,
+        grouped: dict[tuple[str, str], list[AnimationDefinition]],
+        timestamp: float,
+    ) -> AnimationScene:
         scene = AnimationScene(time=timestamp)
 
-        for element_id, element_anims in _group_by_element(animations).items():
-            grouped = _group_by_attribute(element_anims)
-            for attribute, attribute_animations in grouped.items():
-                value = self._conflict_resolver.resolve(attribute_animations, timestamp, attribute)
-                if value:
-                    scene.set_element_property(element_id, attribute, value)
+        for (element_id, attribute), attribute_animations in grouped.items():
+            value = self._conflict_resolver.resolve(attribute_animations, timestamp, attribute)
+            if value:
+                scene.set_element_property(element_id, attribute, value)
 
         return scene
 
@@ -162,6 +172,10 @@ class _ConflictResolver:
 
     def __init__(self, interpolation: InterpolationEngine) -> None:
         self._interpolation = interpolation
+        self._value_cache: dict[tuple[int, float], str | None] = {}
+
+    def clear_cache(self) -> None:
+        self._value_cache.clear()
 
     def resolve(
         self,
@@ -169,7 +183,14 @@ class _ConflictResolver:
         time: float,
         attribute: str,
     ) -> str | None:
-        active = [animation for animation in animations if animation.timing.is_active_at_time(time)]
+        # Fast path: single animation (most common case)
+        if len(animations) == 1:
+            anim = animations[0]
+            if anim.timing.is_active_at_time(time):
+                return self._calculate_value(anim, time)
+            return None
+
+        active = [a for a in animations if a.timing.is_active_at_time(time)]
         if not active:
             return None
 
@@ -199,22 +220,30 @@ class _ConflictResolver:
         return additive_values[-1]
 
     def _calculate_value(self, animation: AnimationDefinition, time: float) -> str | None:
+        cache_key = (id(animation), time)
+        cached = self._value_cache.get(cache_key)
+        if cached is not None:
+            return cached
+
         if not animation.timing.is_active_at_time(time):
             return None
 
         local_time = animation.timing.get_local_time(time)
         if animation.calc_mode == CalcMode.DISCRETE:
-            return self._calculate_discrete(animation, local_time)
+            value = self._calculate_discrete(animation, local_time)
+        else:
+            result = self._interpolation.interpolate_keyframes(
+                animation.values,
+                animation.key_times,
+                animation.key_splines,
+                local_time,
+                animation.target_attribute,
+                transform_type=animation.transform_type,
+            )
+            value = result.value
 
-        result = self._interpolation.interpolate_keyframes(
-            animation.values,
-            animation.key_times,
-            animation.key_splines,
-            local_time,
-            animation.target_attribute,
-            transform_type=animation.transform_type,
-        )
-        return result.value
+        self._value_cache[cache_key] = value
+        return value
 
     def _calculate_discrete(self, animation: AnimationDefinition, progress: float) -> str | None:
         if not animation.values:
@@ -297,6 +326,17 @@ def _group_by_attribute(animations: list[AnimationDefinition]) -> dict[str, list
     groups: dict[str, list[AnimationDefinition]] = {}
     for animation in animations:
         groups.setdefault(animation.target_attribute, []).append(animation)
+    return groups
+
+
+def _group_by_element_and_attribute(
+    animations: list[AnimationDefinition],
+) -> dict[tuple[str, str], list[AnimationDefinition]]:
+    """Group animations by (element_id, attribute) in a single pass."""
+    groups: dict[tuple[str, str], list[AnimationDefinition]] = {}
+    for animation in animations:
+        key = (animation.element_id, animation.target_attribute)
+        groups.setdefault(key, []).append(animation)
     return groups
 
 
