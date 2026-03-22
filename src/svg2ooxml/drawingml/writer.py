@@ -650,6 +650,16 @@ class DrawingMLWriter:
                         raster, element, shape_id, metadata,
                     )
                     if fragment is not None:
+                        self._trace_writer(
+                            "group_rasterized",
+                            stage="paint",
+                            metadata={
+                                "shape_id": shape_id,
+                                "reason": "overlapping_children_with_opacity",
+                                "opacity": element.opacity,
+                                "child_count": len(element.children),
+                            },
+                        )
                         return [fragment], shape_id + 1
 
             fragments, next_id = self._render_elements(element.children, shape_id)
