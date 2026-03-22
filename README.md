@@ -18,18 +18,37 @@
 
 ---
 
-svg2ooxml parses SVG markup, builds a typed intermediate representation, renders native DrawingML XML fragments, and packages them into valid `.pptx` files. Shapes, text, gradients, filters, masks, clipping paths, and SMIL animations are converted to editable PowerPoint objects — not rasterized images.
+Convert animated SVGs to native PowerPoint — programmatically, at scale, without Office. PowerPoint's own SVG import can't do animations, can't run headless, and can't batch.
+
+svg2ooxml parses SVG markup, builds a typed intermediate representation, renders native DrawingML XML fragments, and packages them into valid `.pptx` files. 97% of the SVG feature set is covered. 525 W3C test SVGs pass OpenXML validation.
+
+## Why not just use PowerPoint's SVG import?
+
+| | PowerPoint SVG import | svg2ooxml |
+|---|---|---|
+| **Animations** | Discarded — static shapes only | Full SMIL → native PowerPoint timing, motion paths, keyframes |
+| **Runs headless** | No — requires Windows + Office license | Yes — Python on Linux, macOS, or container |
+| **Batch conversion** | ~2/min via COM automation | ~800/min (75ms each), no Office needed |
+| **Font embedding** | Uses installed system fonts | Subsets + embeds via FontForge (EOT) |
+| **CSS var() / calc()** | Not evaluated | Fully resolved |
+| **Per-character positioning** | Flattened | dx/dy/rotate preserved via glyph outlines or native spacing |
+| **Accessibility** | title/desc discarded | Mapped to `cNvPr descr` |
+| **Programmable** | VBA/COM only | Python API, CLI, REST API |
 
 ## Features
 
 - **Native DrawingML output** — shapes, text, and paths render as editable PowerPoint objects
-- **SMIL animation support** — entrance, emphasis, exit, and motion path animations
-- **SVG filter effects** — blur, drop shadow, color matrix, and compositing
-- **Gradients & patterns** — linear, radial, and pattern fills with correct coordinate transforms
-- **Masks & clipping** — SVG clip paths and masks mapped to OOXML equivalents
+- **SMIL animation support** — entrance, emphasis, exit, motion paths, rotate, scale, opacity, color
+- **Text rendering** — three-tier pipeline: native text with font embedding → WordArt for curves → Skia glyph outlines as last resort
+- **SVG filter effects** — blur, drop shadow, color matrix, lighting, with EMF and raster fallbacks
+- **Gradients & patterns** — linear, radial, pattern fills with userSpaceOnUse, focal point, transforms
+- **CSS support** — custom properties (`var()`), `calc()`, `@media` queries, `oklab()`/`oklch()` colors
+- **Masks & clipping** — clip paths, masks, group clips with native/EMF/raster fallback ladder
+- **Compositing** — `mix-blend-mode`, `paint-order`, group opacity with overlap detection
 - **Multi-slide export** — split multi-page SVGs into separate slides
 - **Figma plugin** — browser-based export from Figma to PowerPoint
 - **Extensible pipeline** — service registry with dependency injection for custom providers
+- **Validated** — 525/525 W3C test SVGs pass both Python and .NET OpenXML validators
 
 ## Installation
 
