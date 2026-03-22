@@ -354,9 +354,11 @@ def test_streaming_slide_size_same() -> None:
             cx = int(slide_sz.get("cx"))
             cy = int(slide_sz.get("cy"))
 
-            # In same mode, first slide dimensions are used
+            # In same mode, first slide dimensions are used (clamped to OOXML minimum 914400)
             first_result = _render_simple_scene(builder, width=100, height=80)
-            assert (cx, cy) == first_result.slide_size
+            expected_cx = max(first_result.slide_size[0], 914400)
+            expected_cy = max(first_result.slide_size[1], 914400)
+            assert (cx, cy) == (expected_cx, expected_cy)
 
 
 def test_streaming_begin_required() -> None:
