@@ -117,19 +117,28 @@ class TextConverter:
         anchor = self._resvg_text_anchor(resvg_node)
         direction = self._resvg_text_direction(resvg_node)
 
-        # dominant-baseline / alignment-baseline → y-offset
-        font_size = updated.font_size_pt
+        # dominant-baseline / alignment-baseline → y-offset from real font metrics
         dom_baseline = (element.get("dominant-baseline") or "").strip().lower()
         align_baseline = (element.get("alignment-baseline") or "").strip().lower()
         baseline = dom_baseline or align_baseline
-        if baseline in ("central", "middle"):
-            origin_y += font_size * 0.4  # shift down by ~half ascent
-        elif baseline == "hanging":
-            origin_y += font_size * 0.8  # shift down by full ascent
-        elif baseline in ("text-bottom", "after-edge"):
-            origin_y -= font_size * 0.2  # shift up by descent
-        elif baseline in ("text-top", "before-edge"):
-            origin_y += font_size * 0.8
+        if baseline and baseline not in ("auto", "alphabetic"):
+            from svg2ooxml.drawingml.glyph_renderer import SKIA_AVAILABLE, _get_font
+            if SKIA_AVAILABLE:
+                _font = _get_font(updated.font_family, updated.font_size_pt)
+                _m = _font.getMetrics()
+                ascent = abs(_m.fAscent)
+                descent = abs(_m.fDescent)
+            else:
+                ascent = updated.font_size_pt * 0.77
+                descent = updated.font_size_pt * 0.23
+            if baseline in ("central", "middle"):
+                origin_y += (ascent - descent) / 2
+            elif baseline == "hanging":
+                origin_y += ascent
+            elif baseline in ("text-bottom", "after-edge"):
+                origin_y -= descent
+            elif baseline in ("text-top", "before-edge"):
+                origin_y += ascent
 
         font_service = self._context.services.resolve("font")
         bbox = self._estimate_text_bbox(runs, origin_x, origin_y, font_service=font_service)
