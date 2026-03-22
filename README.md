@@ -106,4 +106,9 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ## License
 
-Source code is licensed under [AGPL-3.0-only](LICENSE). Documentation and content assets are licensed under [CC BY-NC-SA 4.0](LICENSE-CONTENT).
+**Dual-licensed:**
+
+- **Open source** — [AGPL-3.0](LICENSE) for open-source projects and personal use.
+- **Commercial** — [Commercial License](LICENSE-COMMERCIAL.md) for proprietary software, SaaS, and embedding. Contact [license@svg2ooxml.com](mailto:license@svg2ooxml.com).
+
+Documentation and content assets are licensed under [CC BY-NC-SA 4.0](LICENSE-CONTENT).

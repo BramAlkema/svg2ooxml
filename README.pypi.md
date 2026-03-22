@@ -79,4 +79,4 @@ SVG text
 
 ## License
 
-AGPL-3.0-only
+Dual-licensed: [AGPL-3.0](https://github.com/BramAlkema/svg2ooxml/blob/main/LICENSE) for open source, [Commercial License](https://github.com/BramAlkema/svg2ooxml/blob/main/LICENSE-COMMERCIAL.md) for proprietary use. Contact license@svg2ooxml.com.

@@ -1,6 +1,17 @@
 svg2ooxml
 Copyright (C) 2026 SVG2OOXML Contributors
 
+This program is dual-licensed:
+
+1. GNU Affero General Public License v3.0 (AGPL-3.0) — see below.
+2. Commercial License — see LICENSE-COMMERCIAL.md for terms and pricing.
+
+If you use svg2ooxml in proprietary software or offer it as a service
+without releasing your source code, you need a commercial license.
+Contact license@svg2ooxml.com.
+
+---
+
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as published
 by the Free Software Foundation, version 3 of the License.
