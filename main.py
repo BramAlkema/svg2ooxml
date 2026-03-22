@@ -15,6 +15,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel
 
 from src.svg2ooxml.api.routes.export import router as export_router
+from src.svg2ooxml.api.routes.addon import router as addon_router
 from src.svg2ooxml.api.middleware import RateLimiter, RateLimitMiddleware
 
 RATE_LIMIT = int(os.getenv("SVG2OOXML_RATE_LIMIT", "60"))
@@ -70,6 +71,7 @@ rate_limiter = RateLimiter(limit=RATE_LIMIT, window_seconds=RATE_WINDOW_SECONDS)
 app.add_middleware(RateLimitMiddleware, limiter=rate_limiter)
 
 app.include_router(export_router, prefix="/api/v1", tags=["export"])
+app.include_router(addon_router, prefix="/api/v1/addon", tags=["addon"])
 
 
 # ---------------------------------------------------------------------------

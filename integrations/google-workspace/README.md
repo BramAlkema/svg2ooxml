@@ -10,9 +10,9 @@ Sheets, or Slides.
 3. Delete the default code
 4. Paste the contents of `Code.gs`
 5. Copy `appsscript.json` to the manifest (View → Show manifest file)
-6. **Project Settings → Script Properties** → add `API_TOKEN` with your
-   svg2ooxml API key
-7. Reload the document — "SVG → Slides" menu appears
+6. **Project Settings → Script Properties** → add `SVG2OOXML_API_KEY` with the
+   value of the server's `SVG2OOXML_API_KEY` environment variable
+7. Reload the document — the **SVG → Slides** menu appears
 
 ## Use
 
@@ -28,23 +28,25 @@ Sheets, or Slides.
 
 ### From code
 ```javascript
-// In any Apps Script
-const url = convertSvg('<svg>...</svg>', 'my-diagram');
-// Returns Drive URL of the created PPTX
+// Convert and save PPTX to Drive
+var result = convertSvg('<svg>...</svg>', 'my-diagram');
+// → {url: "https://drive.google.com/...", filename: "my-diagram.pptx", format: "PowerPoint (.pptx)"}
 
-// Or open directly in Google Slides
-const slidesUrl = convertSvg('<svg>...</svg>', 'my-diagram', true);
+// Upload directly to Google Slides
+var result = convertSvg('<svg>...</svg>', 'my-diagram', true);
+// → {url: "https://docs.google.com/presentation/...", filename: "my-diagram", format: "Google Slides"}
 ```
 
 ## How it works
 
 ```
-User pastes SVG → Apps Script → svg2ooxml API (Coolify) → PPTX → Google Drive
-                                                        ↘ Google Slides API
+User pastes SVG → Apps Script → POST /api/v1/addon/convert → PPTX → Google Drive
+                                                            ↘ Google Slides API
 ```
 
-The API converts SVG to native DrawingML shapes (not images). Animations,
-gradients, text, and filters are preserved as editable PowerPoint objects.
-
-For Google Slides output, the API uses the user's OAuth token
-(`ScriptApp.getOAuthToken()`) to upload directly via Google Slides API.
+- **Auth**: API key via `SVG2OOXML_API_KEY` script property, sent as Bearer token
+- **Dimensions**: Auto-extracted from the SVG's `width`/`height` attributes or `viewBox`
+- **Conversion**: SVG → native DrawingML shapes (not images). Animations,
+  gradients, text, and filters are preserved as editable PowerPoint objects.
+- **Slides upload**: Uses the user's OAuth token (`ScriptApp.getOAuthToken()`)
+  to upload via Google Drive API with automatic conversion to Slides format
