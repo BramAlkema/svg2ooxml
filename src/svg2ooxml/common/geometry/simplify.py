@@ -252,8 +252,11 @@ def _curve_fit(
             run.clear()
             return
         fitted = _fit_cubic_beziers(points, tolerance)
-        # Quality gate: only use fitted result if it reduces segment count
-        if len(fitted) < len(run):
+        # Quality gate: each bezier costs ~3 XML nodes vs 1 for a line,
+        # so only use fitted result if it reduces total XML weight.
+        fitted_weight = sum(3 if isinstance(s, BezierSegment) else 1 for s in fitted)
+        original_weight = len(run)  # all lines, 1 node each
+        if fitted_weight < original_weight:
             result.extend(fitted)
         else:
             result.extend(run)
