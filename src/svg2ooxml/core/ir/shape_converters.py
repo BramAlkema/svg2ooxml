@@ -389,6 +389,8 @@ class ShapeConversionMixin(ShapeResvgMixin, ShapeFallbackMixin):
         mask_instance: MaskInstance | None,
     ):
         policy = self._policy_options("geometry")
+        if metadata.get("wordart") or metadata.get("resvg_text"):
+            policy = {**policy, "simplify_paths": False} if policy else {"simplify_paths": False}
         allow_emf_fallback, allow_bitmap_fallback = self._geometry_fallback_flags(policy)
         segments, geom_meta, render_mode = apply_geometry_policy(list(segments), policy)
         bitmap_limits = self._bitmap_fallback_limits(policy)

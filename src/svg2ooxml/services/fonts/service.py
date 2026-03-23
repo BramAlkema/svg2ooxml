@@ -135,6 +135,14 @@ class FontService:
             if fallback.lower() == query.family.lower():
                 continue
             yield replace(query, family=fallback, fallback_chain=())
+        # Inject visually similar fonts when explicit fallbacks don't resolve
+        from svg2ooxml.services.fonts.similarity import get_similar_fonts
+
+        seen = {query.family.lower()} | {f.lower() for f in query.fallback_chain}
+        for similar in get_similar_fonts(query.family):
+            if similar.lower() not in seen:
+                seen.add(similar.lower())
+                yield replace(query, family=similar, fallback_chain=())
 
 
 __all__ = ["FontService", "FontProvider", "FontQuery", "FontMatch"]
