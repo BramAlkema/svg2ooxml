@@ -7,6 +7,7 @@ import pytest
 from svg2ooxml.common.geometry.simplify import (
     _demote_flat_beziers,
     _merge_collinear,
+    _rdp_simplify,
     _remove_degenerates,
     _split_subpaths,
     simplify_segments,
@@ -156,6 +157,85 @@ class TestMergeCollinear:
 
     def test_empty(self):
         assert _merge_collinear([], angle_deg=0.5, epsilon=0.01) == []
+
+
+# ---------------------------------------------------------------------------
+# Pass 4: RDP
+# ---------------------------------------------------------------------------
+
+
+class TestRdpSimplify:
+    def test_removes_intermediate_points_on_line(self):
+        # Four points on a straight line — RDP needs ≥3 segments
+        segs = [_line(0, 0, 3, 0), _line(3, 0, 6, 0), _line(6, 0, 10, 0)]
+        result = _rdp_simplify(segs, tolerance=1.0, epsilon=0.01)
+        assert len(result) == 1
+        assert result[0].start == Point(0, 0)
+        assert result[0].end == Point(10, 0)
+
+    def test_keeps_significant_deviation(self):
+        # Triangle: middle point is 5 units from the baseline — well above tolerance
+        segs = [_line(0, 0, 5, 5), _line(5, 5, 10, 0)]
+        result = _rdp_simplify(segs, tolerance=1.0, epsilon=0.01)
+        assert len(result) == 2
+
+    def test_reduces_zigzag_within_tolerance(self):
+        # Small zigzag within tolerance band
+        segs = [
+            _line(0, 0, 2, 0.3),
+            _line(2, 0.3, 4, -0.2),
+            _line(4, -0.2, 6, 0.1),
+            _line(6, 0.1, 8, -0.3),
+            _line(8, -0.3, 10, 0),
+        ]
+        result = _rdp_simplify(segs, tolerance=1.0, epsilon=0.01)
+        assert len(result) < 5
+        assert result[0].start == Point(0, 0)
+        assert result[-1].end == Point(10, 0)
+
+    def test_preserves_bezier_segments(self):
+        segs = [
+            _line(0, 0, 5, 0),
+            _bezier(5, 0, 6, 2, 8, 2, 10, 0),
+            _line(10, 0, 15, 0),
+        ]
+        result = _rdp_simplify(segs, tolerance=1.0, epsilon=0.01)
+        assert any(isinstance(s, BezierSegment) for s in result)
+
+    def test_handles_gap_between_runs(self):
+        segs = [
+            _line(0, 0, 3, 0),
+            _line(3, 0, 7, 0),
+            _line(7, 0, 10, 0),
+            # gap
+            _line(20, 20, 23, 20),
+            _line(23, 20, 27, 20),
+            _line(27, 20, 30, 20),
+        ]
+        result = _rdp_simplify(segs, tolerance=1.0, epsilon=0.01)
+        assert len(result) == 2
+        assert result[0].start == Point(0, 0)
+        assert result[0].end == Point(10, 0)
+        assert result[1].start == Point(20, 20)
+        assert result[1].end == Point(30, 20)
+
+    def test_short_runs_unchanged(self):
+        segs = [_line(0, 0, 5, 5)]
+        result = _rdp_simplify(segs, tolerance=1.0, epsilon=0.01)
+        assert len(result) == 1
+
+    def test_closed_polygon_simplification(self):
+        # Square with extra point on one edge — should simplify
+        segs = [
+            _line(0, 0, 5, 0),
+            _line(5, 0, 10, 0),   # collinear with above
+            _line(10, 0, 10, 10),
+            _line(10, 10, 0, 10),
+            _line(0, 10, 0, 0),
+        ]
+        result = _rdp_simplify(segs, tolerance=0.5, epsilon=0.01)
+        # The collinear point on top edge should be removed
+        assert len(result) == 4
 
 
 # ---------------------------------------------------------------------------

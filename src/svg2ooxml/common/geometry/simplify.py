@@ -21,6 +21,7 @@ from svg2ooxml.ir.geometry import BezierSegment, LineSegment, Point, SegmentType
 DEFAULT_EPSILON = 0.01  # degenerate segment threshold
 DEFAULT_BEZIER_FLATNESS = 0.5  # control-point deviation for bezier demotion
 DEFAULT_COLLINEAR_ANGLE = 0.5  # degrees
+DEFAULT_RDP_TOLERANCE = 1.0  # Ramer-Douglas-Peucker tolerance
 
 
 # ---------------------------------------------------------------------------
@@ -34,8 +35,9 @@ def simplify_segments(
     epsilon: float = DEFAULT_EPSILON,
     bezier_flatness: float = DEFAULT_BEZIER_FLATNESS,
     collinear_angle_deg: float = DEFAULT_COLLINEAR_ANGLE,
+    rdp_tolerance: float = DEFAULT_RDP_TOLERANCE,
 ) -> list[SegmentType]:
-    """Run passes 1-3 on *segments*, preserving subpath boundaries.
+    """Run simplification passes on *segments*, preserving subpath boundaries.
 
     Returns the simplified segment list.
     """
@@ -45,6 +47,8 @@ def simplify_segments(
         sp = _remove_degenerates(sp, epsilon)
         sp = _demote_flat_beziers(sp, bezier_flatness)
         sp = _merge_collinear(sp, collinear_angle_deg, epsilon)
+        if rdp_tolerance > 0:
+            sp = _rdp_simplify(sp, rdp_tolerance, epsilon)
         result.extend(sp)
     return result
 
@@ -150,6 +154,72 @@ def _merge_collinear(
         result.append(LineSegment(run_start, run_end))
         i = j
     return result
+
+
+# ---------------------------------------------------------------------------
+# Pass 4: Ramer-Douglas-Peucker
+# ---------------------------------------------------------------------------
+
+
+def _rdp_simplify(
+    segments: list[SegmentType],
+    tolerance: float,
+    epsilon: float,
+) -> list[SegmentType]:
+    """Apply RDP to maximal runs of consecutive LineSegments."""
+    if len(segments) < 3:
+        return segments
+
+    result: list[SegmentType] = []
+    run: list[LineSegment] = []
+
+    def _flush_run() -> None:
+        if not run:
+            return
+        if len(run) < 3:
+            result.extend(run)
+            run.clear()
+            return
+        # Build point sequence from line run
+        points = [run[0].start] + [seg.end for seg in run]
+        simplified = _rdp_points(points, tolerance)
+        for i in range(len(simplified) - 1):
+            result.append(LineSegment(simplified[i], simplified[i + 1]))
+        run.clear()
+
+    for seg in segments:
+        if isinstance(seg, LineSegment):
+            if run and _dist(run[-1].end, seg.start) > epsilon:
+                _flush_run()
+            run.append(seg)
+        else:
+            _flush_run()
+            result.append(seg)
+
+    _flush_run()
+    return result
+
+
+def _rdp_points(points: list[Point], tolerance: float) -> list[Point]:
+    """Ramer-Douglas-Peucker on a point sequence. Returns simplified points."""
+    if len(points) <= 2:
+        return points
+
+    # Find the point with maximum distance from the line start→end
+    max_dist = 0.0
+    max_idx = 0
+    for i in range(1, len(points) - 1):
+        d = _point_to_line_dist(points[i], points[0], points[-1])
+        if d > max_dist:
+            max_dist = d
+            max_idx = i
+
+    if max_dist > tolerance:
+        left = _rdp_points(points[: max_idx + 1], tolerance)
+        right = _rdp_points(points[max_idx:], tolerance)
+        return left[:-1] + right
+    else:
+        return [points[0], points[-1]]
 
 
 # ---------------------------------------------------------------------------

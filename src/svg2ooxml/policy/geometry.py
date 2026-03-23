@@ -57,6 +57,7 @@ def apply_geometry_policy(
             epsilon=float(policy.get("simplify_epsilon_px", 0.01)),
             bezier_flatness=float(policy.get("bezier_flatness_px", 0.5)),
             collinear_angle_deg=float(policy.get("collinear_angle_deg", 0.5)),
+            rdp_tolerance=float(policy.get("rdp_tolerance_px", 1.0)),
         )
         after = len(current)
         if after < before:
