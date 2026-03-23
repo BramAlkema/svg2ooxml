@@ -47,19 +47,26 @@ def apply_geometry_policy(
     max_segments = policy.get("max_segments")
     simplify = bool(policy.get("simplify_paths"))
 
+    simplify_min = int(policy.get("simplify_min_segments", 16))
+    if simplify and len(current) >= simplify_min:
+        from svg2ooxml.common.geometry.simplify import simplify_segments
+
+        before = len(current)
+        current = simplify_segments(
+            current,
+            epsilon=float(policy.get("simplify_epsilon_px", 0.01)),
+            bezier_flatness=float(policy.get("bezier_flatness_px", 0.5)),
+            collinear_angle_deg=float(policy.get("collinear_angle_deg", 0.5)),
+        )
+        after = len(current)
+        if after < before:
+            metadata["segments_before_simplify"] = before
+            metadata["segments_after_simplify"] = after
+            metadata["simplified"] = True
+
     if max_segments and len(current) > max_segments:
         metadata["segment_count_before"] = len(current)
-        if simplify:
-            step = max(1, math.ceil(len(current) / max_segments))
-            simplified = current[::step]
-            if simplified and simplified[-1] is not current[-1]:
-                simplified.append(current[-1])
-            current = simplified
-            metadata["segment_count_after"] = len(current)
-            metadata["simplified"] = True
-            if len(current) > max_segments and mode != FALLBACK_BITMAP:
-                mode = FALLBACK_EMF
-        elif mode != FALLBACK_BITMAP:
+        if mode != FALLBACK_BITMAP:
             mode = FALLBACK_EMF
 
     max_complexity = policy.get("max_complexity")

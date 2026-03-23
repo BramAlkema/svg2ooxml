@@ -46,17 +46,18 @@ def test_apply_geometry_policy_force_emf() -> None:
 
 
 def test_apply_geometry_policy_simplifies_when_allowed() -> None:
-    segments = _build_segments(10)
+    segments = _build_segments(20)
 
     simplified, metadata, mode = apply_geometry_policy(
         segments,
-        {"max_segments": 4, "simplify_paths": True},
+        {"max_segments": 4, "simplify_paths": True, "simplify_min_segments": 2},
     )
 
-    assert len(simplified) <= 4
-    assert metadata["segment_count_before"] == 10
+    # Collinear segments are merged by the simplification pass
+    assert len(simplified) < len(segments)
+    assert metadata["segments_before_simplify"] == 20
     assert metadata["simplified"] is True
-    assert mode in {"native", "emf"}
+    assert mode == "native"  # under max_segments after simplification
 
 
 def test_apply_geometry_policy_marks_complexity_exceeded() -> None:
