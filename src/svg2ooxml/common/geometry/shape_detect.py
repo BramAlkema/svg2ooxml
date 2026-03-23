@@ -8,20 +8,22 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from typing import Literal
 
 from svg2ooxml.ir.geometry import BezierSegment, LineSegment, Point, Rect, SegmentType
 
 DEFAULT_TOLERANCE = 2.0  # px — intentionally loose for shape recognition
 
-# Kappa for standard cubic bezier circle approximation
 _KAPPA = 0.5522847498
+
+PresetName = Literal["rect", "roundRect", "ellipse"]
 
 
 @dataclass(frozen=True)
 class PresetShapeMatch:
     """Result of preset shape detection."""
 
-    preset: str  # "rect", "roundRect", "ellipse"
+    preset: PresetName
     bounds: Rect
     corner_radius: float = 0.0
     confidence: float = 1.0
@@ -172,7 +174,7 @@ def _quarter_circle_radius(curve: BezierSegment, tolerance: float) -> float | No
     d2 = _dist(curve.end, curve.control2)
     expected = r * _KAPPA
 
-    if abs(d1 - expected) > tolerance and abs(d2 - expected) > tolerance:
+    if abs(d1 - expected) > tolerance or abs(d2 - expected) > tolerance:
         return None
 
     return r
@@ -271,10 +273,6 @@ def _ellipse_quadrant_error(
 
     Returns average control point error, or None if way off.
     """
-    # Determine quadrant from start/end positions relative to center
-    sx, sy = seg.start.x - cx, seg.start.y - cy
-    ex, ey = seg.end.x - cx, seg.end.y - cy
-
     # Expected control points for each quadrant
     # right→bottom: c1=(rx, ky), c2=(kx, ry)
     # bottom→left:  c1=(-kx, ry), c2=(-rx, ky)
@@ -315,11 +313,11 @@ def _bounds_from_segments(segments: list[SegmentType]) -> Rect:
     all_x: list[float] = []
     all_y: list[float] = []
     for seg in segments:
-        for attr in ("start", "end", "control1", "control2"):
-            pt = getattr(seg, attr, None)
-            if pt is not None:
-                all_x.append(pt.x)
-                all_y.append(pt.y)
+        all_x.extend([seg.start.x, seg.end.x])
+        all_y.extend([seg.start.y, seg.end.y])
+        if isinstance(seg, BezierSegment):
+            all_x.extend([seg.control1.x, seg.control2.x])
+            all_y.extend([seg.control1.y, seg.control2.y])
     min_x, max_x = min(all_x), max(all_x)
     min_y, max_y = min(all_y), max(all_y)
     return Rect(min_x, min_y, max_x - min_x, max_y - min_y)
