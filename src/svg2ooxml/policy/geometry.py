@@ -68,6 +68,22 @@ def apply_geometry_policy(
             metadata["segments_after_simplify"] = after
             metadata["simplified"] = True
 
+    # Preset shape detection (after simplification, before fallback check)
+    if bool(policy.get("detect_preset_shapes", True)) and mode == FALLBACK_NATIVE:
+        from svg2ooxml.common.geometry.shape_detect import detect_preset_shape
+
+        shape_tol = float(policy.get("shape_detect_tolerance_px", 2.0))
+        match = detect_preset_shape(current, tolerance=shape_tol)
+        if match is not None:
+            metadata["preset_shape"] = match.preset
+            metadata["preset_shape_confidence"] = match.confidence
+            metadata["preset_shape_bounds"] = {
+                "x": match.bounds.x, "y": match.bounds.y,
+                "w": match.bounds.width, "h": match.bounds.height,
+            }
+            if match.corner_radius:
+                metadata["preset_shape_corner_radius"] = match.corner_radius
+
     if max_segments and len(current) > max_segments:
         metadata["segment_count_before"] = len(current)
         if mode != FALLBACK_BITMAP:
