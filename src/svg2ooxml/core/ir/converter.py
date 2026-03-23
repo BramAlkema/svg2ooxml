@@ -37,6 +37,7 @@ class IRScene:
     height_px: float | None = None
     animations: list[AnimationDefinition] | None = None
     metadata: dict[str, Any] | None = None
+    background_color: str | None = None
 
 
 class IRConverter:
@@ -166,12 +167,16 @@ class IRConverter:
         }
         if self._context.tracer is not None:
             scene_metadata["trace_report"] = self._context.tracer.report().to_dict()
+        background_color = _extract_background(
+            elements, result.width_px, result.height_px,
+        )
         return IRScene(
             elements=elements,
             width_px=result.width_px,
             height_px=result.height_px,
             animations=result.animations,
             metadata=scene_metadata,
+            background_color=background_color,
         )
 
     @property
@@ -309,6 +314,73 @@ class IRConverter:
         if self._context.policy_context is self._policy_context:
             return
         self._context.policy_context = self._policy_context
+
+
+def _extract_background(
+    elements: SceneGraph,
+    width_px: float | None,
+    height_px: float | None,
+) -> str | None:
+    """Detect a full-coverage background rect and remove it from elements.
+
+    Checks the first element (and the first child of a root Group) for a
+    Rectangle or simple Path that fills ≥95% of the viewport with a solid color.
+
+    Returns the background color as an RRGGBB hex string, or None.
+    """
+    from svg2ooxml.ir.paint import SolidPaint
+    from svg2ooxml.ir.scene import Group
+    from svg2ooxml.ir.shapes import Rectangle
+
+    if not elements or width_px is None or height_px is None:
+        return None
+    if width_px <= 0 or height_px <= 0:
+        return None
+
+    # Try the first element directly
+    color = _check_background_candidate(elements[0], width_px, height_px)
+    if color is not None:
+        elements.pop(0)
+        return color
+
+    # Try the first child of a root Group (common pattern: <g> wrapping everything)
+    first = elements[0]
+    if isinstance(first, Group) and first.children:
+        color = _check_background_candidate(first.children[0], width_px, height_px)
+        if color is not None:
+            first.children.pop(0)
+            return color
+
+    return None
+
+
+def _check_background_candidate(
+    elem: object,
+    width_px: float,
+    height_px: float,
+) -> str | None:
+    """Return the fill color if *elem* is a full-coverage solid-fill rect."""
+    from svg2ooxml.ir.paint import SolidPaint
+    from svg2ooxml.ir.shapes import Rectangle
+
+    if not isinstance(elem, Rectangle):
+        return None
+    if elem.corner_radius > 0 or elem.stroke is not None or elem.effects:
+        return None
+    if not isinstance(elem.fill, SolidPaint):
+        return None
+    if elem.element_id:
+        return None
+
+    coverage_x = elem.bounds.width / width_px
+    coverage_y = elem.bounds.height / height_px
+    if coverage_x < 0.95 or coverage_y < 0.95:
+        return None
+
+    if abs(elem.bounds.x) > width_px * 0.05 or abs(elem.bounds.y) > height_px * 0.05:
+        return None
+
+    return elem.fill.rgb
 
 
 __all__ = ["IRConverter", "IRScene"]

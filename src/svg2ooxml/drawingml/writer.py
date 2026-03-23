@@ -254,7 +254,7 @@ class DrawingMLWriter:
         default_slide_size: tuple[int, int] = DEFAULT_SLIDE_SIZE,
         tracer: ConversionTracer | None = None,
         animation_payload: dict[str, Any] | None = None,
-        animations: list | None = None, # Add animations parameter
+        animations: list | None = None,
     ) -> DrawingMLRenderResult:
         """Convenience wrapper that derives slide size from an IRScene."""
 
@@ -264,12 +264,13 @@ class DrawingMLWriter:
             animation_payload=animation_payload,
             animations=animations,
         )
-        return self.render_scene(
+        result = self.render_scene(
             scene.elements,
             slide_size=slide_size,
             tracer=tracer,
             animation_payload=payload,
         )
+        return result._apply_background(scene.background_color)
 
     def render_shapes_from_ir(
         self,
