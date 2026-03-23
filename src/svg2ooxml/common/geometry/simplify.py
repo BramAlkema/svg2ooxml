@@ -22,6 +22,8 @@ DEFAULT_EPSILON = 0.01  # degenerate segment threshold
 DEFAULT_BEZIER_FLATNESS = 0.5  # control-point deviation for bezier demotion
 DEFAULT_COLLINEAR_ANGLE = 0.5  # degrees
 DEFAULT_RDP_TOLERANCE = 1.0  # Ramer-Douglas-Peucker tolerance
+DEFAULT_CURVE_FIT_TOLERANCE = 1.5  # curve fitting max error
+DEFAULT_CURVE_FIT_MIN_POINTS = 8  # min run length to attempt fitting
 
 
 # ---------------------------------------------------------------------------
@@ -36,6 +38,8 @@ def simplify_segments(
     bezier_flatness: float = DEFAULT_BEZIER_FLATNESS,
     collinear_angle_deg: float = DEFAULT_COLLINEAR_ANGLE,
     rdp_tolerance: float = DEFAULT_RDP_TOLERANCE,
+    curve_fit_tolerance: float = DEFAULT_CURVE_FIT_TOLERANCE,
+    curve_fit_min_points: int = DEFAULT_CURVE_FIT_MIN_POINTS,
 ) -> list[SegmentType]:
     """Run simplification passes on *segments*, preserving subpath boundaries.
 
@@ -49,6 +53,8 @@ def simplify_segments(
         sp = _merge_collinear(sp, collinear_angle_deg, epsilon)
         if rdp_tolerance > 0:
             sp = _rdp_simplify(sp, rdp_tolerance, epsilon)
+        if curve_fit_tolerance > 0 and curve_fit_min_points > 0:
+            sp = _curve_fit(sp, curve_fit_tolerance, curve_fit_min_points, epsilon)
         result.extend(sp)
     return result
 
@@ -220,6 +226,244 @@ def _rdp_points(points: list[Point], tolerance: float) -> list[Point]:
         return left[:-1] + right
     else:
         return [points[0], points[-1]]
+
+
+# ---------------------------------------------------------------------------
+# Pass 5: Curve fitting (Schneider algorithm)
+# ---------------------------------------------------------------------------
+
+
+def _curve_fit(
+    segments: list[SegmentType],
+    tolerance: float,
+    min_points: int,
+    epsilon: float,
+) -> list[SegmentType]:
+    """Re-fit long runs of LineSegments into fewer BezierSegments."""
+    result: list[SegmentType] = []
+    run: list[LineSegment] = []
+
+    def _flush_run() -> None:
+        if not run:
+            return
+        points = [run[0].start] + [seg.end for seg in run]
+        if len(points) < min_points:
+            result.extend(run)
+            run.clear()
+            return
+        fitted = _fit_cubic_beziers(points, tolerance)
+        # Quality gate: only use fitted result if it reduces segment count
+        if len(fitted) < len(run):
+            result.extend(fitted)
+        else:
+            result.extend(run)
+        run.clear()
+
+    for seg in segments:
+        if isinstance(seg, LineSegment):
+            if run and _dist(run[-1].end, seg.start) > epsilon:
+                _flush_run()
+            run.append(seg)
+        else:
+            _flush_run()
+            result.append(seg)
+
+    _flush_run()
+    return result
+
+
+def _fit_cubic_beziers(
+    points: list[Point],
+    tolerance: float,
+) -> list[BezierSegment]:
+    """Fit cubic bezier curves to a point sequence (Schneider algorithm).
+
+    Returns a list of BezierSegments that approximate the point sequence
+    within *tolerance*.
+    """
+    if len(points) < 2:
+        return []
+    if len(points) == 2:
+        return []  # single line — not worth fitting
+
+    # Compute left/right tangent at endpoints
+    left_tan = _normalize(_sub(points[1], points[0]))
+    right_tan = _normalize(_sub(points[-2], points[-1]))
+
+    return _fit_cubic_recursive(points, left_tan, right_tan, tolerance)
+
+
+def _fit_cubic_recursive(
+    points: list[Point],
+    left_tan: tuple[float, float],
+    right_tan: tuple[float, float],
+    tolerance: float,
+) -> list[BezierSegment]:
+    """Recursively fit cubic beziers, splitting at max-error point."""
+    if len(points) == 2:
+        # Degenerate — return line as-is (caller handles)
+        return []
+
+    # Try fitting a single cubic
+    bezier = _fit_single_cubic(points, left_tan, right_tan)
+    max_err, split_idx = _compute_max_error(points, bezier)
+
+    if max_err <= tolerance:
+        return [bezier]
+
+    # Split at point of maximum error and recurse
+    if split_idx <= 0:
+        split_idx = 1
+    if split_idx >= len(points) - 1:
+        split_idx = len(points) - 2
+
+    center_tan = _normalize(_sub(points[split_idx + 1], points[split_idx - 1]))
+    neg_center_tan = (-center_tan[0], -center_tan[1])
+
+    left_segs = _fit_cubic_recursive(
+        points[: split_idx + 1], left_tan, neg_center_tan, tolerance,
+    )
+    right_segs = _fit_cubic_recursive(
+        points[split_idx:], center_tan, right_tan, tolerance,
+    )
+    return left_segs + right_segs
+
+
+def _fit_single_cubic(
+    points: list[Point],
+    left_tan: tuple[float, float],
+    right_tan: tuple[float, float],
+) -> BezierSegment:
+    """Fit a single cubic bezier to a point sequence using least-squares.
+
+    Uses chord-length parameterization and the Schneider method for
+    computing control points from endpoint tangents.
+    """
+    n = len(points)
+    first = points[0]
+    last = points[-1]
+
+    # Chord-length parameterization
+    u = _chord_length_parameterize(points)
+
+    # Compute A matrix entries and right-hand side
+    # For each point, compute contribution to control point distances
+    a00 = a01 = a11 = 0.0
+    x0 = x1 = 0.0
+
+    for i in range(n):
+        t = u[i]
+        b1 = 3.0 * t * (1.0 - t) ** 2  # Bernstein basis B1
+        b2 = 3.0 * t ** 2 * (1.0 - t)   # Bernstein basis B2
+
+        a1 = (left_tan[0] * b1, left_tan[1] * b1)
+        a2 = (right_tan[0] * b2, right_tan[1] * b2)
+
+        a00 += _dot(a1, a1)
+        a01 += _dot(a1, a2)
+        a11 += _dot(a2, a2)
+
+        # tmp = point - bezier(t) using only endpoints
+        b0 = (1.0 - t) ** 3
+        b3 = t ** 3
+        tmp = (
+            points[i].x - (first.x * b0 + first.x * b1 + last.x * b2 + last.x * b3),
+            points[i].y - (first.y * b0 + first.y * b1 + last.y * b2 + last.y * b3),
+        )
+        x0 += _dot(a1, tmp)
+        x1 += _dot(a2, tmp)
+
+    # Solve 2x2 system
+    det = a00 * a11 - a01 * a01
+    if abs(det) < 1e-12:
+        # Fallback: use 1/3 rule
+        dist = _dist(first, last) / 3.0
+        return BezierSegment(
+            start=first,
+            control1=Point(first.x + left_tan[0] * dist, first.y + left_tan[1] * dist),
+            control2=Point(last.x + right_tan[0] * dist, last.y + right_tan[1] * dist),
+            end=last,
+        )
+
+    alpha_l = (a11 * x0 - a01 * x1) / det
+    alpha_r = (a00 * x1 - a01 * x0) / det
+
+    # If alpha is negative or too small, use heuristic
+    seg_length = _dist(first, last)
+    eps = 1e-6 * seg_length
+    if alpha_l < eps or alpha_r < eps:
+        dist = seg_length / 3.0
+        alpha_l = dist
+        alpha_r = dist
+
+    return BezierSegment(
+        start=first,
+        control1=Point(first.x + left_tan[0] * alpha_l, first.y + left_tan[1] * alpha_l),
+        control2=Point(last.x + right_tan[0] * alpha_r, last.y + right_tan[1] * alpha_r),
+        end=last,
+    )
+
+
+def _compute_max_error(
+    points: list[Point],
+    bezier: BezierSegment,
+) -> tuple[float, int]:
+    """Compute maximum distance from points to the fitted bezier."""
+    u = _chord_length_parameterize(points)
+    max_dist = 0.0
+    max_idx = 0
+    for i in range(1, len(points) - 1):
+        p = _eval_bezier(bezier, u[i])
+        d = _dist(points[i], p)
+        if d > max_dist:
+            max_dist = d
+            max_idx = i
+    return max_dist, max_idx
+
+
+def _eval_bezier(b: BezierSegment, t: float) -> Point:
+    """Evaluate cubic bezier at parameter t."""
+    mt = 1.0 - t
+    mt2 = mt * mt
+    t2 = t * t
+    x = mt2 * mt * b.start.x + 3 * mt2 * t * b.control1.x + 3 * mt * t2 * b.control2.x + t2 * t * b.end.x
+    y = mt2 * mt * b.start.y + 3 * mt2 * t * b.control1.y + 3 * mt * t2 * b.control2.y + t2 * t * b.end.y
+    return Point(x, y)
+
+
+def _chord_length_parameterize(points: list[Point]) -> list[float]:
+    """Assign parameter values using cumulative chord length."""
+    u = [0.0]
+    for i in range(1, len(points)):
+        u.append(u[-1] + _dist(points[i - 1], points[i]))
+    total = u[-1]
+    if total > 1e-12:
+        u = [v / total for v in u]
+    else:
+        # Degenerate: evenly space
+        n = len(points) - 1
+        u = [i / n if n > 0 else 0.0 for i in range(len(points))]
+    return u
+
+
+# ---------------------------------------------------------------------------
+# Vector math helpers
+# ---------------------------------------------------------------------------
+
+
+def _sub(a: Point, b: Point) -> tuple[float, float]:
+    return (a.x - b.x, a.y - b.y)
+
+
+def _normalize(v: tuple[float, float]) -> tuple[float, float]:
+    length = math.sqrt(v[0] * v[0] + v[1] * v[1])
+    if length < 1e-12:
+        return (1.0, 0.0)
+    return (v[0] / length, v[1] / length)
+
+
+def _dot(a: tuple[float, float], b: tuple[float, float]) -> float:
+    return a[0] * b[0] + a[1] * b[1]
 
 
 # ---------------------------------------------------------------------------

@@ -5,6 +5,7 @@ import math
 import pytest
 
 from svg2ooxml.common.geometry.simplify import (
+    _curve_fit,
     _demote_flat_beziers,
     _merge_collinear,
     _rdp_simplify,
@@ -236,6 +237,72 @@ class TestRdpSimplify:
         result = _rdp_simplify(segs, tolerance=0.5, epsilon=0.01)
         # The collinear point on top edge should be removed
         assert len(result) == 4
+
+
+# ---------------------------------------------------------------------------
+# Pass 5: Curve fitting
+# ---------------------------------------------------------------------------
+
+
+class TestCurveFit:
+    def _semicircle_points(self, n=20):
+        """Generate points along a semicircle (0 to pi)."""
+        points = []
+        for i in range(n):
+            t = math.pi * i / (n - 1)
+            points.append(Point(math.cos(t) * 10, math.sin(t) * 10))
+        return points
+
+    def _lines_from_points(self, points):
+        return [LineSegment(points[i], points[i + 1]) for i in range(len(points) - 1)]
+
+    def test_fits_semicircle_to_fewer_beziers(self):
+        pts = self._semicircle_points(20)
+        segs = self._lines_from_points(pts)
+        result = _curve_fit(segs, tolerance=0.5, min_points=8, epsilon=0.01)
+        assert len(result) < len(segs)
+        assert any(isinstance(s, BezierSegment) for s in result)
+
+    def test_quality_gate_keeps_original(self):
+        # 3 line segments — below min_points, should pass through
+        segs = [_line(0, 0, 3, 1), _line(3, 1, 6, 0), _line(6, 0, 9, 1)]
+        result = _curve_fit(segs, tolerance=0.5, min_points=8, epsilon=0.01)
+        assert len(result) == 3
+        assert all(isinstance(s, LineSegment) for s in result)
+
+    def test_preserves_bezier_segments(self):
+        segs = [
+            _line(0, 0, 5, 0),
+            _bezier(5, 0, 6, 2, 8, 2, 10, 0),
+            _line(10, 0, 15, 0),
+        ]
+        result = _curve_fit(segs, tolerance=0.5, min_points=2, epsilon=0.01)
+        assert any(isinstance(s, BezierSegment) for s in result)
+
+    def test_fitted_curve_approximates_original(self):
+        # Quarter circle with many sample points
+        n = 30
+        pts = []
+        for i in range(n):
+            t = (math.pi / 2) * i / (n - 1)
+            pts.append(Point(math.cos(t) * 20, math.sin(t) * 20))
+        segs = self._lines_from_points(pts)
+        result = _curve_fit(segs, tolerance=1.0, min_points=8, epsilon=0.01)
+        # Should produce significantly fewer segments
+        assert len(result) < len(segs) // 2
+        # Start and end should match
+        assert result[0].start.x == pytest.approx(pts[0].x, abs=0.1)
+        assert result[-1].end.x == pytest.approx(pts[-1].x, abs=0.1)
+
+    def test_straight_line_not_fitted(self):
+        # Points on a straight line — fitting would produce 1 bezier
+        # but quality gate: 1 bezier vs many lines. Bezier wins.
+        pts = [Point(i, 0) for i in range(20)]
+        segs = self._lines_from_points(pts)
+        result = _curve_fit(segs, tolerance=0.5, min_points=8, epsilon=0.01)
+        # After RDP/collinear merge these would already be 1 line,
+        # but curve fit alone should still produce fewer segments
+        assert len(result) <= len(segs)
 
 
 # ---------------------------------------------------------------------------

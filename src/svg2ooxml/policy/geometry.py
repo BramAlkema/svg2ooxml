@@ -52,12 +52,15 @@ def apply_geometry_policy(
         from svg2ooxml.common.geometry.simplify import simplify_segments
 
         before = len(current)
+        curve_fit_tol = float(policy.get("curve_fit_tolerance_px", 1.5)) if policy.get("curve_fit_enabled", True) else 0.0
         current = simplify_segments(
             current,
             epsilon=float(policy.get("simplify_epsilon_px", 0.01)),
             bezier_flatness=float(policy.get("bezier_flatness_px", 0.5)),
             collinear_angle_deg=float(policy.get("collinear_angle_deg", 0.5)),
             rdp_tolerance=float(policy.get("rdp_tolerance_px", 1.0)),
+            curve_fit_tolerance=curve_fit_tol,
+            curve_fit_min_points=int(policy.get("curve_fit_min_points", 8)),
         )
         after = len(current)
         if after < before:
