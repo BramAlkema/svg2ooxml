@@ -48,6 +48,7 @@ def apply_use_attributes(converter, use_element: etree._Element, target: etree._
         "y",
         "width",
         "height",
+        "transform",
         "{http://www.w3.org/1999/xlink}href",
         "href",
     }
@@ -156,37 +157,38 @@ def apply_use_transform(
     converter,
     clones: Iterable[etree._Element],
     matrix: Matrix2D,
-    dx: float,
-    dy: float,
+    dx: float | None = None,
+    dy: float | None = None,
     *,
     tolerance: float,
 ) -> None:
-    translate = Matrix2D(1.0, 0.0, 0.0, 1.0, dx, dy)
-    combined = matrix.multiply(translate)
+    combined = matrix
+    if dx is not None or dy is not None:
+        translate = Matrix2D(1.0, 0.0, 0.0, 1.0, dx or 0.0, dy or 0.0)
+        combined = matrix.multiply(translate)
     if combined.is_identity(tolerance=tolerance):
         return
     for clone in clones:
         prepend_transform(clone, combined)
 
 
-def compute_use_transform(
+def _compute_use_transform_parts(
     converter,
     element: etree._Element,
     target: etree._Element,
     *,
     tolerance: float,
-) -> Matrix2D | None:
-    base_matrix = Matrix2D.identity()
+) -> tuple[Matrix2D, Matrix2D]:
+    element_matrix = Matrix2D.identity()
     href_transform = element.get("transform")
     if href_transform:
-        base_matrix = base_matrix.multiply(converter._matrix_from_transform(href_transform))
-    # Note: target_transform is NOT folded in here because the clone
-    # retains the target's original transform attribute.  Including it
-    # would double-apply the target's transform.
+        element_matrix = element_matrix.multiply(converter._matrix_from_transform(href_transform))
+
+    content_matrix = Matrix2D.identity()
 
     context = converter._conversion_context
     if context is None:
-        return base_matrix
+        return element_matrix, content_matrix
 
     viewbox_attr = element.get("viewBox") or target.get("viewBox")
     viewbox = parse_viewbox_attribute(viewbox_attr)
@@ -210,7 +212,7 @@ def compute_use_transform(
         if height_px is None:
             height_px = viewbox.height
         if width_px is None or height_px is None:
-            return base_matrix
+            return element_matrix, content_matrix
         preserve_attr = element.get("preserveAspectRatio") or target.get("preserveAspectRatio")
         preserve = parse_preserve_aspect_ratio(preserve_attr)
         try:
@@ -220,8 +222,8 @@ def compute_use_transform(
                 preserve,
             )
         except Exception:
-            return base_matrix
-        scale_matrix = Matrix2D(
+            return element_matrix, content_matrix
+        content_matrix = Matrix2D(
             result.scale_x,
             0.0,
             0.0,
@@ -229,7 +231,7 @@ def compute_use_transform(
             result.translate_x,
             result.translate_y,
         )
-        return base_matrix.multiply(scale_matrix)
+        return element_matrix, content_matrix
 
     target_width = converter._resolve_length(target.get("width"), context, axis="x")
     target_height = converter._resolve_length(target.get("height"), context, axis="y")
@@ -242,9 +244,42 @@ def compute_use_transform(
         scale_x = width_px / target_width
         scale_y = height_px / target_height
         if abs(scale_x - 1.0) > tolerance or abs(scale_y - 1.0) > tolerance:
-            scale_matrix = Matrix2D(scale_x, 0.0, 0.0, scale_y, 0.0, 0.0)
-            return base_matrix.multiply(scale_matrix)
-    return base_matrix
+            content_matrix = Matrix2D(scale_x, 0.0, 0.0, scale_y, 0.0, 0.0)
+    return element_matrix, content_matrix
+
+
+def compute_use_transform(
+    converter,
+    element: etree._Element,
+    target: etree._Element,
+    *,
+    tolerance: float,
+) -> Matrix2D | None:
+    element_matrix, content_matrix = _compute_use_transform_parts(
+        converter,
+        element,
+        target,
+        tolerance=tolerance,
+    )
+    return element_matrix.multiply(content_matrix)
+
+
+def compose_use_transform(
+    converter,
+    element: etree._Element,
+    target: etree._Element,
+    *,
+    tolerance: float,
+) -> Matrix2D:
+    element_matrix, content_matrix = _compute_use_transform_parts(
+        converter,
+        element,
+        target,
+        tolerance=tolerance,
+    )
+    dx, dy = resolve_use_offsets(converter, element)
+    translation = Matrix2D(1.0, 0.0, 0.0, 1.0, dx, dy)
+    return element_matrix.multiply(translation).multiply(content_matrix)
 
 
 def resolve_use_offsets(converter, element: etree._Element) -> tuple[float, float]:
@@ -270,6 +305,7 @@ def matrix_to_string(matrix: Matrix2D) -> str:
 __all__ = [
     "apply_use_attributes",
     "apply_use_transform",
+    "compose_use_transform",
     "compute_use_transform",
     "instantiate_use_target",
     "propagate_symbol_use_attributes",

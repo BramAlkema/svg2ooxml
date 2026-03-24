@@ -4,10 +4,11 @@ This test suite verifies that resvg-mode rendering produces visually correct
 output for core features: blend modes, gradients, text, and composite filters.
 
 Requirements:
-- LibreOffice (soffice) must be available on PATH to render PPTX to PNG
+- A configured PPTX renderer must be available to render PPTX to PNG
 - Baseline images must be generated first using tools/visual/update_baselines.py
 - Install visual-testing dependencies: pip install svg2ooxml[visual-testing]
 - Optional: Playwright for browser comparisons (SVG2OOXML_VISUAL_BROWSER_COMPARE=1)
+- Set SVG2OOXML_VISUAL_RENDERER=powerpoint to use PowerPoint instead of LibreOffice on macOS
 
 Usage:
     pytest tests/visual/test_resvg_visual.py -v
@@ -50,7 +51,7 @@ def _run_visual_test(
     """
     renderer = visual_tools.renderer
     if isinstance(renderer, LibreOfficeRenderer) and not renderer.available:
-        pytest.skip("LibreOffice (soffice) is not available on PATH.")
+        pytest.skip("Configured LibreOffice renderer is not available.")
     
     # Build PPTX from SVG fixture
     svg_path = FIXTURES_DIR / f"{fixture_name}.svg"
@@ -241,6 +242,20 @@ class TestPatternTileTransforms:
 
 
 @pytest.mark.visual
+class TestTransformTorture:
+    """Integrated transform stress fixture covering use, viewBox, marker, clip, mask, and mirror."""
+
+    def test_transform_torture_rendering(self, tmp_path, visual_tools):
+        _run_visual_test(
+            "transform_torture",
+            tmp_path,
+            visual_tools,
+            threshold=0.94,
+            browser_threshold=0.90,
+        )
+
+
+@pytest.mark.visual
 class TestIntegration:
     """Integration tests combining multiple resvg features."""
     
@@ -251,6 +266,7 @@ class TestIntegration:
         "text_rendering",
         "composite_filters",
         "pattern_tile_transforms",
+        "transform_torture",
     ])
     def test_all_resvg_features(self, fixture, tmp_path, visual_tools):
         """Parametrized test running all fixtures."""
@@ -262,12 +278,14 @@ class TestIntegration:
             "text_rendering": 0.82,    # Tolerance for font rendering variance
             "composite_filters": 0.95,
             "pattern_tile_transforms": 0.93,
+            "transform_torture": 0.94,
         }
         browser_thresholds = {
             "blend_modes": 0.84,
             "linear_gradients": 0.87,
             "text_rendering": 0.88,
             "pattern_tile_transforms": 0.90,
+            "transform_torture": 0.90,
         }
         threshold = thresholds.get(fixture, 0.95)
         browser_threshold = browser_thresholds.get(fixture)

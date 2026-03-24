@@ -18,7 +18,7 @@ GOLDEN_DIR = "rect_scene"
 def test_simple_rect_scene(tmp_path, visual_tools) -> None:
     renderer = visual_tools.renderer
     if isinstance(renderer, LibreOfficeRenderer) and not renderer.available:
-        pytest.skip("LibreOffice (soffice) is not available on PATH.")
+        pytest.skip("Configured LibreOffice renderer is not available.")
 
     svg_text = FIXTURE_SVG.read_text(encoding="utf-8")
     pptx_path = tmp_path / "scene.pptx"

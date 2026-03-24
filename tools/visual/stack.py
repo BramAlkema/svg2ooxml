@@ -9,7 +9,7 @@ from tools.visual.browser_renderer import BrowserSvgRenderer, default_browser_re
 from tools.visual.builder import PptxBuilder
 from tools.visual.diff import ImageDiff
 from tools.visual.golden import GoldenRepository
-from tools.visual.renderer import LibreOfficeRenderer, default_renderer
+from tools.visual.renderer import PptxRenderer, resolve_renderer
 
 
 @dataclass
@@ -19,7 +19,7 @@ class VisualStack:
     golden: GoldenRepository
     diff: ImageDiff
     builder: PptxBuilder
-    renderer: LibreOfficeRenderer
+    renderer: PptxRenderer
     browser_renderer: BrowserSvgRenderer | None = None
 
 
@@ -29,7 +29,7 @@ def default_visual_stack() -> VisualStack:
     filter_strategy = os.getenv("SVG2OOXML_VISUAL_FILTER_STRATEGY", "resvg")
     slide_size_mode = os.getenv("SVG2OOXML_SLIDE_SIZE_MODE", "same")
     builder = PptxBuilder(filter_strategy=filter_strategy, slide_size_mode=slide_size_mode)
-    renderer = default_renderer()
+    renderer = resolve_renderer()
     browser_renderer = default_browser_renderer()
     return VisualStack(
         golden=GoldenRepository(),

@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import pytest
+from lxml import etree
 
 # Skip entire module if resvg is not available
 pytest.importorskip("svg2ooxml.core.resvg.usvg_tree")
 
+from svg2ooxml.core.ir import IRConverter
 from svg2ooxml.core.resvg.geometry.matrix import Matrix
 from svg2ooxml.core.resvg.geometry.path_normalizer import NormalizedPath, PathCommand
 from svg2ooxml.core.resvg.parser.presentation import Presentation
@@ -24,6 +26,7 @@ from svg2ooxml.drawingml.bridges.resvg_shape_adapter import (
     ResvgShapeAdapterError,
 )
 from svg2ooxml.ir.geometry import BezierSegment, LineSegment
+from svg2ooxml.services import configure_services
 
 
 def default_presentation() -> Presentation:
@@ -385,6 +388,58 @@ class TestResvgShapeAdapterPath:
 
         with pytest.raises(ResvgShapeAdapterError, match="has no geometry"):
             adapter.from_path_node(path)
+
+    def test_path_proxy_global_transform_applies_local_path_transform_once(self):
+        """Proxy nodes carrying lookup globals should not reapply local path transforms."""
+        svg = (
+            "<svg xmlns='http://www.w3.org/2000/svg'>"
+            "  <g transform='scale(30)translate(13.5,9)'>"
+            "    <path d='M0,0v1h0.5z' transform='translate(0,-1)rotate(18)'/>"
+            "  </g>"
+            "</svg>"
+        )
+
+        svg_root = etree.fromstring(svg)
+        converter = IRConverter(services=configure_services())
+        converter._build_resvg_lookup(svg_root)
+        bridge = converter._resvg_bridge
+
+        def first_path(node):
+            if isinstance(node, PathNode):
+                return node
+            for child in getattr(node, "children", ()):
+                result = first_path(child)
+                if result is not None:
+                    return result
+            return None
+
+        leaf = first_path(bridge.tree.root)
+        assert leaf is not None
+        global_transform = bridge.node_global_transform_lookup[id(leaf)]
+
+        class GlobalTransformProxy:
+            def __init__(self, target, transform):
+                self._target = target
+                self.transform = transform
+
+            def __getattr__(self, name):
+                return getattr(self._target, name)
+
+        adapter = ResvgShapeAdapter()
+        raw_segments = adapter._commands_to_segments(leaf.geometry)
+        expected_segments = adapter._apply_transform_to_segments(raw_segments, global_transform)
+        actual_segments = adapter.from_path_node(GlobalTransformProxy(leaf, global_transform))
+
+        assert len(actual_segments) == len(expected_segments)
+        assert all(isinstance(segment, LineSegment) for segment in actual_segments)
+
+        for actual, expected in zip(actual_segments, expected_segments):
+            assert isinstance(actual, LineSegment)
+            assert isinstance(expected, LineSegment)
+            assert actual.start.x == pytest.approx(expected.start.x)
+            assert actual.start.y == pytest.approx(expected.start.y)
+            assert actual.end.x == pytest.approx(expected.end.x)
+            assert actual.end.y == pytest.approx(expected.end.y)
 
 
 class TestResvgShapeAdapterGeneric:

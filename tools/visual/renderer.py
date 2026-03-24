@@ -339,6 +339,42 @@ def default_renderer(
     )
 
 
+PptxRenderer = LibreOfficeRenderer | PowerPointRenderer
+
+
+def resolve_renderer(
+    *,
+    renderer_name: str | None = None,
+    soffice_path: str | None = None,
+    timeout: float | None = 90.0,
+    user_installation: str | None = None,
+    powerpoint_backend: str = "auto",
+    powerpoint_open_timeout: float = 120.0,
+    powerpoint_capture_timeout: float = 5.0,
+    powerpoint_no_reopen: bool = False,
+) -> PptxRenderer:
+    """Resolve the configured visual renderer."""
+
+    selected = (renderer_name or os.getenv("SVG2OOXML_VISUAL_RENDERER") or "soffice").strip().lower()
+    if selected in {"soffice", "libreoffice"}:
+        if soffice_path:
+            return LibreOfficeRenderer(
+                soffice_path=soffice_path,
+                timeout=timeout,
+                user_installation=user_installation,
+                png_dpi=_resolve_png_dpi(),
+            )
+        return default_renderer(timeout=timeout, user_installation=user_installation)
+    if selected == "powerpoint":
+        return PowerPointRenderer(
+            backend=powerpoint_backend,
+            open_timeout=powerpoint_open_timeout,
+            capture_timeout=powerpoint_capture_timeout,
+            allow_reopen=not powerpoint_no_reopen,
+        )
+    raise ValueError(f"Unknown visual renderer: {selected!r}")
+
+
 def _resolve_png_dpi() -> float | None:
     env_value = os.getenv("SVG2OOXML_SOFFICE_PNG_DPI")
     if env_value is None or env_value == "":
@@ -393,8 +429,10 @@ def _read_slide_size_emu(pptx_path: Path) -> tuple[int, int] | None:
 
 __all__ = [
     "LibreOfficeRenderer",
+    "PptxRenderer",
     "PowerPointRenderer",
     "RenderedSlideSet",
     "VisualRendererError",
     "default_renderer",
+    "resolve_renderer",
 ]

@@ -750,19 +750,16 @@ class TraversalHooksMixin:
         self._use_expansion_stack.add(reference_id)
         try:
             nodes = use_expander.instantiate_use_target(self, target, element)
-            transform_matrix = use_expander.compute_use_transform(
+            transform_matrix = use_expander.compose_use_transform(
                 self,
                 element,
                 target,
                 tolerance=DEFAULT_TOLERANCE,
             )
-            dx, dy = use_expander.resolve_use_offsets(self, element)
             use_expander.apply_use_transform(
                 self,
                 nodes,
                 transform_matrix or Matrix2D.identity(),
-                dx,
-                dy,
                 tolerance=DEFAULT_TOLERANCE,
             )
             results: list = []

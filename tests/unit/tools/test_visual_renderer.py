@@ -4,7 +4,13 @@ import subprocess
 
 import pytest
 
-from tools.visual.renderer import LibreOfficeRenderer, VisualRendererError
+from tools.visual.renderer import (
+    LibreOfficeRenderer,
+    PowerPointRenderer,
+    VisualRendererError,
+    resolve_renderer,
+)
+from tools.visual.stack import default_visual_stack
 
 
 def test_libreoffice_renderer_darwin_failure_raises_visual_error(
@@ -25,3 +31,24 @@ def test_libreoffice_renderer_darwin_failure_raises_visual_error(
 
     with pytest.raises(VisualRendererError, match="LibreOffice failed to render PPTX"):
         renderer.render(pptx_path, output_dir)
+
+
+def test_resolve_renderer_supports_powerpoint() -> None:
+    renderer = resolve_renderer(renderer_name="powerpoint")
+
+    assert isinstance(renderer, PowerPointRenderer)
+
+
+def test_resolve_renderer_rejects_unknown_renderer() -> None:
+    with pytest.raises(ValueError, match="Unknown visual renderer"):
+        resolve_renderer(renderer_name="bogus")
+
+
+def test_default_visual_stack_respects_renderer_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("SVG2OOXML_VISUAL_RENDERER", "powerpoint")
+
+    stack = default_visual_stack()
+
+    assert isinstance(stack.renderer, PowerPointRenderer)

@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="540" viewBox="0 0 900 540">
+  <defs>
+    <symbol id="glyph" viewBox="0 0 20 20">
+      <rect x="1" y="1" width="18" height="18" rx="2.5" fill="#f7c548" stroke="#1d3557" stroke-width="1.5"/>
+      <path d="M4 14 L8 6 L11 10 L16 4" fill="none" stroke="#1d3557" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      <circle cx="14" cy="13" r="2.2" fill="#e63946"/>
+    </symbol>
+
+    <path id="notch" d="M0 0 L14 0 L7 12 Z"/>
+    <clipPath id="cardClip">
+      <g>
+        <path d="M0 0 L210 0 L210 150 L60 150 L0 105 Z"/>
+        <use href="#notch" x="154" y="16" transform="matrix(-1 0 0 1 182 0)"/>
+      </g>
+    </clipPath>
+
+    <circle id="maskDot" cx="0" cy="0" r="18"/>
+    <mask id="spotMask" maskUnits="userSpaceOnUse" maskContentUnits="userSpaceOnUse" x="0" y="0" width="210" height="150">
+      <rect width="210" height="150" fill="#000000"/>
+      <g transform="translate(38,28)">
+        <use href="#maskDot" fill="#ffffff"/>
+        <use href="#maskDot" x="80" y="18" fill="#ffffff"/>
+        <use href="#maskDot" x="126" y="74" transform="matrix(-1 0 0 1 30 0)" fill="#ffffff"/>
+        <use href="#maskDot" x="40" y="94" fill="#ffffff"/>
+      </g>
+    </mask>
+
+    <marker id="chevron" markerWidth="6" markerHeight="6" markerUnits="userSpaceOnUse" refX="1" refY="3" orient="auto-start-reverse" viewBox="0 0 6 6">
+      <path d="M0 0 L6 3 L0 6 z" fill="#1d3557"/>
+    </marker>
+  </defs>
+
+  <rect width="900" height="540" fill="#f5f1e8"/>
+
+  <rect x="30" y="30" width="250" height="230" rx="28" fill="#fffdf7"/>
+  <rect x="320" y="30" width="250" height="230" rx="28" fill="#fffdf7"/>
+  <rect x="610" y="30" width="260" height="230" rx="28" fill="#fffdf7"/>
+
+  <rect x="52" y="52" width="206" height="186" rx="18" fill="#dce6f2"/>
+  <use href="#glyph" x="80" y="62" width="120" height="180"/>
+  <use href="#glyph" x="168" y="118" width="52" height="88" transform="matrix(-1 0 0 1 388 0)"/>
+
+  <rect x="342" y="52" width="206" height="186" rx="18" fill="#fdebd2"/>
+  <use href="#glyph" x="350" y="58" width="120" height="180" preserveAspectRatio="none" transform="translate(8,6)"/>
+  <path d="M344 214 L392 174 L454 226 L536 164"
+        fill="none"
+        stroke="#1d3557"
+        stroke-width="10"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        marker-start="url(#chevron)"
+        marker-end="url(#chevron)"/>
+
+  <g transform="translate(635,55)">
+    <rect width="210" height="180" rx="22" fill="#264653"/>
+    <g transform="translate(0,15)" clip-path="url(#cardClip)" mask="url(#spotMask)">
+      <rect width="210" height="150" fill="#2a9d8f"/>
+      <use href="#glyph" x="22" y="16" width="70" height="108"/>
+      <use href="#glyph" x="116" y="18" width="72" height="110" preserveAspectRatio="none" transform="matrix(-1 0 0 1 304 0)"/>
+      <path d="M12 126 L84 100 L138 132 L196 108"
+            fill="none"
+            stroke="#fefae0"
+            stroke-width="10"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            marker-end="url(#chevron)"/>
+    </g>
+  </g>
+
+  <path d="M120 334 L168 300 L230 350 L308 288 L372 336 L452 278 L516 326 L602 290"
+        fill="none"
+        stroke="#e76f51"
+        stroke-width="14"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        marker-start="url(#chevron)"
+        marker-end="url(#chevron)"/>
+
+  <g transform="translate(98,372)">
+    <use href="#glyph" width="46" height="70"/>
+    <use href="#glyph" x="62" y="18" width="42" height="58" preserveAspectRatio="none"/>
+    <use href="#glyph" x="124" y="4" width="38" height="66" transform="matrix(-1 0 0 1 286 0)"/>
+  </g>
+
+  <g transform="translate(544,360)">
+    <rect width="260" height="116" rx="18" fill="#ffffff" opacity="0.8"/>
+    <g clip-path="url(#cardClip)" transform="translate(24,14)">
+      <rect width="210" height="150" fill="#8ecae6"/>
+      <use href="#glyph" x="20" y="18" width="60" height="96"/>
+      <use href="#glyph" x="100" y="10" width="88" height="124" preserveAspectRatio="none"/>
+    </g>
+  </g>
+</svg>

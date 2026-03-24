@@ -425,15 +425,18 @@ class ShapeResvgMixin:
             element_local = element.tag.split("}")[-1].lower() if isinstance(element.tag, str) else ""
         if element_local == "use" and isinstance(source_element, etree._Element):
             from svg2ooxml.core.styling.use_expander import (
+                compose_use_transform,
                 compute_use_transform,
-                resolve_use_offsets,
             )
 
             use_matrix = compute_use_transform(self, element, source_element, tolerance=DEFAULT_TOLERANCE)
             if use_matrix is not None and not use_matrix.is_identity(tolerance=DEFAULT_TOLERANCE):
-                dx, dy = resolve_use_offsets(self, element)
-                translation = Matrix2D(e=dx, f=dy)
-                combined = use_matrix.multiply(translation)
+                combined = compose_use_transform(
+                    self,
+                    element,
+                    source_element,
+                    tolerance=DEFAULT_TOLERANCE,
+                )
                 if global_transform is None:
                     use_global_override = combined
                 else:

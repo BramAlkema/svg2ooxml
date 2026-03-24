@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+
 import pytest
 from lxml import etree
 
@@ -94,12 +96,110 @@ def _unwrap_use_rectangle(element: object) -> tuple[Rectangle, dict[str, object]
     return element, element.metadata
 
 
+def _collect_rectangles(elements: list[object]) -> list[Rectangle]:
+    rectangles: list[Rectangle] = []
+    stack = list(elements)
+    while stack:
+        current = stack.pop()
+        if isinstance(current, Rectangle):
+            rectangles.append(current)
+            continue
+        if isinstance(current, Group):
+            stack.extend(current.children)
+    return rectangles
+
+
 def _register_filter(parse_result: ParseResult, filter_markup: str) -> None:
     filters = parse_result.filters or {}
     element = etree.fromstring(filter_markup)
     filter_id = element.get("id", "filter")
     filters[filter_id] = element
     parse_result.filters = filters  # type: ignore[assignment]
+
+
+def _path_points(path: Path) -> list[Point]:
+    points: list[Point] = []
+    for segment in path.segments:
+        if isinstance(segment, LineSegment):
+            points.extend([segment.start, segment.end])
+        elif isinstance(segment, BezierSegment):
+            points.extend([segment.start, segment.control1, segment.control2, segment.end])
+    return points
+
+
+def _eu_flag_star_ring_svg() -> str:
+    return (
+        "<svg width='810' height='540' xmlns='http://www.w3.org/2000/svg' "
+        "xmlns:xlink='http://www.w3.org/1999/xlink'>"
+        "<defs>"
+        "  <g id='s'>"
+        "    <g id='c'>"
+        "      <path id='t' d='M0,0v1h0.5z' transform='translate(0,-1)rotate(18)'/>"
+        "      <use href='#t' transform='scale(-1,1)'/>"
+        "    </g>"
+        "    <g id='a'>"
+        "      <use href='#c' transform='rotate(72)'/>"
+        "      <use href='#c' transform='rotate(144)'/>"
+        "    </g>"
+        "    <use href='#a' transform='scale(-1,1)'/>"
+        "  </g>"
+        "</defs>"
+        "<g fill='#fc0' transform='scale(30)translate(13.5,9)'>"
+        "  <use href='#s' y='-6'/>"
+        "  <use href='#s' y='6'/>"
+        "  <g id='l'>"
+        "    <use href='#s' x='-6'/>"
+        "    <use href='#s' transform='rotate(150)translate(0,6)rotate(66)'/>"
+        "    <use href='#s' transform='rotate(120)translate(0,6)rotate(24)'/>"
+        "    <use href='#s' transform='rotate(60)translate(0,6)rotate(12)'/>"
+        "    <use href='#s' transform='rotate(30)translate(0,6)rotate(42)'/>"
+        "  </g>"
+        "  <use href='#l' transform='scale(-1,1)'/>"
+        "</g>"
+        "</svg>"
+    )
+
+
+def _count_paths(element: object) -> int:
+    if isinstance(element, Path):
+        return 1
+    if isinstance(element, Group):
+        return sum(_count_paths(child) for child in element.children)
+    return 0
+
+
+def _collect_paths(element: object) -> list[Path]:
+    if isinstance(element, Path):
+        return [element]
+    if isinstance(element, Group):
+        paths: list[Path] = []
+        for child in element.children:
+            paths.extend(_collect_paths(child))
+        return paths
+    return []
+
+
+def _collect_groups_with_path_count(element: object, path_count: int) -> list[Group]:
+    if isinstance(element, Group) and _count_paths(element) == path_count:
+        return [element]
+    if isinstance(element, Group):
+        groups: list[Group] = []
+        for child in element.children:
+            groups.extend(_collect_groups_with_path_count(child, path_count))
+        return groups
+    return []
+
+
+def _group_center(group: Group) -> tuple[float, float]:
+    points = [point for path in _collect_paths(group) for point in _path_points(path)]
+    return (
+        sum(point.x for point in points) / len(points),
+        sum(point.y for point in points) / len(points),
+    )
+
+
+def _has_point(points: list[Point], x: float, y: float, *, tolerance: float = 1e-6) -> bool:
+    return any(abs(point.x - x) <= tolerance and abs(point.y - y) <= tolerance for point in points)
 
 
 def test_convert_rect_produces_rectangle() -> None:
@@ -305,10 +405,12 @@ def test_use_element_reuses_existing_geometry() -> None:
     assert first_rect.bounds.x == pytest.approx(0.0)
     assert first_rect.bounds.y == pytest.approx(0.0)
 
-    # The <use> element produces a second shape. The x/y offset from the <use>
-    # element is only applied when targeting a <symbol>; for plain element
-    # references the shape inherits the referenced element's geometry directly.
+    # Plain-element <use> references should honor x/y offsets as well.
     second_rect, metadata = _unwrap_use_rectangle(scene.elements[1])
+    assert second_rect.bounds.x == pytest.approx(25.0)
+    assert second_rect.bounds.y == pytest.approx(35.0)
+    assert second_rect.bounds.width == pytest.approx(8.0)
+    assert second_rect.bounds.height == pytest.approx(9.0)
     assert second_rect.fill is not None and second_rect.fill.rgb == "FF00FF"
     element_ids = set(metadata.get("element_ids", []))
     assert "copyRect" in element_ids
@@ -370,6 +472,138 @@ def test_use_symbol_viewbox_meet_preserves_aspect_ratio() -> None:
     rect, _ = _unwrap_use_rectangle(scene.elements[0])
     assert rect.bounds.width == pytest.approx(20.0)
     assert rect.bounds.height == pytest.approx(10.0)
+
+
+def test_use_symbol_viewbox_meet_positions_without_scaling_use_offsets() -> None:
+    parse_result = _build_parse_result(
+        "<svg width='200' height='200' xmlns='http://www.w3.org/2000/svg'>"
+        "<defs>"
+        "  <symbol id='vbSymbol' viewBox='0 0 10 10'>"
+        "    <rect width='10' height='10'/>"
+        "  </symbol>"
+        "</defs>"
+        "<use id='scaled' href='#vbSymbol' x='50' y='60' width='20' height='40'/>"
+        "</svg>"
+    )
+
+    scene = _convert_with_resvg(parse_result)
+
+    rect, _ = _unwrap_use_rectangle(scene.elements[0])
+    assert rect.bounds.x == pytest.approx(50.0)
+    assert rect.bounds.y == pytest.approx(70.0)
+    assert rect.bounds.width == pytest.approx(20.0)
+    assert rect.bounds.height == pytest.approx(20.0)
+
+
+def test_use_symbol_viewbox_none_applies_transform_after_positioning() -> None:
+    parse_result = _build_parse_result(
+        "<svg width='200' height='200' xmlns='http://www.w3.org/2000/svg'>"
+        "<defs>"
+        "  <symbol id='vbSymbol' viewBox='0 0 10 10'>"
+        "    <rect width='10' height='10'/>"
+        "  </symbol>"
+        "</defs>"
+        "<use id='scaled' href='#vbSymbol' x='50' y='60' width='20' height='40' preserveAspectRatio='none' transform='translate(5,7)'/>"
+        "</svg>"
+    )
+
+    scene = _convert_with_resvg(parse_result)
+
+    rect, _ = _unwrap_use_rectangle(scene.elements[0])
+    assert rect.bounds.x == pytest.approx(55.0)
+    assert rect.bounds.y == pytest.approx(67.0)
+    assert rect.bounds.width == pytest.approx(20.0)
+    assert rect.bounds.height == pytest.approx(40.0)
+
+
+def test_mirrored_nested_use_preserves_asymmetric_child_positions() -> None:
+    parse_result = _build_parse_result(
+        "<svg width='100' height='50' xmlns='http://www.w3.org/2000/svg'>"
+        "<defs>"
+        "  <rect id='leaf' width='2' height='3'/>"
+        "  <g id='half'>"
+        "    <use href='#leaf' x='3' y='1'/>"
+        "    <use href='#leaf' x='8' y='4'/>"
+        "  </g>"
+        "</defs>"
+        "<use href='#half'/>"
+        "<use href='#half' transform='matrix(-1 0 0 1 20 0)'/>"
+        "</svg>"
+    )
+
+    scene = _convert_with_resvg(parse_result)
+    rects = _collect_rectangles(scene.elements)
+
+    observed = sorted((rect.bounds.x, rect.bounds.y, rect.bounds.width, rect.bounds.height) for rect in rects)
+    assert observed == [
+        (3.0, 1.0, 2.0, 3.0),
+        (8.0, 4.0, 2.0, 3.0),
+        (10.0, 4.0, 2.0, 3.0),
+        (15.0, 1.0, 2.0, 3.0),
+    ]
+
+
+def test_nested_use_ring_preserves_outer_group_translation() -> None:
+    parse_result = _build_parse_result(
+        "<svg width='100' height='100' xmlns='http://www.w3.org/2000/svg'>"
+        "<defs>"
+        "  <rect id='leaf' width='2' height='2'/>"
+        "  <g id='ring'>"
+        "    <use href='#leaf' x='10' y='0'/>"
+        "    <use href='#leaf' x='0' y='10'/>"
+        "    <use href='#leaf' x='-10' y='0'/>"
+        "    <use href='#leaf' x='0' y='-10'/>"
+        "  </g>"
+        "</defs>"
+        "<g transform='translate(40,40)'><use href='#ring'/></g>"
+        "</svg>"
+    )
+
+    scene = _convert_with_resvg(parse_result)
+    rects = _collect_rectangles(scene.elements)
+
+    observed = sorted((rect.bounds.x, rect.bounds.y) for rect in rects)
+    assert observed == [
+        (30.0, 40.0),
+        (40.0, 30.0),
+        (40.0, 50.0),
+        (50.0, 40.0),
+    ]
+
+
+def test_eu_flag_ring_expands_to_twelve_ten_wedge_stars() -> None:
+    parse_result = _build_parse_result(_eu_flag_star_ring_svg())
+
+    scene = _convert_with_resvg(parse_result)
+
+    assert len(scene.elements) == 1
+    root = scene.elements[0]
+    assert isinstance(root, Group)
+
+    star_groups = _collect_groups_with_path_count(root, 10)
+    assert len(star_groups) == 12
+    assert all(_count_paths(group) == 10 for group in star_groups)
+
+    expected_centers = sorted(
+        (
+            round(405.0 + 180.0 * math.cos(math.radians(angle)), 3),
+            round(270.0 + 180.0 * math.sin(math.radians(angle)), 3),
+        )
+        for angle in range(-90, 270, 30)
+    )
+    observed_centers = sorted(
+        (
+            round(center[0], 3),
+            round(center[1], 3),
+        )
+        for center in [_group_center(group) for group in star_groups]
+    )
+
+    assert observed_centers == expected_centers
+
+    all_points = [point for group in star_groups for path in _collect_paths(group) for point in _path_points(path)]
+    assert all(0.0 <= point.x <= 810.0 for point in all_points)
+    assert all(0.0 <= point.y <= 540.0 for point in all_points)
 
 
 def test_filter_metadata_carries_fallback_assets_into_policy() -> None:
@@ -1115,6 +1349,121 @@ def test_marker_preserve_aspect_ratio_meet() -> None:
     height = max(ys) - min(ys)
     assert pytest.approx(width, rel=1e-6) == pytest.approx(8.0)
     assert pytest.approx(height, rel=1e-6) == pytest.approx(4.0)
+
+
+def test_marker_auto_orient_keeps_marker_origin_on_vertical_endpoint() -> None:
+    svg = (
+        "<svg width='40' height='40' xmlns='http://www.w3.org/2000/svg'>"
+        "<defs>"
+        "  <marker id='tick' markerWidth='2' markerHeight='2' markerUnits='userSpaceOnUse' refX='0' refY='0' orient='auto'>"
+        "    <path d='M0,0 L0,2' stroke='context-stroke' fill='none'/>"
+        "  </marker>"
+        "</defs>"
+        "<path d='M0 0 L0 10' stroke='#000' stroke-width='1' marker-end='url(#tick)' fill='none'/>"
+        "</svg>"
+    )
+
+    parse_result = _build_parse_result(svg)
+    scene = _convert_with_resvg(parse_result)
+
+    marker_path = next(
+        element
+        for element in scene.elements
+        if isinstance(element, Path) and element.metadata.get("marker_position") == "end"
+    )
+    points = _path_points(marker_path)
+
+    assert _has_point(points, 0.0, 10.0)
+    assert _has_point(points, 2.0, 10.0)
+
+
+def test_marker_auto_start_reverse_flips_start_marker_about_anchor() -> None:
+    svg = (
+        "<svg width='50' height='20' xmlns='http://www.w3.org/2000/svg'>"
+        "<defs>"
+        "  <marker id='tick' markerWidth='2' markerHeight='2' markerUnits='userSpaceOnUse' refX='0' refY='0' orient='auto-start-reverse'>"
+        "    <path d='M0,0 L2,0' stroke='context-stroke' fill='none'/>"
+        "  </marker>"
+        "</defs>"
+        "<path d='M0 10 L20 10' stroke='#000' stroke-width='1' marker-start='url(#tick)' marker-end='url(#tick)' fill='none'/>"
+        "</svg>"
+    )
+
+    parse_result = _build_parse_result(svg)
+    scene = _convert_with_resvg(parse_result)
+
+    start_marker = next(
+        element
+        for element in scene.elements
+        if isinstance(element, Path) and element.metadata.get("marker_position") == "start"
+    )
+    end_marker = next(
+        element
+        for element in scene.elements
+        if isinstance(element, Path) and element.metadata.get("marker_position") == "end"
+    )
+
+    start_points = _path_points(start_marker)
+    end_points = _path_points(end_marker)
+
+    assert _has_point(start_points, 0.0, 10.0)
+    assert _has_point(start_points, -2.0, 10.0)
+    assert _has_point(end_points, 20.0, 10.0)
+    assert _has_point(end_points, 18.0, 10.0)
+
+
+def test_marker_viewbox_ref_and_stroke_width_align_reference_point_to_endpoint() -> None:
+    svg = (
+        "<svg width='80' height='80' xmlns='http://www.w3.org/2000/svg'>"
+        "<defs>"
+        "  <marker id='m' markerWidth='4' markerHeight='6' markerUnits='strokeWidth' refX='1' refY='2' orient='90' viewBox='0 0 2 3'>"
+        "    <path d='M0,0 L2,0 L2,3 z' fill='context-stroke'/>"
+        "  </marker>"
+        "</defs>"
+        "<path d='M10 20 L30 20' stroke='#000' stroke-width='5' marker-end='url(#m)' fill='none'/>"
+        "</svg>"
+    )
+
+    parse_result = _build_parse_result(svg)
+    scene = _convert_with_resvg(parse_result)
+
+    marker_path = next(
+        element
+        for element in scene.elements
+        if isinstance(element, Path) and element.metadata.get("marker_position") == "end"
+    )
+    points = _path_points(marker_path)
+
+    assert _has_point(points, 50.0, 10.0)
+    assert _has_point(points, 50.0, 30.0)
+    assert _has_point(points, 20.0, 30.0)
+    assert marker_path.metadata.get("marker_clip") == {"x": 0.0, "y": 0.0, "width": 20.0, "height": 30.0}
+
+
+def test_marker_child_transform_applies_in_marker_local_space() -> None:
+    svg = (
+        "<svg width='80' height='80' xmlns='http://www.w3.org/2000/svg'>"
+        "<defs>"
+        "  <marker id='m' markerWidth='4' markerHeight='4' markerUnits='userSpaceOnUse' refX='0' refY='0' orient='0'>"
+        "    <path d='M0,0 L1,0' stroke='context-stroke' fill='none' transform='translate(3,4)'/>"
+        "  </marker>"
+        "</defs>"
+        "<path d='M10 20 L30 20' stroke='#000' stroke-width='1' marker-end='url(#m)' fill='none'/>"
+        "</svg>"
+    )
+
+    parse_result = _build_parse_result(svg)
+    scene = _convert_with_resvg(parse_result)
+
+    marker_path = next(
+        element
+        for element in scene.elements
+        if isinstance(element, Path) and element.metadata.get("marker_position") == "end"
+    )
+    points = _path_points(marker_path)
+
+    assert _has_point(points, 33.0, 24.0)
+    assert _has_point(points, 34.0, 24.0)
 
 def test_convert_path_produces_segments() -> None:
     parse_result = _build_parse_result(

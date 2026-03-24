@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate or refresh visual regression baselines using LibreOffice."""
+"""Generate or refresh visual regression baselines using a PPTX renderer."""
 
 from __future__ import annotations
 import traceback
@@ -18,7 +18,7 @@ for entry in (REPO_ROOT, SRC_ROOT):
 
 from tools.visual.builder import PptxBuilder
 from tools.visual.golden import GoldenRepository
-from tools.visual.renderer import LibreOfficeRenderer, VisualRendererError, default_renderer
+from tools.visual.renderer import PptxRenderer, VisualRendererError, resolve_renderer
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 logger = logging.getLogger("update_baselines")
@@ -49,12 +49,13 @@ RESVG_FIXTURES = {
     "pattern_tile_transforms": Path("tests/visual/fixtures/resvg/pattern_tile_transforms.svg"),
     "radial_gradients": Path("tests/visual/fixtures/resvg/radial_gradients.svg"),
     "text_rendering": Path("tests/visual/fixtures/resvg/text_rendering.svg"),
+    "transform_torture": Path("tests/visual/fixtures/resvg/transform_torture.svg"),
 }
 RESVG_BASELINES_DIR = Path("tests/visual/baselines/resvg")
 
 
 def generate_w3c_baselines(
-    renderer: LibreOfficeRenderer,
+    renderer: PptxRenderer,
     builder: PptxBuilder,
     golden_root: Path,
     deck_name_filter: str | None = None, # Add this parameter
@@ -104,7 +105,7 @@ def generate_w3c_baselines(
             traceback.print_exc() # Print full traceback here!
 
 
-def generate_baseline(name: str, renderer: LibreOfficeRenderer, builder: PptxBuilder, golden: GoldenRepository) -> None:
+def generate_baseline(name: str, renderer: PptxRenderer, builder: PptxBuilder, golden: GoldenRepository) -> None:
     scenario = SCENARIOS.get(name)
     if scenario is None:
         raise SystemExit(f"Unknown scenario {name!r}. Available: {', '.join(SCENARIOS)}")
@@ -146,7 +147,7 @@ def generate_baseline(name: str, renderer: LibreOfficeRenderer, builder: PptxBui
 
 def generate_resvg_baseline(
     name: str,
-    renderer: LibreOfficeRenderer,
+    renderer: PptxRenderer,
     builder: PptxBuilder,
     baseline_root: Path,
 ) -> None:
@@ -211,25 +212,22 @@ def main() -> None:
         "--soffice-profile",
         help="LibreOffice user profile directory passed via -env:UserInstallation.",
     )
+    parser.add_argument(
+        "--renderer",
+        choices=("soffice", "powerpoint"),
+        default=os.getenv("SVG2OOXML_VISUAL_RENDERER", "soffice"),
+        help="PPTX renderer to use for baseline generation.",
+    )
     args = parser.parse_args()
 
     user_installation = args.soffice_profile or os.getenv("SVG2OOXML_SOFFICE_USER_INSTALL")
-    if args.soffice:
-        renderer = LibreOfficeRenderer(
-            soffice_path=args.soffice,
-            user_installation=user_installation,
-        )
-    else:
-        soffice_override = os.getenv("SVG2OOXML_SOFFICE_PATH")
-        if soffice_override:
-            renderer = LibreOfficeRenderer(
-                soffice_path=soffice_override,
-                user_installation=user_installation,
-            )
-        else:
-            renderer = default_renderer(user_installation=user_installation)
+    renderer = resolve_renderer(
+        renderer_name=args.renderer,
+        soffice_path=args.soffice,
+        user_installation=user_installation,
+    )
     if not renderer.available:
-        raise SystemExit("LibreOffice (soffice) is not available. Please install it first.")
+        raise SystemExit(f"Configured renderer {args.renderer!r} is not available.")
 
     filter_strategy = os.getenv("SVG2OOXML_VISUAL_FILTER_STRATEGY", "resvg")
     slide_size_mode = os.getenv("SVG2OOXML_SLIDE_SIZE_MODE", "same")
