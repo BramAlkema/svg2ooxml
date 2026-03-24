@@ -353,7 +353,7 @@ class TextConversionPipeline:
     ) -> tuple[str, float]:
         base_confidence = max(0.05, decision.wordart.confidence_threshold)
         confidence = base_confidence * 0.75
-        preset = "textWave1"
+        preset = "textPlain"
         is_path_based = False
 
         if text_path_id:
