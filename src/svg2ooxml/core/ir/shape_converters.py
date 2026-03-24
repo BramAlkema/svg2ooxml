@@ -30,7 +30,15 @@ from svg2ooxml.core.styling.style_extractor import StyleResult
 from svg2ooxml.core.traversal.constants import DEFAULT_TOLERANCE
 from svg2ooxml.core.traversal.coordinate_space import CoordinateSpace
 from svg2ooxml.ir.geometry import LineSegment, Point, Rect, SegmentType
-from svg2ooxml.ir.paint import SolidPaint, Stroke
+from svg2ooxml.ir.paint import (
+    LinearGradientPaint,
+    RadialGradientPaint,
+    SolidPaint,
+    Stroke,
+)
+
+# Fill types that DrawingML can render natively (no bitmap fallback needed)
+_NATIVE_FILL_TYPES = (SolidPaint, LinearGradientPaint, RadialGradientPaint)
 from svg2ooxml.ir.scene import ClipRef, Group, Image, MaskInstance, MaskRef, Path
 from svg2ooxml.ir.text import Run, TextAnchor, TextFrame
 from svg2ooxml.policy.constants import FALLBACK_BITMAP, FALLBACK_EMF
@@ -309,7 +317,7 @@ class ShapeConversionMixin(ShapeResvgMixin, ShapeFallbackMixin):
             policy_meta = metadata.setdefault("policy", {}).setdefault("geometry", {})
             policy_meta.update(geom_meta)
 
-        if style.fill and not isinstance(style.fill, SolidPaint):
+        if style.fill and not isinstance(style.fill, _NATIVE_FILL_TYPES):
             if allow_bitmap_fallback:
                 render_mode = FALLBACK_BITMAP
             elif allow_emf_fallback:
@@ -398,7 +406,7 @@ class ShapeConversionMixin(ShapeResvgMixin, ShapeFallbackMixin):
             policy_meta = metadata.setdefault("policy", {}).setdefault("geometry", {})
             policy_meta.update(geom_meta)
 
-        if style.fill and not isinstance(style.fill, SolidPaint):
+        if style.fill and not isinstance(style.fill, _NATIVE_FILL_TYPES):
             if allow_bitmap_fallback:
                 render_mode = FALLBACK_BITMAP
             elif allow_emf_fallback:
