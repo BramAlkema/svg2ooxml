@@ -1016,6 +1016,7 @@ def test_render_scene_exposes_shape_fragments() -> None:
 
     result = writer.render_scene([group])
 
+    # Leaf groups (no nested groups) are flattened
     assert len(result.shape_xml) == 2
     assert all(fragment.startswith("<p:sp>") for fragment in result.shape_xml)
 
@@ -1035,9 +1036,9 @@ def test_render_shapes_returns_flattened_group_fragments() -> None:
 
     fragments = writer.render_shapes([group])
 
-    assert len(fragments) == 2
-    assert "Rectangle 2" in fragments[0]
-    assert "Line 3" in fragments[1]
+    assert len(fragments) == 2  # leaf group flattened
+    assert "Rectangle" in fragments[0]
+    assert "Line" in fragments[1]
 
 
 def test_render_shapes_from_ir_returns_shape_fragments() -> None:

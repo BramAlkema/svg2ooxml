@@ -663,10 +663,47 @@ class DrawingMLWriter:
                         )
                         return [fragment], shape_id + 1
 
-            fragments, next_id = self._render_elements(element.children, shape_id)
-            if not fragments:
+            # Emit <p:grpSp> when the group has nested groups (preserves
+            # z-order across sibling sub-trees). Flatten leaf groups that
+            # only contain shapes — avoids unnecessary nesting.
+            has_nested_groups = any(
+                isinstance(c, Group) for c in element.children
+            )
+
+            if not has_nested_groups:
+                fragments, next_id = self._render_elements(
+                    element.children, shape_id,
+                )
+                if not fragments:
+                    return None
+                return fragments, next_id
+
+            child_fragments, next_id = self._render_elements(
+                element.children, shape_id + 1,
+            )
+            if not child_fragments:
                 return None
-            return fragments, next_id
+
+            children_xml = "\n".join(child_fragments)
+            group_xml = (
+                f'<p:grpSp>'
+                f'<p:nvGrpSpPr>'
+                f'<p:cNvPr id="{shape_id}" name="Group {shape_id}"/>'
+                f'<p:cNvGrpSpPr/>'
+                f'<p:nvPr/>'
+                f'</p:nvGrpSpPr>'
+                f'<p:grpSpPr>'
+                f'<a:xfrm>'
+                f'<a:off x="0" y="0"/>'
+                f'<a:ext cx="0" cy="0"/>'
+                f'<a:chOff x="0" y="0"/>'
+                f'<a:chExt cx="0" cy="0"/>'
+                f'</a:xfrm>'
+                f'</p:grpSpPr>'
+                f'{children_xml}'
+                f'</p:grpSp>'
+            )
+            return [group_xml], next_id
 
         if self._shape_renderer is None:
             raise RuntimeError("Shape renderer not initialised for current rendering run.")
