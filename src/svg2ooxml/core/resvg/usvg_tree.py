@@ -821,8 +821,9 @@ def _expand_use_nodes(root: BaseNode, ids: dict[str, BaseNode]) -> None:
                     continue
                 clone = copy.deepcopy(referenced)
                 _clear_ids(clone)
+                use_transform = child.transform if child.transform is not None else Matrix.identity()
                 translation = Matrix(1.0, 0.0, 0.0, 1.0, child.x, child.y)
-                clone.transform = translation.multiply(clone.transform)
+                clone.transform = use_transform.multiply(translation).multiply(clone.transform)
                 _propagate_use_source(clone, getattr(child, "source", None))
 
                 # Apply <use> element's presentation attributes to cloned content
