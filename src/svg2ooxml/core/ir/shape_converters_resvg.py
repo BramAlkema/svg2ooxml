@@ -430,7 +430,7 @@ class ShapeResvgMixin:
             )
 
             use_matrix = compute_use_transform(self, element, source_element, tolerance=DEFAULT_TOLERANCE)
-            if use_matrix is not None:
+            if use_matrix is not None and not use_matrix.is_identity(tolerance=DEFAULT_TOLERANCE):
                 dx, dy = resolve_use_offsets(self, element)
                 translation = Matrix2D(e=dx, f=dy)
                 combined = use_matrix.multiply(translation)
@@ -532,25 +532,33 @@ class ShapeResvgMixin:
             if children:
                 node_transform_lookup = getattr(self, "_resvg_node_transform_lookup", {})
 
-                def _convert_resvg_children(nodes, parent_style):
+                def _convert_resvg_children(nodes, parent_style, parent_global=None):
                     """Recursively convert resvg child nodes, flattening nested groups."""
                     result_shapes: list[Any] = []
                     for child in nodes:
-                        child_global = node_transform_lookup.get(id(child)) or getattr(child, "transform", None)
-                        if child_global is not None:
-                            child_global = self._matrix2d_from_resvg(child_global)
-                        if (
-                            use_global_override is not None
-                            and original_global_transform is not None
-                            and child_global is not None
-                        ):
-                            try:
-                                relative = child_global.multiply(
-                                    self._matrix2d_from_resvg(original_global_transform).inverse()
-                                )
-                                child_global = use_global_override.multiply(relative)
-                            except Exception:
-                                pass
+                        # Lookup pre-computed global transform (works for nodes present
+                        # during ResvgBridge.build). For deep-copied <use> clones,
+                        # compute from parent + local.
+                        looked_up = node_transform_lookup.get(id(child))
+                        if looked_up is not None:
+                            child_global = self._matrix2d_from_resvg(looked_up)
+                            # Re-base when <use> viewBox override changes the parent
+                            if (
+                                use_global_override is not None
+                                and original_global_transform is not None
+                            ):
+                                try:
+                                    relative = child_global.multiply(
+                                        self._matrix2d_from_resvg(original_global_transform).inverse()
+                                    )
+                                    child_global = use_global_override.multiply(relative)
+                                except Exception:
+                                    pass
+                        else:
+                            # Clone nodes (from <use> expansion): the adapter will
+                            # apply the node's own local transform, so the proxy
+                            # only needs the parent's global.
+                            child_global = parent_global
                         child_proxy = GlobalTransformProxy(child, child_global)
                         child_style = _apply_resvg_paint_overrides(child, parent_style)
                         child_metadata = dict(metadata)
@@ -560,7 +568,7 @@ class ShapeResvgMixin:
                         if child_node_type in ("GenericNode", "GroupNode"):
                             nested = getattr(child, "children", []) or []
                             if nested:
-                                nested_shapes = _convert_resvg_children(nested, child_style)
+                                nested_shapes = _convert_resvg_children(nested, child_style, child_global)
                                 if nested_shapes:
                                     sub_group = Group(
                                         children=nested_shapes,
@@ -651,7 +659,7 @@ class ShapeResvgMixin:
                                 result_shapes.append(child_shape)
                     return result_shapes
 
-                group_children = _convert_resvg_children(children, style)
+                group_children = _convert_resvg_children(children, style, global_transform)
                 if group_children:
                     group = Group(
                         children=group_children,
