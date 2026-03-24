@@ -166,12 +166,7 @@ def apply_use_transform(
     if combined.is_identity(tolerance=tolerance):
         return
     for clone in clones:
-        local = converter._local_name(clone.tag)
-        if local == "g":
-            for child in clone:
-                prepend_transform(child, combined)
-        else:
-            prepend_transform(clone, combined)
+        prepend_transform(clone, combined)
 
 
 def compute_use_transform(
@@ -185,9 +180,9 @@ def compute_use_transform(
     href_transform = element.get("transform")
     if href_transform:
         base_matrix = base_matrix.multiply(converter._matrix_from_transform(href_transform))
-    target_transform = target.get("transform")
-    if target_transform:
-        base_matrix = base_matrix.multiply(converter._matrix_from_transform(target_transform))
+    # Note: target_transform is NOT folded in here because the clone
+    # retains the target's original transform attribute.  Including it
+    # would double-apply the target's transform.
 
     context = converter._conversion_context
     if context is None:

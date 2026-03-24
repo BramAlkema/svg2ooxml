@@ -188,8 +188,6 @@ def build_marker_transform(
         matrix = matrix.multiply(_matrix_scale(scale_x, scale_y))
         clip_rect = (0.0, 0.0, viewport_width, viewport_height)
 
-    matrix = matrix.multiply(_matrix_translate(-definition.ref_x, -definition.ref_y))
-
     orient = definition.orient.lower()
     orient_angle = angle
     if orient == "auto-start-reverse":
@@ -201,8 +199,14 @@ def build_marker_transform(
         except ValueError:
             orient_angle = angle
 
+    # SVG marker transform order: translate(anchor) * rotate * scale * translate(-ref)
+    # `matrix` already holds the scale/viewport part from above.
+    # Prepend translate(-ref), then prepend rotate, then prepend translate(anchor).
+    scale_matrix = matrix
+    matrix = _matrix_translate(anchor.x, anchor.y)
     matrix = matrix.multiply(_matrix_rotate(orient_angle))
-    matrix = matrix.multiply(_matrix_translate(anchor.x, anchor.y))
+    matrix = matrix.multiply(scale_matrix)
+    matrix = matrix.multiply(_matrix_translate(-definition.ref_x, -definition.ref_y))
     return MarkerTransform(matrix=matrix, clip_rect=clip_rect)
 
 
