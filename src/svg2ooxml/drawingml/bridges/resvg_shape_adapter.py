@@ -392,7 +392,8 @@ class ResvgShapeAdapter:
             _arc_to_cubic_segments,
         )
 
-        matrix = geometry.transform
+        # Return raw coordinates — from_path_node() applies node.transform
+        # (which is the same object as geometry.transform) to the result.
         segments: list[SegmentType] = []
         cx, cy = 0.0, 0.0
         sx, sy = 0.0, 0.0  # subpath start
@@ -400,9 +401,7 @@ class ResvgShapeAdapter:
         prev_quad_ctrl: tuple[float, float] | None = None
 
         def _t(x: float, y: float) -> Point:
-            """Apply geometry transform and return a Point."""
-            tx, ty = matrix.apply_to_point(x, y)
-            return Point(tx, ty)
+            return Point(x, y)
 
         for cmd in geometry.commands:
             op = cmd.command
