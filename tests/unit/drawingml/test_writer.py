@@ -331,7 +331,8 @@ def test_render_scene_renders_path_custom_geometry() -> None:
     assert "<a:cubicBezTo>" in xml
 
 
-def test_render_path_names_include_policy_annotations() -> None:
+def test_render_path_names_exclude_policy_annotations() -> None:
+    """Shape names must not contain debug metadata — PowerPoint displays them."""
     writer = DrawingMLWriter()
     segments = [
         LineSegment(Point(0, 0), Point(10, 0)),
@@ -344,8 +345,8 @@ def test_render_path_names_include_policy_annotations() -> None:
     root = ET.fromstring(result.slide_xml.encode("utf-8"))
     ns = {"p": "http://schemas.openxmlformats.org/presentationml/2006/main"}
     names = [elem.attrib["name"] for elem in root.findall('.//p:cNvPr', ns)]
-    assert any("render_mode=native" in value for value in names)
-    assert any("simplified=True" in value for value in names)
+    assert all("render_mode" not in v for v in names)
+    assert all("simplified" not in v for v in names)
 
 
 def test_render_textframe_notes_policy_metadata(caplog) -> None:

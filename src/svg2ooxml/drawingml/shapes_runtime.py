@@ -200,9 +200,6 @@ def render_path(
     stroke_xml = _format_block(stroke_to_xml(path.stroke, metadata=path.metadata), "        ")
     policy_geom = policy_for(path.metadata, "geometry")
     shape_name = f"Path {shape_id}"
-    if policy_geom:
-        annotations = " ".join(f"{k}={v}" for k, v in sorted(policy_geom.items()))
-        shape_name = f"{shape_name} [{annotations}]"
     if policy_geom.get("suggest_fallback") == FALLBACK_BITMAP:
         logger.warning(
             "Path %s marked for bitmap fallback by policy; emitting native geometry until bitmap exporter is available.",

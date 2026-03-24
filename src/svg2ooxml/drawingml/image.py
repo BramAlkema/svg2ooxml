@@ -32,14 +32,6 @@ def render_picture(
     height = max(bounds.height, 1.0)
 
     shape_name = f"Picture {shape_id}"
-    policy_meta = (
-        policy_for(image.metadata, "geometry")
-        or policy_for(image.metadata, "text")
-        or policy_for(image.metadata, "image")
-    )
-    if policy_meta:
-        suffix = ", ".join(f"{key}={value}" for key, value in sorted(policy_meta.items()))
-        shape_name += f" ({suffix})"
 
     effects_xml = ""
     if isinstance(getattr(image, "effects", []), list):
