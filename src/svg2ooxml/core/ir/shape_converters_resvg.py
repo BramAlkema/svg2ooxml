@@ -548,9 +548,9 @@ class ShapeResvgMixin:
                                 and original_global_transform is not None
                             ):
                                 try:
-                                    relative = child_global.multiply(
-                                        self._matrix2d_from_resvg(original_global_transform).inverse()
-                                    )
+                                    relative = self._matrix2d_from_resvg(
+                                        original_global_transform,
+                                    ).inverse().multiply(child_global)
                                     child_global = use_global_override.multiply(relative)
                                 except Exception:
                                     pass
