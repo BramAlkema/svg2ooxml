@@ -37,14 +37,7 @@ from svg2ooxml.ir.paint import (
     Stroke,
 )
 
-def _is_native_fill(fill) -> bool:
-    """Check if a fill can be rendered natively in DrawingML without bitmap fallback."""
-    if isinstance(fill, SolidPaint):
-        return True
-    if isinstance(fill, (LinearGradientPaint, RadialGradientPaint)):
-        # Gradients with transparent stops need bitmap for correct alpha compositing
-        return all(s.opacity >= 1.0 for s in fill.stops)
-    return False
+_NATIVE_FILL_TYPES = (SolidPaint, LinearGradientPaint, RadialGradientPaint)
 from svg2ooxml.ir.scene import ClipRef, Group, Image, MaskInstance, MaskRef, Path
 from svg2ooxml.ir.text import Run, TextAnchor, TextFrame
 from svg2ooxml.policy.constants import FALLBACK_BITMAP, FALLBACK_EMF
@@ -323,7 +316,7 @@ class ShapeConversionMixin(ShapeResvgMixin, ShapeFallbackMixin):
             policy_meta = metadata.setdefault("policy", {}).setdefault("geometry", {})
             policy_meta.update(geom_meta)
 
-        if style.fill and not _is_native_fill(style.fill):
+        if style.fill and not isinstance(style.fill, _NATIVE_FILL_TYPES):
             if allow_bitmap_fallback:
                 render_mode = FALLBACK_BITMAP
             elif allow_emf_fallback:
@@ -412,7 +405,7 @@ class ShapeConversionMixin(ShapeResvgMixin, ShapeFallbackMixin):
             policy_meta = metadata.setdefault("policy", {}).setdefault("geometry", {})
             policy_meta.update(geom_meta)
 
-        if style.fill and not _is_native_fill(style.fill):
+        if style.fill and not isinstance(style.fill, _NATIVE_FILL_TYPES):
             if allow_bitmap_fallback:
                 render_mode = FALLBACK_BITMAP
             elif allow_emf_fallback:
