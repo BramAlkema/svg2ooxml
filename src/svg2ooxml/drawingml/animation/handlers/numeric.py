@@ -37,23 +37,134 @@ class NumericAnimationHandler(AnimationHandler):
             return False
         return True
 
+    # Attributes that map to <p:animScale> (size changes)
+    _SCALE_ATTRS = {"ppt_h", "ppt_w", "height", "width", "w", "h", "rx", "ry"}
+    # Attributes that map to <p:animMotion> (position changes)
+    _MOTION_ATTRS = {"ppt_x", "ppt_y", "x", "y", "cx", "cy"}
+
     def build(
         self,
         animation: AnimationDefinition,
         par_id: int,
         behavior_id: int,
     ) -> etree._Element | None:
-        """Build ``<p:par>`` containing ``<p:anim>`` with TAV keyframes."""
-        # stroke-dashoffset animation → Wipe entrance (line drawing effect)
+        """Build ``<p:par>`` with the correct animation element type."""
         if animation.target_attribute in WIPE_ATTRIBUTES:
             return self._build_wipe_entrance(animation, par_id, behavior_id)
 
         ppt_attribute = self._map_attribute_name(animation.target_attribute)
 
-        # Build <p:anim>
-        anim = p_elem("anim")
+        is_simple = len(animation.values) <= 2 and not animation.key_times
 
-        # Behavior core with attribute name list
+        if is_simple and (ppt_attribute in self._SCALE_ATTRS or animation.target_attribute in self._SCALE_ATTRS):
+            return self._build_scale_animation(animation, par_id, behavior_id, ppt_attribute)
+
+        if is_simple and (ppt_attribute in self._MOTION_ATTRS or animation.target_attribute in self._MOTION_ATTRS):
+            return self._build_position_animation(animation, par_id, behavior_id, ppt_attribute)
+
+        return self._build_generic_anim(animation, par_id, behavior_id, ppt_attribute)
+
+    def _build_scale_animation(
+        self,
+        animation: AnimationDefinition,
+        par_id: int,
+        behavior_id: int,
+        ppt_attribute: str,
+    ) -> etree._Element:
+        """Build ``<p:animScale>`` for width/height changes."""
+        values = animation.values
+        from_val = float(self._normalize_value(ppt_attribute, values[0]))
+        to_val = float(self._normalize_value(ppt_attribute, values[-1]))
+
+        # animScale uses percentage (100000 = 100%)
+        if from_val > 0:
+            scale_pct = int((to_val / from_val) * 100000)
+        else:
+            scale_pct = 100000
+
+        is_height = ppt_attribute in ("ppt_h", "height", "h", "ry")
+        x_pct = 100000 if is_height else scale_pct
+        y_pct = scale_pct if is_height else 100000
+
+        animScale = p_elem("animScale")
+        cBhvr = self._xml.build_behavior_core_elem(
+            behavior_id=behavior_id,
+            duration_ms=animation.duration_ms,
+            target_shape=animation.element_id,
+            fill_mode=animation.fill_mode,
+            repeat_count=animation.repeat_count,
+        )
+        animScale.append(cBhvr)
+        p_sub(animScale, "by", x=str(x_pct), y=str(y_pct))
+
+        return self._xml.build_par_container_elem(
+            par_id=par_id,
+            duration_ms=animation.duration_ms,
+            delay_ms=animation.begin_ms,
+            child_element=animScale,
+            preset_id=6,  # Grow emphasis
+            preset_class="emph",
+            begin_triggers=animation.begin_triggers,
+            default_target_shape=animation.element_id,
+        )
+
+    def _build_position_animation(
+        self,
+        animation: AnimationDefinition,
+        par_id: int,
+        behavior_id: int,
+        ppt_attribute: str,
+    ) -> etree._Element:
+        """Build ``<p:animMotion>`` for x/y position changes."""
+        values = animation.values
+        from_val = float(self._normalize_value(ppt_attribute, values[0]))
+        to_val = float(self._normalize_value(ppt_attribute, values[-1]))
+
+        is_x = ppt_attribute in ("ppt_x", "x", "cx")
+        # animMotion path uses relative coordinates (0-1 range of slide)
+        # The values are in EMU, convert to slide-relative
+        slide_dim = 9144000 if is_x else 6858000  # default slide size
+        from_rel = from_val / slide_dim
+        to_rel = to_val / slide_dim
+
+        if is_x:
+            path = f"M {from_rel:.6f} 0 L {to_rel:.6f} 0 E"
+        else:
+            path = f"M 0 {from_rel:.6f} L 0 {to_rel:.6f} E"
+
+        animMotion = p_elem("animMotion")
+        animMotion.set("origin", "layout")
+        animMotion.set("path", path)
+        animMotion.set("pathEditMode", "relative")
+        cBhvr = self._xml.build_behavior_core_elem(
+            behavior_id=behavior_id,
+            duration_ms=animation.duration_ms,
+            target_shape=animation.element_id,
+            fill_mode=animation.fill_mode,
+            repeat_count=animation.repeat_count,
+        )
+        animMotion.append(cBhvr)
+
+        return self._xml.build_par_container_elem(
+            par_id=par_id,
+            duration_ms=animation.duration_ms,
+            delay_ms=animation.begin_ms,
+            child_element=animMotion,
+            preset_id=0,  # Custom motion
+            preset_class="path",
+            begin_triggers=animation.begin_triggers,
+            default_target_shape=animation.element_id,
+        )
+
+    def _build_generic_anim(
+        self,
+        animation: AnimationDefinition,
+        par_id: int,
+        behavior_id: int,
+        ppt_attribute: str,
+    ) -> etree._Element:
+        """Build ``<p:anim>`` for other numeric properties (stroke-width, etc.)."""
+        anim = p_elem("anim")
         cBhvr = self._xml.build_behavior_core_elem(
             behavior_id=behavior_id,
             duration_ms=animation.duration_ms,
@@ -65,12 +176,10 @@ class NumericAnimationHandler(AnimationHandler):
         )
         anim.append(cBhvr)
 
-        # Build TAV list
         tav_elements = self._build_tav_list(animation, ppt_attribute)
         tav_lst = self._xml.build_tav_list_container(tav_elements)
         anim.append(tav_lst)
 
-        # Wrap in <p:par>
         return self._xml.build_par_container_elem(
             par_id=par_id,
             duration_ms=animation.duration_ms,

@@ -20,11 +20,15 @@ from svg2ooxml.ir.animation import (
 
 
 def make_numeric_animation(**overrides) -> AnimationDefinition:
-    """Build a real AnimationDefinition for numeric animations."""
+    """Build a real AnimationDefinition for numeric animations.
+
+    Uses stroke-width as default attribute to test the generic <p:anim> path.
+    Use target_attribute="x" or "width" to test motion/scale paths.
+    """
     defaults = dict(
         element_id="shape1",
         animation_type=AnimationType.ANIMATE,
-        target_attribute="x",
+        target_attribute="stroke-width",
         values=["0", "100"],
         timing=AnimationTiming(begin=0.0, duration=1.0),
     )
@@ -165,10 +169,10 @@ class TestBuild:
         assert sp_tgt.get("spid") == "shape42"
 
     def test_attribute_name_mapped(self, handler: NumericAnimationHandler):
-        anim = make_numeric_animation(target_attribute="x")
+        anim = make_numeric_animation(target_attribute="stroke-width")
         par = handler.build(anim, par_id=4, behavior_id=5)
         attr_name = par.find(f".//{{{NS_P}}}attrName")
-        assert attr_name.text == "ppt_x"
+        assert attr_name.text == "ln_w"
 
     def test_tav_list_present(self, handler: NumericAnimationHandler):
         anim = make_numeric_animation()

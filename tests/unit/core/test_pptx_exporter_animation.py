@@ -344,9 +344,8 @@ def test_numeric_attribute_animation_emits_anim() -> None:
 
     render_result, _, _ = _render(svg)
 
-    assert "<p:anim>" in render_result.slide_xml
-    assert '<p:attrName>ppt_x</p:attrName>' in render_result.slide_xml
-    assert '<p:fltVal val="190500"/>' in render_result.slide_xml
+    # Position animations use <p:animMotion> with a path
+    assert "<p:animMotion" in render_result.slide_xml
 
 
 def test_rotate_attribute_animation_uses_ppt_angle() -> None:
@@ -376,9 +375,8 @@ def test_width_animation_uses_ppt_width_attribute() -> None:
 
     render_result, _, _ = _render(svg)
 
-    assert "<p:anim>" in render_result.slide_xml
-    assert '<p:attrName>ppt_w</p:attrName>' in render_result.slide_xml
-    assert '<p:fltVal val="95250"/>' in render_result.slide_xml
+    # Width animations use <p:animScale>
+    assert "<p:animScale" in render_result.slide_xml
 
 
 def test_stroke_width_animation_maps_to_ln_w() -> None:
