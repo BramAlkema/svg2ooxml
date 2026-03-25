@@ -328,6 +328,19 @@ class SMILParser:
                         f"animateMotion mpath reference unresolved: {href}"
                     )
                     self._record_degradation("mpath_reference_unresolved")
+            # Fall back to from/to or values coordinate pairs
+            values_attr = element.get("values")
+            if values_attr:
+                coords = [v.strip() for v in values_attr.split(";") if v.strip()]
+                if coords:
+                    parts = [f"M {coords[0]}"] + [f"L {c}" for c in coords[1:]]
+                    return [" ".join(parts)]
+            from_val = element.get("from")
+            to_val = element.get("to")
+            if from_val and to_val:
+                return [f"M {from_val.strip()} L {to_val.strip()}"]
+            if to_val:
+                return [f"M 0,0 L {to_val.strip()}"]
             return ["M 0,0"]
 
         values_attr = element.get("values")
