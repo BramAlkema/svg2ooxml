@@ -54,11 +54,10 @@ class NumericAnimationHandler(AnimationHandler):
 
         ppt_attribute = self._map_attribute_name(animation.target_attribute)
 
-        is_simple = len(animation.values) <= 2 and not animation.key_times
-
-        if is_simple and (ppt_attribute in self._SCALE_ATTRS or animation.target_attribute in self._SCALE_ATTRS):
+        if ppt_attribute in self._SCALE_ATTRS or animation.target_attribute in self._SCALE_ATTRS:
             return self._build_scale_animation(animation, par_id, behavior_id, ppt_attribute)
 
+        is_simple = len(animation.values) <= 2 and not animation.key_times
         if is_simple and (ppt_attribute in self._MOTION_ATTRS or animation.target_attribute in self._MOTION_ATTRS):
             return self._build_position_animation(animation, par_id, behavior_id, ppt_attribute)
 
