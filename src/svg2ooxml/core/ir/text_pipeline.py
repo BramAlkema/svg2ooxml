@@ -357,25 +357,9 @@ class TextConversionPipeline:
         is_path_based = False
 
         if text_path_id:
+            # Only use non-plain presets for actual <textPath> elements
             preset = "textArchUp"
             confidence = max(confidence, base_confidence + 0.25)
-            is_path_based = True
-        elif text_content.isupper() and len(text_content) <= 10:
-            preset = "textCircle"
-            confidence = max(confidence, base_confidence + 0.15)
-        elif len(text_content) <= 8:
-            preset = "textTriangle"
-            confidence = max(confidence, base_confidence + 0.1)
-        elif any(ch in text_content for ch in "~^"):
-            preset = "textWave1"
-            confidence = max(confidence, base_confidence + 0.05)
-
-        # Only apply aspect ratio correction if we don't have a strong path-based hint
-        if not is_path_based:
-            aspect_ratio = frame.bbox.width / frame.bbox.height if frame.bbox.height else 1.0
-            if aspect_ratio > 5:
-                preset = "textWave1"
-                confidence = min(confidence, 0.75)
 
         return preset, confidence
 

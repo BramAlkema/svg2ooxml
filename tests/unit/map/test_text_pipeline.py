@@ -86,8 +86,8 @@ def test_pipeline_populates_metadata_when_detection_enabled() -> None:
     updated = pipeline.plan_frame(frame, frame.runs, decision)
 
     assert updated.wordart_candidate is not None
-    assert updated.wordart_candidate.preset in {"textTriangle", "textWave1", "textCircle", "textArchUp"}
-    assert updated.wordart_candidate.is_confident is True
+    # Plain text always gets textPlain (non-plain only for <textPath>)
+    assert updated.wordart_candidate.preset == "textPlain"
     assert updated.embedding_plan is not None
     assert updated.embedding_plan.requires_embedding is False
     assert updated.metadata.get("wordart", {}).get("preset") == updated.wordart_candidate.preset
