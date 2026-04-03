@@ -53,7 +53,9 @@ class TextPipeline:
         self._converter = converter
 
     def convert(self, *, element, coord_space: CoordinateSpace, resvg_node=None):
-        return self._converter.convert(element=element, coord_space=coord_space, resvg_node=resvg_node)
+        return self._converter.convert(
+            element=element, coord_space=coord_space, resvg_node=resvg_node
+        )
 
     @property
     def converter(self) -> TextConverter:
@@ -147,8 +149,12 @@ class TextConversionPipeline:
 
         metadata = frame.metadata if isinstance(frame.metadata, dict) else {}
         path_id = metadata.get("text_path_id") if isinstance(metadata, dict) else None
-        path_points = metadata.get("text_path_points") if isinstance(metadata, dict) else None
-        path_data = metadata.get("text_path_data") if isinstance(metadata, dict) else None
+        path_points = (
+            metadata.get("text_path_points") if isinstance(metadata, dict) else None
+        )
+        path_data = (
+            metadata.get("text_path_data") if isinstance(metadata, dict) else None
+        )
 
         classification = None
         if isinstance(path_points, list) and path_points:
@@ -186,7 +192,13 @@ class TextConversionPipeline:
                 metadata=candidate_meta,
             )
 
-        # Fallback heuristic classification
+        # Do not route ordinary straight text through WordArt. Native text boxes
+        # are the preferred editable representation unless the source text is
+        # actually path-based and needs a warp approximation.
+        if not path_id:
+            return None
+
+        # Fallback heuristic classification for textPath content only.
         if "\n" in text_content:
             return None
 

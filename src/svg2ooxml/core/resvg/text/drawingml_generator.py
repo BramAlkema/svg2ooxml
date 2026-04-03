@@ -236,7 +236,6 @@ class DrawingMLTextGenerator:
         bodyPr.set("anchor", "t")
         warp = a_sub(bodyPr, "prstTxWarp", prst=preset)
         a_sub(warp, "avLst")
-        a_sub(bodyPr, "normAutofit")
         a_sub(txBody, "lstStyle")
         p = a_sub(txBody, "p")
         pPr = a_sub(p, "pPr")
@@ -298,7 +297,9 @@ class DrawingMLTextGenerator:
         self._generate_runs_into_parent(node, paragraph)
         return "".join(to_string(child) for child in paragraph)
 
-    def _generate_runs_into_parent(self, node: TextNode, parent: etree._Element) -> None:
+    def _generate_runs_into_parent(
+        self, node: TextNode, parent: etree._Element
+    ) -> None:
         """Generate text run elements and append to parent paragraph.
 
         Generates one run per text segment, including simple <tspan> style
@@ -319,7 +320,9 @@ class DrawingMLTextGenerator:
             return
 
         for text, text_style, fill_style, stroke_style, preserve_space in segments:
-            normalized = self._normalize_text_segment(text, preserve_space=preserve_space)
+            normalized = self._normalize_text_segment(
+                text, preserve_space=preserve_space
+            )
             if not normalized:
                 continue
             parts = normalized.split("\n")
@@ -333,7 +336,11 @@ class DrawingMLTextGenerator:
 
                 t = a_sub(r, "t")
                 text_value = part if part else " "
-                preserve = text_value == " " or text_value.startswith(" ") or text_value.endswith(" ")
+                preserve = (
+                    text_value == " "
+                    or text_value.startswith(" ")
+                    or text_value.endswith(" ")
+                )
                 t.text = text_value
                 if preserve:
                     t.set("{http://www.w3.org/XML/1998/namespace}space", "preserve")
@@ -451,7 +458,9 @@ class DrawingMLTextGenerator:
         self,
         node: TextNode,
     ) -> list[tuple[str, TextStyle | None, FillStyle | None, StrokeStyle | None, bool]]:
-        segments: list[tuple[str, TextStyle | None, FillStyle | None, StrokeStyle | None, bool]] = []
+        segments: list[
+            tuple[str, TextStyle | None, FillStyle | None, StrokeStyle | None, bool]
+        ] = []
 
         def visit(
             current,
@@ -471,23 +480,35 @@ class DrawingMLTextGenerator:
             if source is not None:
                 text = getattr(source, "text", None)
                 if text:
-                    segments.append((text, text_style, fill_style, stroke_style, node_preserve))
+                    segments.append(
+                        (text, text_style, fill_style, stroke_style, node_preserve)
+                    )
             for child in getattr(current, "children", []) or []:
                 visit(child, text_style, fill_style, stroke_style, node_preserve)
                 child_source = getattr(child, "source", None)
-                tail = getattr(child_source, "tail", None) if child_source is not None else None
+                tail = (
+                    getattr(child_source, "tail", None)
+                    if child_source is not None
+                    else None
+                )
                 if tail:
-                    segments.append((tail, text_style, fill_style, stroke_style, node_preserve))
+                    segments.append(
+                        (tail, text_style, fill_style, stroke_style, node_preserve)
+                    )
 
         visit(node, node.text_style, node.fill, node.stroke, False)
 
         if not segments and node.text_content:
-            segments.append((node.text_content, node.text_style, node.fill, node.stroke, False))
+            segments.append(
+                (node.text_content, node.text_style, node.fill, node.stroke, False)
+            )
 
         return segments
 
     @staticmethod
-    def _normalize_text_segment(text: str | None, *, preserve_space: bool = False) -> str:
+    def _normalize_text_segment(
+        text: str | None, *, preserve_space: bool = False
+    ) -> str:
         if not text:
             return ""
         token = text.replace("\r\n", "\n").replace("\r", "\n")
@@ -544,7 +565,9 @@ class DrawingMLTextGenerator:
         text_style = node.text_style
 
         # Extract font properties
-        primary_family = text_style.font_families[0] if text_style.font_families else "Arial"
+        primary_family = (
+            text_style.font_families[0] if text_style.font_families else "Arial"
+        )
         weight = _parse_font_weight(text_style.font_weight)
         style = text_style.font_style or "normal"
 

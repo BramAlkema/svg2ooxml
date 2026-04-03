@@ -54,7 +54,9 @@ def test_render_scene_from_ir_reports_slide_size() -> None:
 
 def test_render_scene_renders_rectangle() -> None:
     writer = DrawingMLWriter()
-    rect = Rectangle(bounds=Rect(x=10, y=5, width=20, height=15), fill=SolidPaint("FF0000"))
+    rect = Rectangle(
+        bounds=Rect(x=10, y=5, width=20, height=15), fill=SolidPaint("FF0000")
+    )
 
     result = writer.render_scene([rect])
     xml = result.slide_xml
@@ -119,7 +121,7 @@ def test_render_scene_renders_line() -> None:
 
     assert "<p:sp>" in xml
     assert "Line 2" in xml
-    assert '<a:custGeom>' in xml
+    assert "<a:custGeom>" in xml
     assert 'val="336699"' in xml
 
 
@@ -150,13 +152,17 @@ def test_render_scene_renders_polygon() -> None:
     xml = result.slide_xml
 
     assert "Polygon 2" in xml
-    assert '<a:close/>' in xml
+    assert "<a:close/>" in xml
     assert 'val="00FF00"' in xml
 
 
 def test_render_scene_renders_rounded_rectangle_with_adjustment() -> None:
     writer = DrawingMLWriter()
-    rect = Rectangle(bounds=Rect(x=0, y=0, width=100, height=50), fill=SolidPaint("00FF00"), corner_radius=10.0)
+    rect = Rectangle(
+        bounds=Rect(x=0, y=0, width=100, height=50),
+        fill=SolidPaint("00FF00"),
+        corner_radius=10.0,
+    )
 
     result = writer.render_scene([rect])
     xml = result.slide_xml
@@ -228,7 +234,11 @@ def test_render_textframe_arabic_auto_detects_rtl() -> None:
         origin=Point(0, 0),
         anchor=TextAnchor.START,
         bbox=Rect(0, 0, 100, 20),
-        runs=[Run(text="مرحبا بالعالم", font_family="Arial", font_size_pt=12, rgb="000000")],
+        runs=[
+            Run(
+                text="مرحبا بالعالم", font_family="Arial", font_size_pt=12, rgb="000000"
+            )
+        ],
     )
 
     result = writer.render_scene([frame])
@@ -264,7 +274,13 @@ def test_render_textframe_renders_multiple_runs() -> None:
         bbox=Rect(0, 0, 120, 30),
         runs=[
             Run(text="Hello", font_family="Arial", font_size_pt=12, rgb="000000"),
-            Run(text="World", font_family="Arial", font_size_pt=12, rgb="FF0000", bold=True),
+            Run(
+                text="World",
+                font_family="Arial",
+                font_size_pt=12,
+                rgb="FF0000",
+                bold=True,
+            ),
         ],
         baseline_shift=0.0,
     )
@@ -272,7 +288,7 @@ def test_render_textframe_renders_multiple_runs() -> None:
     result = writer.render_scene([frame])
     root = ET.fromstring(result.slide_xml.encode("utf-8"))
     ns = {"a": "http://schemas.openxmlformats.org/drawingml/2006/main"}
-    runs = root.findall('.//a:r', ns)
+    runs = root.findall(".//a:r", ns)
     assert len(runs) == 2
     second = ET.tostring(runs[1], encoding="unicode")
     assert 'val="FF0000"' in second
@@ -339,12 +355,15 @@ def test_render_path_names_exclude_policy_annotations() -> None:
         LineSegment(Point(10, 0), Point(10, 10)),
     ]
     path = IRPath(segments=segments, fill=SolidPaint("000000"))
-    path.metadata.setdefault("policy", {})["geometry"] = {"simplified": True, "render_mode": "native"}
+    path.metadata.setdefault("policy", {})["geometry"] = {
+        "simplified": True,
+        "render_mode": "native",
+    }
 
     result = writer.render_scene([path])
     root = ET.fromstring(result.slide_xml.encode("utf-8"))
     ns = {"p": "http://schemas.openxmlformats.org/presentationml/2006/main"}
-    names = [elem.attrib["name"] for elem in root.findall('.//p:cNvPr', ns)]
+    names = [elem.attrib["name"] for elem in root.findall(".//p:cNvPr", ns)]
     assert all("render_mode" not in v for v in names)
     assert all("simplified" not in v for v in names)
 
@@ -355,15 +374,23 @@ def test_render_textframe_notes_policy_metadata(caplog) -> None:
         origin=Point(0, 0),
         anchor=TextAnchor.START,
         bbox=Rect(0, 0, 100, 20),
-        runs=[Run(text="Policy!", font_family=TEST_FONT, font_size_pt=12, rgb="FF00FF")],
+        runs=[
+            Run(text="Policy!", font_family=TEST_FONT, font_size_pt=12, rgb="FF00FF")
+        ],
         baseline_shift=0.0,
-        metadata={"policy": {"text": {"rendering_behavior": "outline", "font_fallback": "Arial"}}},
+        metadata={
+            "policy": {
+                "text": {"rendering_behavior": "outline", "font_fallback": "Arial"}
+            }
+        },
     )
 
     with caplog.at_level("DEBUG"):
         _result = writer.render_scene([frame])
 
-    debug_notes = [rec.getMessage() for rec in caplog.records if rec.levelname == "DEBUG"]
+    debug_notes = [
+        rec.getMessage() for rec in caplog.records if rec.levelname == "DEBUG"
+    ]
     assert any("rendering_behavior=outline" in message for message in debug_notes)
     assert any("font_fallback=Arial" in message for message in debug_notes)
 
@@ -375,7 +402,9 @@ def test_render_wordart_frame_uses_warp_template() -> None:
         anchor=TextAnchor.START,
         bbox=Rect(0, 0, 120, 40),
         runs=[Run(text="WAVE", font_family=TEST_FONT, font_size_pt=28.0, bold=True)],
-        wordart_candidate=WordArtCandidate(preset="textWave1", confidence=0.9, fallback_strategy="vector_outline"),
+        wordart_candidate=WordArtCandidate(
+            preset="textWave1", confidence=0.9, fallback_strategy="vector_outline"
+        ),
         metadata={"wordart": {"prefer_native": True}},
     )
 
@@ -384,7 +413,64 @@ def test_render_wordart_frame_uses_warp_template() -> None:
     assert "WordArt 2" in xml
     assert 'prst="textWave1"' in xml
     assert "WAVE" in xml
-    assert "<a:normAutofit/>" in xml
+    assert "<a:normAutofit/>" not in xml
+
+
+def test_render_wordart_frame_uses_tighter_height_for_flat_presets() -> None:
+    writer = DrawingMLWriter()
+    frame = TextFrame(
+        origin=Point(0, 0),
+        anchor=TextAnchor.START,
+        bbox=Rect(10, 20, 120, 56),
+        runs=[Run(text="WAVE", font_family=TEST_FONT, font_size_pt=28.0, bold=True)],
+        wordart_candidate=WordArtCandidate(
+            preset="textWave1", confidence=0.9, fallback_strategy="vector_outline"
+        ),
+        metadata={"wordart": {"prefer_native": True}},
+    )
+
+    xml = writer.render_scene([frame]).slide_xml
+    root = ET.fromstring(xml.encode("utf-8"))
+    ns = {
+        "a": "http://schemas.openxmlformats.org/drawingml/2006/main",
+        "p": "http://schemas.openxmlformats.org/presentationml/2006/main",
+    }
+    ext = root.find(".//p:sp/p:spPr/a:xfrm/a:ext", ns)
+    off = root.find(".//p:sp/p:spPr/a:xfrm/a:off", ns)
+
+    assert ext is not None
+    assert off is not None
+    expected_height = round(28.0 * (96.0 / 72.0) * 1.1 * EMU_PER_PX)
+    expected_y = round(
+        (20.0 + ((56.0 - (28.0 * (96.0 / 72.0) * 1.1)) / 2.0)) * EMU_PER_PX
+    )
+    assert int(ext.attrib["cy"]) == expected_height
+    assert int(off.attrib["y"]) == expected_y
+
+
+def test_render_wordart_frame_preserves_height_for_circle_presets() -> None:
+    writer = DrawingMLWriter()
+    frame = TextFrame(
+        origin=Point(0, 0),
+        anchor=TextAnchor.START,
+        bbox=Rect(10, 20, 120, 56),
+        runs=[Run(text="ROUND", font_family=TEST_FONT, font_size_pt=28.0, bold=True)],
+        wordart_candidate=WordArtCandidate(
+            preset="textCircle", confidence=0.9, fallback_strategy="vector_outline"
+        ),
+        metadata={"wordart": {"prefer_native": True}},
+    )
+
+    xml = writer.render_scene([frame]).slide_xml
+    root = ET.fromstring(xml.encode("utf-8"))
+    ns = {
+        "a": "http://schemas.openxmlformats.org/drawingml/2006/main",
+        "p": "http://schemas.openxmlformats.org/presentationml/2006/main",
+    }
+    ext = root.find(".//p:sp/p:spPr/a:xfrm/a:ext", ns)
+
+    assert ext is not None
+    assert int(ext.attrib["cy"]) == int(56.0 * EMU_PER_PX)
 
 
 def test_writer_collects_font_embedding_plans() -> None:
@@ -464,13 +550,15 @@ def test_writer_registers_filter_assets() -> None:
             }
         }
     }
-    rect.effects.append(CustomEffect(drawingml='<a:effectLst><a:blur rad="1000"/></a:effectLst>'))
+    rect.effects.append(
+        CustomEffect(drawingml='<a:effectLst><a:blur rad="1000"/></a:effectLst>')
+    )
 
     first = writer.render_scene([rect])
 
     assert any(item.relationship_id == "rIdCustom" for item in first.assets.media)
     second = writer.render_scene([rect])
-    assert '<a:effectLst>' in second.slide_xml
+    assert "<a:effectLst>" in second.slide_xml
 
 
 def test_writer_preserves_effect_dag_custom_effect() -> None:
@@ -480,7 +568,7 @@ def test_writer_preserves_effect_dag_custom_effect() -> None:
         CustomEffect(
             drawingml=(
                 "<a:effectDag><a:cont/><a:alphaModFix><a:cont/>"
-                "<a:effectLst><a:blur rad=\"1000\"/></a:effectLst>"
+                '<a:effectLst><a:blur rad="1000"/></a:effectLst>'
                 "</a:alphaModFix></a:effectDag>"
             )
         )
@@ -508,7 +596,7 @@ def test_render_linear_gradient_fill() -> None:
 
     assert "<a:gradFill" in xml
     assert "<a:lin" in xml
-    assert "pos=\"100000\"" in xml
+    assert 'pos="100000"' in xml
 
 
 def test_render_path_with_arrow_markers() -> None:
@@ -557,7 +645,10 @@ def test_render_path_applies_marker_clip_metadata() -> None:
     writer = DrawingMLWriter()
     segments = [LineSegment(Point(0, 0), Point(10, 0))]
     stroke = Stroke(paint=SolidPaint("000000"), width=1.0)
-    metadata = {"marker_clip": {"x": 0.0, "y": 0.0, "width": 2.0, "height": 1.0}, "marker_overflow": "hidden"}
+    metadata = {
+        "marker_clip": {"x": 0.0, "y": 0.0, "width": 2.0, "height": 1.0},
+        "marker_overflow": "hidden",
+    }
     path = IRPath(
         segments=segments,
         fill=None,
@@ -588,23 +679,38 @@ def test_shape_navigation_embeds_hyperlink_metadata() -> None:
     navigation_assets = list(result.assets.navigation)
     assert navigation_assets
     asset = navigation_assets[0]
-    assert asset.relationship_type == "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink"
+    assert (
+        asset.relationship_type
+        == "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink"
+    )
     assert asset.target == "https://example.com"
     assert asset.scope == "shape"
 
 
 def test_text_run_navigation_creates_relationships() -> None:
     writer = DrawingMLWriter()
-    nav_external = NavigationSpec(kind=NavigationKind.EXTERNAL, href="https://example.com")
+    nav_external = NavigationSpec(
+        kind=NavigationKind.EXTERNAL, href="https://example.com"
+    )
     nav_slide = NavigationSpec(kind=NavigationKind.SLIDE, slide=SlideTarget(index=3))
     frame = TextFrame(
         origin=Point(0, 0),
         anchor=TextAnchor.START,
         bbox=Rect(0, 0, 120, 30),
         runs=[
-            Run(text=RUN_TEXT_EXTERNAL, font_family=TEST_FONT, font_size_pt=14.0, navigation=nav_external),
+            Run(
+                text=RUN_TEXT_EXTERNAL,
+                font_family=TEST_FONT,
+                font_size_pt=14.0,
+                navigation=nav_external,
+            ),
             Run(text=" ", font_family=TEST_FONT, font_size_pt=14.0),
-            Run(text=RUN_TEXT_SLIDE, font_family=TEST_FONT, font_size_pt=14.0, navigation=nav_slide),
+            Run(
+                text=RUN_TEXT_SLIDE,
+                font_family=TEST_FONT,
+                font_size_pt=14.0,
+                navigation=nav_slide,
+            ),
         ],
     )
 
@@ -615,9 +721,16 @@ def test_text_run_navigation_creates_relationships() -> None:
     assert len(navigation_assets) == 2
     scopes = {asset.scope for asset in navigation_assets}
     assert scopes == {"text_run"}
-    external_asset = next(asset for asset in navigation_assets if asset.target_mode == "External")
+    external_asset = next(
+        asset for asset in navigation_assets if asset.target_mode == "External"
+    )
     assert external_asset.target == "https://example.com"
-    slide_asset = next(asset for asset in navigation_assets if asset.relationship_type == "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide")
+    slide_asset = next(
+        asset
+        for asset in navigation_assets
+        if asset.relationship_type
+        == "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide"
+    )
     assert slide_asset.target.endswith("slide3.xml")
 
 
@@ -655,7 +768,10 @@ def test_path_clip_path_serialisation() -> None:
     # Shape still renders.
     assert "<p:sp>" in result.slide_xml
     # Clip diagnostic is recorded.
-    assert any("clip1" in msg.lower() or "clip" in msg.lower() for msg in result.assets.diagnostics)
+    assert any(
+        "clip1" in msg.lower() or "clip" in msg.lower()
+        for msg in result.assets.diagnostics
+    )
 
 
 def test_mask_approximated_to_clip_path() -> None:
@@ -671,7 +787,9 @@ def test_mask_approximated_to_clip_path() -> None:
             LineSegment(Point(2, 8), Point(2, 2)),
         ),
     )
-    mask_ref = MaskRef(mask_id="mask1", definition=mask_def, target_bounds=mask_def.bounding_box)
+    mask_ref = MaskRef(
+        mask_id="mask1", definition=mask_def, target_bounds=mask_def.bounding_box
+    )
     mask_instance = MaskInstance(mask=mask_ref, bounds=mask_def.bounding_box)
     path = IRPath(
         segments=[
@@ -692,7 +810,10 @@ def test_mask_approximated_to_clip_path() -> None:
     # Shape still renders.
     assert "<p:sp>" in result.slide_xml
     # Mask diagnostic records the fallback.
-    assert any("mask1" in msg.lower() or "native geometry" in msg.lower() for msg in result.assets.diagnostics)
+    assert any(
+        "mask1" in msg.lower() or "native geometry" in msg.lower()
+        for msg in result.assets.diagnostics
+    )
 
 
 def test_mask_raster_fallback_emits_asset() -> None:
@@ -702,7 +823,9 @@ def test_mask_raster_fallback_emits_asset() -> None:
         mask_id="mask-raster",
         bounding_box=Rect(0, 0, 10, 10),
     )
-    mask_ref = MaskRef(mask_id="mask-raster", definition=mask_def, target_bounds=mask_def.bounding_box)
+    mask_ref = MaskRef(
+        mask_id="mask-raster", definition=mask_def, target_bounds=mask_def.bounding_box
+    )
     mask_instance = MaskInstance(mask=mask_ref, bounds=mask_def.bounding_box)
     path = IRPath(
         segments=[
@@ -752,7 +875,9 @@ def test_mask_policy_emf_emits_asset() -> None:
             LineSegment(Point(0, 8), Point(0, 0)),
         ),
     )
-    mask_ref = MaskRef(mask_id="mask-emf", definition=mask_def, target_bounds=mask_def.bounding_box)
+    mask_ref = MaskRef(
+        mask_id="mask-emf", definition=mask_def, target_bounds=mask_def.bounding_box
+    )
     mask_instance = MaskInstance(mask=mask_ref, bounds=mask_def.bounding_box)
     path = IRPath(
         segments=[
@@ -801,7 +926,9 @@ def test_mask_policy_prefers_mimic_before_emf() -> None:
             LineSegment(Point(0, 6), Point(0, 0)),
         ),
     )
-    mask_ref = MaskRef(mask_id="mask-mimic", definition=mask_def, target_bounds=mask_def.bounding_box)
+    mask_ref = MaskRef(
+        mask_id="mask-mimic", definition=mask_def, target_bounds=mask_def.bounding_box
+    )
     mask_instance = MaskInstance(mask=mask_ref, bounds=mask_def.bounding_box)
     path = IRPath(
         segments=[
@@ -828,6 +955,8 @@ def test_mask_policy_prefers_mimic_before_emf() -> None:
     # Mimic doesn't register mask assets.
     assert not list(result.assets.iter_masks())
     assert any("mimic fallback emitted" in msg for msg in result.assets.diagnostics)
+
+
 def test_apply_mask_alpha_scales_solid_fill_opacity() -> None:
     """_apply_mask_alpha multiplies alpha into SolidPaint opacity."""
     from svg2ooxml.drawingml.writer import _apply_mask_alpha

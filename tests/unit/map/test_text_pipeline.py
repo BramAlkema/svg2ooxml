@@ -38,7 +38,9 @@ def _circle_points(radius: float = 1.0, count: int = 48) -> list[PathPoint]:
     return points
 
 
-def _wave_points(amplitude: float = 1.0, periods: int = 2, count: int = 120) -> list[PathPoint]:
+def _wave_points(
+    amplitude: float = 1.0, periods: int = 2, count: int = 120
+) -> list[PathPoint]:
     points: list[PathPoint] = []
     prev_x = prev_y = 0.0
     distance = 0.0
@@ -53,12 +55,16 @@ def _wave_points(amplitude: float = 1.0, periods: int = 2, count: int = 120) -> 
             tangent = math.atan2(dy, dx)
         else:
             tangent = 0.0
-        points.append(PathPoint(x=x, y=y, tangent_angle=tangent, distance_along_path=distance))
+        points.append(
+            PathPoint(x=x, y=y, tangent_angle=tangent, distance_along_path=distance)
+        )
         prev_x, prev_y = x, y
     return points
 
 
-def _bulge_points(amplitude: float = 1.0, width: float = 4.0, count: int = 80) -> list[PathPoint]:
+def _bulge_points(
+    amplitude: float = 1.0, width: float = 4.0, count: int = 80
+) -> list[PathPoint]:
     points: list[PathPoint] = []
     prev_x = prev_y = 0.0
     distance = 0.0
@@ -73,28 +79,32 @@ def _bulge_points(amplitude: float = 1.0, width: float = 4.0, count: int = 80) -
             tangent = math.atan2(dy, dx)
         else:
             tangent = 0.0
-        points.append(PathPoint(x=x, y=y, tangent_angle=tangent, distance_along_path=distance))
+        points.append(
+            PathPoint(x=x, y=y, tangent_angle=tangent, distance_along_path=distance)
+        )
         prev_x, prev_y = x, y
     return points
 
 
 def test_pipeline_populates_metadata_when_detection_enabled() -> None:
-    pipeline = TextConversionPipeline(font_service=None, embedding_engine=None, logger=None)
+    pipeline = TextConversionPipeline(
+        font_service=None, embedding_engine=None, logger=None
+    )
     frame = _make_frame("Hello")
     decision = resolve_text_policy("balanced")
 
     updated = pipeline.plan_frame(frame, frame.runs, decision)
 
-    assert updated.wordart_candidate is not None
-    # Plain text always gets textPlain (non-plain only for <textPath>)
-    assert updated.wordart_candidate.preset == "textPlain"
+    assert updated.wordart_candidate is None
     assert updated.embedding_plan is not None
     assert updated.embedding_plan.requires_embedding is False
-    assert updated.metadata.get("wordart", {}).get("preset") == updated.wordart_candidate.preset
+    assert "wordart" not in updated.metadata
 
 
 def test_pipeline_skips_annotations_when_detection_disabled() -> None:
-    pipeline = TextConversionPipeline(font_service=None, embedding_engine=None, logger=None)
+    pipeline = TextConversionPipeline(
+        font_service=None, embedding_engine=None, logger=None
+    )
     frame = _make_frame("Hello")
     decision = resolve_text_policy("low")
 
@@ -108,8 +118,12 @@ def test_pipeline_uses_font_service_for_embedding(monkeypatch) -> None:
     service = FontService()
 
     class _StaticProvider:
-        def resolve(self, query: FontQuery) -> FontMatch | None:  # pragma: no cover - simple stub
-            if query.family.lower() == "arial" or "arial" in [fam.lower() for fam in query.fallback_chain]:
+        def resolve(
+            self, query: FontQuery
+        ) -> FontMatch | None:  # pragma: no cover - simple stub
+            if query.family.lower() == "arial" or "arial" in [
+                fam.lower() for fam in query.fallback_chain
+            ]:
                 return FontMatch(
                     family="Arial",
                     path="/fonts/Arial.ttf",
@@ -135,11 +149,16 @@ def test_pipeline_uses_font_service_for_embedding(monkeypatch) -> None:
             subset_path=None,
             glyph_count=len(request.glyph_ids),
             bytes_written=256,
-            packaging_metadata={"font_data": b"subset-bytes", "font_path": request.font_path},
+            packaging_metadata={
+                "font_data": b"subset-bytes",
+                "font_path": request.font_path,
+            },
         ),
     )
 
-    pipeline = TextConversionPipeline(font_service=service, embedding_engine=embedding_engine, logger=None)
+    pipeline = TextConversionPipeline(
+        font_service=service, embedding_engine=embedding_engine, logger=None
+    )
     frame = _make_frame("Embed")
     decision = resolve_text_policy("high")
 
@@ -154,7 +173,9 @@ def test_pipeline_uses_font_service_for_embedding(monkeypatch) -> None:
 
 
 def test_pipeline_prefers_classifier_when_path_points_present() -> None:
-    pipeline = TextConversionPipeline(font_service=None, embedding_engine=None, logger=None)
+    pipeline = TextConversionPipeline(
+        font_service=None, embedding_engine=None, logger=None
+    )
     circle_points = _circle_points()
     frame = TextFrame(
         origin=Point(0, 0),
@@ -174,11 +195,16 @@ def test_pipeline_prefers_classifier_when_path_points_present() -> None:
 
     assert updated.wordart_candidate is not None
     assert updated.wordart_candidate.preset == "textCircle"
-    assert updated.wordart_candidate.metadata.get("reason") == "Closed near-circular baseline"
+    assert (
+        updated.wordart_candidate.metadata.get("reason")
+        == "Closed near-circular baseline"
+    )
 
 
 def test_pipeline_classifies_wave_wordart() -> None:
-    pipeline = TextConversionPipeline(font_service=None, embedding_engine=None, logger=None)
+    pipeline = TextConversionPipeline(
+        font_service=None, embedding_engine=None, logger=None
+    )
     points = _wave_points()
     frame = TextFrame(
         origin=Point(0, 0),
@@ -198,13 +224,17 @@ def test_pipeline_classifies_wave_wordart() -> None:
     assert updated.wordart_candidate is not None
     assert updated.wordart_candidate.preset in {"textWave1", "textArchUp"}
     if updated.wordart_candidate.preset == "textWave1":
-        assert "wave" in (updated.wordart_candidate.metadata.get("reason") or "").lower()
+        assert (
+            "wave" in (updated.wordart_candidate.metadata.get("reason") or "").lower()
+        )
     else:
         assert updated.wordart_candidate.metadata.get("reason") is not None
 
 
 def test_pipeline_classifies_bulge_wordart() -> None:
-    pipeline = TextConversionPipeline(font_service=None, embedding_engine=None, logger=None)
+    pipeline = TextConversionPipeline(
+        font_service=None, embedding_engine=None, logger=None
+    )
     points = _bulge_points()
     frame = TextFrame(
         origin=Point(0, 0),
@@ -222,5 +252,9 @@ def test_pipeline_classifies_bulge_wordart() -> None:
     updated = pipeline.plan_frame(frame, frame.runs or [], decision)
 
     assert updated.wordart_candidate is not None
-    assert updated.wordart_candidate.preset in {"textInflate", "textDeflate", "textArchUp"}
+    assert updated.wordart_candidate.preset in {
+        "textInflate",
+        "textDeflate",
+        "textArchUp",
+    }
     assert updated.wordart_candidate.metadata.get("text_path_id") == "bulge"

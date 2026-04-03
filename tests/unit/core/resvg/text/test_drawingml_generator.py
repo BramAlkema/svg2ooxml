@@ -369,9 +369,9 @@ class TestDrawingMLTextGenerator:
 
         xml = generator.generate_text_body(node)
 
-        assert '<a:solidFill>' in xml
+        assert "<a:solidFill>" in xml
         assert '<a:srgbClr val="FF0000"/>' in xml
-        assert '</a:solidFill>' in xml
+        assert "</a:solidFill>" in xml
 
     def test_generate_text_with_all_properties(self):
         """Test text with all properties combined."""
@@ -397,7 +397,7 @@ class TestDrawingMLTextGenerator:
         assert 'b="1"' in xml  # Bold
         assert 'i="1"' in xml  # Italic
         assert '<a:latin typeface="Arial"/>' in xml
-        assert '<a:solidFill>' in xml
+        assert "<a:solidFill>" in xml
         assert '<a:srgbClr val="336699"/>' in xml  # Hex color
 
     def test_generate_text_escapes_special_characters(self):
@@ -552,7 +552,7 @@ class TestDrawingMLTextGenerator:
         xml = generator.generate_text_body(node)
 
         # Should not have sz attribute
-        assert 'sz=' not in xml
+        assert "sz=" not in xml
 
     def test_generate_text_with_negative_font_size_ignored(self):
         """Test that negative font size is ignored."""
@@ -571,7 +571,7 @@ class TestDrawingMLTextGenerator:
         xml = generator.generate_text_body(node)
 
         # Should not have sz attribute
-        assert 'sz=' not in xml
+        assert "sz=" not in xml
 
     def test_generate_text_with_font_family_containing_ampersand(self):
         """Test that font family with ampersand is properly escaped."""
@@ -592,7 +592,7 @@ class TestDrawingMLTextGenerator:
         # Should escape ampersand in attribute value
         # quoteattr produces "Rock &amp; Roll" or 'Rock &amp; Roll'
         assert "Rock &amp; Roll" in xml
-        assert '<a:latin typeface=' in xml
+        assert "<a:latin typeface=" in xml
 
     def test_generate_text_with_font_family_containing_quotes(self):
         """Test that font family with quotes is properly escaped."""
@@ -612,7 +612,7 @@ class TestDrawingMLTextGenerator:
 
         # Should escape quotes in attribute value
         # quoteattr will use single quotes when value contains double quotes
-        assert '<a:latin typeface=' in xml
+        assert "<a:latin typeface=" in xml
         # The escaped version should be present
         assert "&quot;" in xml or "'" in xml
 
@@ -635,7 +635,7 @@ class TestDrawingMLTextGenerator:
         # Should escape < and > in attribute value
         assert "&lt;" in xml
         assert "&gt;" in xml
-        assert '<a:latin typeface=' in xml
+        assert "<a:latin typeface=" in xml
 
 
 class TestWordArtTextBody:
@@ -681,14 +681,14 @@ class TestWordArtTextBody:
 
         assert "<a:endParaRPr/>" in xml
 
-    def test_wordart_body_has_norm_autofit(self):
-        """Test that wordart body includes normAutofit."""
+    def test_wordart_body_does_not_force_autofit(self):
+        """WordArt should inherit sizing from the shape instead of forcing autofit."""
         generator = DrawingMLTextGenerator()
         node = MockTextNode(text_content="Test")
 
         xml = generator.generate_wordart_text_body(node, "textWave1")
 
-        assert "<a:normAutofit/>" in xml
+        assert "<a:normAutofit/>" not in xml
 
     def test_wordart_body_structure(self):
         """Test complete structure of wordart body."""
@@ -1149,7 +1149,9 @@ class TestGradientFillOnText:
         node = MockTextNode(
             text_content="Plain",
             text_style=MockTextStyle(("Arial",), 12.0, None, None),
-            fill=MockFillStyle(color=MockColor(1.0, 0.0, 0.0), opacity=1.0, reference=ref),
+            fill=MockFillStyle(
+                color=MockColor(1.0, 0.0, 0.0), opacity=1.0, reference=ref
+            ),
         )
         generator = DrawingMLTextGenerator()  # no paint_resolver
         xml = generator.generate_text_body(node)
@@ -1164,7 +1166,9 @@ class TestGradientFillOnText:
         node = MockTextNode(
             text_content="Fallback",
             text_style=MockTextStyle(("Arial",), 12.0, None, None),
-            fill=MockFillStyle(color=MockColor(0.0, 0.0, 1.0), opacity=1.0, reference=ref),
+            fill=MockFillStyle(
+                color=MockColor(0.0, 0.0, 1.0), opacity=1.0, reference=ref
+            ),
         )
         generator = DrawingMLTextGenerator(paint_resolver=resolver)
         xml = generator.generate_text_body(node)
@@ -1179,7 +1183,9 @@ class TestTextDecorations:
         """text-decoration: underline → u="sng" on rPr."""
         node = MockTextNode(
             text_content="Underlined",
-            text_style=MockTextStyle(("Arial",), 12.0, None, None, text_decoration="underline"),
+            text_style=MockTextStyle(
+                ("Arial",), 12.0, None, None, text_decoration="underline"
+            ),
             fill=MockFillStyle(color=MockColor(0.0, 0.0, 0.0)),
         )
         generator = DrawingMLTextGenerator()
@@ -1190,7 +1196,9 @@ class TestTextDecorations:
         """text-decoration: line-through → strike="sngStrike" on rPr."""
         node = MockTextNode(
             text_content="Struck",
-            text_style=MockTextStyle(("Arial",), 12.0, None, None, text_decoration="line-through"),
+            text_style=MockTextStyle(
+                ("Arial",), 12.0, None, None, text_decoration="line-through"
+            ),
             fill=MockFillStyle(color=MockColor(0.0, 0.0, 0.0)),
         )
         generator = DrawingMLTextGenerator()
@@ -1201,7 +1209,9 @@ class TestTextDecorations:
         """text-decoration: underline line-through → both attributes."""
         node = MockTextNode(
             text_content="Both",
-            text_style=MockTextStyle(("Arial",), 12.0, None, None, text_decoration="underline line-through"),
+            text_style=MockTextStyle(
+                ("Arial",), 12.0, None, None, text_decoration="underline line-through"
+            ),
             fill=MockFillStyle(color=MockColor(0.0, 0.0, 0.0)),
         )
         generator = DrawingMLTextGenerator()
@@ -1219,7 +1229,7 @@ class TestTextDecorations:
         generator = DrawingMLTextGenerator()
         xml = generator.generate_text_body(node)
         assert 'u="sng"' not in xml
-        assert 'strike=' not in xml
+        assert "strike=" not in xml
 
 
 class TestLetterSpacing:

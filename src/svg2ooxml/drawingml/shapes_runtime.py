@@ -83,7 +83,11 @@ def render_rectangle(
 ) -> str:
     bounds = rect.bounds
     preset = "roundRect" if rect.is_rounded else "rect"
-    av_list = _round_rect_adjustment_block(bounds.width, bounds.height, rect.corner_radius) if rect.is_rounded else "        <a:avLst/>\n"
+    av_list = (
+        _round_rect_adjustment_block(bounds.width, bounds.height, rect.corner_radius)
+        if rect.is_rounded
+        else "        <a:avLst/>\n"
+    )
     return template.format(
         SHAPE_ID=shape_id,
         X_EMU=px_to_emu(bounds.x),
@@ -93,7 +97,9 @@ def render_rectangle(
         PRESET=preset,
         AV_LIST=av_list,
         FILL_XML=_format_block(paint_to_fill(rect.fill, shape_bbox=bounds), "        "),
-        STROKE_XML=_format_block(stroke_to_xml(rect.stroke, metadata=rect.metadata), "        "),
+        STROKE_XML=_format_block(
+            stroke_to_xml(rect.stroke, metadata=rect.metadata), "        "
+        ),
         HYPERLINK_XML=hyperlink_xml,
         EFFECTS_XML=_effect_block(rect.effects),
         DESCR_ATTR=_descr_attr(rect.metadata),
@@ -121,8 +127,12 @@ def render_circle(
         shape_id=shape_id,
         preset="ellipse",
         template=template,
-        fill_xml=_format_block(paint_to_fill(circle.fill, shape_bbox=bounds), "        "),
-        stroke_xml=_format_block(stroke_to_xml(circle.stroke, metadata=circle.metadata), "        "),
+        fill_xml=_format_block(
+            paint_to_fill(circle.fill, shape_bbox=bounds), "        "
+        ),
+        stroke_xml=_format_block(
+            stroke_to_xml(circle.stroke, metadata=circle.metadata), "        "
+        ),
         effects_xml=_effect_block(circle.effects),
         hyperlink_xml=hyperlink_xml,
         descr_attr=_descr_attr(circle.metadata),
@@ -149,8 +159,12 @@ def render_ellipse(
         shape_id=shape_id,
         preset="ellipse",
         template=template,
-        fill_xml=_format_block(paint_to_fill(ellipse.fill, shape_bbox=bounds), "        "),
-        stroke_xml=_format_block(stroke_to_xml(ellipse.stroke, metadata=ellipse.metadata), "        "),
+        fill_xml=_format_block(
+            paint_to_fill(ellipse.fill, shape_bbox=bounds), "        "
+        ),
+        stroke_xml=_format_block(
+            stroke_to_xml(ellipse.stroke, metadata=ellipse.metadata), "        "
+        ),
         effects_xml=_effect_block(ellipse.effects),
         hyperlink_xml=hyperlink_xml,
         descr_attr=_descr_attr(ellipse.metadata),
@@ -197,7 +211,9 @@ def render_path(
     hyperlink_xml: str = "",
 ) -> str:
     fill_xml = _format_block(paint_to_fill(path.fill, shape_bbox=path.bbox), "        ")
-    stroke_xml = _format_block(stroke_to_xml(path.stroke, metadata=path.metadata), "        ")
+    stroke_xml = _format_block(
+        stroke_to_xml(path.stroke, metadata=path.metadata), "        "
+    )
     policy_geom = policy_for(path.metadata, "geometry")
     shape_name = f"Path {shape_id}"
     if policy_geom.get("suggest_fallback") == FALLBACK_BITMAP:
@@ -262,7 +278,9 @@ def render_line(
         HEIGHT_EMU=geometry.height_emu,
         GEOMETRY_XML=_format_block(geometry.xml, "        "),
         FILL_XML=_format_block(paint_to_fill(None), "        "),
-        STROKE_XML=_format_block(stroke_to_xml(line.stroke, metadata=line.metadata), "        "),
+        STROKE_XML=_format_block(
+            stroke_to_xml(line.stroke, metadata=line.metadata), "        "
+        ),
         EFFECTS_XML=_effect_block(line.effects),
         HYPERLINK_XML=hyperlink_xml,
         DESCR_ATTR=_descr_attr(line.metadata),
@@ -344,6 +362,69 @@ def _resolve_alignment(anchor: TextAnchor, *, rtl: bool) -> str:
     }.get(anchor, "l")
 
 
+_LOW_PROFILE_WORDART_PRESETS = frozenset(
+    {
+        "textPlain",
+        "textArchUp",
+        "textArchDown",
+        "textWave1",
+        "textSlantUp",
+        "textSlantDown",
+    }
+)
+_MEDIUM_PROFILE_WORDART_PRESETS = frozenset(
+    {
+        "textCanUp",
+        "textCanDown",
+        "textInflate",
+        "textDeflate",
+        "textInflateTop",
+        "textInflateBottom",
+    }
+)
+
+
+def _normalize_wordart_bbox(frame: TextFrame, candidate: WordArtCandidate) -> Rect:
+    """Tighten WordArt height so it tracks textbox sizing more closely.
+
+    Text boxes intentionally reserve extra leading to avoid clipping. Native
+    WordArt uses the outer shape as its warp envelope, so reusing the same
+    height tends to make single-line WordArt appear vertically inflated.
+    """
+    bbox = frame.bbox
+    runs = frame.runs or []
+    if bbox.height <= 0.0 or not runs or frame.is_multiline:
+        return bbox
+
+    max_font_pt = max((run.font_size_pt for run in runs), default=0.0)
+    if max_font_pt <= 0.0:
+        return bbox
+
+    if candidate.preset in _LOW_PROFILE_WORDART_PRESETS:
+        profile_scale = 1.1
+    elif candidate.preset in _MEDIUM_PROFILE_WORDART_PRESETS:
+        profile_scale = 1.2
+    else:
+        return bbox
+
+    max_font_px = max_font_pt * (96.0 / 72.0)
+    stroke_padding_px = max((run.stroke_width_px or 0.0 for run in runs), default=0.0)
+    target_height = min(
+        bbox.height,
+        max_font_px * profile_scale + stroke_padding_px,
+    )
+    if target_height >= bbox.height * 0.98:
+        return bbox
+
+    center_y = bbox.y + (bbox.height / 2.0)
+    return Rect(
+        x=bbox.x,
+        y=center_y - (target_height / 2.0),
+        width=bbox.width,
+        height=target_height,
+    )
+
+
 def render_textframe(
     frame: TextFrame,
     shape_id: int,
@@ -407,7 +488,7 @@ def render_wordart(
     hyperlink_xml: str = "",
     register_run_navigation=None,
 ) -> str:
-    bbox = frame.bbox
+    bbox = _normalize_wordart_bbox(frame, candidate)
     rtl = _is_frame_rtl(frame)
     align = _resolve_alignment(frame.anchor, rtl=rtl)
 
@@ -427,7 +508,7 @@ def render_wordart(
 
     runs_xml = _resolve_runs_xml(frame, register_run_navigation)
 
-    body_extra = "        <a:normAutofit/>\n"
+    body_extra = ""
 
     if candidate.fallback_strategy and candidate.fallback_strategy != "vector_outline":
         logger.info(
@@ -462,7 +543,10 @@ def build_runs_xml(runs: Iterable[Run], register_navigation=None) -> str:
         text = (run.text or "").replace("\r\n", "\n").replace("\r", "\n")
         parts = text.split("\n") if text else [""]
         navigation_handler = None
-        if register_navigation is not None and getattr(run, "navigation", None) is not None:
+        if (
+            register_navigation is not None
+            and getattr(run, "navigation", None) is not None
+        ):
             navigation_registered = False
 
             def _navigation_factory(segment_text: str, _run=run):
@@ -543,7 +627,9 @@ def run_fragment(run: Run, text_segment: str, navigation_factory) -> str:
         # proportional to the number of spaces vs total characters.
         space_count = text_segment.count(" ")
         if space_count > 0 and len(text_segment) > 1:
-            extra_per_char = (float(word_spacing) * space_count) / (len(text_segment) - 1)
+            extra_per_char = (float(word_spacing) * space_count) / (
+                len(text_segment) - 1
+            )
             base = float(effective_spacing) if effective_spacing is not None else 0.0
             effective_spacing = base + extra_per_char
     if effective_spacing is not None:
@@ -563,8 +649,13 @@ def run_fragment(run: Run, text_segment: str, navigation_factory) -> str:
 
     rgb = (run.rgb or "000000").upper()
     font_family = html.escape(run.font_family or "Arial", quote=True)
-    east_asian = html.escape(getattr(run, "east_asian_font", "") or run.font_family or "Arial", quote=True)
-    complex_script = html.escape(getattr(run, "complex_script_font", "") or run.font_family or "Arial", quote=True)
+    east_asian = html.escape(
+        getattr(run, "east_asian_font", "") or run.font_family or "Arial", quote=True
+    )
+    complex_script = html.escape(
+        getattr(run, "complex_script_font", "") or run.font_family or "Arial",
+        quote=True,
+    )
 
     # Build a:r element with lxml
     r = a_elem("r")
@@ -683,7 +774,9 @@ def _render_polygonal_shape(
     shape_name = f"{'Polygon' if closed else 'Polyline'} {shape_id}"
 
     fill_xml = paint_to_fill(getattr(shape, "fill", None), shape_bbox=bounds)
-    stroke_xml = stroke_to_xml(getattr(shape, "stroke", None), metadata=getattr(shape, "metadata", None))
+    stroke_xml = stroke_to_xml(
+        getattr(shape, "stroke", None), metadata=getattr(shape, "metadata", None)
+    )
 
     return template.format(
         SHAPE_ID=shape_id,
@@ -750,14 +843,31 @@ def _merge_effect_lists(xml: str) -> str:
     _VALID_CHILDREN = {
         f"{{{_NS}}}{local}"
         for local in [
-            "blur", "fillOverlay", "glow", "innerShdw",
-            "outerShdw", "prstShdw", "reflection", "softEdge",
+            "blur",
+            "fillOverlay",
+            "glow",
+            "innerShdw",
+            "outerShdw",
+            "prstShdw",
+            "reflection",
+            "softEdge",
         ]
     }
-    _TAG_ORDER = {f"{{{_NS}}}{local}": i for i, local in enumerate(
-        ["blur", "fillOverlay", "glow", "innerShdw",
-         "outerShdw", "prstShdw", "reflection", "softEdge"]
-    )}
+    _TAG_ORDER = {
+        f"{{{_NS}}}{local}": i
+        for i, local in enumerate(
+            [
+                "blur",
+                "fillOverlay",
+                "glow",
+                "innerShdw",
+                "outerShdw",
+                "prstShdw",
+                "reflection",
+                "softEdge",
+            ]
+        )
+    }
 
     try:
         root = etree.fromstring(f'<root xmlns:a="{_NS}">{xml}</root>')
@@ -820,13 +930,17 @@ def _effect_to_drawingml(effect: Effect) -> str:
         alpha = effect.to_alpha_val()
         color = (effect.color or "000000").upper()
         color_elem = srgb_color(color, alpha=alpha)
-        shadow = outer_shadow(blur_rad, dist, direction, color_elem, algn="ctr", rotWithShape="0")
+        shadow = outer_shadow(
+            blur_rad, dist, direction, color_elem, algn="ctr", rotWithShape="0"
+        )
         return to_string(effect_list(shadow))
 
     if isinstance(effect, ReflectionEffect):
         blur_rad, dist = effect.to_emu()
         start_alpha, end_alpha = effect.to_alpha_vals()
-        return to_string(effect_list(reflection(blur_rad, dist, start_alpha, end_alpha)))
+        return to_string(
+            effect_list(reflection(blur_rad, dist, start_alpha, end_alpha))
+        )
 
     return ""
 

@@ -7,15 +7,29 @@ import html
 import logging
 import os
 from pathlib import Path
-from typing import Iterable
+from typing import Any, Iterable
 from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
+from tools.visual.browser_renderer import (
+    BrowserRenderError,
+    BrowserSvgRenderer,
+    default_browser_renderer,
+)
 from tools.visual.builder import PptxBuilder, VisualBuildError
-from tools.visual.renderer import LibreOfficeRenderer, VisualRendererError, default_renderer
+from tools.visual.diff import VisualDiffer
+from tools.visual.renderer import (
+    LibreOfficeRenderer,
+    VisualRendererError,
+    default_renderer,
+)
+from tools.visual.structure_compare import (
+    SubstructureComparison,
+    compare_substructures,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +53,7 @@ def create_app(
     output_root: Path | str | None = None,
     builder: PptxBuilder | None = None,
     renderer: LibreOfficeRenderer | None = None,
+    browser_renderer: BrowserSvgRenderer | None = None,
 ) -> FastAPI:
     """Return a configured FastAPI app for visual comparisons."""
 
@@ -56,6 +71,7 @@ def create_app(
     else:
         pptx_builder = builder
     pptx_renderer = renderer or default_renderer()
+    browser_svg_renderer = browser_renderer or default_browser_renderer()
     app = FastAPI(title="svg2ooxml Visual Diff", version="0.1")
 
     app.mount("/artefacts", StaticFiles(directory=str(output_root)), name="artefacts")
@@ -69,7 +85,14 @@ def create_app(
             for item in fixtures
         )
         renderer_status = (
-            "✅ LibreOffice renderer available" if pptx_renderer.available else "⚠️ LibreOffice renderer not detected"
+            "✅ LibreOffice renderer available"
+            if pptx_renderer.available
+            else "⚠️ LibreOffice renderer not detected"
+        )
+        browser_status = (
+            "✅ Playwright browser renderer available"
+            if browser_svg_renderer.available
+            else "⚠️ Playwright browser renderer not detected"
         )
 
         content = f"""
@@ -87,6 +110,7 @@ def create_app(
           <body>
             <h1>svg2ooxml Visual Diff</h1>
             <div class="status">{renderer_status}</div>
+            <div class="status">{browser_status}</div>
             <form action="/compare" method="get">
               <label for="path">Compare local SVG path:</label>
               <input id="path" name="path" type="text" placeholder="/path/to/graphic.svg" />
@@ -101,11 +125,18 @@ def create_app(
 
     @app.get("/compare", response_class=HTMLResponse)
     async def compare(
-        name: str | None = Query(default=None, description="Fixture filename under tests/visual/fixtures"),
-        path: str | None = Query(default=None, description="Absolute or relative path to an SVG file"),
+        name: str | None = Query(
+            default=None, description="Fixture filename under tests/visual/fixtures"
+        ),
+        path: str | None = Query(
+            default=None, description="Absolute or relative path to an SVG file"
+        ),
     ) -> HTMLResponse:
         if not name and not path:
-            raise HTTPException(status_code=400, detail="Provide either ?name=<fixture.svg> or ?path=/file.svg")
+            raise HTTPException(
+                status_code=400,
+                detail="Provide either ?name=<fixture.svg> or ?path=/file.svg",
+            )
 
         if name:
             svg_path = (fixture_root / name).resolve()
@@ -115,7 +146,9 @@ def create_app(
         if not svg_path.exists():
             raise HTTPException(status_code=404, detail=f"SVG not found: {svg_path}")
         if svg_path.suffix.lower() != ".svg":
-            raise HTTPException(status_code=400, detail="Only SVG sources are supported.")
+            raise HTTPException(
+                status_code=400, detail="Only SVG sources are supported."
+            )
 
         svg_text = svg_path.read_text(encoding="utf-8")
         svg_b64 = _encode_svg(svg_text)
@@ -130,6 +163,10 @@ def create_app(
         notes: list[str] = []
 
         trace_reports: dict[str, dict[str, Any]] = {}
+        structure_reports: dict[str, SubstructureComparison] = {}
+        browser_image: Path | None = None
+        browser_diff: Path | None = None
+        browser_metrics: tuple[float, float] | None = None
 
         for engine in engines:
             engine_dir = session_dir / engine
@@ -147,36 +184,124 @@ def create_app(
 
             try:
                 from svg2ooxml.core.tracing import ConversionTracer
+
                 tracer = ConversionTracer()
-                
-                build_result = builder.build_from_svg(svg_text, pptx_path, source_path=svg_path, tracer=tracer)
+
+                build_result = builder.build_from_svg(
+                    svg_text, pptx_path, source_path=svg_path, tracer=tracer
+                )
                 trace_reports[engine] = tracer.report().to_dict()
-                
+            except VisualBuildError as exc:
+                notes.append(
+                    f"{engine.capitalize()} build failed: {html.escape(str(exc))}"
+                )
+                renders[engine] = []
+                continue
+
+            try:
+                structure_reports[engine] = compare_substructures(
+                    svg_text,
+                    build_result.pptx_path,
+                    source_path=svg_path,
+                    filter_strategy=engine,
+                    geometry_mode=engine,
+                    trace_report=trace_reports.get(engine),
+                )
+            except ValueError as exc:
+                notes.append(
+                    f"{engine.capitalize()} structure compare failed: {html.escape(str(exc))}"
+                )
+
+            try:
                 rendered = pptx_renderer.render(build_result.pptx_path, render_dir)
                 renders[engine] = list(rendered.images)
-            except (VisualBuildError, VisualRendererError) as exc:
-                notes.append(f"{engine.capitalize()} failed: {html.escape(str(exc))}")
+            except VisualRendererError as exc:
+                notes.append(
+                    f"{engine.capitalize()} render failed: {html.escape(str(exc))}"
+                )
                 renders[engine] = []
 
-        def _get_tags(engine: str):
+        if browser_svg_renderer.available:
+            browser_dir = session_dir / "browser"
+            browser_dir.mkdir()
+            browser_path = browser_dir / "reference.png"
+            try:
+                browser_svg_renderer.render_svg(
+                    svg_text,
+                    browser_path,
+                    source_path=svg_path,
+                )
+                browser_image = browser_path
+
+                resvg_images = renders.get("resvg", [])
+                if resvg_images:
+                    from PIL import Image
+
+                    differ = VisualDiffer(
+                        threshold=float(
+                            os.getenv("SVG2OOXML_VISUAL_BROWSER_THRESHOLD", "0.90")
+                        )
+                    )
+                    browser_result = differ.compare(
+                        Image.open(browser_path),
+                        Image.open(resvg_images[0]),
+                        generate_diff=True,
+                    )
+                    browser_metrics = (
+                        browser_result.ssim_score,
+                        browser_result.pixel_diff_percentage,
+                    )
+                    if browser_result.diff_image is not None:
+                        browser_diff = browser_dir / "diff.png"
+                        browser_result.save_diff(browser_diff)
+                else:
+                    notes.append(
+                        "Browser reference rendered, but no PPTX slide image was available for diff."
+                    )
+            except (BrowserRenderError, RuntimeError, OSError) as exc:
+                notes.append(f"Browser reference failed: {html.escape(str(exc))}")
+        else:
+            notes.append("Playwright browser renderer is not available.")
+
+        def _get_tags(engine: str) -> str:
             images = renders.get(engine, [])
             if not images:
                 return f"<p>No {engine} slides.</p>"
             return "".join(
                 f'<figure><img class="media" src="/artefacts/{token}/{engine}/render/{img.name}" alt="{engine} {index}" />'
-                f'<figcaption>{engine.capitalize()} Slide {index}</figcaption></figure>'
+                f"<figcaption>{engine.capitalize()} Slide {index}</figcaption></figure>"
                 for index, img in enumerate(images, start=1)
             )
 
         resvg_tags = _get_tags("resvg")
+        browser_tags = (
+            f'<figure><img class="media" src="/artefacts/{token}/browser/{browser_image.name}" alt="Browser reference" />'
+            "<figcaption>Browser Reference</figcaption></figure>"
+            if browser_image is not None
+            else "<p>No browser reference available.</p>"
+        )
+        browser_diff_tags = (
+            f'<figure><img class="media diff-bg" src="/artefacts/{token}/browser/{browser_diff.name}" alt="Browser diff" />'
+            "<figcaption>Browser vs PPTX Diff</figcaption></figure>"
+            if browser_diff is not None
+            else "<p>No browser diff available.</p>"
+        )
+        browser_metrics_html = ""
+        if browser_metrics is not None:
+            ssim_score, pixel_diff = browser_metrics
+            browser_metrics_html = (
+                '<p data-testid="browser-metrics">'
+                f"SSIM: {ssim_score:.4f} | Pixel diff: {pixel_diff:.2f}%"
+                "</p>"
+            )
 
-        def _format_trace(engine: str):
+        def _format_trace(engine: str) -> str:
             report = trace_reports.get(engine)
             if not report:
                 return "<p>No trace available.</p>"
-            
+
             rows = []
-            
+
             # Stage Events
             for event in report.get("stage_events", []):
                 stage = event.get("stage", "")
@@ -184,8 +309,10 @@ def create_app(
                 subject = event.get("subject") or ""
                 metadata = event.get("metadata")
                 meta_str = html.escape(str(metadata)) if metadata else ""
-                rows.append(f"<tr><td>{stage}</td><td>{action}</td><td>{subject}</td><td><small>{meta_str}</small></td></tr>")
-            
+                rows.append(
+                    f"<tr><td>{stage}</td><td>{action}</td><td>{subject}</td><td><small>{meta_str}</small></td></tr>"
+                )
+
             # Geometry Decisions
             for event in report.get("geometry_events", []):
                 tag = event.get("tag", "")
@@ -193,7 +320,9 @@ def create_app(
                 element_id = event.get("element_id") or ""
                 metadata = event.get("metadata")
                 meta_str = html.escape(str(metadata)) if metadata else ""
-                rows.append(f"<tr><td>geometry</td><td>{decision} ({tag})</td><td>{element_id}</td><td><small>{meta_str}</small></td></tr>")
+                rows.append(
+                    f"<tr><td>geometry</td><td>{decision} ({tag})</td><td>{element_id}</td><td><small>{meta_str}</small></td></tr>"
+                )
 
             # Paint Decisions
             for event in report.get("paint_events", []):
@@ -202,23 +331,31 @@ def create_app(
                 paint_id = event.get("paint_id") or ""
                 metadata = event.get("metadata")
                 meta_str = html.escape(str(metadata)) if metadata else ""
-                rows.append(f"<tr><td>paint</td><td>{decision} ({ptype})</td><td>{paint_id}</td><td><small>{meta_str}</small></td></tr>")
+                rows.append(
+                    f"<tr><td>paint</td><td>{decision} ({ptype})</td><td>{paint_id}</td><td><small>{meta_str}</small></td></tr>"
+                )
 
             totals = []
             if report.get("resvg_metrics"):
-                metrics = ", ".join(f"{k}: {v}" for k, v in report["resvg_metrics"].items())
+                metrics = ", ".join(
+                    f"{k}: {v}" for k, v in report["resvg_metrics"].items()
+                )
                 totals.append(f"<li><strong>Resvg Metrics:</strong> {metrics}</li>")
-            
+
             geom_totals = report.get("geometry_totals", {})
             if geom_totals:
-                totals.append(f"<li><strong>Geometry:</strong> {', '.join(f'{k}={v}' for k, v in geom_totals.items())}</li>")
+                totals.append(
+                    f"<li><strong>Geometry:</strong> {', '.join(f'{k}={v}' for k, v in geom_totals.items())}</li>"
+                )
 
             paint_totals = report.get("paint_totals", {})
             if paint_totals:
-                totals.append(f"<li><strong>Paint:</strong> {', '.join(f'{k}={v}' for k, v in paint_totals.items())}</li>")
+                totals.append(
+                    f"<li><strong>Paint:</strong> {', '.join(f'{k}={v}' for k, v in paint_totals.items())}</li>"
+                )
 
             totals_html = f"<ul>{''.join(totals)}</ul>" if totals else ""
-            
+
             return f"""
                 <details>
                   <summary>{engine.capitalize()} Conversion Trace ({len(rows)} events)</summary>
@@ -230,7 +367,98 @@ def create_app(
                 </details>
             """
 
+        def _format_structure(engine: str) -> str:
+            report = structure_reports.get(engine)
+            if report is None:
+                return "<p>No structure comparison available.</p>"
+
+            summary_items = [
+                f"<li><strong>Source leaves:</strong> {report.source_count}</li>",
+                f"<li><strong>Slide leaves:</strong> {report.target_count}</li>",
+                f"<li><strong>Matched leaves:</strong> {report.matched_count}</li>",
+            ]
+            if report.count_delta:
+                summary_items.append(
+                    f"<li><strong>Count delta:</strong> {report.count_delta:+d}</li>"
+                )
+            if report.target_kind_totals:
+                summary_items.append(
+                    "<li><strong>Slide kinds:</strong> "
+                    + ", ".join(
+                        f"{kind}={count}"
+                        for kind, count in sorted(report.target_kind_totals.items())
+                    )
+                    + "</li>"
+                )
+            if report.geometry_decision_totals:
+                summary_items.append(
+                    "<li><strong>Geometry decisions:</strong> "
+                    + ", ".join(
+                        f"{kind}={count}"
+                        for kind, count in sorted(
+                            report.geometry_decision_totals.items()
+                        )
+                    )
+                    + "</li>"
+                )
+
+            raster_rows = []
+            for pair in report.rasterized_pairs()[:8]:
+                src_x, src_y, src_w, src_h = pair.source.bbox
+                raster_rows.append(
+                    "<tr>"
+                    f"<td>{html.escape(pair.source.element_id or '')}</td>"
+                    f"<td>{html.escape(pair.target.shape_tag)}</td>"
+                    f"<td>{html.escape(pair.geometry_decision or '')}</td>"
+                    f"<td>{src_x:.1f}, {src_y:.1f}, {src_w:.1f}, {src_h:.1f}</td>"
+                    "</tr>"
+                )
+
+            mismatch_rows = []
+            for pair in report.top_bbox_mismatches(limit=10):
+                mismatch_rows.append(
+                    "<tr>"
+                    f"<td>{html.escape(pair.source.element_id or '')}</td>"
+                    f"<td>{html.escape(pair.target.shape_tag)}</td>"
+                    f"<td>{pair.max_abs_delta:.2f}</td>"
+                    f"<td>{pair.dx:.2f}</td>"
+                    f"<td>{pair.dy:.2f}</td>"
+                    f"<td>{pair.dw:.2f}</td>"
+                    f"<td>{pair.dh:.2f}</td>"
+                    "</tr>"
+                )
+
+            raster_table = (
+                "<table data-testid='structure-rasterized' style='font-size: 0.8rem; border-collapse: collapse; width: 100%;'>"
+                "<thead><tr style='text-align: left; border-bottom: 1px solid #ccc;'><th>Element</th><th>Slide kind</th><th>Decision</th><th>Source bbox</th></tr></thead>"
+                f"<tbody>{''.join(raster_rows)}</tbody></table>"
+                if raster_rows
+                else "<p>No rasterized substructures detected.</p>"
+            )
+            mismatch_table = (
+                "<table data-testid='structure-mismatches' style='font-size: 0.8rem; border-collapse: collapse; width: 100%;'>"
+                "<thead><tr style='text-align: left; border-bottom: 1px solid #ccc;'><th>Element</th><th>Slide kind</th><th>Max Δ</th><th>Δx</th><th>Δy</th><th>Δw</th><th>Δh</th></tr></thead>"
+                f"<tbody>{''.join(mismatch_rows)}</tbody></table>"
+                if mismatch_rows
+                else "<p>No bbox mismatch data available.</p>"
+            )
+
+            return f"""
+                <div data-testid="structure-report">
+                  <ul>{"".join(summary_items)}</ul>
+                  <details open>
+                    <summary>Rasterized Substructures</summary>
+                    {raster_table}
+                  </details>
+                  <details>
+                    <summary>Largest BBox Deltas</summary>
+                    {mismatch_table}
+                  </details>
+                </div>
+            """
+
         resvg_trace = _format_trace("resvg")
+        resvg_structure = _format_structure("resvg")
         # Update the columns section to include traces
         columns_html = f"""
             <div class="columns" data-testid="compare-columns">
@@ -238,10 +466,23 @@ def create_app(
                 <h2>Source SVG</h2>
                 <img class="media" src="data:image/svg+xml;base64,{svg_b64}" alt="SVG source" />
               </section>
+              <section class="pane" data-testid="pane-browser">
+                <h2>Browser Reference</h2>
+                {browser_tags}
+                {browser_metrics_html}
+              </section>
               <section class="pane" data-testid="pane-resvg">
                 <h2>Resvg Render</h2>
                 {resvg_tags}
                 {resvg_trace}
+              </section>
+              <section class="pane" data-testid="pane-browser-diff">
+                <h2>Browser Diff</h2>
+                {browser_diff_tags}
+              </section>
+              <section class="pane" data-testid="pane-structure">
+                <h2>Structure Compare</h2>
+                {resvg_structure}
               </section>
             </div>
         """
@@ -278,6 +519,15 @@ def create_app(
               <a class="button" data-testid="download-resvg" href="/artefacts/{token}/resvg/presentation.pptx">
                 Download Resvg PPTX
               </a>
+              {
+                (
+                  f'<a class="button" data-testid="download-browser" href="/artefacts/{token}/browser/{browser_image.name}">'
+                  "Download Browser PNG"
+                  "</a>"
+                )
+                if browser_image is not None
+                else ""
+              }
             </div>
             {note_html}
             {columns_html}
