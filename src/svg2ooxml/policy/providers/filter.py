@@ -63,7 +63,7 @@ class FilterPolicyProvider(PolicyProvider):
         "balanced": {
             "strategy": "resvg",
             "allow_anisotropic_native": True,
-            "max_bitmap_stddev": 64.0,
+            "max_bitmap_stddev": 96.0,
             "max_shadow_distance": 80.0,
             "prefer_emf_blend_modes": False,
             "max_convolve_kernel": 7,
@@ -134,7 +134,9 @@ class FilterPolicyProvider(PolicyProvider):
     def supports(self, target: PolicyTarget) -> bool:
         return target.name == "filter"
 
-    def evaluate(self, target: PolicyTarget, options: Mapping[str, Any]) -> Mapping[str, Any]:
+    def evaluate(
+        self, target: PolicyTarget, options: Mapping[str, Any]
+    ) -> Mapping[str, Any]:
         quality = self._normalise_quality(options.get("quality"))
         base_defaults, base_primitives = self._extract_target_defaults(options, quality)
         payload = dict(base_defaults)
@@ -149,7 +151,10 @@ class FilterPolicyProvider(PolicyProvider):
         if primitive_payload:
             payload["primitives"] = primitive_payload
         fallback_defaults = self._FALLBACKS.get(quality, self._FALLBACKS["balanced"])
-        default_strategy = payload.get("strategy", base_defaults.get("strategy", fallback_defaults.get("strategy", "auto")))
+        default_strategy = payload.get(
+            "strategy",
+            base_defaults.get("strategy", fallback_defaults.get("strategy", "auto")),
+        )
         payload["strategy"] = self._resolve_strategy(options, str(default_strategy))
         return self._coerce_payload(payload, quality)
 
@@ -174,7 +179,9 @@ class FilterPolicyProvider(PolicyProvider):
                 return token
         return "balanced"
 
-    def _collect_overrides(self, options: Mapping[str, Any]) -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
+    def _collect_overrides(
+        self, options: Mapping[str, Any]
+    ) -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
         overrides: dict[str, Any] = {}
         primitive_overrides: dict[str, dict[str, Any]] = {}
         for key, raw in options.items():
@@ -209,38 +216,88 @@ class FilterPolicyProvider(PolicyProvider):
         explicit = options.get("filter_strategy")
         if isinstance(explicit, str):
             token = explicit.strip().lower()
-            if token in {"auto", "native", "native-if-neutral", "vector", "emf", "raster", "resvg", "resvg-only"}:
+            if token in {
+                "auto",
+                "native",
+                "native-if-neutral",
+                "vector",
+                "emf",
+                "raster",
+                "resvg",
+                "resvg-only",
+            }:
                 return token
         overrides = options.get("filter.strategy")
         if isinstance(overrides, str):
             token = overrides.strip().lower()
-            if token in {"auto", "native", "native-if-neutral", "vector", "emf", "raster", "resvg", "resvg-only"}:
+            if token in {
+                "auto",
+                "native",
+                "native-if-neutral",
+                "vector",
+                "emf",
+                "raster",
+                "resvg",
+                "resvg-only",
+            }:
                 return token
         return default or "auto"
 
-    def _coerce_payload(self, payload: Mapping[str, Any], quality: str) -> dict[str, Any]:
+    def _coerce_payload(
+        self, payload: Mapping[str, Any], quality: str
+    ) -> dict[str, Any]:
         strategy = str(payload.get("strategy", "auto")).strip().lower()
         result: dict[str, Any] = {"quality": quality, "strategy": strategy}
-        result["allow_anisotropic_native"] = self._coerce_bool(payload.get("allow_anisotropic_native"))
-        result["max_bitmap_stddev"] = self._coerce_float(payload.get("max_bitmap_stddev"))
-        result["max_shadow_distance"] = self._coerce_float(payload.get("max_shadow_distance"))
-        result["prefer_emf_blend_modes"] = self._coerce_bool(payload.get("prefer_emf_blend_modes"))
-        result["max_convolve_kernel"] = self._coerce_int(payload.get("max_convolve_kernel"))
+        result["allow_anisotropic_native"] = self._coerce_bool(
+            payload.get("allow_anisotropic_native")
+        )
+        result["max_bitmap_stddev"] = self._coerce_float(
+            payload.get("max_bitmap_stddev")
+        )
+        result["max_shadow_distance"] = self._coerce_float(
+            payload.get("max_shadow_distance")
+        )
+        result["prefer_emf_blend_modes"] = self._coerce_bool(
+            payload.get("prefer_emf_blend_modes")
+        )
+        result["max_convolve_kernel"] = self._coerce_int(
+            payload.get("max_convolve_kernel")
+        )
         result["max_glow_radius"] = self._coerce_float(payload.get("max_glow_radius"))
         result["max_glow_alpha"] = self._coerce_float(payload.get("max_glow_alpha"))
-        result["preferred_glow_strategy"] = self._coerce_glow_strategy(payload.get("preferred_glow_strategy"))
-        result["blur_strategy"] = self._coerce_blur_strategy(payload.get("blur_strategy"))
-        result["max_filter_primitives"] = self._coerce_int(payload.get("max_filter_primitives"))
-        result["max_filter_complexity"] = self._coerce_int(payload.get("max_filter_complexity"))
+        result["preferred_glow_strategy"] = self._coerce_glow_strategy(
+            payload.get("preferred_glow_strategy")
+        )
+        result["blur_strategy"] = self._coerce_blur_strategy(
+            payload.get("blur_strategy")
+        )
+        result["max_filter_primitives"] = self._coerce_int(
+            payload.get("max_filter_primitives")
+        )
+        result["max_filter_complexity"] = self._coerce_int(
+            payload.get("max_filter_complexity")
+        )
         result["native_blur"] = self._coerce_bool(payload.get("native_blur"))
         result["native_shadow"] = self._coerce_bool(payload.get("native_shadow"))
-        result["approximation_allowed"] = self._coerce_bool(payload.get("approximation_allowed"))
-        result["prefer_rasterization"] = self._coerce_bool(payload.get("prefer_rasterization"))
-        result["enable_effect_dag"] = self._coerce_bool(payload.get("enable_effect_dag"))
-        result["enable_native_color_transforms"] = self._coerce_bool(payload.get("enable_native_color_transforms"))
-        result["enable_blip_effect_enrichment"] = self._coerce_bool(payload.get("enable_blip_effect_enrichment"))
+        result["approximation_allowed"] = self._coerce_bool(
+            payload.get("approximation_allowed")
+        )
+        result["prefer_rasterization"] = self._coerce_bool(
+            payload.get("prefer_rasterization")
+        )
+        result["enable_effect_dag"] = self._coerce_bool(
+            payload.get("enable_effect_dag")
+        )
+        result["enable_native_color_transforms"] = self._coerce_bool(
+            payload.get("enable_native_color_transforms")
+        )
+        result["enable_blip_effect_enrichment"] = self._coerce_bool(
+            payload.get("enable_blip_effect_enrichment")
+        )
         result["enable_telemetry"] = self._coerce_bool(payload.get("enable_telemetry"))
-        result["telemetry_level"] = self._coerce_telemetry_level(payload.get("telemetry_level"))
+        result["telemetry_level"] = self._coerce_telemetry_level(
+            payload.get("telemetry_level")
+        )
         primitives = self._coerce_primitives(payload.get("primitives"))
         if primitives:
             result["primitives"] = primitives
@@ -333,7 +390,9 @@ class FilterPolicyProvider(PolicyProvider):
         return merged
 
     @staticmethod
-    def _extract_direct_primitive_overrides(options: Mapping[str, Any]) -> dict[str, Mapping[str, Any]]:
+    def _extract_direct_primitive_overrides(
+        options: Mapping[str, Any],
+    ) -> dict[str, Mapping[str, Any]]:
         candidate = options.get("filter_primitives")
         if not isinstance(candidate, Mapping):
             return {}
@@ -347,7 +406,9 @@ class FilterPolicyProvider(PolicyProvider):
             if "allow_resvg" in config:
                 entry["allow_resvg"] = self._coerce_bool(config.get("allow_resvg"))
             if "allow_promotion" in config:
-                entry["allow_promotion"] = self._coerce_bool(config.get("allow_promotion"))
+                entry["allow_promotion"] = self._coerce_bool(
+                    config.get("allow_promotion")
+                )
             if "max_pixels" in config:
                 max_pixels = self._coerce_int(config.get("max_pixels"))
                 if max_pixels is not None and max_pixels > 0:

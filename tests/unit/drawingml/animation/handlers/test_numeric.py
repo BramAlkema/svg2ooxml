@@ -188,8 +188,12 @@ class TestBuild:
         assert tavs[0].get("tm") == "0"
         assert tavs[1].get("tm") == "100000"
 
-    def test_simple_non_numeric_values_use_strval(self, handler: NumericAnimationHandler):
-        anim = make_numeric_animation(target_attribute="visibility", values=["visible", "hidden"])
+    def test_simple_non_numeric_values_use_strval(
+        self, handler: NumericAnimationHandler
+    ):
+        anim = make_numeric_animation(
+            target_attribute="visibility", values=["visible", "hidden"]
+        )
         par = handler.build(anim, par_id=4, behavior_id=5)
         flt_vals = par.findall(f".//{{{NS_P}}}fltVal")
         str_vals = par.findall(f".//{{{NS_P}}}strVal")
@@ -219,6 +223,43 @@ class TestBuild:
         ctn = par.find(f"{{{NS_P}}}cTn")
         assert ctn.get("presetClass") == "emph"
         assert ctn.get("presetID") == "32"
+
+    def test_simple_width_animation_uses_from_to_scale(
+        self, handler: NumericAnimationHandler
+    ):
+        anim = make_numeric_animation(target_attribute="width", values=["10", "20"])
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        anim_scale = par.find(f".//{{{NS_P}}}animScale")
+        assert anim_scale is not None
+        assert anim_scale.find(f"{{{NS_P}}}from").get("x") == "100000"
+        assert anim_scale.find(f"{{{NS_P}}}to").get("x") == "200000"
+
+    def test_multi_keyframe_width_animation_uses_generic_anim(
+        self, handler: NumericAnimationHandler
+    ):
+        anim = make_numeric_animation(
+            target_attribute="width",
+            values=["10", "40", "10"],
+        )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        assert par.find(f".//{{{NS_P}}}animScale") is None
+        anim_elem = par.find(f".//{{{NS_P}}}anim")
+        assert anim_elem is not None
+        attr_name = par.find(f".//{{{NS_P}}}attrName")
+        assert attr_name.text == "ppt_w"
+        tavs = par.findall(f".//{{{NS_P}}}tav")
+        assert [tav.get("tm") for tav in tavs] == ["0", "50000", "100000"]
+
+    def test_position_animation_uses_relative_delta_path(
+        self, handler: NumericAnimationHandler
+    ):
+        anim = make_numeric_animation(target_attribute="x", values=["20", "30"])
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        anim_motion = par.find(f".//{{{NS_P}}}animMotion")
+        assert anim_motion is not None
+        path = anim_motion.get("path")
+        assert path.startswith("M 0 0 L ")
+        assert "0.010417" in path
 
     def test_empty_values_rejected_by_ir(self):
         """AnimationDefinition validates values is non-empty at construction."""
@@ -255,9 +296,17 @@ class TestMultiKeyframe:
         )
         par = handler.build(anim, par_id=4, behavior_id=5)
         tavs = par.findall(f".//{{{NS_P}}}tav")
-        assert [tav.get("tm") for tav in tavs] == ["0", "40000", "40000", "100000", "100000"]
+        assert [tav.get("tm") for tav in tavs] == [
+            "0",
+            "40000",
+            "40000",
+            "100000",
+            "100000",
+        ]
 
-    def test_paced_calc_mode_overrides_explicit_key_times(self, handler: NumericAnimationHandler):
+    def test_paced_calc_mode_overrides_explicit_key_times(
+        self, handler: NumericAnimationHandler
+    ):
         anim = make_numeric_animation(
             values=["0", "10", "40"],
             key_times=[0.0, 0.5, 1.0],

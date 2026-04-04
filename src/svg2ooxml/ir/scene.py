@@ -7,6 +7,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Literal
 
+from svg2ooxml.common.geometry.paths import compute_segments_bbox
+
 from .effects import Effect
 from .geometry import Point, Rect, SegmentType
 from .numpy_compat import np
@@ -127,18 +129,7 @@ class Path:
 
     @property
     def bbox(self) -> Rect:
-        xs, ys = [], []
-        for segment in self.segments:
-            for attr in ("start", "end", "control1", "control2"):
-                point = getattr(segment, attr, None)
-                if point is not None:
-                    xs.append(point.x)
-                    ys.append(point.y)
-        if not xs or not ys:
-            return Rect(0, 0, 0, 0)
-        min_x, max_x = min(xs), max(xs)
-        min_y, max_y = min(ys), max(ys)
-        return Rect(min_x, min_y, max_x - min_x, max_y - min_y)
+        return compute_segments_bbox(self.segments)
 
     @property
     def is_closed(self) -> bool:
@@ -180,7 +171,16 @@ class Path:
 @dataclass(frozen=True)
 class Group:
     children: list[
-        Path | Circle | Ellipse | Rectangle | Line | Polyline | Polygon | TextFrame | Group | Image
+        Path
+        | Circle
+        | Ellipse
+        | Rectangle
+        | Line
+        | Polyline
+        | Polygon
+        | TextFrame
+        | Group
+        | Image
     ]
     clip: ClipRef | None = None
     mask: MaskRef | None = None

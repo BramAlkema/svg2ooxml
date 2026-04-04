@@ -40,8 +40,8 @@ class LinearGradientPaint:
     transform: np.ndarray | None = None
     gradient_id: str | None = None
     # Phase 4: Units & Spread tracking
-    gradient_units: str | None = None           # "userSpaceOnUse" or "objectBoundingBox"
-    spread_method: str | None = None            # "pad", "reflect", or "repeat"
+    gradient_units: str | None = None  # "userSpaceOnUse" or "objectBoundingBox"
+    spread_method: str | None = None  # "pad", "reflect", or "repeat"
 
     def __post_init__(self) -> None:
         if len(self.stops) < 2:
@@ -57,14 +57,18 @@ class RadialGradientPaint:
     transform: np.ndarray | None = None
     gradient_id: str | None = None
     # Phase 1: Transform detection & telemetry fields
-    gradient_transform: Any | None = None        # Original gradient transform (before baking)
-    original_transform: Any | None = None        # Shape transform (for telemetry)
-    had_transform_flag: bool = False                # Was any transform applied?
-    transform_class: Any | None = None            # SVD classification (TransformClass from adapter)
-    policy_decision: str | None = None              # "vector_ok" / "vector_warn_mild_anisotropy" / "rasterize_nonuniform"
+    gradient_transform: Any | None = None  # Original gradient transform (before baking)
+    original_transform: Any | None = None  # Shape transform (for telemetry)
+    had_transform_flag: bool = False  # Was any transform applied?
+    transform_class: Any | None = (
+        None  # SVD classification (TransformClass from adapter)
+    )
+    policy_decision: str | None = (
+        None  # "vector_ok" / "vector_warn_mild_anisotropy" / "rasterize_nonuniform"
+    )
     # Phase 4: Units & Spread tracking
-    gradient_units: str | None = None               # "userSpaceOnUse" or "objectBoundingBox"
-    spread_method: str | None = None                # "pad", "reflect", or "repeat"
+    gradient_units: str | None = None  # "userSpaceOnUse" or "objectBoundingBox"
+    spread_method: str | None = None  # "pad", "reflect", or "repeat"
 
 
 @dataclass(frozen=True)
@@ -74,6 +78,7 @@ class PatternPaint:
     preset: str | None = None
     foreground: str | None = None
     background: str | None = None
+    background_opacity: float = 1.0
     foreground_theme_color: str | None = None
     background_theme_color: str | None = None
     # Rasterized tile image for non-preset patterns
@@ -91,7 +96,14 @@ class GradientPaintRef:
     transform: np.ndarray | None = None
 
 
-Paint = SolidPaint | LinearGradientPaint | RadialGradientPaint | PatternPaint | GradientPaintRef | None
+Paint = (
+    SolidPaint
+    | LinearGradientPaint
+    | RadialGradientPaint
+    | PatternPaint
+    | GradientPaintRef
+    | None
+)
 
 
 class StrokeJoin(Enum):

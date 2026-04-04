@@ -211,7 +211,7 @@ def test_animate_motion_path_emits_point_list() -> None:
 
     assert "<p:animMotion" in render_result.slide_xml
     assert 'path="M' in render_result.slide_xml
-    assert 'ptsTypes=' in render_result.slide_xml
+    assert "ptsTypes=" in render_result.slide_xml
 
 
 def test_motion_rotate_auto_emits_fidelity_downgrade_trace() -> None:
@@ -298,7 +298,9 @@ def test_begin_click_with_offset_emits_onclick_condition_with_delay() -> None:
     assert 'delay="500"' in render_result.slide_xml
 
 
-def test_begin_click_with_offset_and_spaces_emits_onclick_condition_with_delay() -> None:
+def test_begin_click_with_offset_and_spaces_emits_onclick_condition_with_delay() -> (
+    None
+):
     svg = """
     <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">
       <rect id="rect1" width="10" height="10" fill="#000">
@@ -348,6 +350,21 @@ def test_numeric_attribute_animation_emits_anim() -> None:
     assert "<p:animMotion" in render_result.slide_xml
 
 
+def test_position_animation_uses_relative_delta_from_nonzero_start() -> None:
+    svg = """
+    <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">
+      <rect id="rect1" width="10" height="10" fill="#000">
+        <animate attributeName="x" from="20" to="30" dur="1s" begin="0s"/>
+      </rect>
+    </svg>
+    """
+
+    render_result, _, _ = _render(svg)
+
+    assert '<p:animMotion origin="layout" path="M 0 0 L ' in render_result.slide_xml
+    assert "0.010417" in render_result.slide_xml
+
+
 def test_rotate_attribute_animation_uses_ppt_angle() -> None:
     svg = """
     <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">
@@ -360,9 +377,10 @@ def test_rotate_attribute_animation_uses_ppt_angle() -> None:
     render_result, _, _ = _render(svg)
 
     assert "<p:anim>" in render_result.slide_xml
-    assert '<p:attrName>ppt_angle</p:attrName>' in render_result.slide_xml
+    assert "<p:attrName>ppt_angle</p:attrName>" in render_result.slide_xml
     assert '<p:fltVal val="0"/>' in render_result.slide_xml
     assert '<p:fltVal val="5400000"/>' in render_result.slide_xml
+
 
 def test_width_animation_uses_ppt_width_attribute() -> None:
     svg = """
@@ -379,6 +397,39 @@ def test_width_animation_uses_ppt_width_attribute() -> None:
     assert "<p:animScale" in render_result.slide_xml
 
 
+def test_multi_keyframe_width_animation_uses_tav_width_animation() -> None:
+    svg = """
+    <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">
+      <rect id="rect1" width="10" height="10" fill="#000">
+        <animate attributeName="width" values="10;40;10" dur="1s" begin="0s"/>
+      </rect>
+    </svg>
+    """
+
+    render_result, _, _ = _render(svg)
+
+    assert "<p:animScale" not in render_result.slide_xml
+    assert "<p:anim>" in render_result.slide_xml
+    assert "<p:attrName>ppt_w</p:attrName>" in render_result.slide_xml
+    assert render_result.slide_xml.count("<p:tav ") == 3
+
+
+def test_multi_keyframe_opacity_animation_uses_property_anim() -> None:
+    svg = """
+    <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">
+      <rect id="rect1" width="10" height="10" fill="#000">
+        <animate attributeName="opacity" values="0.1;1;0.1" dur="1s" begin="0s"/>
+      </rect>
+    </svg>
+    """
+
+    render_result, _, _ = _render(svg)
+
+    assert "<p:animEffect" not in render_result.slide_xml
+    assert "<p:anim>" in render_result.slide_xml
+    assert "<p:attrName>style.opacity</p:attrName>" in render_result.slide_xml
+
+
 def test_stroke_width_animation_maps_to_ln_w() -> None:
     svg = """
     <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">
@@ -391,7 +442,7 @@ def test_stroke_width_animation_maps_to_ln_w() -> None:
     render_result, _, _ = _render(svg)
 
     assert "<p:anim>" in render_result.slide_xml
-    assert '<p:attrName>ln_w</p:attrName>' in render_result.slide_xml
+    assert "<p:attrName>ln_w</p:attrName>" in render_result.slide_xml
     assert '<p:fltVal val="9525"/>' in render_result.slide_xml
     assert '<p:fltVal val="19050"/>' in render_result.slide_xml
 
@@ -424,7 +475,7 @@ def test_set_animation_emits_set_element() -> None:
     render_result, _, _ = _render(svg)
 
     assert "<p:set>" in render_result.slide_xml
-    assert '<p:attrName>visibility</p:attrName>' in render_result.slide_xml
+    assert "<p:attrName>visibility</p:attrName>" in render_result.slide_xml
     assert '<p:strVal val="hidden"/>' in render_result.slide_xml
 
 
@@ -440,7 +491,7 @@ def test_set_animation_normalizes_numeric_value() -> None:
     render_result, _, _ = _render(svg)
 
     assert "<p:set>" in render_result.slide_xml
-    assert '<p:attrName>ppt_x</p:attrName>' in render_result.slide_xml
+    assert "<p:attrName>ppt_x</p:attrName>" in render_result.slide_xml
     assert '<p:strVal val="95250"/>' in render_result.slide_xml
 
 
@@ -457,7 +508,7 @@ def test_numeric_animation_tav_list_emitted() -> None:
 
     assert render_result.slide_xml.count('tm="') >= 3
     assert 'tm="0"' in render_result.slide_xml
-    assert 'tm="50000"' in render_result.slide_xml    # 0.5 * 100000
+    assert 'tm="50000"' in render_result.slide_xml  # 0.5 * 100000
     assert 'tm="100000"' in render_result.slide_xml
     assert 'val="0"' in render_result.slide_xml
     assert 'val="95250"' in render_result.slide_xml
@@ -495,7 +546,7 @@ def test_numeric_paced_calc_mode_uses_distance_weighted_key_times() -> None:
     assert 'tm="50000"' not in render_result.slide_xml
 
 
-def test_color_animation_uses_from_to_without_tav_list() -> None:
+def test_color_animation_segments_multi_keyframe_values() -> None:
     svg = """
     <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">
       <rect id="rect1" width="10" height="10" fill="#000">
@@ -508,13 +559,15 @@ def test_color_animation_uses_from_to_without_tav_list() -> None:
 
     assert "<p:animClr" in render_result.slide_xml
     assert "<p:tavLst" not in render_result.slide_xml
-    assert "<p:from" in render_result.slide_xml
-    assert "<p:to" in render_result.slide_xml
+    assert render_result.slide_xml.count("<p:animClr") == 2
     assert 'a:srgbClr val="FF0000"' in render_result.slide_xml
+    assert 'a:srgbClr val="00FF00"' in render_result.slide_xml
     assert 'a:srgbClr val="0000FF"' in render_result.slide_xml
+    assert 'dur="500"' in render_result.slide_xml
+    assert 'dur="1500"' in render_result.slide_xml
 
 
-def test_color_discrete_calc_mode_still_omits_tav_list() -> None:
+def test_color_discrete_calc_mode_emits_set_steps() -> None:
     svg = """
     <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">
       <rect id="rect1" width="10" height="10" fill="#000">
@@ -525,8 +578,10 @@ def test_color_discrete_calc_mode_still_omits_tav_list() -> None:
 
     render_result, _, _ = _render(svg)
 
-    assert "<p:animClr" in render_result.slide_xml
     assert "<p:tavLst" not in render_result.slide_xml
+    assert "<p:animClr" not in render_result.slide_xml
+    assert render_result.slide_xml.count("<p:set>") == 3
+    assert render_result.slide_xml.count("<p:clrVal>") == 3
 
 
 def test_motion_path_handles_relative_and_curves() -> None:

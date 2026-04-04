@@ -42,11 +42,16 @@ def _load_filter_pipeline():
     try:
         from svg2ooxml.filters.planner import FilterPlanner
         from svg2ooxml.filters.renderer import FilterRenderer as FilterPipelineRenderer
+
         return FilterPlanner, FilterPipelineRenderer, None
     except Exception as full_error:  # pragma: no cover - optional dependency missing
         try:
-            from svg2ooxml.filters.lightweight import LightweightFilterPlanner as FilterPlanner
-            from svg2ooxml.filters.lightweight import LightweightFilterRenderer as FilterPipelineRenderer
+            from svg2ooxml.filters.lightweight import (
+                LightweightFilterPlanner as FilterPlanner,
+            )
+            from svg2ooxml.filters.lightweight import (
+                LightweightFilterRenderer as FilterPipelineRenderer,
+            )
         except Exception as fallback_error:  # pragma: no cover - defensive
             return None, None, fallback_error
         return FilterPlanner, FilterPipelineRenderer, full_error
@@ -56,7 +61,6 @@ def _pipeline_warning_message(error: Exception | None) -> str:
     if error is None:
         return "optional filter pipeline dependencies are missing"
     return f"{type(error).__name__}: {error}"
-
 
 
 class FilterService:
@@ -141,7 +145,9 @@ class FilterService:
             key = descriptor.filter_id or filter_id
             self._descriptors[key] = descriptor
 
-    def register_filter(self, filter_id: str, definition: ResolvedFilter | etree._Element) -> None:
+    def register_filter(
+        self, filter_id: str, definition: ResolvedFilter | etree._Element
+    ) -> None:
         """Register a single filter definition."""
         if not filter_id:
             raise ValueError("filter id must be non-empty")
@@ -171,7 +177,9 @@ class FilterService:
     # Conversion hooks (stubs)                                           #
     # ------------------------------------------------------------------ #
 
-    def get_filter_content(self, filter_id: str, *, context: Any | None = None) -> str | None:
+    def get_filter_content(
+        self, filter_id: str, *, context: Any | None = None
+    ) -> str | None:
         """Return DrawingML content for the requested filter reference."""
         descriptor = self.get(filter_id)
         if descriptor is None:
@@ -180,22 +188,32 @@ class FilterService:
         try:
             return etree.tostring(element, encoding="unicode")
         except Exception:  # pragma: no cover - defensive
-            self._logger.debug("Failed to serialise filter %s", filter_id, exc_info=True)
+            self._logger.debug(
+                "Failed to serialise filter %s", filter_id, exc_info=True
+            )
             return None
 
-    def resolve_effects(self, filter_ref: str, *, context: Any | None = None) -> list[FilterEffectResult]:
+    def resolve_effects(
+        self, filter_ref: str, *, context: Any | None = None
+    ) -> list[FilterEffectResult]:
         """Resolve a filter reference into IR effect objects."""
         if not self._ensure_pipeline():
-            return self._finalize_results(filter_ref, self._disabled_effects(filter_ref), context)
+            return self._finalize_results(
+                filter_ref, self._disabled_effects(filter_ref), context
+            )
 
         descriptor = self.get(filter_ref)
         if descriptor is None:
-            self._logger.debug("Filter %s is not defined; skipping effect resolution", filter_ref)
+            self._logger.debug(
+                "Filter %s is not defined; skipping effect resolution", filter_ref
+            )
             return self._finalize_results(filter_ref, [], context)
 
         filter_element = self._materialize_filter(filter_ref, descriptor)
         filter_context = self._build_context(filter_element, context)
-        descriptor_payload, bounds_payload = self._descriptor_payload(filter_context, descriptor)
+        descriptor_payload, bounds_payload = self._descriptor_payload(
+            filter_context, descriptor
+        )
         results: list[FilterEffectResult] = []
         emf_sources: list[FilterEffectResult] = []
         raster_results_cache: list[FilterEffectResult] = []
@@ -208,22 +226,32 @@ class FilterService:
 
         resvg_result: FilterEffectResult | None = None
         if resvg_enabled:
-            resvg_result = self._render_resvg_filter(descriptor, filter_element, filter_context, filter_ref)
+            resvg_result = self._render_resvg_filter(
+                descriptor, filter_element, filter_context, filter_ref
+            )
             if resvg_result is not None and resvg_only:
-                return self._finalize_results(filter_ref, [resvg_result], filter_context)
+                return self._finalize_results(
+                    filter_ref, [resvg_result], filter_context
+                )
 
         if strategy in {"auto", "native", "resvg", "resvg-only"}:
             native_results = self._render_native(filter_element, filter_context)
             if native_results:
                 results.extend(native_results)
-                emf_sources.extend(result for result in native_results if result.fallback == "emf")
+                emf_sources.extend(
+                    result for result in native_results if result.fallback == "emf"
+                )
                 if strategy == "native" and not resvg_preferred:
                     return self._finalize_results(filter_ref, results, filter_context)
                 if strategy == "auto" and not resvg_preferred:
                     if all(result.fallback is None for result in native_results):
-                        return self._finalize_results(filter_ref, results, filter_context)
+                        return self._finalize_results(
+                            filter_ref, results, filter_context
+                        )
 
-        skip_fallbacks = resvg_result is not None and not resvg_preferred and not results
+        skip_fallbacks = (
+            resvg_result is not None and not resvg_preferred and not results
+        )
 
         if not skip_fallbacks:
             if strategy in {"vector", "emf", "auto"}:
@@ -237,7 +265,9 @@ class FilterService:
                     else:
                         results = list(computed_vector)
                     if strategy in {"vector", "emf"} and not resvg_preferred:
-                        return self._finalize_results(filter_ref, results, filter_context)
+                        return self._finalize_results(
+                            filter_ref, results, filter_context
+                        )
 
             descriptor_results = self._descriptor_fallback(
                 descriptor_payload,
@@ -251,7 +281,9 @@ class FilterService:
                     results = self._attach_emf_metadata(results, emf_sources)
 
             if strategy in {"auto", "raster"}:
-                raster_results = self._render_raster(filter_element, filter_context, filter_ref, strategy=strategy)
+                raster_results = self._render_raster(
+                    filter_element, filter_context, filter_ref, strategy=strategy
+                )
                 if raster_results:
                     raster_results_cache = list(raster_results)
                     if descriptor_results:
@@ -260,15 +292,24 @@ class FilterService:
                         results.extend(raster_results)
 
         if resvg_result is not None and resvg_preferred:
+            native_results = [result for result in results if result.fallback is None]
+            if native_results:
+                return self._finalize_results(
+                    filter_ref, native_results, filter_context
+                )
             preferred_results = [resvg_result]
             if emf_sources:
-                preferred_results = self._attach_emf_metadata(preferred_results, emf_sources)
+                preferred_results = self._attach_emf_metadata(
+                    preferred_results, emf_sources
+                )
             if raster_results_cache:
                 self._attach_raster_metadata(preferred_results, raster_results_cache)
             return self._finalize_results(filter_ref, preferred_results, filter_context)
         if resvg_result is not None and resvg_enabled:
             if not results:
-                return self._finalize_results(filter_ref, [resvg_result], filter_context)
+                return self._finalize_results(
+                    filter_ref, [resvg_result], filter_context
+                )
             results.append(resvg_result)
         return self._finalize_results(filter_ref, results, filter_context)
 
@@ -325,7 +366,9 @@ class FilterService:
     ) -> list[FilterEffectResult]:
         if self._renderer is None:
             return []
-        return self._renderer.render_raster(element, context, filter_id, strategy=strategy)
+        return self._renderer.render_raster(
+            element, context, filter_id, strategy=strategy
+        )
 
     def _render_resvg_filter(
         self,
@@ -368,12 +411,18 @@ class FilterService:
             self._logger.debug("Filter registry initialisation failed", exc_info=True)
             return FilterRegistry()
 
-    def _build_context(self, filter_element: etree._Element, extra: Any | None) -> FilterContext:
+    def _build_context(
+        self, filter_element: etree._Element, extra: Any | None
+    ) -> FilterContext:
         options: dict[str, Any] = {}
         if isinstance(extra, dict):
             options.update(extra)
         services = self._services
-        if "source_path" not in options and services is not None and hasattr(services, "resolve"):
+        if (
+            "source_path" not in options
+            and services is not None
+            and hasattr(services, "resolve")
+        ):
             source_path = services.resolve("source_path")
             if isinstance(source_path, str) and source_path:
                 options["source_path"] = source_path
@@ -417,7 +466,9 @@ class FilterService:
         elif self._palette_resolver is not None and self._renderer is not None:
             self._renderer.set_palette_resolver(self._palette_resolver)
 
-    def _extract_palette_resolver(self, services: ConversionServices) -> PaletteResolver | None:
+    def _extract_palette_resolver(
+        self, services: ConversionServices
+    ) -> PaletteResolver | None:
         candidate_names = (
             "filter_palette_resolver",
             "palette_resolver",
@@ -476,7 +527,9 @@ class FilterService:
                 return cast(PaletteResolver, method)
         return None
 
-    def _resolve_strategy(self, context: FilterContext, descriptor: ResolvedFilter | None) -> str:
+    def _resolve_strategy(
+        self, context: FilterContext, descriptor: ResolvedFilter | None
+    ) -> str:
         policy_options = context.policy
 
         # Prioritize policy-defined strategy if present
@@ -485,7 +538,9 @@ class FilterService:
             normalized = policy_strategy.strip().lower()
             if normalized in ALLOWED_STRATEGIES:
                 if normalized == "native-if-neutral":
-                    if self._planner and self._planner.descriptor_is_neutral(descriptor):
+                    if self._planner and self._planner.descriptor_is_neutral(
+                        descriptor
+                    ):
                         return "native"
                     return "emf"
                 return normalized
@@ -517,7 +572,9 @@ class FilterService:
             return
         self._renderer.attach_raster_metadata(existing_results, raster_results)
 
-    def _materialize_filter(self, filter_id: str, descriptor: ResolvedFilter) -> etree._Element:
+    def _materialize_filter(
+        self, filter_id: str, descriptor: ResolvedFilter
+    ) -> etree._Element:
         cached = self._materialized_filters.get(filter_id)
         if cached is not None:
             return cached
@@ -535,7 +592,11 @@ class FilterService:
         elif isinstance(definition, etree._Element):
             descriptor = resolve_filter_element(definition)
         else:
-            self._logger.debug("Unsupported filter definition type for %s: %r", filter_id, type(definition))
+            self._logger.debug(
+                "Unsupported filter definition type for %s: %r",
+                filter_id,
+                type(definition),
+            )
             return None
         if not descriptor.filter_id:
             descriptor = replace(descriptor, filter_id=filter_id)

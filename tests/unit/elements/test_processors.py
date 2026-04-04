@@ -62,6 +62,50 @@ def test_pattern_processor_detects_grid() -> None:
     assert analysis.child_count == 6
 
 
+def test_pattern_processor_detects_grouped_arc_dots_from_style() -> None:
+    services = _services()
+    processor = create_pattern_processor(services)
+    pattern_xml = etree.fromstring(
+        """
+        <pattern id="dots" width="8" height="7" patternUnits="userSpaceOnUse"
+                 patternTransform="translate(12,4)">
+            <g transform="translate(-12,-4)">
+                <rect width="8" height="7" style="fill:none;stroke:none"/>
+                <path
+                    sodipodi:type="arc"
+                    xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+                    style="fill:#000000;stroke:none"
+                    d="M 10,10 A 3,3 0 1 1 10,9.99"/>
+                <path
+                    sodipodi:type="arc"
+                    xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+                    style="fill:#000000;stroke:none"
+                    d="M 10,10 A 3,3 0 1 1 10,9.99"/>
+                <path
+                    sodipodi:type="arc"
+                    xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+                    style="fill:#000000;stroke:none"
+                    d="M 10,10 A 3,3 0 1 1 10,9.99"/>
+                <path
+                    sodipodi:type="arc"
+                    xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+                    style="fill:#000000;stroke:none"
+                    d="M 10,10 A 3,3 0 1 1 10,9.99"/>
+            </g>
+        </pattern>
+        """
+    )
+
+    analysis = processor.analyze_pattern_element(pattern_xml, context=None)
+
+    assert analysis.pattern_type.name == "DOTS"
+    assert analysis.child_count == 4
+    assert analysis.preset_candidate is not None
+    assert analysis.powerpoint_compatible is True
+    assert analysis.emf_fallback_recommended is False
+    assert analysis.colors_used == ["#000000"]
+
+
 def test_image_processor_handles_data_uri() -> None:
     services = _services()
     processor = create_image_processor(services)

@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 from lxml import etree
 
 from svg2ooxml.paint.resvg_bridge import resolve_paints_for_node
 from svg2ooxml.policy.fidelity import FidelityDecision, resolve_fidelity
+from svg2ooxml.ir.paint import PatternPaint
 
 from .style_extractor import StyleResult
 
@@ -40,7 +43,9 @@ def extract_style(converter, element: etree._Element) -> StyleResult:
     if resvg_node is None:
         tag_name = str(element.tag).split("}", 1)[-1]
         if tag_name.lower() == "use":
-            href_attr = element.get("{http://www.w3.org/1999/xlink}href") or element.get("href")
+            href_attr = element.get(
+                "{http://www.w3.org/1999/xlink}href"
+            ) or element.get("href")
             if href_attr and href_attr.startswith("#"):
                 reference_id = href_attr[1:]
                 element_index = getattr(converter, "_element_index", None)
@@ -56,9 +61,20 @@ def extract_style(converter, element: etree._Element) -> StyleResult:
             # Elements inside <defs> or other non-drawable containers are expected to be missing.
             tag_name = str(element.tag).split("}", 1)[-1]
             is_drawable = tag_name.lower() in {
-                "path", "rect", "circle", "ellipse", "line", "polyline", "polygon", "image", "text", "g", "svg", "use"
+                "path",
+                "rect",
+                "circle",
+                "ellipse",
+                "line",
+                "polyline",
+                "polygon",
+                "image",
+                "text",
+                "g",
+                "svg",
+                "use",
             }
-            
+
             # Check if element or any ancestor is inside <defs>
             in_defs = False
             curr = element
@@ -85,11 +101,14 @@ def extract_style(converter, element: etree._Element) -> StyleResult:
                 p = element.getparent()
                 if p is not None and p in node_lookup:
                     parent_has_node = True
-                
+
                 if not parent_has_node:
                     logger.warning(
                         "style-runtime/missing-resvg-node",
-                        extra={"element_id": element.get("id"), "svg_tag": str(element.tag)},
+                        extra={
+                            "element_id": element.get("id"),
+                            "svg_tag": str(element.tag),
+                        },
                     )
         return StyleResult(
             fill=base_style.fill,
@@ -111,7 +130,19 @@ def extract_style(converter, element: etree._Element) -> StyleResult:
         )
 
     fill = paints.fill if paints.fill is not None else base_style.fill
+    if isinstance(fill, PatternPaint) and isinstance(base_style.fill, PatternPaint):
+        fill = _merge_pattern_paint(fill, base_style.fill)
+
     stroke = paints.stroke if paints.stroke is not None else base_style.stroke
+    if (
+        stroke is not None
+        and base_style.stroke is not None
+        and isinstance(getattr(stroke, "paint", None), PatternPaint)
+        and isinstance(getattr(base_style.stroke, "paint", None), PatternPaint)
+    ):
+        stroke = replace(
+            stroke, paint=_merge_pattern_paint(stroke.paint, base_style.stroke.paint)
+        )
 
     opacity = base_style.opacity
     presentation = getattr(resvg_node, "presentation", None)
@@ -119,7 +150,9 @@ def extract_style(converter, element: etree._Element) -> StyleResult:
         opacity = presentation.opacity  # type: ignore[assignment]
 
     style_meta["source"] = "resvg"
-    decision = resolve_fidelity("style", node=resvg_node, context={"element_id": element.get("id")})
+    decision = resolve_fidelity(
+        "style", node=resvg_node, context={"element_id": element.get("id")}
+    )
     style_meta["decision"] = decision.value
     return StyleResult(
         fill=fill,
@@ -131,3 +164,22 @@ def extract_style(converter, element: etree._Element) -> StyleResult:
 
 
 __all__ = ["extract_style"]
+
+
+def _merge_pattern_paint(
+    runtime_paint: PatternPaint, analyzed_paint: PatternPaint
+) -> PatternPaint:
+    return replace(
+        runtime_paint,
+        preset=analyzed_paint.preset or runtime_paint.preset,
+        foreground=analyzed_paint.foreground or runtime_paint.foreground,
+        background=analyzed_paint.background or runtime_paint.background,
+        background_opacity=analyzed_paint.background_opacity,
+        foreground_theme_color=analyzed_paint.foreground_theme_color
+        or runtime_paint.foreground_theme_color,
+        background_theme_color=analyzed_paint.background_theme_color
+        or runtime_paint.background_theme_color,
+        tile_image=analyzed_paint.tile_image or runtime_paint.tile_image,
+        tile_width_px=analyzed_paint.tile_width_px or runtime_paint.tile_width_px,
+        tile_height_px=analyzed_paint.tile_height_px or runtime_paint.tile_height_px,
+    )

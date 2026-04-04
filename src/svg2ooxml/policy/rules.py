@@ -21,7 +21,9 @@ class Policy:
     options: Mapping[str, Any]
 
 
-def _merge(base: Mapping[str, Any], overrides: Mapping[str, Any] | None = None) -> dict[str, Any]:
+def _merge(
+    base: Mapping[str, Any], overrides: Mapping[str, Any] | None = None
+) -> dict[str, Any]:
     payload = dict(base)
     if overrides:
         payload.update(overrides)
@@ -142,7 +144,7 @@ _BASE_GEOMETRY: dict[str, Any] = {
 _BASE_FILTER: dict[str, Any] = {
     "strategy": "resvg",
     "allow_anisotropic_native": True,
-    "max_bitmap_stddev": 64.0,
+    "max_bitmap_stddev": 96.0,
     "max_shadow_distance": 80.0,
     "prefer_emf_blend_modes": False,
     "max_convolve_kernel": 7,

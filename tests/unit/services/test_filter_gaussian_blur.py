@@ -52,7 +52,9 @@ def test_gaussian_blur_anisotropic_with_policy_native() -> None:
     )
     service.register_filter("blur", filter_xml)
 
-    results = service.resolve_effects("blur", context={"policy": {"allow_anisotropic_native": True}})
+    results = service.resolve_effects(
+        "blur", context={"policy": {"allow_anisotropic_native": True}}
+    )
 
     assert results
     first = results[0]
@@ -61,3 +63,25 @@ def test_gaussian_blur_anisotropic_with_policy_native() -> None:
     assert isinstance(first.effect, CustomEffect)
     assert "softEdge" in first.effect.drawingml
     assert first.metadata.get("anisotropic_mode") == "approx_native"
+
+
+def test_gaussian_blur_large_sigma_can_still_use_native_with_higher_cap() -> None:
+    service = FilterService()
+    filter_xml = etree.fromstring(
+        "<filter id='blur'><feGaussianBlur stdDeviation='74.833887'/></filter>"
+    )
+    service.register_filter("blur", filter_xml)
+
+    results = service.resolve_effects(
+        "blur",
+        context={
+            "policy": {"max_bitmap_stddev": 96.0, "allow_anisotropic_native": True}
+        },
+    )
+
+    assert results
+    first = results[0]
+    assert_strategy(first, modern="native")
+    assert_fallback(first, modern=None)
+    assert isinstance(first.effect, CustomEffect)
+    assert "softEdge" in first.effect.drawingml

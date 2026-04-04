@@ -21,12 +21,32 @@ from svg2ooxml.core.traversal.geometry_utils import (
     transform_axis_aligned_rect,
 )
 from svg2ooxml.ir.geometry import Point
-from svg2ooxml.ir.paint import Stroke, StrokeCap, StrokeJoin
+from svg2ooxml.ir.paint import PatternPaint, Stroke, StrokeCap, StrokeJoin
 from svg2ooxml.ir.scene import ClipRef, Group, MaskInstance, MaskRef
 from svg2ooxml.ir.shapes import Circle, Ellipse, Rectangle
 
 
 class ShapeResvgMixin:
+    @staticmethod
+    def _merge_pattern_paint(
+        runtime_paint: PatternPaint, analyzed_paint: PatternPaint
+    ) -> PatternPaint:
+        return replace(
+            runtime_paint,
+            preset=analyzed_paint.preset or runtime_paint.preset,
+            foreground=analyzed_paint.foreground or runtime_paint.foreground,
+            background=analyzed_paint.background or runtime_paint.background,
+            background_opacity=analyzed_paint.background_opacity,
+            foreground_theme_color=analyzed_paint.foreground_theme_color
+            or runtime_paint.foreground_theme_color,
+            background_theme_color=analyzed_paint.background_theme_color
+            or runtime_paint.background_theme_color,
+            tile_image=analyzed_paint.tile_image or runtime_paint.tile_image,
+            tile_width_px=analyzed_paint.tile_width_px or runtime_paint.tile_width_px,
+            tile_height_px=analyzed_paint.tile_height_px
+            or runtime_paint.tile_height_px,
+        )
+
     def _resvg_miss_reason(self, element: etree._Element) -> str:
         if getattr(self, "_resvg_tree", None) is None:
             return "resvg_tree_missing"
@@ -90,8 +110,12 @@ class ShapeResvgMixin:
     def _geometry_fallback_flags(policy: Mapping[str, Any] | None) -> tuple[bool, bool]:
         if not policy:
             return True, True
-        allow_emf = bool(policy.get("allow_emf_fallback", True)) or bool(policy.get("force_emf"))
-        allow_bitmap = bool(policy.get("allow_bitmap_fallback", True)) or bool(policy.get("force_bitmap"))
+        allow_emf = bool(policy.get("allow_emf_fallback", True)) or bool(
+            policy.get("force_emf")
+        )
+        allow_bitmap = bool(policy.get("allow_bitmap_fallback", True)) or bool(
+            policy.get("force_bitmap")
+        )
         return allow_emf, allow_bitmap
 
     def _resvg_rect_to_rectangle(
@@ -110,7 +134,9 @@ class ShapeResvgMixin:
         if style.effects:
             return None
 
-        transform_matrix = self._matrix2d_from_resvg(getattr(resvg_node, "transform", None))
+        transform_matrix = self._matrix2d_from_resvg(
+            getattr(resvg_node, "transform", None)
+        )
         if not is_axis_aligned(transform_matrix, DEFAULT_TOLERANCE):
             return None
 
@@ -145,7 +171,9 @@ class ShapeResvgMixin:
         if rx > DEFAULT_TOLERANCE and ry > DEFAULT_TOLERANCE:
             if abs(rx - ry) > DEFAULT_TOLERANCE:
                 return None
-            corner_radius = scaled_corner_radius(rx, transform_matrix, DEFAULT_TOLERANCE)
+            corner_radius = scaled_corner_radius(
+                rx, transform_matrix, DEFAULT_TOLERANCE
+            )
         else:
             corner_radius = 0.0
 
@@ -177,7 +205,9 @@ class ShapeResvgMixin:
         if style.effects:
             return None
 
-        transform_matrix = self._matrix2d_from_resvg(getattr(resvg_node, "transform", None))
+        transform_matrix = self._matrix2d_from_resvg(
+            getattr(resvg_node, "transform", None)
+        )
         cx = ShapeResvgMixin._coerce_float(getattr(resvg_node, "cx", None), 0.0)
         cy = ShapeResvgMixin._coerce_float(getattr(resvg_node, "cy", None), 0.0)
         raw_radius = ShapeResvgMixin._coerce_float(getattr(resvg_node, "r", None), 0.0)
@@ -222,8 +252,13 @@ class ShapeResvgMixin:
         if style.effects:
             return None
 
-        transform_matrix = self._matrix2d_from_resvg(getattr(resvg_node, "transform", None))
-        has_rotation = abs(transform_matrix.b) > DEFAULT_TOLERANCE or abs(transform_matrix.c) > DEFAULT_TOLERANCE
+        transform_matrix = self._matrix2d_from_resvg(
+            getattr(resvg_node, "transform", None)
+        )
+        has_rotation = (
+            abs(transform_matrix.b) > DEFAULT_TOLERANCE
+            or abs(transform_matrix.c) > DEFAULT_TOLERANCE
+        )
         if has_rotation:
             return None
 
@@ -275,9 +310,21 @@ class ShapeResvgMixin:
 
         paint = base.paint if base.paint is not None else override.paint
         width = override.width if override.width is not None else base.width
-        join = override.join if override.join != StrokeJoin.MITER or base.join == StrokeJoin.MITER else base.join
-        cap = override.cap if override.cap != StrokeCap.BUTT or base.cap == StrokeCap.BUTT else base.cap
-        miter_limit = override.miter_limit if override.miter_limit != 4.0 or base.miter_limit == 4.0 else base.miter_limit
+        join = (
+            override.join
+            if override.join != StrokeJoin.MITER or base.join == StrokeJoin.MITER
+            else base.join
+        )
+        cap = (
+            override.cap
+            if override.cap != StrokeCap.BUTT or base.cap == StrokeCap.BUTT
+            else base.cap
+        )
+        miter_limit = (
+            override.miter_limit
+            if override.miter_limit != 4.0 or base.miter_limit == 4.0
+            else base.miter_limit
+        )
         dash_array = override.dash_array if override.dash_array else base.dash_array
         dash_offset = override.dash_offset if override.dash_offset else base.dash_offset
         opacity = override.opacity if override.opacity != 1.0 else base.opacity
@@ -330,14 +377,18 @@ class ShapeResvgMixin:
             metadata=metadata,
         )
 
-    def _merge_use_styles(self, use_style: StyleResult, source_style: StyleResult | None) -> StyleResult:
+    def _merge_use_styles(
+        self, use_style: StyleResult, source_style: StyleResult | None
+    ) -> StyleResult:
         if source_style is None:
             return use_style
 
         fill = source_style.fill if source_style.fill is not None else use_style.fill
         stroke = self._combine_strokes(use_style.stroke, source_style.stroke)
 
-        opacity = use_style.opacity if use_style.opacity != 1.0 else source_style.opacity
+        opacity = (
+            use_style.opacity if use_style.opacity != 1.0 else source_style.opacity
+        )
 
         effects: list[Any] = []
         effects.extend(source_style.effects)
@@ -373,18 +424,19 @@ class ShapeResvgMixin:
         # This includes all inherited group transforms (translate, scale, etc.)
         # We use the structural signature path as a stable key.
         from svg2ooxml.core.ir.resvg_bridge import ResvgBridge
+
         sig = ResvgBridge._element_signature(element)
         global_transform_lookup = getattr(self, "_resvg_global_transform_lookup", {})
         global_transform = global_transform_lookup.get(sig)
-        
+
         if global_transform is None:
             node_transform_lookup = getattr(self, "_resvg_node_transform_lookup", {})
             global_transform = node_transform_lookup.get(id(resvg_node))
             if global_transform is None:
                 self._logger.warning("No global transform found for signature: %s", sig)
-        
+
         # We replace the node's local transform with the global one before passing it
-        # to the converters/adapters. This is safe because we're not modifying the 
+        # to the converters/adapters. This is safe because we're not modifying the
         # original tree, just how we interpret this specific node.
         # Note: We must be careful not to actually 'set' it on the frozen dataclass
         # if it's frozen, but we can pass it explicitly or use a proxy.
@@ -401,7 +453,9 @@ class ShapeResvgMixin:
         use_source = getattr(resvg_node, "use_source", None)
         source_element = None
         if isinstance(use_source, etree._Element):
-            href_attr = use_source.get("{http://www.w3.org/1999/xlink}href") or use_source.get("href")
+            href_attr = use_source.get(
+                "{http://www.w3.org/1999/xlink}href"
+            ) or use_source.get("href")
             reference_id = self._normalize_href_reference(href_attr)
             if reference_id:
                 source_element = self._element_index.get(reference_id)
@@ -409,7 +463,9 @@ class ShapeResvgMixin:
             source_element = getattr(resvg_node, "source", None)
         source_style: StyleResult | None = None
         if isinstance(source_element, etree._Element):
-            paint_dict = self._style_resolver.compute_paint_style(source_element, context=self._css_context)
+            paint_dict = self._style_resolver.compute_paint_style(
+                source_element, context=self._css_context
+            )
             source_style = self._materialize_style(source_element, paint_dict)
             style = self._merge_use_styles(style, source_style)
             metadata.update(source_style.metadata or {})
@@ -422,15 +478,23 @@ class ShapeResvgMixin:
         if hasattr(self, "_local_name"):
             element_local = self._local_name(element.tag).lower()
         else:
-            element_local = element.tag.split("}")[-1].lower() if isinstance(element.tag, str) else ""
+            element_local = (
+                element.tag.split("}")[-1].lower()
+                if isinstance(element.tag, str)
+                else ""
+            )
         if element_local == "use" and isinstance(source_element, etree._Element):
             from svg2ooxml.core.styling.use_expander import (
                 compose_use_transform,
                 compute_use_transform,
             )
 
-            use_matrix = compute_use_transform(self, element, source_element, tolerance=DEFAULT_TOLERANCE)
-            if use_matrix is not None and not use_matrix.is_identity(tolerance=DEFAULT_TOLERANCE):
+            use_matrix = compute_use_transform(
+                self, element, source_element, tolerance=DEFAULT_TOLERANCE
+            )
+            if use_matrix is not None and not use_matrix.is_identity(
+                tolerance=DEFAULT_TOLERANCE
+            ):
                 combined = compose_use_transform(
                     self,
                     element,
@@ -440,11 +504,13 @@ class ShapeResvgMixin:
                 if global_transform is None:
                     use_global_override = combined
                 else:
-                    local_transform = self._matrix2d_from_resvg(getattr(resvg_node, "transform", None))
+                    local_transform = self._matrix2d_from_resvg(
+                        getattr(resvg_node, "transform", None)
+                    )
                     try:
-                        parent_transform = self._matrix2d_from_resvg(global_transform).multiply(
-                            local_transform.inverse()
-                        )
+                        parent_transform = self._matrix2d_from_resvg(
+                            global_transform
+                        ).multiply(local_transform.inverse())
                     except Exception:
                         parent_transform = self._matrix2d_from_resvg(global_transform)
                     use_global_override = parent_transform.multiply(combined)
@@ -461,12 +527,27 @@ class ShapeResvgMixin:
 
                 resvg_stroke = resolve_stroke_style(node.stroke, tree)
                 if resvg_stroke is not None and resvg_stroke.paint is not None:
+                    if (
+                        isinstance(resvg_stroke.paint, PatternPaint)
+                        and updated.stroke is not None
+                        and isinstance(updated.stroke.paint, PatternPaint)
+                    ):
+                        resvg_stroke = replace(
+                            resvg_stroke,
+                            paint=self._merge_pattern_paint(
+                                resvg_stroke.paint, updated.stroke.paint
+                            ),
+                        )
                     updated = replace(updated, stroke=resvg_stroke)
             if hasattr(node, "fill") and node.fill is not None:
                 from svg2ooxml.paint.resvg_bridge import resolve_fill_paint
 
                 resvg_fill = resolve_fill_paint(node.fill, tree)
                 if resvg_fill is not None:
+                    if isinstance(resvg_fill, PatternPaint) and isinstance(
+                        updated.fill, PatternPaint
+                    ):
+                        resvg_fill = self._merge_pattern_paint(resvg_fill, updated.fill)
                     updated = replace(updated, fill=resvg_fill)
             return updated
 
@@ -483,6 +564,7 @@ class ShapeResvgMixin:
             def __init__(self, target, g_transform):
                 self._target = target
                 self.transform = g_transform
+
             def __getattr__(self, name):
                 return getattr(self._target, name)
 
@@ -533,7 +615,9 @@ class ShapeResvgMixin:
         if node_type in ("GenericNode", "GroupNode"):
             children = getattr(resvg_node, "children", []) or []
             if children:
-                node_transform_lookup = getattr(self, "_resvg_node_transform_lookup", {})
+                node_transform_lookup = getattr(
+                    self, "_resvg_node_transform_lookup", {}
+                )
 
                 def _convert_resvg_children(nodes, parent_style, parent_global=None):
                     """Recursively convert resvg child nodes, flattening nested groups."""
@@ -551,10 +635,16 @@ class ShapeResvgMixin:
                                 and original_global_transform is not None
                             ):
                                 try:
-                                    relative = self._matrix2d_from_resvg(
-                                        original_global_transform,
-                                    ).inverse().multiply(child_global)
-                                    child_global = use_global_override.multiply(relative)
+                                    relative = (
+                                        self._matrix2d_from_resvg(
+                                            original_global_transform,
+                                        )
+                                        .inverse()
+                                        .multiply(child_global)
+                                    )
+                                    child_global = use_global_override.multiply(
+                                        relative
+                                    )
                                 except Exception:
                                     pass
                         else:
@@ -571,11 +661,17 @@ class ShapeResvgMixin:
                         if child_node_type in ("GenericNode", "GroupNode"):
                             nested = getattr(child, "children", []) or []
                             if nested:
-                                nested_shapes = _convert_resvg_children(nested, child_style, child_global)
+                                nested_shapes = _convert_resvg_children(
+                                    nested, child_style, child_global
+                                )
                                 if nested_shapes:
                                     sub_group = Group(
                                         children=nested_shapes,
-                                        opacity=child_style.opacity if child_style.opacity != 1.0 else 1.0,
+                                        opacity=(
+                                            child_style.opacity
+                                            if child_style.opacity != 1.0
+                                            else 1.0
+                                        ),
                                         metadata=child_metadata,
                                     )
                                     result_shapes.append(sub_group)
@@ -662,7 +758,9 @@ class ShapeResvgMixin:
                                 result_shapes.append(child_shape)
                     return result_shapes
 
-                group_children = _convert_resvg_children(children, style, global_transform)
+                group_children = _convert_resvg_children(
+                    children, style, global_transform
+                )
                 if group_children:
                     group = Group(
                         children=group_children,

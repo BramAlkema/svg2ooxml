@@ -24,7 +24,9 @@ ASSETS_DIR = Path(__file__).resolve().parents[2] / "assets"
 
 
 def _make_filter_element(markup: str) -> etree._Element:
-    return etree.fromstring(f"<svg xmlns='http://www.w3.org/2000/svg'>{markup}</svg>")[0]
+    return etree.fromstring(f"<svg xmlns='http://www.w3.org/2000/svg'>{markup}</svg>")[
+        0
+    ]
 
 
 def _make_descriptor(markup: str) -> ResolvedFilter:
@@ -63,7 +65,6 @@ class _TraceRecorder:
                 "metadata": dict(metadata),
             }
         )
-
 
 
 def test_filter_service_registers_and_requires_definitions() -> None:
@@ -109,7 +110,10 @@ def test_filter_service_binds_policy_engine_from_services() -> None:
 
 def test_descriptor_fallback_prefers_vector_hint() -> None:
     service = FilterService(registry=_NoopRegistry())
-    service.register_filter("vectorish", _make_descriptor("<filter id='vectorish'><feComponentTransfer/></filter>"))
+    service.register_filter(
+        "vectorish",
+        _make_descriptor("<filter id='vectorish'><feComponentTransfer/></filter>"),
+    )
     service.set_strategy("vector")
 
     context = {
@@ -136,7 +140,10 @@ def test_descriptor_fallback_prefers_vector_hint() -> None:
 
 def test_descriptor_fallback_produces_placeholder_when_rendering_absent() -> None:
     service = FilterService(registry=_NoopRegistry())
-    service.register_filter("rasterish", _make_descriptor("<filter id='rasterish'><feGaussianBlur/></filter>"))
+    service.register_filter(
+        "rasterish",
+        _make_descriptor("<filter id='rasterish'><feGaussianBlur/></filter>"),
+    )
     service.set_strategy("raster")
 
     context = {
@@ -183,7 +190,9 @@ def test_raster_adapter_produces_png_asset() -> None:
     metadata = raster_effect.metadata or {}
     assets = metadata.get("fallback_assets")
     assert isinstance(assets, list)
-    raster_asset = next((asset for asset in assets if asset.get("type") == "raster"), None)
+    raster_asset = next(
+        (asset for asset in assets if asset.get("type") == "raster"), None
+    )
     assert raster_asset is not None
     assert raster_asset.get("format") == "png"
     raw = raster_asset.get("data")
@@ -196,7 +205,9 @@ def test_resvg_path_returns_bitmap_result() -> None:
     pytest.importorskip("skia")
 
     service = FilterService(registry=_NoopRegistry())
-    descriptor = _make_descriptor("<filter id='resvg'><feGaussianBlur stdDeviation='2'/></filter>")
+    descriptor = _make_descriptor(
+        "<filter id='resvg'><feGaussianBlur stdDeviation='2'/></filter>"
+    )
     service.register_filter("resvg", descriptor)
 
     context = {
@@ -212,6 +223,26 @@ def test_resvg_path_returns_bitmap_result() -> None:
     assert metadata.get("filter_type") == "gaussian_blur"
     assert metadata.get("native_support") is True
     assert not metadata.get("fallback_assets")
+
+
+def test_resvg_strategy_prefers_native_gaussian_blur_when_available() -> None:
+    pytest.importorskip("skia")
+
+    service = FilterService(registry=_NoopRegistry())
+    descriptor = _make_descriptor(
+        "<filter id='resvg'><feGaussianBlur stdDeviation='2'/></filter>"
+    )
+    service.register_filter("resvg", descriptor)
+    service.set_strategy("resvg")
+
+    results = service.resolve_effects("resvg")
+
+    assert results
+    assert [result.strategy for result in results] == ["native"]
+    effect = results[0]
+    assert effect.fallback is None
+    assert effect.effect is not None
+    assert "<a:softEdge" in effect.effect.drawingml
 
 
 def test_resvg_promotes_blend_to_emf_asset() -> None:
@@ -280,7 +311,8 @@ def test_resvg_promotes_color_matrix_to_emf_asset() -> None:
         assert metadata.get("resvg_promotion") in {"native", "vector", "emf"}
         plan_primitives = metadata.get("plan_primitives") or []
         assert any(
-            isinstance(item, dict) and str(item.get("tag", "")).lower() == "fecolormatrix"
+            isinstance(item, dict)
+            and str(item.get("tag", "")).lower() == "fecolormatrix"
             for item in plan_primitives
         )
 
@@ -299,7 +331,9 @@ def test_resvg_lighting_metadata_includes_light_params() -> None:
     service.register_filter("light", descriptor)
     service.set_strategy("resvg")
 
-    results = service.resolve_effects("light", context={"ir_bbox": {"x": 0, "y": 0, "width": 64, "height": 48}})
+    results = service.resolve_effects(
+        "light", context={"ir_bbox": {"x": 0, "y": 0, "width": 64, "height": 48}}
+    )
 
     assert results
     metadata = results[0].metadata or {}
@@ -391,7 +425,11 @@ def test_resvg_promotes_component_transfer_merge_chain() -> None:
     ]
     assert metadata.get("resvg_promotion") in {"vector", "emf"}
     plan_meta = metadata.get("plan_primitives") or []
-    assert any(entry.get("metadata") for entry in plan_meta if entry.get("tag") == "feComponentTransfer")
+    assert any(
+        entry.get("metadata")
+        for entry in plan_meta
+        if entry.get("tag") == "feComponentTransfer"
+    )
 
 
 def test_resvg_tracer_emits_plan_characteristics() -> None:
@@ -417,7 +455,11 @@ def test_resvg_tracer_emits_plan_characteristics() -> None:
     results = service.resolve_effects("lighting", context=context)
 
     assert results
-    plan_events = [event for event in tracer.events if event["action"] == "resvg_plan_characterised"]
+    plan_events = [
+        event
+        for event in tracer.events
+        if event["action"] == "resvg_plan_characterised"
+    ]
     assert plan_events
     payload = plan_events[-1]["metadata"]
     assert payload.get("primitive_count") == 2
@@ -454,7 +496,9 @@ def test_resvg_lighting_candidate_event() -> None:
     results = service.resolve_effects("lighting", context=context)
 
     assert results
-    lighting_events = [event for event in tracer.events if event["action"] == "resvg_lighting_promoted"]
+    lighting_events = [
+        event for event in tracer.events if event["action"] == "resvg_lighting_promoted"
+    ]
     assert lighting_events
     lighting_meta = lighting_events[-1]["metadata"] or {}
     assert lighting_meta.get("primitive") == "fediffuselighting"
@@ -478,7 +522,13 @@ def test_resvg_promotes_diffuse_lighting_chain() -> None:
     service.register_filter("lit", descriptor)
     service.set_strategy("resvg")
 
-    results = service.resolve_effects("lit", context={"tracer": tracer, "ir_bbox": {"x": 0, "y": 0, "width": 64, "height": 48}})
+    results = service.resolve_effects(
+        "lit",
+        context={
+            "tracer": tracer,
+            "ir_bbox": {"x": 0, "y": 0, "width": 64, "height": 48},
+        },
+    )
 
     assert results
     effect = results[0]
@@ -495,7 +545,9 @@ def test_resvg_promotes_diffuse_lighting_chain() -> None:
         primitives = meta.get("primitives") or []
         if primitives:
             assert "feDiffuseLighting" in primitives
-    lighting_events = [event for event in tracer.events if event["action"] == "resvg_lighting_promoted"]
+    lighting_events = [
+        event for event in tracer.events if event["action"] == "resvg_lighting_promoted"
+    ]
     assert lighting_events
 
 
@@ -515,7 +567,13 @@ def test_resvg_promotes_specular_lighting_chain() -> None:
     service.register_filter("spec", descriptor)
     service.set_strategy("resvg")
 
-    results = service.resolve_effects("spec", context={"tracer": tracer, "ir_bbox": {"x": 0, "y": 0, "width": 64, "height": 48}})
+    results = service.resolve_effects(
+        "spec",
+        context={
+            "tracer": tracer,
+            "ir_bbox": {"x": 0, "y": 0, "width": 64, "height": 48},
+        },
+    )
 
     assert results
     effect = results[0]
@@ -532,8 +590,14 @@ def test_resvg_promotes_specular_lighting_chain() -> None:
         primitives = meta.get("primitives") or []
         if primitives:
             assert "feSpecularLighting" in primitives
-    lighting_events = [event for event in tracer.events if event["action"] == "resvg_lighting_promoted"]
-    assert any(event["metadata"].get("primitive") == "fespecularlighting" for event in lighting_events)
+    lighting_events = [
+        event for event in tracer.events if event["action"] == "resvg_lighting_promoted"
+    ]
+    assert any(
+        event["metadata"].get("primitive") == "fespecularlighting"
+        for event in lighting_events
+    )
+
 
 def test_fixture_turbulence_descriptor_preserves_stitch_metadata() -> None:
     svg_path = ASSETS_DIR / "turbulence_stitch.svg"
@@ -549,6 +613,7 @@ def test_fixture_turbulence_descriptor_preserves_stitch_metadata() -> None:
     assert primitive_tags == ["feTurbulence", "feComposite"]
     turbulence_meta = plan.primitives[0].extra
     assert turbulence_meta.get("stitch") == "stitch"
+
 
 def test_resvg_promotion_blocked_by_merge_policy_limit() -> None:
     pytest.importorskip("skia")
@@ -657,7 +722,9 @@ def test_resvg_promotion_disabled_by_policy() -> None:
     pytest.importorskip("skia")
 
     service = FilterService(registry=_NoopRegistry())
-    descriptor = _make_descriptor("<filter id='blend'><feBlend mode='screen'/></filter>")
+    descriptor = _make_descriptor(
+        "<filter id='blend'><feBlend mode='screen'/></filter>"
+    )
     service.register_filter("blend", descriptor)
     service.set_strategy("resvg")
 
@@ -704,15 +771,27 @@ def test_promotion_policy_allows_blocks_arithmetic_coefficients() -> None:
         metadata={"operator": "arithmetic", "k1": 1.2, "k2": 0.0, "k3": 0.0, "k4": 0.0},
     )
 
-    assert not FilterService._promotion_policy_allows("fecomposite", result, {"max_arithmetic_coeff": 0.5})
-    assert FilterService._promotion_policy_allows("fecomposite", result, {"max_arithmetic_coeff": 2.0})
+    assert not FilterService._promotion_policy_allows(
+        "fecomposite", result, {"max_arithmetic_coeff": 0.5}
+    )
+    assert FilterService._promotion_policy_allows(
+        "fecomposite", result, {"max_arithmetic_coeff": 2.0}
+    )
 
 
 def test_promotion_policy_allows_enforces_additional_limits() -> None:
-    offset = FilterResult(success=True, fallback="emf", metadata={"dx": 10.0, "dy": 4.0})
-    assert not FilterService._promotion_policy_allows("feoffset", offset, {"max_offset_distance": 5.0})
-    assert FilterService._promotion_policy_allows("feoffset", offset, {"max_offset_distance": 12.0})
-    violation = FilterService._promotion_policy_violation("feoffset", offset, {"max_offset_distance": 5.0})
+    offset = FilterResult(
+        success=True, fallback="emf", metadata={"dx": 10.0, "dy": 4.0}
+    )
+    assert not FilterService._promotion_policy_allows(
+        "feoffset", offset, {"max_offset_distance": 5.0}
+    )
+    assert FilterService._promotion_policy_allows(
+        "feoffset", offset, {"max_offset_distance": 12.0}
+    )
+    violation = FilterService._promotion_policy_violation(
+        "feoffset", offset, {"max_offset_distance": 5.0}
+    )
     assert violation == {
         "rule": "max_offset_distance",
         "limit": 5.0,
@@ -721,10 +800,18 @@ def test_promotion_policy_allows_enforces_additional_limits() -> None:
         "dy": 4.0,
     }
 
-    merge = FilterResult(success=True, fallback="emf", metadata={"inputs": ["a", "b", "c"]})
-    assert not FilterService._promotion_policy_allows("femerge", merge, {"max_merge_inputs": 2})
-    assert FilterService._promotion_policy_allows("femerge", merge, {"max_merge_inputs": 3})
-    violation = FilterService._promotion_policy_violation("femerge", merge, {"max_merge_inputs": 2})
+    merge = FilterResult(
+        success=True, fallback="emf", metadata={"inputs": ["a", "b", "c"]}
+    )
+    assert not FilterService._promotion_policy_allows(
+        "femerge", merge, {"max_merge_inputs": 2}
+    )
+    assert FilterService._promotion_policy_allows(
+        "femerge", merge, {"max_merge_inputs": 3}
+    )
+    violation = FilterService._promotion_policy_violation(
+        "femerge", merge, {"max_merge_inputs": 2}
+    )
     assert violation == {"rule": "max_merge_inputs", "limit": 2, "observed": 3}
 
     component = FilterResult(
@@ -748,7 +835,11 @@ def test_promotion_policy_allows_enforces_additional_limits() -> None:
         component,
         {"max_component_functions": 2},
     )
-    assert violation_funcs == {"rule": "max_component_functions", "limit": 2, "observed": 3}
+    assert violation_funcs == {
+        "rule": "max_component_functions",
+        "limit": 2,
+        "observed": 3,
+    }
     assert not FilterService._promotion_policy_allows(
         "fecomponenttransfer",
         component,
@@ -764,15 +855,24 @@ def test_promotion_policy_allows_enforces_additional_limits() -> None:
         component,
         {"max_component_table_values": 2},
     )
-    assert violation == {"rule": "max_component_table_values", "limit": 2, "observed": 3, "channel": "r"}
+    assert violation == {
+        "rule": "max_component_table_values",
+        "limit": 2,
+        "observed": 3,
+        "channel": "r",
+    }
 
     convolve = FilterResult(
         success=True,
         fallback="emf",
         metadata={"kernel": [1.0] * 10, "order": (5, 3)},
     )
-    assert not FilterService._promotion_policy_allows("feconvolvematrix", convolve, {"max_convolve_kernel": 9})
-    assert not FilterService._promotion_policy_allows("feconvolvematrix", convolve, {"max_convolve_order": 12})
+    assert not FilterService._promotion_policy_allows(
+        "feconvolvematrix", convolve, {"max_convolve_kernel": 9}
+    )
+    assert not FilterService._promotion_policy_allows(
+        "feconvolvematrix", convolve, {"max_convolve_order": 12}
+    )
     assert FilterService._promotion_policy_allows(
         "feconvolvematrix",
         convolve,
@@ -833,7 +933,9 @@ def test_resvg_strategy_prefers_resvg_only() -> None:
 
     service = FilterService(registry=_NoopRegistry())
     service.set_strategy("resvg")
-    descriptor = _make_descriptor("<filter id='r'><feFlood flood-color='#112233'/></filter>")
+    descriptor = _make_descriptor(
+        "<filter id='r'><feFlood flood-color='#112233'/></filter>"
+    )
     service.register_filter("r", descriptor)
 
     results = service.resolve_effects("r")

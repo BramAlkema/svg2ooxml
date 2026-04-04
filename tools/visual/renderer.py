@@ -7,6 +7,7 @@ import os
 import platform
 import shutil
 import subprocess
+import sys
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -49,6 +50,7 @@ def _kill_running_soffice() -> None:
         )
         if result.returncode == 0:
             import time
+
             time.sleep(0.5)
             logger.debug("Killed existing soffice process(es) before headless render.")
     except FileNotFoundError:
@@ -108,7 +110,9 @@ class LibreOfficeRenderer:
         """Render *pptx_path* into PNG images under *output_dir*."""
 
         if not self.available:
-            raise VisualRendererError("LibreOffice (soffice) is not installed or not on PATH.")
+            raise VisualRendererError(
+                "LibreOffice (soffice) is not installed or not on PATH."
+            )
 
         _kill_running_soffice()
 
@@ -121,6 +125,7 @@ class LibreOfficeRenderer:
 
         # Create a unique temporary directory for this render pass to avoid locking issues
         import tempfile
+
         user_install_dir = Path(tempfile.mkdtemp(prefix="soffice_user_"))
         user_install_uri = user_install_dir.resolve().as_uri()
 
@@ -146,9 +151,13 @@ class LibreOfficeRenderer:
                     text=True,
                 )
             except FileNotFoundError as exc:  # pragma: no cover - defensive
-                raise VisualRendererError("LibreOffice soffice command not found.") from exc
+                raise VisualRendererError(
+                    "LibreOffice soffice command not found."
+                ) from exc
             except subprocess.TimeoutExpired as exc:
-                raise VisualRendererError(f"LibreOffice timed out after {self._timeout} seconds.") from exc
+                raise VisualRendererError(
+                    f"LibreOffice timed out after {self._timeout} seconds."
+                ) from exc
 
         cmd = [self._command_path or "soffice", *soffice_args]  # guarded above
         try:
@@ -166,7 +175,9 @@ class LibreOfficeRenderer:
                     f"exit code: {completed.returncode}",
                 ]
                 if tried_open:
-                    message_lines.append("LibreOffice failed when launched via open(1) as well.")
+                    message_lines.append(
+                        "LibreOffice failed when launched via open(1) as well."
+                    )
                 if completed.stdout:
                     message_lines.append(f"stdout:\n{completed.stdout}")
                 if completed.stderr:
@@ -219,7 +230,6 @@ class LibreOfficeRenderer:
         return None
 
 
-
 class PowerPointRenderer:
     """Render PPTX files to PNG using Microsoft PowerPoint via AppleScript."""
 
@@ -232,7 +242,7 @@ class PowerPointRenderer:
         slide_delay: float = 0.15,
         open_timeout: float = 120.0,
         capture_timeout: float = 5.0,
-        use_keys: bool = True,
+        use_keys: bool = False,
         allow_reopen: bool = True,
         png_dpi: float | None = None,
     ) -> None:
@@ -252,7 +262,9 @@ class PowerPointRenderer:
 
     def render(self, pptx_path: Path | str, output_dir: Path | str) -> RenderedSlideSet:
         if not self.available:
-            raise VisualRendererError("PowerPoint capture requires macOS with osascript available.")
+            raise VisualRendererError(
+                "PowerPoint capture requires macOS with osascript available."
+            )
 
         pptx_path = Path(pptx_path)
         if not pptx_path.exists():
@@ -261,26 +273,26 @@ class PowerPointRenderer:
         output_dir = Path(output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        try:
-            from tools.visual import powerpoint_capture
-
-            output_path = output_dir / "slide_1.png"
-            powerpoint_capture.capture_pptx_window(
-                pptx_path,
-                output_path,
-                self._delay,
-                backend=self._backend,
-                capture_timeout=self._capture_timeout,
-            )
-            
-            # Post-process: Trim window chrome and black borders
-            if output_path.exists():
-                subprocess.run(
-                    ["magick", str(output_path), "-fuzz", "15%", "-trim", "+repage", str(output_path)],
-                    check=False
-                )
-        except Exception as exc:
-            raise VisualRendererError(str(exc)) from exc
+        output_path = output_dir / "slide_1.png"
+        self._run_capture_helper(
+            [
+                str(pptx_path),
+                str(output_path),
+                "--mode",
+                "slideshow",
+                "--delay",
+                str(self._delay),
+                "--slideshow-delay",
+                str(self._slideshow_delay),
+                "--open-timeout",
+                str(self._open_timeout),
+                "--capture-timeout",
+                str(self._capture_timeout),
+                "--backend",
+                self._backend,
+            ],
+            timeout=max(30.0, self._open_timeout + self._capture_timeout + 15.0),
+        )
 
         generated = sorted(output_dir.glob("slide_*.png"))
         if not generated:
@@ -293,6 +305,93 @@ class PowerPointRenderer:
 
         logger.debug("Generated %d slide image(s).", len(generated))
         return RenderedSlideSet(images=tuple(generated), renderer="powerpoint")
+
+    def capture_animation(
+        self,
+        pptx_path: Path | str,
+        output_dir: Path | str,
+        *,
+        duration: float,
+        fps: float = 10.0,
+    ) -> Sequence[Path]:
+        if not self.available:
+            raise VisualRendererError(
+                "PowerPoint capture requires macOS with osascript available."
+            )
+
+        pptx_path = Path(pptx_path)
+        if not pptx_path.exists():
+            raise VisualRendererError(f"PPTX path does not exist: {pptx_path}")
+
+        output_dir = Path(output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        frame_count = max(1, int(duration * fps)) if duration > 0 else 1
+        self._run_capture_helper(
+            [
+                str(pptx_path),
+                str(output_dir),
+                "--mode",
+                "live",
+                "--duration",
+                str(duration),
+                "--fps",
+                str(fps),
+                "--delay",
+                str(self._delay),
+                "--slideshow-delay",
+                str(self._slideshow_delay),
+                "--open-timeout",
+                str(self._open_timeout),
+                "--capture-timeout",
+                str(self._capture_timeout),
+                "--backend",
+                self._backend,
+            ],
+            timeout=max(
+                30.0,
+                self._open_timeout
+                + duration
+                + (self._capture_timeout * frame_count)
+                + 15.0,
+            ),
+        )
+
+        generated = tuple(sorted(output_dir.glob("frame_*.png")))
+        if not generated:
+            raise VisualRendererError(
+                f"PowerPoint animation capture produced no PNG files in {output_dir}."
+            )
+
+        if self._png_dpi is not None:
+            self._normalize_pngs(pptx_path, generated, self._png_dpi)
+
+        logger.debug("Generated %d animation frame(s).", len(generated))
+        return generated
+
+    def _run_capture_helper(self, args: Sequence[str], *, timeout: float) -> None:
+        cmd = [sys.executable, "-m", "tools.visual.powerpoint_capture", *args]
+        if not self._use_keys:
+            cmd.append("--no-keys")
+        if not self._allow_reopen:
+            cmd.append("--no-reopen")
+        logger.debug("Running PowerPoint capture helper: %s", " ".join(cmd))
+        try:
+            completed = subprocess.run(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                check=False,
+                timeout=timeout,
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise VisualRendererError(
+                f"PowerPoint capture timed out after {timeout:.1f} seconds."
+            ) from exc
+        if completed.returncode != 0:
+            detail = completed.stderr.strip() or completed.stdout.strip()
+            raise VisualRendererError(detail or "PowerPoint capture failed.")
 
     def _normalize_pngs(
         self,
@@ -310,7 +409,10 @@ def _normalize_pngs(
 ) -> None:
     target_size = _slide_size_to_pixels(pptx_path, png_dpi)
     if target_size is None:
-        logger.warning("Unable to resolve slide size for %s; skipping PNG normalization.", pptx_path)
+        logger.warning(
+            "Unable to resolve slide size for %s; skipping PNG normalization.",
+            pptx_path,
+        )
         return
 
     for image_path in images:
@@ -354,13 +456,20 @@ def resolve_renderer(
     timeout: float | None = 90.0,
     user_installation: str | None = None,
     powerpoint_backend: str = "auto",
-    powerpoint_open_timeout: float = 120.0,
-    powerpoint_capture_timeout: float = 5.0,
+    powerpoint_delay: float = 0.5,
+    powerpoint_slideshow_delay: float = 0.25,
+    powerpoint_open_timeout: float = 30.0,
+    powerpoint_capture_timeout: float = 3.0,
+    powerpoint_use_keys: bool = False,
     powerpoint_no_reopen: bool = False,
 ) -> PptxRenderer:
     """Resolve the configured visual renderer."""
 
-    selected = (renderer_name or os.getenv("SVG2OOXML_VISUAL_RENDERER") or "soffice").strip().lower()
+    selected = (
+        (renderer_name or os.getenv("SVG2OOXML_VISUAL_RENDERER") or "soffice")
+        .strip()
+        .lower()
+    )
     if selected in {"soffice", "libreoffice"}:
         if soffice_path:
             return LibreOfficeRenderer(
@@ -373,8 +482,11 @@ def resolve_renderer(
     if selected == "powerpoint":
         return PowerPointRenderer(
             backend=powerpoint_backend,
+            delay=powerpoint_delay,
+            slideshow_delay=powerpoint_slideshow_delay,
             open_timeout=powerpoint_open_timeout,
             capture_timeout=powerpoint_capture_timeout,
+            use_keys=powerpoint_use_keys,
             allow_reopen=not powerpoint_no_reopen,
         )
     raise ValueError(f"Unknown visual renderer: {selected!r}")
@@ -389,7 +501,9 @@ def _resolve_png_dpi() -> float | None:
     try:
         dpi = float(env_value)
     except ValueError as exc:
-        raise ValueError(f"Invalid SVG2OOXML_SOFFICE_PNG_DPI value: {env_value!r}") from exc
+        raise ValueError(
+            f"Invalid SVG2OOXML_SOFFICE_PNG_DPI value: {env_value!r}"
+        ) from exc
     if dpi <= 0:
         return None
     return dpi

@@ -52,8 +52,12 @@ class TextConverter:
             embedding_engine=self._context.services.resolve("font_embedding"),
             logger=self._context.logger,
         )
-        self._smart_font_bridge = SmartFontBridge(self._context.services, self._context.logger)
-        self._text_path_positioner = CurveTextPositioner(PathSamplingMethod.DETERMINISTIC)
+        self._smart_font_bridge = SmartFontBridge(
+            self._context.services, self._context.logger
+        )
+        self._text_path_positioner = CurveTextPositioner(
+            PathSamplingMethod.DETERMINISTIC
+        )
 
     # ------------------------------------------------------------------
     # Public surface consumed by IRConverter
@@ -95,7 +99,9 @@ class TextConverter:
         # Parse style attribute once for all CSS property lookups below
         style_attr = element.get("style", "")
 
-        lang = element.get("{http://www.w3.org/XML/1998/namespace}lang") or element.get("lang")
+        lang = element.get("{http://www.w3.org/XML/1998/namespace}lang") or element.get(
+            "lang"
+        )
         if lang and not run.language:
             run = _replace(run, language=lang.strip())
 
@@ -104,6 +110,7 @@ class TextConverter:
         if not font_variant:
             if "font-variant" in style_attr:
                 import re
+
                 m = re.search(r"font-variant\s*:\s*([^;]+)", style_attr)
                 if m:
                     font_variant = m.group(1).strip().lower()
@@ -123,6 +130,7 @@ class TextConverter:
         baseline = dom_baseline or align_baseline
         if baseline and baseline not in ("auto", "alphabetic"):
             from svg2ooxml.drawingml.glyph_renderer import SKIA_AVAILABLE, _get_font
+
             if SKIA_AVAILABLE:
                 _font = _get_font(updated.font_family, updated.font_size_pt)
                 _m = _font.getMetrics()
@@ -141,10 +149,13 @@ class TextConverter:
                 origin_y += ascent
 
         font_service = self._context.services.resolve("font")
-        bbox = self._estimate_text_bbox(runs, origin_x, origin_y, font_service=font_service)
+        bbox = self._estimate_text_bbox(
+            runs, origin_x, origin_y, font_service=font_service
+        )
         bbox = self._apply_text_anchor(bbox, anchor)
 
         metadata: dict[str, Any] = {}
+        self._attach_text_path_metadata(element, metadata, resvg_node=resvg_node)
         self._attach_resvg_text_metadata(resvg_node, metadata)
         self._context.attach_policy_metadata(metadata, "text")
         if font_variant == "small-caps":
@@ -155,6 +166,7 @@ class TextConverter:
         if not writing_mode:
             if "writing-mode" in style_attr:
                 import re as _re
+
                 wm = _re.search(r"writing-mode\s*:\s*([^;]+)", style_attr)
                 if wm:
                     writing_mode = wm.group(1).strip().lower()
@@ -199,10 +211,14 @@ class TextConverter:
                 dx_vals = _per_char_attrs["dx"]
                 if len(dx_vals) >= 1:
                     avg_dx = sum(dx_vals) / len(dx_vals)
-                    is_uniform = all(
-                        abs(v - avg_dx) / max(abs(avg_dx), 0.01) < 0.1
-                        for v in dx_vals
-                    ) if avg_dx != 0 else all(abs(v) < 0.5 for v in dx_vals)
+                    is_uniform = (
+                        all(
+                            abs(v - avg_dx) / max(abs(avg_dx), 0.01) < 0.1
+                            for v in dx_vals
+                        )
+                        if avg_dx != 0
+                        else all(abs(v) < 0.5 for v in dx_vals)
+                    )
                     if is_uniform and abs(avg_dx) > 0.01:
                         base_ls = updated.letter_spacing or 0.0
                         updated = _replace(updated, letter_spacing=base_ls + avg_dx)
@@ -216,6 +232,7 @@ class TextConverter:
         if not font_stretch:
             if "font-stretch" in style_attr:
                 import re as _re3
+
                 fs = _re3.search(r"font-stretch\s*:\s*([^;]+)", style_attr)
                 if fs:
                     font_stretch = fs.group(1).strip().lower()
@@ -239,6 +256,7 @@ class TextConverter:
         if not text_deco:
             if "text-decoration" in style_attr:
                 import re as _re2
+
                 td = _re2.search(r"text-decoration\s*:\s*([^;]+)", style_attr)
                 if td:
                     text_deco = td.group(1).strip().lower()
@@ -259,7 +277,9 @@ class TextConverter:
                 if char_count > 1 and target_width > 0:
                     # Estimate natural width from bbox (will be computed below)
                     metadata["_text_length_target"] = target_width
-                    length_adjust = element.get("lengthAdjust", "spacing").strip().lower()
+                    length_adjust = (
+                        element.get("lengthAdjust", "spacing").strip().lower()
+                    )
                     metadata["_length_adjust"] = length_adjust
             except ValueError:
                 pass
@@ -310,7 +330,9 @@ class TextConverter:
         self._context.trace_geometry_decision(element, "resvg", frame.metadata)
         return frame
 
-    def _resvg_text_origin(self, resvg_node: Any, coord_space: CoordinateSpace) -> tuple[float, float]:
+    def _resvg_text_origin(
+        self, resvg_node: Any, coord_space: CoordinateSpace
+    ) -> tuple[float, float]:
         spans = getattr(resvg_node, "spans", None)
         if spans:
             first = spans[0]
@@ -486,7 +508,11 @@ class TextConverter:
         # Extract text direction
         direction = base_style.get("direction") or element.get("direction") or None
         if isinstance(direction, str):
-            direction = direction.strip().lower() if direction.strip().lower() in ("rtl", "ltr") else None
+            direction = (
+                direction.strip().lower()
+                if direction.strip().lower() in ("rtl", "ltr")
+                else None
+            )
 
         for text, style, x, y in segments:
             run = self._create_run_from_style(text, style)
@@ -497,7 +523,9 @@ class TextConverter:
                 policy_meta_accum.update(run_policy)
 
             origin_x, origin_y = coord_space.apply_point(x, y)
-            bbox = self._estimate_text_bbox([updated], origin_x, origin_y, font_service=font_service)
+            bbox = self._estimate_text_bbox(
+                [updated], origin_x, origin_y, font_service=font_service
+            )
 
             metadata: dict[str, Any] = dict(run_metadata)
             self._context.attach_policy_metadata(metadata, "text")
@@ -517,7 +545,9 @@ class TextConverter:
             if self._pipeline is not None:
                 frame = self._pipeline.plan_frame(frame, [updated], decision)
             if self._smart_font_bridge is not None:
-                frame = self._smart_font_bridge.enhance_frame(frame, [updated], decision)
+                frame = self._smart_font_bridge.enhance_frame(
+                    frame, [updated], decision
+                )
 
             self._context.trace_geometry_decision(element, "native", frame.metadata)
             frames.append(frame)
@@ -550,7 +580,9 @@ class TextConverter:
                 return
 
             run = self._create_run_from_style(normalized, style)
-            per_char = max(len(x_values), len(y_values), len(dx_values), len(dy_values)) > 1
+            per_char = (
+                max(len(x_values), len(y_values), len(dx_values), len(dy_values)) > 1
+            )
 
             if per_char:
                 for idx, ch in enumerate(normalized):
@@ -597,10 +629,18 @@ class TextConverter:
                 )
 
             font_size_pt = float(node_style.get("font_size_pt", 12.0))
-            x_values = self._parse_text_length_list(node.get("x"), font_size_pt, axis="x")
-            y_values = self._parse_text_length_list(node.get("y"), font_size_pt, axis="y")
-            dx_values = self._parse_text_length_list(node.get("dx"), font_size_pt, axis="x")
-            dy_values = self._parse_text_length_list(node.get("dy"), font_size_pt, axis="y")
+            x_values = self._parse_text_length_list(
+                node.get("x"), font_size_pt, axis="x"
+            )
+            y_values = self._parse_text_length_list(
+                node.get("y"), font_size_pt, axis="y"
+            )
+            dx_values = self._parse_text_length_list(
+                node.get("dx"), font_size_pt, axis="x"
+            )
+            dy_values = self._parse_text_length_list(
+                node.get("dy"), font_size_pt, axis="y"
+            )
 
             xml_space = node.get("{http://www.w3.org/XML/1998/namespace}space")
             node_preserve = preserve_space or (xml_space == "preserve")
@@ -648,7 +688,9 @@ class TextConverter:
 
     @staticmethod
     def _normalize_positioned_text(text: str | None, preserve_space: bool) -> str:
-        return TextConverter._normalize_text_segment(text, preserve_space=preserve_space)
+        return TextConverter._normalize_text_segment(
+            text, preserve_space=preserve_space
+        )
 
     def apply_policy(self, run: Run) -> tuple[Run, dict[str, Any]]:
         policy = self._context.policy_options("text")
@@ -672,7 +714,9 @@ class TextConverter:
         parent_context = getattr(context, "_context", None)
         if parent_context is not None:
             return parent_context
-        raise TypeError("TextConverter expects an IRConverterContext or compatible object.")
+        raise TypeError(
+            "TextConverter expects an IRConverterContext or compatible object."
+        )
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -692,7 +736,9 @@ class TextConverter:
             return candidate
         return None
 
-    def _compute_text_style_with_inheritance(self, element: etree._Element) -> dict[str, Any]:
+    def _compute_text_style_with_inheritance(
+        self, element: etree._Element
+    ) -> dict[str, Any]:
         parent_style: dict[str, Any] | None = None
         parent = element.getparent()
         if isinstance(parent, etree._Element) and isinstance(parent.tag, str):
@@ -711,10 +757,14 @@ class TextConverter:
         segments: list[tuple[Mapping[str, Any], str]] = []
         metadata: dict[str, Any] = {}
 
-        def visit(node: etree._Element, style: Mapping[str, Any], preserve_space: bool) -> None:
+        def visit(
+            node: etree._Element, style: Mapping[str, Any], preserve_space: bool
+        ) -> None:
             xml_space = node.get("{http://www.w3.org/XML/1998/namespace}space")
             node_preserve = preserve_space or (xml_space == "preserve")
-            text_segment = self._normalize_text_segment(node.text, preserve_space=node_preserve)
+            text_segment = self._normalize_text_segment(
+                node.text, preserve_space=node_preserve
+            )
             if text_segment:
                 segments.append((dict(style), text_segment))
 
@@ -733,18 +783,16 @@ class TextConverter:
                         context=self._context.css_context,
                         parent_style=style,
                     )
-                    href = child.get("{http://www.w3.org/1999/xlink}href") or child.get("href")
-                    path_id = self._context.normalize_href_reference(href)
-                    if path_id:
-                        metadata.setdefault("text_path_id", path_id)
-                        sampled = self._sample_text_path(path_id)
-                        if sampled is not None:
-                            metadata["text_path_data"] = sampled["path_data"]
-                            metadata["text_path_points"] = sampled["points"]
+                    href = child.get("{http://www.w3.org/1999/xlink}href") or child.get(
+                        "href"
+                    )
+                    self._record_text_path_reference(href, metadata)
                     visit(child, child_style, node_preserve)
                 else:
                     visit(child, style, node_preserve)
-                tail_segment = self._normalize_text_segment(child.tail, preserve_space=node_preserve)
+                tail_segment = self._normalize_text_segment(
+                    child.tail, preserve_space=node_preserve
+                )
                 if tail_segment:
                     segments.append((dict(style), tail_segment))
 
@@ -759,7 +807,9 @@ class TextConverter:
         return runs, metadata
 
     @staticmethod
-    def _normalize_text_segment(text: str | None, *, preserve_space: bool = False) -> str:
+    def _normalize_text_segment(
+        text: str | None, *, preserve_space: bool = False
+    ) -> str:
         if not text:
             return ""
         token = text.replace("\r\n", "\n").replace("\r", "\n")
@@ -785,16 +835,20 @@ class TextConverter:
         fill = style.get("fill") or "#000000"
         hex_color = self._coerce_hex_color(fill)
         fill_opacity = float(style.get("fill_opacity", 1.0))
-        
+
         stroke = style.get("stroke")
         stroke_rgb = None
         stroke_width = None
         stroke_opacity = None
-        
+
         if stroke and stroke.lower() != "none":
             stroke_rgb = self._coerce_hex_color(stroke)
             stroke_width_raw = style.get("stroke_width", "1")
-            stroke_width = self._resolve_text_length(stroke_width_raw, axis="x", font_size_pt=float(style.get("font_size_pt", 12.0)))
+            stroke_width = self._resolve_text_length(
+                stroke_width_raw,
+                axis="x",
+                font_size_pt=float(style.get("font_size_pt", 12.0)),
+            )
             stroke_opacity = float(style.get("stroke_opacity", 1.0))
 
         font_size = float(style.get("font_size_pt", 12.0))
@@ -869,11 +923,15 @@ class TextConverter:
             and abs(first.fill_opacity - second.fill_opacity) <= 1e-6
             and first.stroke_rgb == second.stroke_rgb
             and first.stroke_theme_color == second.stroke_theme_color
-            and abs((first.stroke_width_px or 0.0) - (second.stroke_width_px or 0.0)) <= 1e-6
-            and abs((first.stroke_opacity or 1.0) - (second.stroke_opacity or 1.0)) <= 1e-6
+            and abs((first.stroke_width_px or 0.0) - (second.stroke_width_px or 0.0))
+            <= 1e-6
+            and abs((first.stroke_opacity or 1.0) - (second.stroke_opacity or 1.0))
+            <= 1e-6
         )
 
-    def _attach_resvg_text_metadata(self, resvg_node: Any, metadata: dict[str, Any]) -> None:
+    def _attach_resvg_text_metadata(
+        self, resvg_node: Any, metadata: dict[str, Any]
+    ) -> None:
         if not hasattr(resvg_node, "text_content"):
             return
         try:
@@ -903,7 +961,9 @@ class TextConverter:
         if tree is not None:
             from svg2ooxml.paint.resvg_bridge import _resolve_paint_reference
 
-            paint_resolver = lambda ref: _resolve_paint_reference(ref, tree)  # noqa: E731
+            paint_resolver = lambda ref: _resolve_paint_reference(
+                ref, tree
+            )  # noqa: E731
 
         generator = DrawingMLTextGenerator(
             font_service=self._context.services.resolve("font"),
@@ -921,6 +981,44 @@ class TextConverter:
             resvg_meta["runs_xml"] = runs_xml
         else:
             resvg_meta["strategy"] = "empty"
+
+    def _attach_text_path_metadata(
+        self,
+        element: etree._Element,
+        metadata: dict[str, Any],
+        *,
+        resvg_node: Any | None = None,
+    ) -> None:
+        if metadata.get("text_path_id"):
+            return
+
+        for node in element.iter():
+            local = self._context.local_name(getattr(node, "tag", "")).lower()
+            if local != "textpath":
+                continue
+            href = node.get("{http://www.w3.org/1999/xlink}href") or node.get("href")
+            self._record_text_path_reference(href, metadata)
+            if metadata.get("text_path_id"):
+                return
+
+        attrs = getattr(resvg_node, "attributes", {}) or {}
+        href = attrs.get("textPath")
+        if isinstance(href, str):
+            self._record_text_path_reference(href, metadata)
+
+    def _record_text_path_reference(
+        self,
+        href: str | None,
+        metadata: dict[str, Any],
+    ) -> None:
+        path_id = self._context.normalize_href_reference(href)
+        if not path_id:
+            return
+        metadata.setdefault("text_path_id", path_id)
+        sampled = self._sample_text_path(path_id)
+        if sampled is not None:
+            metadata["text_path_data"] = sampled["path_data"]
+            metadata["text_path_points"] = sampled["points"]
 
     @staticmethod
     def _estimate_text_bbox(
@@ -1022,7 +1120,9 @@ class TextConverter:
             return "000000"
         return value.upper()
 
-    def _apply_text_decision(self, run: Run, decision: TextPolicyDecision) -> tuple[Run, dict[str, Any]]:
+    def _apply_text_decision(
+        self, run: Run, decision: TextPolicyDecision
+    ) -> tuple[Run, dict[str, Any]]:
         updated = run
         metadata: dict[str, Any] = {}
 
@@ -1032,7 +1132,9 @@ class TextConverter:
 
         behavior = decision.fallback.missing_font_behavior.lower()
         if behavior == "fallback_family":
-            fallback = self._resolve_font_fallback(updated.font_family, decision.fallback.fallback_order)
+            fallback = self._resolve_font_fallback(
+                updated.font_family, decision.fallback.fallback_order
+            )
             if fallback and fallback.lower() != updated.font_family.lower():
                 updated = replace(updated, font_family=fallback)
                 metadata["font_fallback"] = fallback
@@ -1094,9 +1196,9 @@ class TextConverter:
         if not family:
             return "Arial"
         tokens = [
-            part.strip().strip('"\'')
+            part.strip().strip("\"'")
             for part in family.split(",")
-            if part.strip().strip('"\'')
+            if part.strip().strip("\"'")
         ]
         if not tokens:
             return "Arial"
@@ -1112,7 +1214,9 @@ class TextConverter:
         if not path_data:
             return None
         try:
-            points = self._text_path_positioner.sample_path_for_text(path_data, num_samples=96)
+            points = self._text_path_positioner.sample_path_for_text(
+                path_data, num_samples=96
+            )
             return {"points": points, "path_data": path_data}
         except Exception:  # pragma: no cover - defensive fallback
             return None

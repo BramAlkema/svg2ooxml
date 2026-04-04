@@ -13,6 +13,7 @@ from svg2ooxml.common.geometry import Matrix2D
 from svg2ooxml.common.style.resolver import StyleContext as CSSStyleContext
 from svg2ooxml.core.parser.switch_evaluator import SwitchEvaluator
 from svg2ooxml.core.styling import style_runtime, use_expander
+from svg2ooxml.core.styling.style_helpers import parse_style_attr
 from svg2ooxml.core.traversal import clipping
 from svg2ooxml.core.traversal.constants import DEFAULT_TOLERANCE
 from svg2ooxml.core.traversal.coordinate_space import CoordinateSpace
@@ -69,7 +70,9 @@ class TraversalHooksMixin:
         "auto": 0,
     }
 
-    def convert_group(self, element: etree._Element, children: list, matrix) -> Group | None:
+    def convert_group(
+        self, element: etree._Element, children: list, matrix
+    ) -> Group | None:
         if not children:
             return None
         clip_ref = self._resolve_clip_ref(element)
@@ -146,14 +149,22 @@ class TraversalHooksMixin:
                 )
             if tag == "text":
                 resvg_lookup = getattr(self, "_resvg_element_lookup", {})
-                resvg_node = resvg_lookup.get(element) if isinstance(resvg_lookup, dict) else None
-                return handler(element=element, coord_space=coord_space, resvg_node=resvg_node)
+                resvg_node = (
+                    resvg_lookup.get(element)
+                    if isinstance(resvg_lookup, dict)
+                    else None
+                )
+                return handler(
+                    element=element, coord_space=coord_space, resvg_node=resvg_node
+                )
             return handler(element=element, coord_space=coord_space)
         except Exception as exc:  # pragma: no cover - defensive logging
             self._logger.error("Failed to convert <%s>: %s", tag, exc)
             return None
 
-    def attach_metadata(self, ir_object, element: etree._Element, navigation_spec) -> None:
+    def attach_metadata(
+        self, ir_object, element: etree._Element, navigation_spec
+    ) -> None:
         if ir_object is None or not hasattr(ir_object, "metadata"):
             return
         metadata: dict[str, Any] = ir_object.metadata  # type: ignore[attr-defined]
@@ -217,13 +228,19 @@ class TraversalHooksMixin:
         metadata: dict[str, Any],
     ) -> None:
         filter_attr = element.get("filter")
+        if not filter_attr:
+            filter_attr = parse_style_attr(element.get("style")).get("filter")
         filter_id = self._normalize_href_reference(filter_attr)
         if not filter_id:
             return
 
         filters_meta = metadata.setdefault("filters", [])
         filter_entry = next(
-            (entry for entry in filters_meta if isinstance(entry, dict) and entry.get("id") == filter_id),
+            (
+                entry
+                for entry in filters_meta
+                if isinstance(entry, dict) and entry.get("id") == filter_id
+            ),
             None,
         )
         if filter_entry is None:
@@ -250,13 +267,19 @@ class TraversalHooksMixin:
                     }
 
                 descriptor_map = getattr(self, "_resvg_filter_descriptors", {})
-                descriptor = descriptor_map.get(filter_id) if isinstance(descriptor_map, dict) else None
+                descriptor = (
+                    descriptor_map.get(filter_id)
+                    if isinstance(descriptor_map, dict)
+                    else None
+                )
                 if descriptor is not None:
                     descriptor_payload = {
                         "filter_units": descriptor.filter_units,
                         "primitive_units": descriptor.primitive_units,
                         "primitive_count": len(descriptor.primitives),
-                        "primitive_tags": [primitive.tag for primitive in descriptor.primitives],
+                        "primitive_tags": [
+                            primitive.tag for primitive in descriptor.primitives
+                        ],
                         "filter_region": dict(descriptor.region or {}),
                     }
 
@@ -278,7 +301,9 @@ class TraversalHooksMixin:
                     context=filter_context_payload,
                 )
             except Exception as exc:  # pragma: no cover - defensive logging
-                self._logger.debug("Failed to resolve effects for filter %s: %s", filter_id, exc)
+                self._logger.debug(
+                    "Failed to resolve effects for filter %s: %s", filter_id, exc
+                )
 
         if not effect_results:
             effect_results = [
@@ -338,7 +363,9 @@ class TraversalHooksMixin:
                     if prior is selected_result:
                         continue
                     prior_assets = (
-                        prior.metadata.get("fallback_assets") if isinstance(prior.metadata, dict) else None
+                        prior.metadata.get("fallback_assets")
+                        if isinstance(prior.metadata, dict)
+                        else None
                     )
                     if isinstance(prior_assets, list):
                         assets.extend(prior_assets)
@@ -348,7 +375,8 @@ class TraversalHooksMixin:
             filter_types = {
                 str(result.metadata.get("filter_type", "")).lower()
                 for result in effect_results
-                if isinstance(result.metadata, dict) and result.metadata.get("filter_type")
+                if isinstance(result.metadata, dict)
+                and result.metadata.get("filter_type")
             }
             if not filter_types:
                 fallback_type = selected_meta.get("filter_type")
@@ -381,7 +409,9 @@ class TraversalHooksMixin:
             geometry_policy["suggest_fallback"] = fallback_mode
         effects_policy = policy.setdefault("effects", {})
         filters_policy = effects_policy.setdefault("filters", [])
-        if filter_id not in (entry.get("id") for entry in filters_policy if isinstance(entry, dict)):
+        if filter_id not in (
+            entry.get("id") for entry in filters_policy if isinstance(entry, dict)
+        ):
             filters_policy.append(
                 {
                     "id": filter_id,
@@ -395,7 +425,9 @@ class TraversalHooksMixin:
         if descriptor_payload is not None:
             filter_entry.setdefault("descriptor", descriptor_payload)
 
-    def _select_filter_result(self, results: list[FilterEffectResult]) -> FilterEffectResult:
+    def _select_filter_result(
+        self, results: list[FilterEffectResult]
+    ) -> FilterEffectResult:
         if not results:
             return FilterEffectResult(
                 effect=CustomEffect(drawingml=""),
@@ -414,7 +446,9 @@ class TraversalHooksMixin:
             rank = rank_map.get(strategy, 0)
             return (0 if no_op else 1, 1 if fallback_none else 0, rank, index)
 
-        best_index, _ = max(enumerate(results), key=lambda item: _score(item[0], item[1]))
+        best_index, _ = max(
+            enumerate(results), key=lambda item: _score(item[0], item[1])
+        )
         return results[best_index]
 
     def _collect_group_effect_targets(
@@ -500,7 +534,9 @@ class TraversalHooksMixin:
                 rect.corner_radius,
             )
         else:
-            segments = _rect_segments(rect.bounds.x, rect.bounds.y, rect.bounds.width, rect.bounds.height)
+            segments = _rect_segments(
+                rect.bounds.x, rect.bounds.y, rect.bounds.width, rect.bounds.height
+            )
         return {
             "shape_type": "Rectangle",
             "geometry": self._serialize_segments(segments),
@@ -515,7 +551,9 @@ class TraversalHooksMixin:
         }
 
     def _circle_descriptor(self, circle: IRShapeCircle) -> dict[str, Any]:
-        segments = _ellipse_segments(circle.center.x, circle.center.y, circle.radius, circle.radius)
+        segments = _ellipse_segments(
+            circle.center.x, circle.center.y, circle.radius, circle.radius
+        )
         return {
             "shape_type": "Circle",
             "geometry": self._serialize_segments(segments),
@@ -530,7 +568,9 @@ class TraversalHooksMixin:
         }
 
     def _ellipse_descriptor(self, ellipse: IRShapeEllipse) -> dict[str, Any]:
-        segments = _ellipse_segments(ellipse.center.x, ellipse.center.y, ellipse.radius_x, ellipse.radius_y)
+        segments = _ellipse_segments(
+            ellipse.center.x, ellipse.center.y, ellipse.radius_x, ellipse.radius_y
+        )
         return {
             "shape_type": "Ellipse",
             "geometry": self._serialize_segments(segments),
@@ -586,7 +626,9 @@ class TraversalHooksMixin:
             "bbox": self._serialize_rect(line.bbox),
         }
 
-    def _serialize_segments(self, segments: Iterable[SegmentType]) -> list[dict[str, Any]]:
+    def _serialize_segments(
+        self, segments: Iterable[SegmentType]
+    ) -> list[dict[str, Any]]:
         serialized: list[dict[str, Any]] = []
         for segment in segments:
             if isinstance(segment, LineSegment):
@@ -658,9 +700,11 @@ class TraversalHooksMixin:
             }
 
             # Phase 1: Include transform telemetry fields if present
-            if hasattr(paint, 'had_transform_flag') and paint.had_transform_flag:
+            if hasattr(paint, "had_transform_flag") and paint.had_transform_flag:
                 result["had_transform"] = True
-                result["gradient_transform"] = self._serialize_matrix(paint.gradient_transform)
+                result["gradient_transform"] = self._serialize_matrix(
+                    paint.gradient_transform
+                )
 
                 if paint.policy_decision:
                     result["policy_decision"] = paint.policy_decision
@@ -724,7 +768,9 @@ class TraversalHooksMixin:
         current_navigation,
         traverse_callback,
     ) -> list:
-        href_attr = element.get("{http://www.w3.org/1999/xlink}href") or element.get("href")
+        href_attr = element.get("{http://www.w3.org/1999/xlink}href") or element.get(
+            "href"
+        )
         reference_id = self._normalize_href_reference(href_attr)
         if reference_id is None:
             return []
@@ -736,11 +782,17 @@ class TraversalHooksMixin:
             return []
 
         if reference_id in self._use_expansion_stack:
-            self._logger.debug("Detected recursive <use> expansion for %s", reference_id)
+            self._logger.debug(
+                "Detected recursive <use> expansion for %s", reference_id
+            )
             return []
 
         self._symbol_usage.add(reference_id)
-        target_tag = self._local_name(getattr(target, "tag", "")) if isinstance(target, etree._Element) else None
+        target_tag = (
+            self._local_name(getattr(target, "tag", ""))
+            if isinstance(target, etree._Element)
+            else None
+        )
         self._trace_stage(
             "symbol_expand",
             stage="symbol",
@@ -829,7 +881,11 @@ class TraversalHooksMixin:
             is_axis_aligned=is_axis_aligned,
         )
         if clip_ref is not None:
-            decision = "emf" if getattr(clip_ref.strategy, "value", clip_ref.strategy) == "emf" else "native"
+            decision = (
+                "emf"
+                if getattr(clip_ref.strategy, "value", clip_ref.strategy) == "emf"
+                else "native"
+            )
             metadata = {
                 "clip_id": clip_ref.clip_id,
                 "strategy": getattr(clip_ref.strategy, "value", clip_ref.strategy),
@@ -841,13 +897,20 @@ class TraversalHooksMixin:
                     "clip_applied",
                     stage="clip",
                     subject=clip_ref.clip_id,
-                    metadata={"strategy": metadata["strategy"], "custom_geometry": metadata["custom_geometry"]},
+                    metadata={
+                        "strategy": metadata["strategy"],
+                        "custom_geometry": metadata["custom_geometry"],
+                    },
                 )
             self._trace_geometry_decision(element, decision, metadata)
         return clip_ref
 
-    def _resolve_mask_ref(self, element: etree._Element) -> tuple[MaskRef | None, MaskInstance | None]:
-        mask_ref, mask_instance = clipping.resolve_mask_ref(element, mask_info=self._mask_info)
+    def _resolve_mask_ref(
+        self, element: etree._Element
+    ) -> tuple[MaskRef | None, MaskInstance | None]:
+        mask_ref, mask_instance = clipping.resolve_mask_ref(
+            element, mask_info=self._mask_info
+        )
         if mask_ref is not None and mask_ref.mask_id:
             self._mask_usage.add(mask_ref.mask_id)
             self._trace_stage(

@@ -1,7 +1,9 @@
 """Tests for IR scene primitives."""
 
+import pytest
+
 from svg2ooxml.ir.effects import BlurEffect
-from svg2ooxml.ir.geometry import LineSegment, Point, Rect
+from svg2ooxml.ir.geometry import BezierSegment, LineSegment, Point, Rect
 from svg2ooxml.ir.paint import SolidPaint, Stroke
 from svg2ooxml.ir.scene import (
     ClipRef,
@@ -36,6 +38,26 @@ def test_path_bbox_and_complexity() -> None:
     assert path.complexity_score >= 4
 
 
+def test_path_bbox_tracks_bezier_extrema() -> None:
+    path = Path(
+        segments=[
+            BezierSegment(
+                start=Point(0, 0),
+                control1=Point(10, 20),
+                control2=Point(20, 20),
+                end=Point(30, 0),
+            )
+        ]
+    )
+
+    bbox = path.bbox
+
+    assert bbox.x == 0
+    assert bbox.width == 30
+    assert bbox.y == pytest.approx(0.0)
+    assert bbox.height == pytest.approx(15.0)
+
+
 def test_group_bbox_and_children_count() -> None:
     circle = Circle(center=Point(5, 5), radius=2)
     path = Path(segments=[_line(0, 0, 1, 1)], fill=None)
@@ -56,8 +78,15 @@ def test_mask_definition_reference() -> None:
 
 
 def test_mask_instance_exposes_mode_and_bounds() -> None:
-    definition = MaskDefinition(mask_id="mask2", mode=MaskMode.ALPHA, bounding_box=Rect(0, 0, 10, 20))
-    mask_ref = MaskRef(mask_id="mask2", definition=definition, target_bounds=Rect(0, 0, 10, 20), target_opacity=0.6)
+    definition = MaskDefinition(
+        mask_id="mask2", mode=MaskMode.ALPHA, bounding_box=Rect(0, 0, 10, 20)
+    )
+    mask_ref = MaskRef(
+        mask_id="mask2",
+        definition=definition,
+        target_bounds=Rect(0, 0, 10, 20),
+        target_opacity=0.6,
+    )
     instance = MaskInstance(mask=mask_ref, bounds=Rect(1, 2, 8, 16), opacity=0.8)
 
     assert instance.mask_id == "mask2"

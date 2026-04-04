@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import argparse
+import os
+import platform
 import subprocess
 import sys
 import time
@@ -22,7 +24,9 @@ try:
             self.error = None
             return self
 
-        def stream_didOutputSampleBuffer_ofType_(self, stream, sampleBuffer, outputType):
+        def stream_didOutputSampleBuffer_ofType_(
+            self, stream, sampleBuffer, outputType
+        ):
             if outputType != SCK.SCStreamOutputTypeScreen:
                 return
             if self.sample_buffer is None:
@@ -30,6 +34,7 @@ try:
 
         def stream_didStopWithError_(self, stream, error):
             self.error = error
+
 except Exception:
     _SCKStreamOutput = None
 
@@ -42,6 +47,37 @@ from tools.visual.pptx_window import (  # noqa: E402
     osascript as _osascript,
     osascript_jxa as _osascript_jxa,
 )
+
+_POWERPOINT_PERMISSION_NOTICE_SHOWN = False
+
+
+def _maybe_prompt_for_permissions() -> None:
+    global _POWERPOINT_PERMISSION_NOTICE_SHOWN
+    if _POWERPOINT_PERMISSION_NOTICE_SHOWN:
+        return
+    if platform.system() != "Darwin":
+        return
+    if os.getenv("SVG2OOXML_POWERPOINT_SKIP_NOTICE", "").lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }:
+        _POWERPOINT_PERMISSION_NOTICE_SHOWN = True
+        return
+    if not sys.stdin.isatty() or not sys.stdout.isatty():
+        return
+
+    script = """
+display dialog "PowerPoint visual capture may trigger macOS prompts for Automation, Screen Recording, and file access.\n\nIf macOS asks, allow your terminal app to control Microsoft PowerPoint and capture the screen. Keeping outputs under reports/visual/powerpoint reduces repeat prompts." with title "svg2ooxml PowerPoint Capture" buttons {"Cancel", "Continue"} default button "Continue" cancel button "Cancel" with icon caution
+"""
+    try:
+        _osascript(script, timeout=30.0)
+    except RuntimeError as exc:
+        raise RuntimeError(
+            "PowerPoint capture cancelled before permission preflight."
+        ) from exc
+    _POWERPOINT_PERMISSION_NOTICE_SHOWN = True
 
 
 def _capture_window_screen_capture_kit(
@@ -179,7 +215,9 @@ def _capture_window_screen_capture_kit(
     stream.startCaptureWithCompletionHandler_(start_handler)
 
     deadline = time.time() + timeout
-    while time.time() < deadline and output.sample_buffer is None and output.error is None:
+    while (
+        time.time() < deadline and output.sample_buffer is None and output.error is None
+    ):
         run_loop.runUntilDate_(NSDate.dateWithTimeIntervalSinceNow_(0.05))
 
     stream.stopCaptureWithCompletionHandler_(lambda error: None)
@@ -220,19 +258,40 @@ def _capture_window(
     if window_id:
         if backend in {"auto", "sckit"}:
             try:
-                _capture_window_screen_capture_kit(int(window_id), output_path, timeout=timeout)
+                _capture_window_screen_capture_kit(
+                    int(window_id), output_path, timeout=timeout
+                )
                 return
             except Exception:
                 if backend == "sckit":
                     raise
-        subprocess.run(
-            ["screencapture", "-x", "-T", "0", "-l", str(window_id), str(output_path)],
-            check=True,
-        )
+        try:
+            subprocess.run(
+                [
+                    "screencapture",
+                    "-x",
+                    "-T",
+                    "0",
+                    "-l",
+                    str(window_id),
+                    str(output_path),
+                ],
+                check=True,
+                timeout=max(1.0, timeout),
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise RuntimeError("screencapture timed out while capturing slideshow window") from exc
         return
     if backend == "sckit":
         raise RuntimeError("No window ID for ScreenCaptureKit capture")
-    subprocess.run(["screencapture", "-x", "-T", "0", str(output_path)], check=True)
+    try:
+        subprocess.run(
+            ["screencapture", "-x", "-T", "0", str(output_path)],
+            check=True,
+            timeout=max(1.0, timeout),
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError("screencapture timed out while capturing the screen") from exc
 
 
 def _get_slide_count() -> int:
@@ -270,6 +329,36 @@ tell application "Microsoft PowerPoint"
 end tell
 """
     _osascript(script)
+
+
+def _teardown_powerpoint_session() -> None:
+    try:
+        _exit_slideshow()
+    except RuntimeError:
+        pass
+    try:
+        _close_active_presentation()
+    except RuntimeError:
+        pass
+
+
+def _cleanup_powerpoint_state() -> None:
+    script = """
+tell application "Microsoft PowerPoint"
+    try
+        try
+            exit slide show slide show view of slide show window of active presentation
+        end try
+        repeat with pres in presentations
+            close pres saving no
+        end repeat
+    end try
+end tell
+"""
+    try:
+        _osascript(script)
+    except RuntimeError:
+        pass
 
 
 def _start_slideshow(
@@ -320,9 +409,25 @@ end clickDialogButtons
 
 on openPresentation(pptPosix)
     tell application "Microsoft PowerPoint"
+        launch
+        try
+            repeat with pres in presentations
+                close pres saving no
+            end repeat
+        end try
         open (POSIX file pptPosix)
     end tell
 end openPresentation
+
+on runSlideshowWindowed()
+    tell application "Microsoft PowerPoint"
+        try
+            set show type of slide show settings of active presentation to slide show type window
+        end try
+        run slide show slide show settings of active presentation
+    end tell
+    return true
+end runSlideshowWindowed
 
 on dismissDialogs(aggressive, maxSeconds)
     tell application "System Events"
@@ -399,18 +504,27 @@ on isPowerPointRunning()
     end tell
 end isPowerPointRunning
 
-on waitForPresentation(maxSeconds, pptPosix, allowReopen)
+on waitForPresentation(maxSeconds, targetName, pptPosix, allowReopen)
     set t0 to (current date)
     set didReopen to false
     set lastOpen to (current date)
     repeat while ((current date) - t0) < maxSeconds
         set presCount to 0
+        set targetOpen to false
         try
             tell application "Microsoft PowerPoint"
                 set presCount to count of presentations
+                repeat with pres in presentations
+                    try
+                        if name of pres is targetName then
+                            set targetOpen to true
+                            exit repeat
+                        end if
+                    end try
+                end repeat
             end tell
         end try
-        if presCount > 0 then
+        if presCount > 0 and targetOpen then
             return true
         end if
         my dismissDialogs(true, 2)
@@ -457,35 +571,39 @@ end using terms from
 
 set pptPath to POSIX file "{pptx_path}"
 set pptPosix to POSIX path of pptPath
+set targetName to "{pptx_path.name}"
 set useKeys to {str(use_keys).lower()}
 set allowReopen to {str(allow_reopen).lower()}
-tell application "Microsoft PowerPoint"
-    activate
-end tell
-delay 0.2
 my openPresentation(pptPosix)
 delay 0.1
 delay {delay}
 my dismissDialogs(true, 10)
-if my waitForPresentation({open_timeout}, pptPosix, allowReopen) is false then
+if my waitForPresentation({open_timeout}, targetName, pptPosix, allowReopen) is false then
     error "No active presentation after repair."
 end if
 if my waitForSlides({open_timeout}) is false then
     error "No active slides after repair."
 end if
-tell application "Microsoft PowerPoint"
-    if (count of presentations) is 0 then
-        error "Presentation closed before slideshow."
+set startedSlideshow to false
+try
+    set startedSlideshow to my runSlideshowWindowed()
+end try
+if startedSlideshow is false then
+    if useKeys then
+        tell application "Microsoft PowerPoint"
+            activate
+        end tell
+        delay 0.2
+        tell application "System Events"
+            tell process "Microsoft PowerPoint"
+                set frontmost to true
+            end tell
+            keystroke return using {{command down, shift down}}
+        end tell
+    else
+        error "Unable to start slideshow via PowerPoint object model."
     end if
-    activate
-end tell
-delay 0.2
-tell application "System Events"
-    tell process "Microsoft PowerPoint"
-        set frontmost to true
-    end tell
-    keystroke return using {{command down, shift down}}
-end tell
+end if
 delay {slideshow_delay}
 """
     timeout = max(60.0, open_timeout + 30.0)
@@ -506,9 +624,11 @@ def capture_pptx_slideshow_all(
     allow_reopen: bool,
     backend: str,
 ) -> None:
+    _maybe_prompt_for_permissions()
     pptx_path = pptx_path.resolve()
     output_dir = output_dir.resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
+    _cleanup_powerpoint_state()
     open_failed_path = output_dir / "open_failed.png"
     if open_failed_path.exists():
         open_failed_path.unlink()
@@ -568,8 +688,7 @@ def capture_pptx_slideshow_all(
             _advance_slide()
     finally:
         if exit_after:
-            _exit_slideshow()
-            _close_active_presentation()
+            _teardown_powerpoint_session()
 
 
 def _exit_slideshow() -> None:
@@ -600,6 +719,7 @@ def capture_pptx_window(
     backend: str,
     capture_timeout: float,
 ) -> None:
+    _maybe_prompt_for_permissions()
     win_id = _get_front_window_id(pptx_path, delay)
     if not win_id:
         raise RuntimeError("No PowerPoint window ID returned.")
@@ -625,6 +745,8 @@ def capture_pptx_slideshow(
     allow_reopen: bool,
     backend: str,
 ) -> None:
+    _maybe_prompt_for_permissions()
+    _cleanup_powerpoint_state()
     _start_slideshow(
         pptx_path,
         delay,
@@ -646,7 +768,7 @@ def capture_pptx_slideshow(
         )
     finally:
         if exit_after:
-            _exit_slideshow()
+            _teardown_powerpoint_session()
 
 
 def capture_live_animation(
@@ -664,9 +786,11 @@ def capture_live_animation(
     backend: str = "auto",
 ) -> list[Path]:
     """Record a single slide's playback by taking fast screenshots."""
+    _maybe_prompt_for_permissions()
     pptx_path = pptx_path.resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
-    
+    _cleanup_powerpoint_state()
+
     _start_slideshow(
         pptx_path,
         delay,
@@ -675,41 +799,59 @@ def capture_live_animation(
         use_keys=use_keys,
         allow_reopen=allow_reopen,
     )
-    
+
     captured_files = []
     try:
-        win_id = _get_slideshow_window_id(timeout=slideshow_delay + 2.0)
+        win_id = _get_slideshow_window_id(timeout=max(5.0, slideshow_delay + 5.0))
         start_time = time.time()
         frame_idx = 0
         interval = 1.0 / fps
-        
+
         while (time.time() - start_time) < duration:
             frame_path = output_dir / f"frame_{frame_idx:04d}.png"
-            _capture_window(
-                frame_path,
-                win_id or None,
-                backend=backend,
-                timeout=capture_timeout,
-            )
+            if win_id:
+                try:
+                    _capture_window(
+                        frame_path,
+                        win_id,
+                        backend=backend,
+                        timeout=capture_timeout,
+                    )
+                except Exception:
+                    win_id = _get_slideshow_window_id(timeout=1.5)
+                    _capture_window(
+                        frame_path,
+                        win_id or None,
+                        backend=backend,
+                        timeout=capture_timeout,
+                    )
+            else:
+                _capture_window(
+                    frame_path,
+                    None,
+                    backend=backend,
+                    timeout=capture_timeout,
+                )
             captured_files.append(frame_path)
             frame_idx += 1
-            
+
             # Simple pacing
             elapsed = time.time() - start_time
-            next_shot = (frame_idx * interval)
+            next_shot = frame_idx * interval
             wait = next_shot - elapsed
             if wait > 0:
                 time.sleep(wait)
-                
+
     finally:
-        _exit_slideshow()
-        _close_active_presentation()
-        
+        _teardown_powerpoint_session()
+
     return captured_files
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Capture PowerPoint window screenshot.")
+    parser = argparse.ArgumentParser(
+        description="Capture PowerPoint window screenshot."
+    )
     parser.add_argument("pptx", type=Path, help="Path to the PPTX file to open.")
     parser.add_argument(
         "output",
@@ -722,9 +864,15 @@ def main() -> int:
         default="window",
         help="Capture mode: live records a single slide's animation.",
     )
-    parser.add_argument("--duration", type=float, default=5.0, help="Duration for live recording.")
-    parser.add_argument("--fps", type=float, default=10.0, help="FPS for live recording.")
-    parser.add_argument("--delay", type=float, default=1.5, help="Delay after opening (seconds).")
+    parser.add_argument(
+        "--duration", type=float, default=5.0, help="Duration for live recording."
+    )
+    parser.add_argument(
+        "--fps", type=float, default=10.0, help="FPS for live recording."
+    )
+    parser.add_argument(
+        "--delay", type=float, default=1.5, help="Delay after opening (seconds)."
+    )
     parser.add_argument(
         "--slideshow-delay",
         type=float,

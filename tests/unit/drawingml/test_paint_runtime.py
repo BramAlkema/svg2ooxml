@@ -80,6 +80,20 @@ def test_pattern_fill_supports_theme_slots() -> None:
     assert 'val="4472C4"' not in xml
 
 
+def test_pattern_fill_supports_transparent_background() -> None:
+    paint = PatternPaint(
+        pattern_id="pat_transparent",
+        preset="pct20",
+        foreground="000000",
+        background="FFFFFF",
+        background_opacity=0.0,
+    )
+
+    xml = paint_runtime.paint_to_fill(paint)
+
+    assert '<a:srgbClr val="FFFFFF"><a:alpha val="0"/></a:srgbClr>' in xml
+
+
 def test_gradient_stroke_generates_gradient_fill() -> None:
     gradient = LinearGradientPaint(
         stops=[

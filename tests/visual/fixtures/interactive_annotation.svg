@@ -1,0 +1,62 @@
+<svg
+  width="413"
+  height="832"
+  viewBox="0 0 413 832"
+  fill="none"
+  xmlns="http://www.w3.org/2000/svg"
+>
+  <g id="step_start" data-slide="2">
+    <title>Start step</title>
+    <path
+      id="step_start_hotspot"
+      d="M7 92.017C8.2049 92.017 9.398 91.7797 10.5112 91.3186C11.6244 90.8575 12.6358 90.1817 13.4878 89.3297C14.3398 88.4777 15.0156 87.4662 15.4767 86.3531C15.9378 85.2399 16.1751 84.0468 16.1751 82.8419C16.1751 81.637 15.9378 80.4439 15.4767 79.3307C15.0156 78.2175 14.3398 77.2061 13.4878 76.3541C12.6358 75.5021 11.6244 74.8263 10.5112 74.3652C9.398 73.9041 8.2049 73.6667 7 73.6667L7 92.017Z"
+      fill="#FB913A"
+    />
+  </g>
+  <text id="label_start" x="30" y="88" font-family="Verdana" font-size="14" fill="#181D2C">Start</text>
+
+  <g id="step_branch" data-slide="3">
+    <title>Branch step</title>
+    <path
+      id="step_branch_hotspot"
+      d="M79.2552 26.644L70.0801 35.8192L79.2552 44.9943L88.4304 35.8192L79.2552 26.644Z"
+      fill="#4673D1"
+    />
+  </g>
+  <text id="label_branch" x="104" y="41" font-family="Verdana" font-size="14" fill="#181D2C">Branch</text>
+
+  <g id="step_resolve" data-slide="4">
+    <title>Resolve step</title>
+    <path
+      id="step_resolve_hotspot"
+      d="M248.994 292.15L236.378 300.751L236.378 283.548L248.994 292.15Z"
+      fill="#4673D1"
+    />
+  </g>
+  <text id="label_resolve" x="266" y="297" font-family="Verdana" font-size="14" fill="#181D2C">Resolve</text>
+
+  <path
+    d="M64.3454 150.509L42.4414 150.509C24.7683 150.509 10.4414 136.182 10.4414 118.509L10.4414 101.192"
+    stroke="#FB913A"
+    stroke-width="1.5"
+    stroke-dasharray="6 6"
+  />
+  <path
+    d="M10.4414 64.4914V64.4914C10.4414 48.6561 23.2784 35.8191 39.1137 35.8191L60.9047 35.8191"
+    stroke="#FF576D"
+    stroke-width="1.5"
+    stroke-dasharray="6 6"
+  />
+  <path
+    d="M167.564 377.593L167.564 323.576C167.564 305.903 181.891 291.576 199.564 291.576L227.203 291.576"
+    stroke="#51BFE1"
+    stroke-width="1.5"
+    stroke-dasharray="6 6"
+  />
+  <path
+    id="mask"
+    d="M153 2L150.5 21L132.5 36H97.5H37.5L20.5 43L10.5 65V123.5L20.5 145.5L44.5 152H100H153L166.5 162L173 179V207V257.5L166.5 272.5L150.5 281H100H44.5L27.5 297L20.5 312V335V436.5L30.5 454L47.5 462.5H116H254.5L273.5 451L279.5 434V315.5L273.5 297L254.5 292.5H195.5L178 297L166.5 318V599L155.5 618L129.5 623.5H60.5H42.5L27.5 636.5L20.5 653V741V794.5L30.5 811.5L50.5 821.5H87L105.5 809L112 790V703.5"
+    stroke="#181D2C"
+    stroke-width="20"
+  />
+</svg>

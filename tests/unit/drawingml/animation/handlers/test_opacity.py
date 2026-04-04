@@ -132,8 +132,11 @@ class TestBuild:
     def test_fade_out(self, handler: OpacityAnimationHandler):
         anim = make_opacity_animation(values=["1", "0"])
         par = handler.build(anim, par_id=4, behavior_id=5)
-        anim_effect = par.find(f".//{{{NS_P}}}animEffect")
-        assert anim_effect.get("filter") == "fade(opacity=0)"
+        assert par.find(f".//{{{NS_P}}}animEffect") is None
+        anim_elem = par.find(f".//{{{NS_P}}}anim")
+        assert anim_elem is not None
+        attr_name = par.find(f".//{{{NS_P}}}attrName")
+        assert attr_name.text == "style.opacity"
 
     def test_delay_from_begin(self, handler: OpacityAnimationHandler):
         anim = make_opacity_animation(
@@ -156,3 +159,36 @@ class TestBuild:
         par = handler.build(anim, par_id=4, behavior_id=5)
         ctn = par.find(f"{{{NS_P}}}cTn")
         assert ctn.get("presetClass") == "entr"
+
+    def test_nonzero_start_opacity_uses_property_animation(
+        self, handler: OpacityAnimationHandler
+    ):
+        anim = make_opacity_animation(values=["0.1", "1"])
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        assert par.find(f".//{{{NS_P}}}animEffect") is None
+        anim_elem = par.find(f".//{{{NS_P}}}anim")
+        assert anim_elem is not None
+        attr_name = par.find(f".//{{{NS_P}}}attrName")
+        assert attr_name.text == "style.opacity"
+
+    def test_multi_keyframe_opacity_uses_property_animation(
+        self, handler: OpacityAnimationHandler
+    ):
+        anim = make_opacity_animation(values=["0.1", "1", "0.1"])
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        assert par.find(f".//{{{NS_P}}}animEffect") is None
+        anim_elem = par.find(f".//{{{NS_P}}}anim")
+        assert anim_elem is not None
+        tavs = par.findall(f".//{{{NS_P}}}tav")
+        assert [tav.get("tm") for tav in tavs] == ["0", "50000", "100000"]
+
+    def test_repeat_opacity_uses_property_animation(
+        self, handler: OpacityAnimationHandler
+    ):
+        anim = make_opacity_animation(
+            values=["0", "1"],
+            timing=AnimationTiming(begin=0.0, duration=1.0, repeat_count="indefinite"),
+        )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        assert par.find(f".//{{{NS_P}}}animEffect") is None
+        assert par.find(f".//{{{NS_P}}}anim") is not None

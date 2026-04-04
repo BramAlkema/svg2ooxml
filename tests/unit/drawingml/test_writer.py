@@ -2,15 +2,19 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from lxml import etree as ET
 
 from svg2ooxml.core.ir import IRScene
+from svg2ooxml.core.parser import ParserConfig, SVGParser
 from svg2ooxml.core.pipeline.navigation import (
     NavigationKind,
     NavigationSpec,
     SlideTarget,
 )
 from svg2ooxml.drawingml.writer import EMU_PER_PX, DrawingMLWriter
+from svg2ooxml.ir.entrypoints import convert_parser_output
 from svg2ooxml.ir.effects import CustomEffect
 from svg2ooxml.ir.geometry import BezierSegment, LineSegment, Point, Rect
 from svg2ooxml.ir.paint import (
@@ -471,6 +475,24 @@ def test_render_wordart_frame_preserves_height_for_circle_presets() -> None:
 
     assert ext is not None
     assert int(ext.attrib["cy"]) == int(56.0 * EMU_PER_PX)
+
+
+def test_render_scene_from_ir_uses_wordart_for_text_path_fixture() -> None:
+    fixture = (
+        Path(__file__).resolve().parents[2]
+        / "corpus"
+        / "kelvin_lawrence"
+        / "text-path.svg"
+    )
+    parser = SVGParser(ParserConfig())
+    parse_result = parser.parse(fixture.read_text(), source_path=str(fixture))
+    scene = convert_parser_output(parse_result)
+
+    writer = DrawingMLWriter()
+    result = writer.render_scene_from_ir(scene)
+
+    assert "Some text drawn on a curved path!" in result.slide_xml
+    assert "prstTxWarp" in result.slide_xml
 
 
 def test_writer_collects_font_embedding_plans() -> None:

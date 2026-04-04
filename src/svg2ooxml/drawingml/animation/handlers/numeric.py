@@ -13,7 +13,12 @@ from lxml import etree
 from svg2ooxml.drawingml.xml_builder import p_elem, p_sub
 from svg2ooxml.ir.animation import AnimationType, CalcMode
 
-from ..constants import ATTRIBUTE_NAME_MAP, COLOR_ATTRIBUTES, FADE_ATTRIBUTES, WIPE_ATTRIBUTES
+from ..constants import (
+    ATTRIBUTE_NAME_MAP,
+    COLOR_ATTRIBUTES,
+    FADE_ATTRIBUTES,
+    WIPE_ATTRIBUTES,
+)
 from ..timing_utils import compute_paced_key_times
 from ..value_formatters import format_numeric_value
 from .base import AnimationHandler
@@ -54,12 +59,31 @@ class NumericAnimationHandler(AnimationHandler):
 
         ppt_attribute = self._map_attribute_name(animation.target_attribute)
 
-        if ppt_attribute in self._SCALE_ATTRS or animation.target_attribute in self._SCALE_ATTRS:
-            return self._build_scale_animation(animation, par_id, behavior_id, ppt_attribute)
+        if (
+            ppt_attribute in self._SCALE_ATTRS
+            or animation.target_attribute in self._SCALE_ATTRS
+        ):
+            if len(animation.values) > 2 or animation.key_times:
+                return self._build_generic_anim(
+                    animation,
+                    par_id,
+                    behavior_id,
+                    ppt_attribute,
+                    preset_id=None,
+                    preset_class="emph",
+                )
+            return self._build_scale_animation(
+                animation, par_id, behavior_id, ppt_attribute
+            )
 
         is_simple = len(animation.values) <= 2 and not animation.key_times
-        if is_simple and (ppt_attribute in self._MOTION_ATTRS or animation.target_attribute in self._MOTION_ATTRS):
-            return self._build_position_animation(animation, par_id, behavior_id, ppt_attribute)
+        if is_simple and (
+            ppt_attribute in self._MOTION_ATTRS
+            or animation.target_attribute in self._MOTION_ATTRS
+        ):
+            return self._build_position_animation(
+                animation, par_id, behavior_id, ppt_attribute
+            )
 
         return self._build_generic_anim(animation, par_id, behavior_id, ppt_attribute)
 
@@ -75,15 +99,9 @@ class NumericAnimationHandler(AnimationHandler):
         from_val = float(self._normalize_value(ppt_attribute, values[0]))
         to_val = float(self._normalize_value(ppt_attribute, values[-1]))
 
-        # animScale uses percentage (100000 = 100%)
-        if from_val > 0:
-            scale_pct = int((to_val / from_val) * 100000)
-        else:
-            scale_pct = 100000
-
-        is_height = ppt_attribute in ("ppt_h", "height", "h", "ry")
-        x_pct = 100000 if is_height else scale_pct
-        y_pct = scale_pct if is_height else 100000
+        baseline = self._scale_baseline(from_val, to_val)
+        from_x, from_y = self._scale_pair(ppt_attribute, from_val, baseline)
+        to_x, to_y = self._scale_pair(ppt_attribute, to_val, baseline)
 
         animScale = p_elem("animScale")
         cBhvr = self._xml.build_behavior_core_elem(
@@ -94,7 +112,8 @@ class NumericAnimationHandler(AnimationHandler):
             repeat_count=animation.repeat_count,
         )
         animScale.append(cBhvr)
-        p_sub(animScale, "by", x=str(x_pct), y=str(y_pct))
+        p_sub(animScale, "from", x=str(from_x), y=str(from_y))
+        p_sub(animScale, "to", x=str(to_x), y=str(to_y))
 
         return self._xml.build_par_container_elem(
             par_id=par_id,
@@ -123,13 +142,12 @@ class NumericAnimationHandler(AnimationHandler):
         # animMotion path uses relative coordinates (0-1 range of slide)
         # The values are in EMU, convert to slide-relative
         slide_dim = 9144000 if is_x else 6858000  # default slide size
-        from_rel = from_val / slide_dim
-        to_rel = to_val / slide_dim
+        delta_rel = (to_val - from_val) / slide_dim
 
         if is_x:
-            path = f"M {from_rel:.6f} 0 L {to_rel:.6f} 0 E"
+            path = f"M 0 0 L {delta_rel:.6f} 0 E"
         else:
-            path = f"M 0 {from_rel:.6f} L 0 {to_rel:.6f} E"
+            path = f"M 0 0 L 0 {delta_rel:.6f} E"
 
         animMotion = p_elem("animMotion")
         animMotion.set("origin", "layout")
@@ -161,6 +179,9 @@ class NumericAnimationHandler(AnimationHandler):
         par_id: int,
         behavior_id: int,
         ppt_attribute: str,
+        *,
+        preset_id: int | None = 32,
+        preset_class: str | None = "emph",
     ) -> etree._Element:
         """Build ``<p:anim>`` for other numeric properties (stroke-width, etc.)."""
         anim = p_elem("anim")
@@ -184,11 +205,33 @@ class NumericAnimationHandler(AnimationHandler):
             duration_ms=animation.duration_ms,
             delay_ms=animation.begin_ms,
             child_element=anim,
-            preset_id=32,
-            preset_class="emph",
+            preset_id=preset_id,
+            preset_class=preset_class,
             begin_triggers=animation.begin_triggers,
             default_target_shape=animation.element_id,
         )
+
+    @staticmethod
+    def _scale_baseline(*values: float) -> float:
+        for value in values:
+            if abs(value) > 1e-6:
+                return abs(value)
+        return 1.0
+
+    @classmethod
+    def _scale_pair(
+        cls,
+        ppt_attribute: str,
+        absolute_value: float,
+        baseline: float,
+    ) -> tuple[int, int]:
+        scale_pct = (
+            int(round((absolute_value / baseline) * 100000)) if baseline else 100000
+        )
+        is_height = ppt_attribute in ("ppt_h", "height", "h", "ry")
+        x_pct = 100000 if is_height else scale_pct
+        y_pct = scale_pct if is_height else 100000
+        return (x_pct, y_pct)
 
     def _build_wipe_entrance(
         self,

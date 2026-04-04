@@ -63,6 +63,24 @@ def test_compute_segments_bbox() -> None:
     assert bbox.height == 3
 
 
+def test_compute_segments_bbox_uses_bezier_extrema() -> None:
+    segments = [
+        BezierSegment(
+            start=Point(0, 0),
+            control1=Point(10, 20),
+            control2=Point(20, 20),
+            end=Point(30, 0),
+        )
+    ]
+
+    bbox = compute_segments_bbox(segments)
+
+    assert bbox.x == 0
+    assert bbox.width == 30
+    assert bbox.y == pytest.approx(0.0)
+    assert bbox.height == pytest.approx(15.0)
+
+
 def test_parse_arc_command() -> None:
     segments = parse_path_data("M 0 0 A 10 10 0 0 1 10 10")
 

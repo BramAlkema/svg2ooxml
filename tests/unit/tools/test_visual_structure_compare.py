@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from svg2ooxml.core.tracing import ConversionTracer
 from tools.visual.builder import PptxBuilder
 from tools.visual.structure_compare import compare_substructures
 
@@ -43,7 +44,7 @@ def test_compare_substructures_flags_rasterized_fallbacks(tmp_path: Path) -> Non
       <defs>
         <pattern id="dots" patternUnits="userSpaceOnUse" width="8" height="8">
           <g transform="translate(1,1)">
-            <path d="M0,0 L6,6" stroke="#000000" fill="none" />
+            <path d="M0,0 C2,6 6,2 8,8" stroke="#000000" fill="none" />
           </g>
         </pattern>
       </defs>
@@ -76,3 +77,50 @@ def test_compare_substructures_flags_rasterized_fallbacks(tmp_path: Path) -> Non
     assert rasterized[0].source.element_id == "patterned"
     assert rasterized[0].target.shape_tag == "pic"
     assert rasterized[0].geometry_decision == "bitmap"
+
+
+def test_compare_substructures_keeps_interactive_annotations_aligned(
+    tmp_path: Path,
+) -> None:
+    fixture = (
+        Path(__file__).resolve().parents[2]
+        / "visual"
+        / "fixtures"
+        / "interactive_annotation.svg"
+    )
+    svg = fixture.read_text()
+    pptx_path = tmp_path / "interactive_annotation.pptx"
+
+    builder = PptxBuilder(
+        filter_strategy="resvg",
+        geometry_mode="resvg",
+        slide_size_mode="same",
+        allow_promotion=False,
+    )
+    tracer = ConversionTracer()
+    builder.build_from_svg(svg, pptx_path, tracer=tracer, source_path=fixture)
+
+    report = compare_substructures(
+        svg,
+        pptx_path,
+        source_path=fixture,
+        filter_strategy="resvg",
+        geometry_mode="resvg",
+        trace_report=tracer.report().to_dict(),
+    )
+
+    pairs_by_id = {
+        pair.source.element_id: pair
+        for pair in report.pairs
+        if pair.source.element_id is not None
+    }
+    for element_id in (
+        "step_start_hotspot",
+        "step_branch_hotspot",
+        "step_resolve_hotspot",
+        "label_start",
+        "label_branch",
+        "label_resolve",
+    ):
+        assert pairs_by_id[element_id].target.shape_tag == "sp"
+        assert pairs_by_id[element_id].max_abs_delta < 0.1

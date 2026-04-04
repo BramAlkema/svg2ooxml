@@ -3,17 +3,20 @@
 from __future__ import annotations
 
 import math
+from pathlib import Path as FilePath
 
 import pytest
 from lxml import etree
 
 from svg2ooxml.core.ir import IRConverter, IRScene
 from svg2ooxml.core.parser import ParseResult
+from svg2ooxml.core.parser import ParserConfig, SVGParser
 from svg2ooxml.ir.entrypoints import convert_parser_output
 from svg2ooxml.ir.geometry import BezierSegment, LineSegment, Point, Rect
 from svg2ooxml.ir.paint import (
     GradientPaintRef,
     LinearGradientPaint,
+    PatternPaint,
     SolidPaint,
     Stroke,
 )
@@ -88,7 +91,8 @@ def _unwrap_use_rectangle(element: object) -> tuple[Rectangle, dict[str, object]
         rect = next(child for child in element.children if isinstance(child, Rectangle))
         metadata = (
             element.metadata
-            if isinstance(element.metadata, dict) and element.metadata.get("element_ids")
+            if isinstance(element.metadata, dict)
+            and element.metadata.get("element_ids")
             else rect.metadata
         )
         return rect, metadata
@@ -109,6 +113,39 @@ def _collect_rectangles(elements: list[object]) -> list[Rectangle]:
     return rectangles
 
 
+def _fixture_path(name: str) -> FilePath:
+    return FilePath(__file__).resolve().parents[2] / "visual" / "fixtures" / name
+
+
+def _convert_fixture_with_resvg(name: str) -> IRScene:
+    fixture = _fixture_path(name)
+    parser = SVGParser(ParserConfig())
+    result = parser.parse(fixture.read_text(), source_path=str(fixture))
+    return convert_parser_output(
+        result,
+        overrides={"geometry": {"geometry_mode": "resvg-only"}},
+    )
+
+
+def _iter_scene_elements(element: object):
+    if isinstance(element, Group):
+        yield element
+        for child in element.children:
+            yield from _iter_scene_elements(child)
+        return
+    yield element
+
+
+def _element_ids(element: object) -> list[str]:
+    metadata = getattr(element, "metadata", None)
+    if not isinstance(metadata, dict):
+        return []
+    element_ids = metadata.get("element_ids")
+    if isinstance(element_ids, list) and element_ids:
+        return [str(element_id) for element_id in element_ids]
+    return []
+
+
 def _register_filter(parse_result: ParseResult, filter_markup: str) -> None:
     filters = parse_result.filters or {}
     element = etree.fromstring(filter_markup)
@@ -123,7 +160,9 @@ def _path_points(path: Path) -> list[Point]:
         if isinstance(segment, LineSegment):
             points.extend([segment.start, segment.end])
         elif isinstance(segment, BezierSegment):
-            points.extend([segment.start, segment.control1, segment.control2, segment.end])
+            points.extend(
+                [segment.start, segment.control1, segment.control2, segment.end]
+            )
     return points
 
 
@@ -198,8 +237,13 @@ def _group_center(group: Group) -> tuple[float, float]:
     )
 
 
-def _has_point(points: list[Point], x: float, y: float, *, tolerance: float = 1e-6) -> bool:
-    return any(abs(point.x - x) <= tolerance and abs(point.y - y) <= tolerance for point in points)
+def _has_point(
+    points: list[Point], x: float, y: float, *, tolerance: float = 1e-6
+) -> bool:
+    return any(
+        abs(point.x - x) <= tolerance and abs(point.y - y) <= tolerance
+        for point in points
+    )
 
 
 def test_convert_rect_produces_rectangle() -> None:
@@ -534,7 +578,10 @@ def test_mirrored_nested_use_preserves_asymmetric_child_positions() -> None:
     scene = _convert_with_resvg(parse_result)
     rects = _collect_rectangles(scene.elements)
 
-    observed = sorted((rect.bounds.x, rect.bounds.y, rect.bounds.width, rect.bounds.height) for rect in rects)
+    observed = sorted(
+        (rect.bounds.x, rect.bounds.y, rect.bounds.width, rect.bounds.height)
+        for rect in rects
+    )
     assert observed == [
         (3.0, 1.0, 2.0, 3.0),
         (8.0, 4.0, 2.0, 3.0),
@@ -601,7 +648,12 @@ def test_eu_flag_ring_expands_to_twelve_ten_wedge_stars() -> None:
 
     assert observed_centers == expected_centers
 
-    all_points = [point for group in star_groups for path in _collect_paths(group) for point in _path_points(path)]
+    all_points = [
+        point
+        for group in star_groups
+        for path in _collect_paths(group)
+        for point in _path_points(path)
+    ]
     assert all(0.0 <= point.x <= 810.0 for point in all_points)
     assert all(0.0 <= point.y <= 540.0 for point in all_points)
 
@@ -678,8 +730,6 @@ def test_gradient_fill_resolves_to_linear_gradient() -> None:
     assert analysis["stop_count"] == 2
 
 
-
-
 def test_mesh_gradient_records_policy_metadata() -> None:
     svg = (
         "<svg width='60' height='60' xmlns='http://www.w3.org/2000/svg'>"
@@ -700,17 +750,19 @@ def test_mesh_gradient_records_policy_metadata() -> None:
     rect = scene.elements[0]
     assert isinstance(rect, Rectangle)
     assert isinstance(rect.fill, GradientPaintRef)
-    assert rect.fill.gradient_id == 'meshGrad'
-    assert rect.fill.gradient_type == 'mesh'
-    analysis = rect.metadata.get('paint_analysis', {}).get('fill', {}).get('gradient')
+    assert rect.fill.gradient_id == "meshGrad"
+    assert rect.fill.gradient_type == "mesh"
+    analysis = rect.metadata.get("paint_analysis", {}).get("fill", {}).get("gradient")
     assert analysis is not None
-    assert analysis['type'] == 'mesh'
-    assert analysis['patch_count'] == 2
-    paint_policy = rect.metadata.get('policy', {}).get('paint', {}).get('fill', {})
-    assert paint_policy.get('gradient_kind') == 'mesh'
-    assert paint_policy.get('suggest_fallback') == FALLBACK_EMF
-    geometry_policy = rect.metadata.get('policy', {}).get('geometry', {})
-    assert geometry_policy.get('suggest_fallback') == FALLBACK_EMF
+    assert analysis["type"] == "mesh"
+    assert analysis["patch_count"] == 2
+    paint_policy = rect.metadata.get("policy", {}).get("paint", {}).get("fill", {})
+    assert paint_policy.get("gradient_kind") == "mesh"
+    assert paint_policy.get("suggest_fallback") == FALLBACK_EMF
+    geometry_policy = rect.metadata.get("policy", {}).get("geometry", {})
+    assert geometry_policy.get("suggest_fallback") == FALLBACK_EMF
+
+
 def test_gradient_fill_resolves_without_parser_services() -> None:
     svg = (
         "<svg width='80' height='80' xmlns='http://www.w3.org/2000/svg'>"
@@ -762,7 +814,7 @@ def test_text_tspan_produces_multiple_runs() -> None:
 def test_textpath_metadata_captured() -> None:
     svg = (
         "<svg width='200' height='200' xmlns='http://www.w3.org/2000/svg'>"
-        "<defs><path id='curve' d='M0 0 L 50 0'/></defs>"
+        "<defs><path id='curve' d='M0 40 Q 25 0 50 40'/></defs>"
         "<text><textPath href='#curve'>Hello</textPath></text>"
         "</svg>"
     )
@@ -773,9 +825,11 @@ def test_textpath_metadata_captured() -> None:
     assert len(scene.elements) == 1
     text = scene.elements[0]
     assert isinstance(text, TextFrame)
+    assert text.wordart_candidate is not None
+    assert text.metadata.get("text_path_id") == "curve"
     resvg_text = text.metadata.get("resvg_text", {})
     assert isinstance(resvg_text, dict)
-    assert resvg_text.get("strategy") in {"emf", "text_path", "runs"}
+    assert resvg_text.get("strategy") == "text_path"
 
 
 def test_inline_navigation_attributes_attach_metadata() -> None:
@@ -790,11 +844,11 @@ def test_inline_navigation_attributes_attach_metadata() -> None:
 
     rect = scene.elements[0]
     assert isinstance(rect, Rectangle)
-    navigation = rect.metadata.get('navigation')
+    navigation = rect.metadata.get("navigation")
     assert navigation is not None
-    assert navigation['kind'] == 'slide'
-    assert navigation['slide']['index'] == 3
-    assert rect.metadata.get('attributes', {}).get('title') == 'Jump'
+    assert navigation["kind"] == "slide"
+    assert navigation["slide"]["index"] == 3
+    assert rect.metadata.get("attributes", {}).get("title") == "Jump"
 
 
 def test_group_navigation_attributes_propagate_to_children() -> None:
@@ -811,16 +865,54 @@ def test_group_navigation_attributes_propagate_to_children() -> None:
 
     group = scene.elements[0]
     assert isinstance(group, Group)
-    nav = group.metadata.get('navigation')
+    nav = group.metadata.get("navigation")
     assert nav is not None
-    assert nav['kind'] == 'custom_show'
-    assert nav['custom_show']['name'] == 'deckA'
+    assert nav["kind"] == "custom_show"
+    assert nav["custom_show"]["name"] == "deckA"
 
     child = group.children[0]
     assert isinstance(child, Rectangle)
-    child_nav = child.metadata.get('navigation')
+    child_nav = child.metadata.get("navigation")
     assert child_nav is not None
-    assert child_nav['custom_show']['name'] == 'deckA'
+    assert child_nav["custom_show"]["name"] == "deckA"
+
+
+def test_interactive_annotation_fixture_preserves_hotspot_navigation_and_labels() -> (
+    None
+):
+    scene = _convert_fixture_with_resvg("interactive_annotation.svg")
+
+    elements_by_id: dict[str, object] = {}
+    for root in scene.elements:
+        for element in _iter_scene_elements(root):
+            for element_id in _element_ids(element):
+                elements_by_id[element_id] = element
+
+    start_hotspot = elements_by_id["step_start_hotspot"]
+    branch_hotspot = elements_by_id["step_branch_hotspot"]
+    resolve_hotspot = elements_by_id["step_resolve_hotspot"]
+    start_label = elements_by_id["label_start"]
+    branch_label = elements_by_id["label_branch"]
+    resolve_label = elements_by_id["label_resolve"]
+
+    assert isinstance(start_hotspot, Path)
+    assert isinstance(branch_hotspot, Path)
+    assert isinstance(resolve_hotspot, Path)
+    assert isinstance(start_label, TextFrame)
+    assert isinstance(branch_label, TextFrame)
+    assert isinstance(resolve_label, TextFrame)
+
+    assert start_hotspot.metadata["navigation"]["slide"]["index"] == 2
+    assert branch_hotspot.metadata["navigation"]["slide"]["index"] == 3
+    assert resolve_hotspot.metadata["navigation"]["slide"]["index"] == 4
+
+    assert start_label.runs[0].text == "Start"
+    assert branch_label.runs[0].text == "Branch"
+    assert resolve_label.runs[0].text == "Resolve"
+
+    assert start_label.bbox.x > start_hotspot.bbox.x + start_hotspot.bbox.width
+    assert branch_label.bbox.x > branch_hotspot.bbox.x + branch_hotspot.bbox.width
+    assert resolve_label.bbox.x > resolve_hotspot.bbox.x + resolve_hotspot.bbox.width
 
 
 def test_filter_reference_marks_bitmap_fallback() -> None:
@@ -838,20 +930,22 @@ def test_filter_reference_marks_bitmap_fallback() -> None:
 
     rect = scene.elements[0]
     assert isinstance(rect, Rectangle)
-    filters_meta = rect.metadata.get('filters')
+    filters_meta = rect.metadata.get("filters")
     assert isinstance(filters_meta, list)
     entry = next(iter(filters_meta))
-    assert entry['id'] == 'glow'
-    assert entry['strategy'] in {'native', 'raster', 'auto', 'resvg'}
+    assert entry["id"] == "glow"
+    assert entry["strategy"] in {"native", "raster", "auto", "resvg"}
     # Entry may omit fallback when a native strategy is selected
-    if entry.get('fallback'):
-        assert entry['fallback'] in {'bitmap', 'emf', 'vector'}
-    geometry_policy = rect.metadata.get('policy', {}).get('geometry', {})
-    if 'suggest_fallback' in geometry_policy:
-        assert geometry_policy['suggest_fallback'] in {FALLBACK_BITMAP, 'emf', 'vector'}
+    if entry.get("fallback"):
+        assert entry["fallback"] in {"bitmap", "emf", "vector"}
+    geometry_policy = rect.metadata.get("policy", {}).get("geometry", {})
+    if "suggest_fallback" in geometry_policy:
+        assert geometry_policy["suggest_fallback"] in {FALLBACK_BITMAP, "emf", "vector"}
     assert rect.effects, "expected filter to add custom effects"
-    filters_policy = rect.metadata.get('policy', {}).get('effects', {}).get('filters', [])
-    assert any(item.get('id') == 'glow' for item in filters_policy)
+    filters_policy = (
+        rect.metadata.get("policy", {}).get("effects", {}).get("filters", [])
+    )
+    assert any(item.get("id") == "glow" for item in filters_policy)
 
 
 def test_displacement_map_filter_metadata() -> None:
@@ -869,15 +963,46 @@ def test_displacement_map_filter_metadata() -> None:
 
     rect = scene.elements[0]
     assert isinstance(rect, Rectangle)
-    filters_meta = rect.metadata.get('filters', [])
-    assert any(entry.get('id') == 'disp' for entry in filters_meta)
-    filter_meta = rect.metadata.get('filter_metadata', {}).get('disp', {})
+    filters_meta = rect.metadata.get("filters", [])
+    assert any(entry.get("id") == "disp" for entry in filters_meta)
+    filter_meta = rect.metadata.get("filter_metadata", {}).get("disp", {})
     assert filter_meta is not None
-    geometry_policy = rect.metadata.get('policy', {}).get('geometry', {})
-    if 'suggest_fallback' in geometry_policy:
-        assert geometry_policy['suggest_fallback'] in {FALLBACK_BITMAP, FALLBACK_EMF, 'vector'}
-    filters_policy = rect.metadata.get('policy', {}).get('effects', {}).get('filters', [])
-    assert any(item.get('id') == 'disp' for item in filters_policy)
+    geometry_policy = rect.metadata.get("policy", {}).get("geometry", {})
+    if "suggest_fallback" in geometry_policy:
+        assert geometry_policy["suggest_fallback"] in {
+            FALLBACK_BITMAP,
+            FALLBACK_EMF,
+            "vector",
+        }
+    filters_policy = (
+        rect.metadata.get("policy", {}).get("effects", {}).get("filters", [])
+    )
+    assert any(item.get("id") == "disp" for item in filters_policy)
+
+
+def test_style_based_filter_metadata_adds_effects() -> None:
+    svg = (
+        "<svg width='40' height='40' xmlns='http://www.w3.org/2000/svg'>"
+        "  <defs>"
+        "    <filter id='glow'><feGaussianBlur stdDeviation='5'/></filter>"
+        "  </defs>"
+        "  <rect width='20' height='10' "
+        "style='fill:#ff0000;filter:url(#glow)'/>"
+        "</svg>"
+    )
+    parse_result = _build_parse_result(svg)
+
+    scene = _convert_with_resvg(parse_result)
+
+    rect = scene.elements[0]
+    assert isinstance(rect, Rectangle)
+    filters_meta = rect.metadata.get("filters", [])
+    assert any(entry.get("id") == "glow" for entry in filters_meta)
+    assert rect.effects, "expected inline style filter to add custom effects"
+    filters_policy = (
+        rect.metadata.get("policy", {}).get("effects", {}).get("filters", [])
+    )
+    assert any(item.get("id") == "glow" for item in filters_policy)
 
 
 def test_path_with_marker_metadata() -> None:
@@ -954,6 +1079,92 @@ def test_pattern_fill_records_policy_metadata() -> None:
     assert analysis["id"] == "grid"
 
 
+def test_grouped_dot_pattern_stays_native() -> None:
+    svg = (
+        "<svg width='50' height='50' xmlns='http://www.w3.org/2000/svg' "
+        "xmlns:sodipodi='http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd'>"
+        "<defs>"
+        "  <pattern id='dots' width='8' height='7' patternUnits='userSpaceOnUse' "
+        "           patternTransform='translate(12,4)'>"
+        "    <g transform='translate(-12,-4)'>"
+        "      <rect width='8' height='7' style='fill:none;stroke:none'/>"
+        "      <path sodipodi:type='arc' style='fill:#000000;stroke:none' "
+        "            d='M 10,10 A 3,3 0 1 1 10,9.99'/>"
+        "      <path sodipodi:type='arc' style='fill:#000000;stroke:none' "
+        "            d='M 10,10 A 3,3 0 1 1 10,9.99' transform='translate(4,0)'/>"
+        "      <path sodipodi:type='arc' style='fill:#000000;stroke:none' "
+        "            d='M 10,10 A 3,3 0 1 1 10,9.99' transform='translate(0,3)'/>"
+        "      <path sodipodi:type='arc' style='fill:#000000;stroke:none' "
+        "            d='M 10,10 A 3,3 0 1 1 10,9.99' transform='translate(4,3)'/>"
+        "    </g>"
+        "  </pattern>"
+        "</defs>"
+        "<rect width='20' height='20' fill='url(#dots)'/>"
+        "</svg>"
+    )
+
+    parse_result = _build_parse_result(svg)
+    scene = _convert_with_resvg(parse_result)
+
+    rect = scene.elements[0]
+    assert isinstance(rect, Rectangle)
+    assert isinstance(rect.fill, PatternPaint)
+    paint_policy = rect.metadata.get("policy", {}).get("paint", {})
+    assert paint_policy.get("fill", {}).get("type") == "pattern"
+    assert paint_policy["fill"].get("suggest_fallback") is None
+    assert (
+        rect.metadata.get("policy", {}).get("geometry", {}).get("suggest_fallback")
+        is None
+    )
+    assert rect.fill.background_opacity == 0.0
+    analysis = rect.metadata.get("paint_analysis", {}).get("fill", {}).get("pattern")
+    assert analysis is not None
+    assert analysis["type"] == "dots"
+    assert analysis["preset_candidate"] is not None
+
+
+def test_grouped_dot_pattern_on_path_uses_fallback() -> None:
+    svg = (
+        "<svg width='50' height='50' xmlns='http://www.w3.org/2000/svg' "
+        "xmlns:sodipodi='http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd'>"
+        "<defs>"
+        "  <pattern id='dots' width='8' height='7' patternUnits='userSpaceOnUse' "
+        "           patternTransform='translate(12,4)'>"
+        "    <g transform='translate(-12,-4)'>"
+        "      <rect width='8' height='7' style='fill:none;stroke:none'/>"
+        "      <path sodipodi:type='arc' style='fill:#000000;stroke:none' "
+        "            d='M 10,10 A 3,3 0 1 1 10,9.99'/>"
+        "      <path sodipodi:type='arc' style='fill:#000000;stroke:none' "
+        "            d='M 10,10 A 3,3 0 1 1 10,9.99' transform='translate(4,0)'/>"
+        "      <path sodipodi:type='arc' style='fill:#000000;stroke:none' "
+        "            d='M 10,10 A 3,3 0 1 1 10,9.99' transform='translate(0,3)'/>"
+        "      <path sodipodi:type='arc' style='fill:#000000;stroke:none' "
+        "            d='M 10,10 A 3,3 0 1 1 10,9.99' transform='translate(4,3)'/>"
+        "    </g>"
+        "  </pattern>"
+        "</defs>"
+        "<path d='M5,5 L45,5 L45,45 L5,45 Z' fill='url(#dots)'/>"
+        "</svg>"
+    )
+
+    parse_result = _build_parse_result(svg)
+    scene = _convert_with_resvg(parse_result)
+
+    element = scene.elements[0]
+    assert isinstance(element, Image)
+    assert element.format in {"emf", "png"}
+    assert (
+        element.metadata.get("paint_analysis", {})
+        .get("fill", {})
+        .get("pattern", {})
+        .get("type")
+        == "dots"
+    )
+    assert element.metadata.get("policy", {}).get("geometry", {}).get(
+        "suggest_fallback"
+    ) in {FALLBACK_EMF, FALLBACK_BITMAP}
+
+
 def test_polygon_respects_geometry_policy(monkeypatch):
     svg = (
         "<svg width='40' height='40' xmlns='http://www.w3.org/2000/svg'>"
@@ -982,7 +1193,9 @@ def test_polygon_respects_geometry_policy(monkeypatch):
     ):
         calls["called"] = True
         metadata = dict(metadata)
-        metadata.setdefault("policy", {}).setdefault("geometry", {})["render_mode"] = "emf"
+        metadata.setdefault("policy", {}).setdefault("geometry", {})[
+            "render_mode"
+        ] = "emf"
         return Image(
             origin=Point(0.0, 0.0),
             size=Rect(0.0, 0.0, 1.0, 1.0),
@@ -999,7 +1212,9 @@ def test_polygon_respects_geometry_policy(monkeypatch):
     scene = _convert_with_resvg(parse_result)
 
     assert calls.get("called") is True
-    assert any(isinstance(elem, Image) and elem.format == "emf" for elem in scene.elements)
+    assert any(
+        isinstance(elem, Image) and elem.format == "emf" for elem in scene.elements
+    )
 
 
 def test_clip_ref_generates_custom_geometry() -> None:
@@ -1096,7 +1311,11 @@ def test_clip_ref_round_rect_uses_roundrect_preset() -> None:
 
     scene = _convert_with_resvg(parse_result)
 
-    clip_ref = next(path.clip for path in scene.elements if isinstance(path, Path) and path.clip is not None)
+    clip_ref = next(
+        path.clip
+        for path in scene.elements
+        if isinstance(path, Path) and path.clip is not None
+    )
     assert clip_ref.custom_geometry_xml is not None
     assert 'prst="roundRect"' in clip_ref.custom_geometry_xml
     assert 'name="rad"' in clip_ref.custom_geometry_xml
@@ -1118,7 +1337,11 @@ def test_clip_ref_mirrored_rect_uses_preset_geometry() -> None:
 
     scene = _convert_with_resvg(parse_result)
 
-    clip_ref = next(path.clip for path in scene.elements if isinstance(path, Path) and path.clip is not None)
+    clip_ref = next(
+        path.clip
+        for path in scene.elements
+        if isinstance(path, Path) and path.clip is not None
+    )
     assert clip_ref.custom_geometry_xml is not None
     assert 'prst="rect"' in clip_ref.custom_geometry_xml
     assert "<a:custGeom>" not in clip_ref.custom_geometry_xml
@@ -1140,7 +1363,11 @@ def test_clip_ref_mirrored_round_rect_uses_roundrect_preset() -> None:
 
     scene = _convert_with_resvg(parse_result)
 
-    clip_ref = next(path.clip for path in scene.elements if isinstance(path, Path) and path.clip is not None)
+    clip_ref = next(
+        path.clip
+        for path in scene.elements
+        if isinstance(path, Path) and path.clip is not None
+    )
     assert clip_ref.custom_geometry_xml is not None
     assert 'prst="roundRect"' in clip_ref.custom_geometry_xml
     assert 'name="rad"' in clip_ref.custom_geometry_xml
@@ -1162,7 +1389,11 @@ def test_clip_ref_elliptical_radius_uses_snip_round_preset() -> None:
 
     scene = _convert_with_resvg(parse_result)
 
-    clip_ref = next(path.clip for path in scene.elements if isinstance(path, Path) and path.clip is not None)
+    clip_ref = next(
+        path.clip
+        for path in scene.elements
+        if isinstance(path, Path) and path.clip is not None
+    )
     xml = clip_ref.custom_geometry_xml
     assert xml is not None
     assert 'prst="snipRoundRect"' in xml
@@ -1186,12 +1417,17 @@ def test_clip_ref_mirrored_elliptical_radius_uses_snip_round_preset() -> None:
 
     scene = _convert_with_resvg(parse_result)
 
-    clip_ref = next(path.clip for path in scene.elements if isinstance(path, Path) and path.clip is not None)
+    clip_ref = next(
+        path.clip
+        for path in scene.elements
+        if isinstance(path, Path) and path.clip is not None
+    )
     xml = clip_ref.custom_geometry_xml
     assert xml is not None
     assert 'prst="snipRoundRect"' in xml
     assert 'name="snip"' in xml
     assert 'name="rad"' in xml
+
 
 def test_path_markers_expand_scene_with_marker_geometry() -> None:
     svg = (
@@ -1261,7 +1497,10 @@ def test_marker_group_generates_multiple_shapes() -> None:
         for path in marker_paths
         if path.metadata.get("marker_position") == "start" and path.fill is not None
     ]
-    assert any(isinstance(fill, SolidPaint) and fill.rgb.upper() == "00FF00" for fill in start_fills)
+    assert any(
+        isinstance(fill, SolidPaint) and fill.rgb.upper() == "00FF00"
+        for fill in start_fills
+    )
     assert all("marker_clip" in path.metadata for path in marker_paths)
 
 
@@ -1283,7 +1522,8 @@ def test_marker_viewbox_scaling_applied() -> None:
     marker_paths = [
         element
         for element in scene.elements
-        if isinstance(element, Path) and element.metadata.get("marker_position") == "end"
+        if isinstance(element, Path)
+        and element.metadata.get("marker_position") == "end"
     ]
     assert len(marker_paths) == 1
     marker_path = marker_paths[0]
@@ -1293,7 +1533,9 @@ def test_marker_viewbox_scaling_applied() -> None:
         if isinstance(segment, LineSegment):
             all_points.extend([segment.start, segment.end])
         elif isinstance(segment, BezierSegment):
-            all_points.extend([segment.start, segment.control1, segment.control2, segment.end])
+            all_points.extend(
+                [segment.start, segment.control1, segment.control2, segment.end]
+            )
 
     xs = [point.x for point in all_points]
     ys = [point.y for point in all_points]
@@ -1327,7 +1569,8 @@ def test_marker_preserve_aspect_ratio_meet() -> None:
     marker_paths = [
         element
         for element in scene.elements
-        if isinstance(element, Path) and element.metadata.get("marker_position") == "end"
+        if isinstance(element, Path)
+        and element.metadata.get("marker_position") == "end"
     ]
     assert len(marker_paths) == 1
     marker = marker_paths[0]
@@ -1343,8 +1586,12 @@ def test_marker_preserve_aspect_ratio_meet() -> None:
             xs.extend([segment.start.x, segment.end.x])
             ys.extend([segment.start.y, segment.end.y])
         elif isinstance(segment, BezierSegment):
-            xs.extend([segment.start.x, segment.control1.x, segment.control2.x, segment.end.x])
-            ys.extend([segment.start.y, segment.control1.y, segment.control2.y, segment.end.y])
+            xs.extend(
+                [segment.start.x, segment.control1.x, segment.control2.x, segment.end.x]
+            )
+            ys.extend(
+                [segment.start.y, segment.control1.y, segment.control2.y, segment.end.y]
+            )
     width = max(xs) - min(xs)
     height = max(ys) - min(ys)
     assert pytest.approx(width, rel=1e-6) == pytest.approx(8.0)
@@ -1369,7 +1616,8 @@ def test_marker_auto_orient_keeps_marker_origin_on_vertical_endpoint() -> None:
     marker_path = next(
         element
         for element in scene.elements
-        if isinstance(element, Path) and element.metadata.get("marker_position") == "end"
+        if isinstance(element, Path)
+        and element.metadata.get("marker_position") == "end"
     )
     points = _path_points(marker_path)
 
@@ -1395,12 +1643,14 @@ def test_marker_auto_start_reverse_flips_start_marker_about_anchor() -> None:
     start_marker = next(
         element
         for element in scene.elements
-        if isinstance(element, Path) and element.metadata.get("marker_position") == "start"
+        if isinstance(element, Path)
+        and element.metadata.get("marker_position") == "start"
     )
     end_marker = next(
         element
         for element in scene.elements
-        if isinstance(element, Path) and element.metadata.get("marker_position") == "end"
+        if isinstance(element, Path)
+        and element.metadata.get("marker_position") == "end"
     )
 
     start_points = _path_points(start_marker)
@@ -1412,7 +1662,9 @@ def test_marker_auto_start_reverse_flips_start_marker_about_anchor() -> None:
     assert _has_point(end_points, 18.0, 10.0)
 
 
-def test_marker_viewbox_ref_and_stroke_width_align_reference_point_to_endpoint() -> None:
+def test_marker_viewbox_ref_and_stroke_width_align_reference_point_to_endpoint() -> (
+    None
+):
     svg = (
         "<svg width='80' height='80' xmlns='http://www.w3.org/2000/svg'>"
         "<defs>"
@@ -1430,14 +1682,20 @@ def test_marker_viewbox_ref_and_stroke_width_align_reference_point_to_endpoint()
     marker_path = next(
         element
         for element in scene.elements
-        if isinstance(element, Path) and element.metadata.get("marker_position") == "end"
+        if isinstance(element, Path)
+        and element.metadata.get("marker_position") == "end"
     )
     points = _path_points(marker_path)
 
     assert _has_point(points, 50.0, 10.0)
     assert _has_point(points, 50.0, 30.0)
     assert _has_point(points, 20.0, 30.0)
-    assert marker_path.metadata.get("marker_clip") == {"x": 0.0, "y": 0.0, "width": 20.0, "height": 30.0}
+    assert marker_path.metadata.get("marker_clip") == {
+        "x": 0.0,
+        "y": 0.0,
+        "width": 20.0,
+        "height": 30.0,
+    }
 
 
 def test_marker_child_transform_applies_in_marker_local_space() -> None:
@@ -1458,12 +1716,14 @@ def test_marker_child_transform_applies_in_marker_local_space() -> None:
     marker_path = next(
         element
         for element in scene.elements
-        if isinstance(element, Path) and element.metadata.get("marker_position") == "end"
+        if isinstance(element, Path)
+        and element.metadata.get("marker_position") == "end"
     )
     points = _path_points(marker_path)
 
     assert _has_point(points, 33.0, 24.0)
     assert _has_point(points, 34.0, 24.0)
+
 
 def test_convert_path_produces_segments() -> None:
     parse_result = _build_parse_result(
@@ -1523,7 +1783,9 @@ def test_emf_fallback_creates_image() -> None:
         "</svg>"
     )
     services = configure_services()
-    policy_context = PolicyContext(selections={"geometry": {"max_segments": 2, "simplify_paths": False}})
+    policy_context = PolicyContext(
+        selections={"geometry": {"max_segments": 2, "simplify_paths": False}}
+    )
     converter = IRConverter(services=services, policy_context=policy_context)
 
     scene = converter.convert(parse_result)
@@ -1585,7 +1847,13 @@ def test_bitmap_fallback_respects_area_limit() -> None:
     )
     services = configure_services()
     policy_context = PolicyContext(
-        selections={"geometry": {"force_bitmap": True, "max_bitmap_area": 2500, "max_bitmap_side": 1000}}
+        selections={
+            "geometry": {
+                "force_bitmap": True,
+                "max_bitmap_area": 2500,
+                "max_bitmap_side": 1000,
+            }
+        }
     )
     converter = IRConverter(services=services, policy_context=policy_context)
 

@@ -86,7 +86,9 @@ def paint_to_fill(paint, *, opacity: float | None = None, shape_bbox=None) -> st
         if opacity is not None:
             effective = max(0.0, min(1.0, effective * opacity))
         alpha = opacity_to_ppt(effective)
-        return to_string(solid_fill(paint.rgb, alpha=alpha, theme_color=paint.theme_color))
+        return to_string(
+            solid_fill(paint.rgb, alpha=alpha, theme_color=paint.theme_color)
+        )
     if isinstance(paint, LinearGradientPaint):
         paint = _normalize_gradient_units(paint, shape_bbox)
         return linear_gradient_to_fill(paint)
@@ -133,7 +135,11 @@ def stroke_to_xml(stroke, metadata: Mapping[str, Any] | None = None) -> str:
         fill = solid_fill(color, alpha=alpha, theme_color=paint.theme_color)
         ln.append(fill)
     elif isinstance(paint, PatternPaint):
-        ln.append(_pattern_to_fill_elem(paint, opacity=stroke.opacity if hasattr(stroke, 'opacity') else None))
+        ln.append(
+            _pattern_to_fill_elem(
+                paint, opacity=stroke.opacity if hasattr(stroke, "opacity") else None
+            )
+        )
     elif isinstance(paint, LinearGradientPaint):
         ln.append(_linear_gradient_to_fill_elem(paint))
     elif isinstance(paint, RadialGradientPaint):
@@ -147,7 +153,9 @@ def stroke_to_xml(stroke, metadata: Mapping[str, Any] | None = None) -> str:
         a_sub(ln, "noFill")
 
     # Add dash pattern
-    dash_elem = _dash_elem(stroke.dash_array, stroke.width, dash_offset=stroke.dash_offset)
+    dash_elem = _dash_elem(
+        stroke.dash_array, stroke.width, dash_offset=stroke.dash_offset
+    )
     if dash_elem is not None:
         ln.append(dash_elem)
 
@@ -267,7 +275,7 @@ def _apply_dash_offset(values: list[float], offset: float) -> list[float]:
     remainder = values[split_idx] - into
 
     # Rotate: [partial_split_entry, entries_after..., entries_before..., consumed_portion]
-    after = list(values[split_idx + 1:])
+    after = list(values[split_idx + 1 :])
     before = list(values[:split_idx])
     rotated = [remainder] + after + before + [into]
 
@@ -355,23 +363,27 @@ def _expand_stops_for_spread(stops, spread_method: str | None):
                 new_offset = rep * extent + (end_off - stop.offset)
                 if new_offset > 1.0 + 1e-6:
                     continue
-                expanded.append(GradientStop(
-                    offset=min(1.0, max(0.0, new_offset)),
-                    rgb=stop.rgb,
-                    opacity=stop.opacity,
-                    theme_color=stop.theme_color,
-                ))
+                expanded.append(
+                    GradientStop(
+                        offset=min(1.0, max(0.0, new_offset)),
+                        rgb=stop.rgb,
+                        opacity=stop.opacity,
+                        theme_color=stop.theme_color,
+                    )
+                )
         else:
             for stop in stops:
                 new_offset = rep * extent + (stop.offset - start_off)
                 if new_offset > 1.0 + 1e-6:
                     continue
-                expanded.append(GradientStop(
-                    offset=min(1.0, max(0.0, new_offset)),
-                    rgb=stop.rgb,
-                    opacity=stop.opacity,
-                    theme_color=stop.theme_color,
-                ))
+                expanded.append(
+                    GradientStop(
+                        offset=min(1.0, max(0.0, new_offset)),
+                        rgb=stop.rgb,
+                        opacity=stop.opacity,
+                        theme_color=stop.theme_color,
+                    )
+                )
 
     # Deduplicate stops at same offset (keep first)
     seen_offsets: set[int] = set()
@@ -466,7 +478,9 @@ def radial_gradient_to_fill(paint: RadialGradientPaint) -> str:
 _RELS_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
 
 
-def _as_pattern_affine(transform: Any) -> tuple[float, float, float, float, float, float] | None:
+def _as_pattern_affine(
+    transform: Any,
+) -> tuple[float, float, float, float, float, float] | None:
     """Extract SVG affine matrix values (a,b,c,d,e,f) from a 3x3 transform."""
     if transform is None:
         return None
@@ -570,14 +584,31 @@ def _pattern_to_fill_elem(paint: PatternPaint, *, opacity: float | None = None):
     fgClr.append(
         color_choice(
             foreground,
-            alpha=opacity_to_ppt(opacity) if opacity is not None and opacity < 0.999 else None,
+            alpha=(
+                opacity_to_ppt(opacity)
+                if opacity is not None and opacity < 0.999
+                else None
+            ),
             theme_color=paint.foreground_theme_color,
         )
     )
 
     # Background color
+    background_opacity = paint.background_opacity
+    if opacity is not None:
+        background_opacity *= opacity
     bgClr = a_sub(pattFill, "bgClr")
-    bgClr.append(color_choice(background, theme_color=paint.background_theme_color))
+    bgClr.append(
+        color_choice(
+            background,
+            alpha=(
+                opacity_to_ppt(background_opacity)
+                if background_opacity < 0.999
+                else None
+            ),
+            theme_color=paint.background_theme_color,
+        )
+    )
 
     return pattFill
 

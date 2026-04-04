@@ -169,7 +169,9 @@ class TestBuild:
         assert srgb is not None
         assert srgb.get("val") == "00FF00"
 
-    def test_single_value_uses_same_for_from_and_to(self, handler: ColorAnimationHandler):
+    def test_single_value_uses_same_for_from_and_to(
+        self, handler: ColorAnimationHandler
+    ):
         anim = make_color_animation(values=["#FF0000"])
         par = handler.build(anim, par_id=4, behavior_id=5)
         from_srgb = par.find(f".//{{{NS_P}}}from/{{{NS_A}}}srgbClr")
@@ -230,22 +232,67 @@ class TestTAVList:
         tav_lst = par.find(f".//{{{NS_P}}}tavLst")
         assert tav_lst is None
 
-    def test_no_tav_for_three_values(self, handler: ColorAnimationHandler):
+    def test_multi_keyframe_values_emit_segmented_animclr(
+        self, handler: ColorAnimationHandler
+    ):
         anim = make_color_animation(values=["#FF0000", "#00FF00", "#0000FF"])
         par = handler.build(anim, par_id=4, behavior_id=5)
         tav_lst = par.find(f".//{{{NS_P}}}tavLst")
+        anim_clr = par.findall(f".//{{{NS_P}}}animClr")
         assert tav_lst is None
+        assert len(anim_clr) == 2
+        assert (
+            par.xpath(
+                "count(.//p:from/a:srgbClr[@val='FF0000'])",
+                namespaces={"p": NS_P, "a": NS_A},
+            )
+            == 1.0
+        )
+        assert (
+            par.xpath(
+                "count(.//p:to/a:srgbClr[@val='00FF00'])",
+                namespaces={"p": NS_P, "a": NS_A},
+            )
+            == 1.0
+        )
+        assert (
+            par.xpath(
+                "count(.//p:from/a:srgbClr[@val='00FF00'])",
+                namespaces={"p": NS_P, "a": NS_A},
+            )
+            == 1.0
+        )
+        assert (
+            par.xpath(
+                "count(.//p:to/a:srgbClr[@val='0000FF'])",
+                namespaces={"p": NS_P, "a": NS_A},
+            )
+            == 1.0
+        )
 
-    def test_no_tav_with_explicit_key_times(self, handler: ColorAnimationHandler):
+    def test_explicit_key_times_split_delay_and_duration(
+        self, handler: ColorAnimationHandler
+    ):
         anim = make_color_animation(
-            values=["#FF0000", "#00FF00", "#0000FF"],
-            key_times=[0.0, 0.5, 1.0],
+            values=["#FF0000", "#00FF00"],
+            key_times=[0.25, 1.0],
+            timing=AnimationTiming(begin=0.0, duration=2.0),
         )
         par = handler.build(anim, par_id=4, behavior_id=5)
         tav_lst = par.find(f".//{{{NS_P}}}tavLst")
+        segment_ctn = par.find(
+            f"./{{{NS_P}}}cTn/{{{NS_P}}}childTnLst/{{{NS_P}}}par/{{{NS_P}}}cTn"
+        )
         assert tav_lst is None
+        assert segment_ctn is not None
+        assert segment_ctn.get("dur") == "1500"
+        cond = segment_ctn.find(f"./{{{NS_P}}}stCondLst/{{{NS_P}}}cond")
+        assert cond is not None
+        assert cond.get("delay") == "500"
 
-    def test_discrete_calc_mode_still_omits_tav(self, handler: ColorAnimationHandler):
+    def test_discrete_calc_mode_emits_color_set_steps(
+        self, handler: ColorAnimationHandler
+    ):
         anim = make_color_animation(
             values=["#FF0000", "#00FF00", "#0000FF"],
             key_times=[0.0, 0.4, 1.0],
@@ -253,4 +300,29 @@ class TestTAVList:
         )
         par = handler.build(anim, par_id=4, behavior_id=5)
         tav_lst = par.find(f".//{{{NS_P}}}tavLst")
+        set_elems = par.findall(f".//{{{NS_P}}}set")
+        anim_clr = par.findall(f".//{{{NS_P}}}animClr")
         assert tav_lst is None
+        assert len(set_elems) == 3
+        assert not anim_clr
+        assert (
+            par.xpath(
+                "count(.//p:to/p:clrVal/a:srgbClr[@val='FF0000'])",
+                namespaces={"p": NS_P, "a": NS_A},
+            )
+            == 1.0
+        )
+        assert (
+            par.xpath(
+                "count(.//p:to/p:clrVal/a:srgbClr[@val='00FF00'])",
+                namespaces={"p": NS_P, "a": NS_A},
+            )
+            == 1.0
+        )
+        assert (
+            par.xpath(
+                "count(.//p:to/p:clrVal/a:srgbClr[@val='0000FF'])",
+                namespaces={"p": NS_P, "a": NS_A},
+            )
+            == 1.0
+        )

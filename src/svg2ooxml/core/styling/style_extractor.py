@@ -77,8 +77,16 @@ class StyleExtractor:
     def clear_cache(self) -> None:
         self._paint_cache.clear()
 
-    def extract(self, element: etree._Element, services: ConversionServices, *, context: Any | None = None) -> StyleResult:
-        paint_style = self._compute_paint_style_with_inheritance(element, context=context)
+    def extract(
+        self,
+        element: etree._Element,
+        services: ConversionServices,
+        *,
+        context: Any | None = None,
+    ) -> StyleResult:
+        paint_style = self._compute_paint_style_with_inheritance(
+            element, context=context
+        )
         metadata: dict[str, Any] = {}
 
         fill_opacity = float(paint_style.get("fill_opacity", 1.0))
@@ -107,19 +115,30 @@ class StyleExtractor:
         effects = self._resolve_effects(element, services, metadata, context)
 
         # Parse paint-order (SVG2): "stroke fill markers", "fill stroke", etc.
-        paint_order = paint_style.get("paint_order") or element.get("paint-order", "").strip()
+        paint_order = (
+            paint_style.get("paint_order") or element.get("paint-order", "").strip()
+        )
         if paint_order and paint_order != "normal":
             metadata["paint_order"] = paint_order
 
         # Parse mix-blend-mode and isolation
-        blend_mode = paint_style.get("mix_blend_mode") or element.get("mix-blend-mode", "").strip()
+        blend_mode = (
+            paint_style.get("mix_blend_mode")
+            or element.get("mix-blend-mode", "").strip()
+        )
         if blend_mode and blend_mode != "normal":
             metadata["mix_blend_mode"] = blend_mode
         isolation = paint_style.get("isolation") or element.get("isolation", "").strip()
         if isolation == "isolate":
             metadata["isolation"] = "isolate"
 
-        return StyleResult(fill=fill, stroke=stroke, opacity=opacity, effects=effects, metadata=metadata)
+        return StyleResult(
+            fill=fill,
+            stroke=stroke,
+            opacity=opacity,
+            effects=effects,
+            metadata=metadata,
+        )
 
     def _compute_paint_style_with_inheritance(
         self,
@@ -135,7 +154,9 @@ class StyleExtractor:
         if isinstance(parent, etree._Element) and isinstance(parent.tag, str):
             parent_style = self._compute_paint_style_with_inheritance(parent, context)
 
-        style = self._resolver.compute_paint_style(element, context=context, parent_style=parent_style)
+        style = self._resolver.compute_paint_style(
+            element, context=context, parent_style=parent_style
+        )
         self._paint_cache[element] = dict(style)
         return dict(style)
 
@@ -197,7 +218,9 @@ class StyleExtractor:
                     return gradient_paint
                 return GradientPaintRef(gradient_id=paint_id, gradient_type="auto")
             pattern_service = services.pattern_service
-            pattern_descriptor = pattern_service.get(paint_id) if pattern_service else None
+            pattern_descriptor = (
+                pattern_service.get(paint_id) if pattern_service else None
+            )
             if pattern_descriptor is not None:
                 pattern_paint = self._build_pattern_paint(
                     pattern_id=paint_id,
@@ -377,7 +400,9 @@ class StyleExtractor:
         gradient_service = services.gradient_service
         if gradient_service is None:
             return None
-        descriptor_chain = gradient_service.resolve_chain(gradient_id, include_self=True)
+        descriptor_chain = gradient_service.resolve_chain(
+            gradient_id, include_self=True
+        )
         if not descriptor_chain:
             descriptor = gradient_service.get(gradient_id)
             if descriptor is None:
@@ -396,8 +421,12 @@ class StyleExtractor:
         if len(stops) < 2:
             return None
 
-        gradient_units = self._gradient_attr(materialized_chain, "gradientUnits", default="objectBoundingBox")
-        gradient_transform = self._gradient_attr(materialized_chain, "gradientTransform")
+        gradient_units = self._gradient_attr(
+            materialized_chain, "gradientUnits", default="objectBoundingBox"
+        )
+        gradient_transform = self._gradient_attr(
+            materialized_chain, "gradientTransform"
+        )
         transform_matrix: Matrix2D | None = None
         if gradient_transform:
             try:
@@ -512,6 +541,7 @@ class StyleExtractor:
         preset = None
         foreground = None
         background = None
+        background_opacity = 1.0
         processor = self._get_pattern_processor(services)
         if processor is not None:
             try:
@@ -531,6 +561,8 @@ class StyleExtractor:
                     foreground = cleaned[0]
                 if len(cleaned) > 1:
                     background = cleaned[1]
+                elif len(cleaned) == 1:
+                    background_opacity = 0.0
             except Exception:  # pragma: no cover - defensive
                 pass
 
@@ -546,6 +578,7 @@ class StyleExtractor:
             preset=preset,
             foreground=foreground,
             background=background,
+            background_opacity=background_opacity,
         )
 
     def _get_gradient_processor(self, services: ConversionServices):
@@ -570,13 +603,17 @@ class StyleExtractor:
             processor = getattr(services.pattern_service, "processor", None)
         return processor
 
-    def _ensure_paint_policy(self, metadata: dict[str, Any], role: str) -> dict[str, Any]:
+    def _ensure_paint_policy(
+        self, metadata: dict[str, Any], role: str
+    ) -> dict[str, Any]:
         policy = metadata.setdefault("policy", {})
         paint_policy = policy.setdefault("paint", {})
         entry = paint_policy.setdefault(role, {})
         return entry
 
-    def _maybe_set_geometry_fallback(self, metadata: dict[str, Any], fallback: str) -> None:
+    def _maybe_set_geometry_fallback(
+        self, metadata: dict[str, Any], fallback: str
+    ) -> None:
         normalized = geometry_fallback_for(fallback)
         if normalized is None:
             return
@@ -604,7 +641,9 @@ class StyleExtractor:
     ) -> None:
         stop_count = len(getattr(descriptor, "stops", ()))
         descriptor_colors = self._descriptor_stop_colors(descriptor)
-        gradient_kind = "linear" if isinstance(descriptor, LinearGradientDescriptor) else "radial"
+        gradient_kind = (
+            "linear" if isinstance(descriptor, LinearGradientDescriptor) else "radial"
+        )
         analysis_entry: dict[str, Any] = {
             "id": gradient_id,
             "type": gradient_kind,
@@ -629,35 +668,47 @@ class StyleExtractor:
                 gradient_element = None
             if gradient_element is not None:
                 try:
-                    analysis = processor.analyze_gradient_element(gradient_element, context)
+                    analysis = processor.analyze_gradient_element(
+                        gradient_element, context
+                    )
                 except Exception:  # pragma: no cover - defensive
                     analysis = None
 
         colors_from_analysis = None
         color_stats = None
         if analysis is not None:
-            analysis_entry["type"] = getattr(analysis, "gradient_type", analysis_entry["type"])
+            analysis_entry["type"] = getattr(
+                analysis, "gradient_type", analysis_entry["type"]
+            )
             complexity_attr = getattr(analysis, "complexity", None)
             if complexity_attr is not None:
-                analysis_entry["complexity"] = getattr(complexity_attr, "value", str(complexity_attr))
+                analysis_entry["complexity"] = getattr(
+                    complexity_attr, "value", str(complexity_attr)
+                )
             stop_count_attr = getattr(analysis, "stop_count", None)
             if stop_count_attr is not None:
                 analysis_entry["stop_count"] = stop_count_attr
             has_transform_attr = getattr(analysis, "has_transforms", None)
             if has_transform_attr is not None:
                 analysis_entry["has_transforms"] = has_transform_attr
-            analysis_entry["powerpoint_compatible"] = getattr(analysis, "powerpoint_compatible", True)
+            analysis_entry["powerpoint_compatible"] = getattr(
+                analysis, "powerpoint_compatible", True
+            )
 
             optimizations = getattr(analysis, "optimization_opportunities", None)
             if optimizations:
-                analysis_entry["optimizations"] = [getattr(opt, "value", str(opt)) for opt in optimizations]
+                analysis_entry["optimizations"] = [
+                    getattr(opt, "value", str(opt)) for opt in optimizations
+                ]
 
             metrics = getattr(analysis, "metrics", None)
             if metrics is not None:
                 analysis_entry["metrics"] = {
                     "stop_count": getattr(metrics, "stop_count", None),
                     "color_complexity": getattr(metrics, "color_complexity", None),
-                    "transform_complexity": getattr(metrics, "transform_complexity", None),
+                    "transform_complexity": getattr(
+                        metrics, "transform_complexity", None
+                    ),
                     "memory_usage": getattr(metrics, "memory_usage", None),
                     "processing_time": getattr(metrics, "processing_time", None),
                 }
@@ -674,12 +725,16 @@ class StyleExtractor:
             if isinstance(color_stats, dict) and color_stats:
                 analysis_entry["color_statistics"] = color_stats
 
-        metadata.setdefault("paint_analysis", {}).setdefault(role, {})["gradient"] = analysis_entry
+        metadata.setdefault("paint_analysis", {}).setdefault(role, {})[
+            "gradient"
+        ] = analysis_entry
 
         paint_policy = self._ensure_paint_policy(metadata, role)
         paint_policy.setdefault("type", "gradient")
         paint_policy.setdefault("id", gradient_id)
-        paint_policy.setdefault("complexity", analysis_entry.get("complexity", "unknown"))
+        paint_policy.setdefault(
+            "complexity", analysis_entry.get("complexity", "unknown")
+        )
 
         palette_source = colors_from_analysis or analysis_entry.get("colors_used")
         if palette_source:
@@ -696,13 +751,20 @@ class StyleExtractor:
             # The processor's generic "powerpoint_compatible" flag is conservative and
             # marks several supported features (e.g. spreadMethod/gradientUnits) as
             # incompatible, which can force unnecessary EMF fallback.
-            if complexity in {GradientComplexity.COMPLEX, GradientComplexity.UNSUPPORTED}:
+            if complexity in {
+                GradientComplexity.COMPLEX,
+                GradientComplexity.UNSUPPORTED,
+            }:
                 paint_policy["suggest_fallback"] = FALLBACK_EMF
                 self._maybe_set_geometry_fallback(metadata, FALLBACK_EMF)
 
         tracer = self._tracer
         if tracer is not None:
-            decision = "emf" if paint_policy.get("suggest_fallback") == FALLBACK_EMF else "native"
+            decision = (
+                "emf"
+                if paint_policy.get("suggest_fallback") == FALLBACK_EMF
+                else "native"
+            )
             tracer.record_paint_decision(
                 paint_type="gradient",
                 paint_id=gradient_id,
@@ -735,7 +797,9 @@ class StyleExtractor:
         if descriptor.colors:
             analysis_entry["colors_used"] = list(descriptor.colors)
 
-        metadata.setdefault("paint_analysis", {}).setdefault(role, {})["gradient"] = analysis_entry
+        metadata.setdefault("paint_analysis", {}).setdefault(role, {})[
+            "gradient"
+        ] = analysis_entry
 
         paint_policy = self._ensure_paint_policy(metadata, role)
         paint_policy.setdefault("type", "gradient")
@@ -797,7 +861,9 @@ class StyleExtractor:
                 pattern_element = None
             if pattern_element is not None:
                 try:
-                    analysis = processor.analyze_pattern_element(pattern_element, context)
+                    analysis = processor.analyze_pattern_element(
+                        pattern_element, context
+                    )
                 except Exception:  # pragma: no cover - defensive
                     analysis = None
 
@@ -807,15 +873,25 @@ class StyleExtractor:
         if analysis is not None:
             pattern_type = getattr(analysis, "pattern_type", None)
             if pattern_type is not None:
-                analysis_entry["type"] = getattr(pattern_type, "value", str(pattern_type))
+                analysis_entry["type"] = getattr(
+                    pattern_type, "value", str(pattern_type)
+                )
 
             complexity_attr = getattr(analysis, "complexity", None)
             if complexity_attr is not None:
-                analysis_entry["complexity"] = getattr(complexity_attr, "value", str(complexity_attr))
+                analysis_entry["complexity"] = getattr(
+                    complexity_attr, "value", str(complexity_attr)
+                )
 
-            analysis_entry["child_count"] = getattr(analysis, "child_count", analysis_entry["child_count"])
-            analysis_entry["powerpoint_compatible"] = getattr(analysis, "powerpoint_compatible", True)
-            analysis_entry["emf_fallback_recommended"] = getattr(analysis, "emf_fallback_recommended", False)
+            analysis_entry["child_count"] = getattr(
+                analysis, "child_count", analysis_entry["child_count"]
+            )
+            analysis_entry["powerpoint_compatible"] = getattr(
+                analysis, "powerpoint_compatible", True
+            )
+            analysis_entry["emf_fallback_recommended"] = getattr(
+                analysis, "emf_fallback_recommended", False
+            )
 
             geometry = getattr(analysis, "geometry", None)
             if geometry is not None:
@@ -841,12 +917,17 @@ class StyleExtractor:
             if preset_candidate:
                 analysis_entry["preset_candidate"] = preset_candidate
 
-        metadata.setdefault("paint_analysis", {}).setdefault(role, {})["pattern"] = analysis_entry
+        metadata.setdefault("paint_analysis", {}).setdefault(role, {})[
+            "pattern"
+        ] = analysis_entry
 
         paint_policy = self._ensure_paint_policy(metadata, role)
         paint_policy.setdefault("type", "pattern")
         paint_policy.setdefault("id", pattern_id)
-        paint_policy.setdefault("complexity", analysis_entry.get("complexity", PatternComplexity.SIMPLE.value))
+        paint_policy.setdefault(
+            "complexity",
+            analysis_entry.get("complexity", PatternComplexity.SIMPLE.value),
+        )
 
         if colors:
             paint_policy.setdefault("palette", list(colors))
@@ -865,7 +946,11 @@ class StyleExtractor:
 
         tracer = self._tracer
         if tracer is not None:
-            decision = "emf" if paint_policy.get("suggest_fallback") == FALLBACK_EMF else "native"
+            decision = (
+                "emf"
+                if paint_policy.get("suggest_fallback") == FALLBACK_EMF
+                else "native"
+            )
             tracer.record_paint_decision(
                 paint_type="pattern",
                 paint_id=pattern_id,
@@ -945,11 +1030,19 @@ class StyleExtractor:
         conversion,
         axis_defaults: tuple[str, str],
     ) -> tuple[float, float]:
-        x_value = self._gradient_attr(chain, attr_x, default=default[0] if default else None)
-        y_value = self._gradient_attr(chain, attr_y, default=default[1] if default else None)
+        x_value = self._gradient_attr(
+            chain, attr_x, default=default[0] if default else None
+        )
+        y_value = self._gradient_attr(
+            chain, attr_y, default=default[1] if default else None
+        )
         return (
-            self._resolve_gradient_length(chain, attr_x, x_value, units, conversion, axis_defaults[0]),
-            self._resolve_gradient_length(chain, attr_y, y_value, units, conversion, axis_defaults[1]),
+            self._resolve_gradient_length(
+                chain, attr_x, x_value, units, conversion, axis_defaults[0]
+            ),
+            self._resolve_gradient_length(
+                chain, attr_y, y_value, units, conversion, axis_defaults[1]
+            ),
         )
 
     def _resolve_gradient_length(
@@ -970,15 +1063,21 @@ class StyleExtractor:
                 scale = None
                 axis_lower = axis.lower()
                 if axis_lower.startswith("x") or axis_lower == "width":
-                    scale = getattr(conversion, "width", None) or getattr(conversion, "viewport_width", None)
+                    scale = getattr(conversion, "width", None) or getattr(
+                        conversion, "viewport_width", None
+                    )
                 elif axis_lower.startswith("y") or axis_lower == "height":
-                    scale = getattr(conversion, "height", None) or getattr(conversion, "viewport_height", None)
+                    scale = getattr(conversion, "height", None) or getattr(
+                        conversion, "viewport_height", None
+                    )
                 if scale:
                     return px_value / scale
             return px_value
         return parse_percentage(value)
 
-    def _apply_matrix_to_point(self, matrix: Matrix2D, point: tuple[float, float]) -> tuple[float, float]:
+    def _apply_matrix_to_point(
+        self, matrix: Matrix2D, point: tuple[float, float]
+    ) -> tuple[float, float]:
         return apply_matrix_to_point(matrix, point)
 
     def _matrix2d_to_numpy(self, matrix: Matrix2D | None):

@@ -32,6 +32,7 @@ from svg2ooxml.core.traversal.coordinate_space import CoordinateSpace
 from svg2ooxml.ir.geometry import LineSegment, Point, Rect, SegmentType
 from svg2ooxml.ir.paint import (
     LinearGradientPaint,
+    PatternPaint,
     RadialGradientPaint,
     SolidPaint,
     Stroke,
@@ -70,6 +71,68 @@ class ShapeConversionMixin(ShapeResvgMixin, ShapeFallbackMixin):
             element_id=element_id,
         )
 
+    @staticmethod
+    def _fill_can_render_natively(fill, metadata: dict[str, Any]) -> bool:
+        if isinstance(fill, _NATIVE_FILL_TYPES):
+            return True
+        if not isinstance(fill, PatternPaint):
+            return False
+
+        policy = metadata.get("policy", {}) if isinstance(metadata, dict) else {}
+        geometry_policy = policy.get("geometry", {}) if isinstance(policy, dict) else {}
+        paint_policy = policy.get("paint", {}) if isinstance(policy, dict) else {}
+        fill_policy = (
+            paint_policy.get("fill", {}) if isinstance(paint_policy, dict) else {}
+        )
+
+        for entry in (fill_policy, geometry_policy):
+            if isinstance(entry, dict) and entry.get("suggest_fallback") in {
+                FALLBACK_EMF,
+                FALLBACK_BITMAP,
+            }:
+                return False
+        return True
+
+    @staticmethod
+    def _pattern_fill_requires_path_fallback(fill) -> bool:
+        if not isinstance(fill, PatternPaint):
+            return False
+
+        transform = fill.transform
+        if transform is None:
+            return False
+
+        matrix = transform.tolist() if hasattr(transform, "tolist") else transform
+        identity = (
+            (1.0, 0.0, 0.0),
+            (0.0, 1.0, 0.0),
+            (0.0, 0.0, 1.0),
+        )
+        try:
+            for row_idx, row in enumerate(matrix):
+                for col_idx, value in enumerate(row):
+                    if abs(float(value) - identity[row_idx][col_idx]) >= 1e-9:
+                        return True
+            return False
+        except (TypeError, ValueError, IndexError):
+            return True
+
+    @staticmethod
+    def _prefer_pattern_path_fallback(
+        metadata: dict[str, Any],
+        *,
+        allow_emf_fallback: bool,
+        allow_bitmap_fallback: bool,
+    ) -> str | None:
+        geometry_policy = metadata.setdefault("policy", {}).setdefault("geometry", {})
+        if allow_emf_fallback:
+            geometry_policy.setdefault("suggest_fallback", FALLBACK_EMF)
+            return FALLBACK_EMF
+        if allow_bitmap_fallback:
+            geometry_policy.setdefault("suggest_fallback", FALLBACK_BITMAP)
+            return FALLBACK_BITMAP
+        return None
+
     def _convert_use(
         self,
         *,
@@ -84,7 +147,9 @@ class ShapeConversionMixin(ShapeResvgMixin, ShapeFallbackMixin):
             if resvg_result is not None:
                 return resvg_result
             resvg_lookup = getattr(self, "_resvg_element_lookup", {})
-            resvg_node = resvg_lookup.get(element) if isinstance(resvg_lookup, dict) else None
+            resvg_node = (
+                resvg_lookup.get(element) if isinstance(resvg_lookup, dict) else None
+            )
             if type(resvg_node).__name__ == "TextNode":
                 text_converter = getattr(self, "_text_converter", None)
                 text_convert = getattr(text_converter, "convert", None)
@@ -105,7 +170,11 @@ class ShapeConversionMixin(ShapeResvgMixin, ShapeFallbackMixin):
                         if text_result is not None:
                             return text_result
             use_target = self._resolve_use_target(element)
-            use_target_tag = _local_name(getattr(use_target, "tag", "")).lower() if use_target is not None else ""
+            use_target_tag = (
+                _local_name(getattr(use_target, "tag", "")).lower()
+                if use_target is not None
+                else ""
+            )
             if use_target_tag == "image":
                 expanded_result = self.expand_use(
                     element=element,
@@ -121,7 +190,9 @@ class ShapeConversionMixin(ShapeResvgMixin, ShapeFallbackMixin):
         return None
 
     def _resolve_use_target(self, element: etree._Element) -> etree._Element | None:
-        href_attr = element.get("{http://www.w3.org/1999/xlink}href") or element.get("href")
+        href_attr = element.get("{http://www.w3.org/1999/xlink}href") or element.get(
+            "href"
+        )
         if not href_attr:
             return None
         reference_id = self._normalize_href_reference(href_attr)
@@ -129,7 +200,11 @@ class ShapeConversionMixin(ShapeResvgMixin, ShapeFallbackMixin):
             return None
 
         symbol_definitions = getattr(self, "_symbol_definitions", {})
-        target = symbol_definitions.get(reference_id) if isinstance(symbol_definitions, dict) else None
+        target = (
+            symbol_definitions.get(reference_id)
+            if isinstance(symbol_definitions, dict)
+            else None
+        )
         if target is not None:
             return target
 
@@ -170,8 +245,9 @@ class ShapeConversionMixin(ShapeResvgMixin, ShapeFallbackMixin):
         self._trace_resvg_only_miss(element, self._resvg_miss_reason(element))
         return None
 
-
-    def _convert_ellipse(self, *, element: etree._Element, coord_space: CoordinateSpace):
+    def _convert_ellipse(
+        self, *, element: etree._Element, coord_space: CoordinateSpace
+    ):
         if self._can_use_resvg(element):
             resvg_result = self._convert_via_resvg(element, coord_space)
             if resvg_result is not None:
@@ -186,7 +262,6 @@ class ShapeConversionMixin(ShapeResvgMixin, ShapeFallbackMixin):
             return None
         self._trace_resvg_only_miss(element, self._resvg_miss_reason(element))
         return None
-
 
     def _convert_line(self, *, element: etree._Element, coord_space: CoordinateSpace):
         if self._can_use_resvg(element):
@@ -260,11 +335,17 @@ class ShapeConversionMixin(ShapeResvgMixin, ShapeFallbackMixin):
             cx = _parse_float(element.get("cx"), default=0.0) or 0.0
             cy = _parse_float(element.get("cy"), default=0.0) or 0.0
             if ry > DEFAULT_TOLERANCE:
-                segments = [LineSegment(Point(cx, cy - ry), Point(cx + epsilon, cy + ry))]
+                segments = [
+                    LineSegment(Point(cx, cy - ry), Point(cx + epsilon, cy + ry))
+                ]
             elif rx > DEFAULT_TOLERANCE:
-                segments = [LineSegment(Point(cx - rx, cy), Point(cx + rx, cy + epsilon))]
+                segments = [
+                    LineSegment(Point(cx - rx, cy), Point(cx + rx, cy + epsilon))
+                ]
             else:
-                segments = [LineSegment(Point(cx, cy), Point(cx + epsilon, cy + epsilon))]
+                segments = [
+                    LineSegment(Point(cx, cy), Point(cx + epsilon, cy + epsilon))
+                ]
             return self._segments_to_path(element, segments, coord_space)
 
         if tag == "line":
@@ -272,17 +353,16 @@ class ShapeConversionMixin(ShapeResvgMixin, ShapeFallbackMixin):
             y1 = _parse_float(element.get("y1"), default=0.0) or 0.0
             x2 = _parse_float(element.get("x2"), default=0.0) or 0.0
             y2 = _parse_float(element.get("y2"), default=0.0) or 0.0
-            if (
-                abs(x2 - x1) > DEFAULT_TOLERANCE
-                or abs(y2 - y1) > DEFAULT_TOLERANCE
-            ):
+            if abs(x2 - x1) > DEFAULT_TOLERANCE or abs(y2 - y1) > DEFAULT_TOLERANCE:
                 return None
             segments = [LineSegment(Point(x1, y1), Point(x2 + epsilon, y2 + epsilon))]
             return self._segments_to_path(element, segments, coord_space)
 
         return None
 
-    def _convert_polygon(self, *, element: etree._Element, coord_space: CoordinateSpace):
+    def _convert_polygon(
+        self, *, element: etree._Element, coord_space: CoordinateSpace
+    ):
         if self._can_use_resvg(element):
             resvg_result = self._convert_via_resvg(element, coord_space)
             if resvg_result is not None:
@@ -292,7 +372,9 @@ class ShapeConversionMixin(ShapeResvgMixin, ShapeFallbackMixin):
         self._trace_resvg_only_miss(element, self._resvg_miss_reason(element))
         return None
 
-    def _convert_polyline(self, *, element: etree._Element, coord_space: CoordinateSpace):
+    def _convert_polyline(
+        self, *, element: etree._Element, coord_space: CoordinateSpace
+    ):
         if self._can_use_resvg(element):
             resvg_result = self._convert_via_resvg(element, coord_space)
             if resvg_result is not None:
@@ -302,12 +384,19 @@ class ShapeConversionMixin(ShapeResvgMixin, ShapeFallbackMixin):
         self._trace_resvg_only_miss(element, self._resvg_miss_reason(element))
         return None
 
-    def _segments_to_path(self, element: etree._Element, segments: list[SegmentType], coord_space: CoordinateSpace):
+    def _segments_to_path(
+        self,
+        element: etree._Element,
+        segments: list[SegmentType],
+        coord_space: CoordinateSpace,
+    ):
         style = styles_runtime.extract_style(self, element)
         clip_ref = self._resolve_clip_ref(element)
         mask_ref, mask_instance = self._resolve_mask_ref(element)
         policy = self._policy_options("geometry")
-        allow_emf_fallback, allow_bitmap_fallback = self._geometry_fallback_flags(policy)
+        allow_emf_fallback, allow_bitmap_fallback = self._geometry_fallback_flags(
+            policy
+        )
         segments, geom_meta, render_mode = apply_geometry_policy(list(segments), policy)
         bitmap_limits = self._bitmap_fallback_limits(policy)
         metadata = dict(style.metadata)
@@ -316,7 +405,17 @@ class ShapeConversionMixin(ShapeResvgMixin, ShapeFallbackMixin):
             policy_meta = metadata.setdefault("policy", {}).setdefault("geometry", {})
             policy_meta.update(geom_meta)
 
-        if style.fill and not isinstance(style.fill, _NATIVE_FILL_TYPES):
+        pattern_fallback = None
+        if self._pattern_fill_requires_path_fallback(style.fill):
+            pattern_fallback = self._prefer_pattern_path_fallback(
+                metadata,
+                allow_emf_fallback=allow_emf_fallback,
+                allow_bitmap_fallback=allow_bitmap_fallback,
+            )
+
+        if pattern_fallback is not None:
+            render_mode = pattern_fallback
+        elif style.fill and not self._fill_can_render_natively(style.fill, metadata):
             if allow_bitmap_fallback:
                 render_mode = FALLBACK_BITMAP
             elif allow_emf_fallback:
@@ -334,12 +433,24 @@ class ShapeConversionMixin(ShapeResvgMixin, ShapeFallbackMixin):
                 metadata=metadata,
             )
             if emf_image is not None:
-                self._trace_geometry_decision(element, "emf", emf_image.metadata if isinstance(emf_image.metadata, dict) else metadata)
+                self._trace_geometry_decision(
+                    element,
+                    "emf",
+                    (
+                        emf_image.metadata
+                        if isinstance(emf_image.metadata, dict)
+                        else metadata
+                    ),
+                )
                 return emf_image
-            self._logger.warning("Failed to build EMF fallback; reverting to native path.")
+            self._logger.warning(
+                "Failed to build EMF fallback; reverting to native path."
+            )
         elif render_mode == FALLBACK_BITMAP:
             if not allow_bitmap_fallback:
-                self._logger.warning("Bitmap fallback disabled; falling back to native rendering.")
+                self._logger.warning(
+                    "Bitmap fallback disabled; falling back to native rendering."
+                )
             else:
                 bitmap_image = self._convert_path_to_bitmap(
                     element=element,
@@ -356,10 +467,16 @@ class ShapeConversionMixin(ShapeResvgMixin, ShapeFallbackMixin):
                     self._trace_geometry_decision(
                         element,
                         "bitmap",
-                        bitmap_image.metadata if isinstance(bitmap_image.metadata, dict) else metadata,
+                        (
+                            bitmap_image.metadata
+                            if isinstance(bitmap_image.metadata, dict)
+                            else metadata
+                        ),
                     )
                     return bitmap_image
-                self._logger.warning("Failed to rasterize path; falling back to native rendering.")
+                self._logger.warning(
+                    "Failed to rasterize path; falling back to native rendering."
+                )
 
         transformed = coord_space.apply_segments(segments)
         if not transformed:
@@ -397,15 +514,31 @@ class ShapeConversionMixin(ShapeResvgMixin, ShapeFallbackMixin):
     ):
         policy = self._policy_options("geometry")
         if metadata.get("wordart") or metadata.get("resvg_text"):
-            policy = {**policy, "simplify_paths": False} if policy else {"simplify_paths": False}
-        allow_emf_fallback, allow_bitmap_fallback = self._geometry_fallback_flags(policy)
+            policy = (
+                {**policy, "simplify_paths": False}
+                if policy
+                else {"simplify_paths": False}
+            )
+        allow_emf_fallback, allow_bitmap_fallback = self._geometry_fallback_flags(
+            policy
+        )
         segments, geom_meta, render_mode = apply_geometry_policy(list(segments), policy)
         bitmap_limits = self._bitmap_fallback_limits(policy)
         if geom_meta:
             policy_meta = metadata.setdefault("policy", {}).setdefault("geometry", {})
             policy_meta.update(geom_meta)
 
-        if style.fill and not isinstance(style.fill, _NATIVE_FILL_TYPES):
+        pattern_fallback = None
+        if self._pattern_fill_requires_path_fallback(style.fill):
+            pattern_fallback = self._prefer_pattern_path_fallback(
+                metadata,
+                allow_emf_fallback=allow_emf_fallback,
+                allow_bitmap_fallback=allow_bitmap_fallback,
+            )
+
+        if pattern_fallback is not None:
+            render_mode = pattern_fallback
+        elif style.fill and not self._fill_can_render_natively(style.fill, metadata):
             if allow_bitmap_fallback:
                 render_mode = FALLBACK_BITMAP
             elif allow_emf_fallback:
@@ -428,16 +561,26 @@ class ShapeConversionMixin(ShapeResvgMixin, ShapeFallbackMixin):
                 self._trace_geometry_decision(
                     element,
                     "emf",
-                    emf_image.metadata if isinstance(emf_image.metadata, dict) else metadata,
+                    (
+                        emf_image.metadata
+                        if isinstance(emf_image.metadata, dict)
+                        else metadata
+                    ),
                 )
                 return emf_image
             if allow_bitmap_fallback:
-                self._logger.warning("Failed to build EMF fallback; attempting bitmap fallback.")
+                self._logger.warning(
+                    "Failed to build EMF fallback; attempting bitmap fallback."
+                )
                 fallback_to_bitmap = True
             else:
-                self._logger.warning("Failed to build EMF fallback; bitmap fallback disabled.")
+                self._logger.warning(
+                    "Failed to build EMF fallback; bitmap fallback disabled."
+                )
 
-        if (render_mode == FALLBACK_BITMAP or fallback_to_bitmap) and allow_bitmap_fallback:
+        if (
+            render_mode == FALLBACK_BITMAP or fallback_to_bitmap
+        ) and allow_bitmap_fallback:
             bitmap_image = self._convert_path_to_bitmap(
                 element=element,
                 style=style,
@@ -451,18 +594,28 @@ class ShapeConversionMixin(ShapeResvgMixin, ShapeFallbackMixin):
             )
             if bitmap_image is not None:
                 if fallback_to_bitmap:
-                    geometry_policy = metadata.setdefault("policy", {}).setdefault("geometry", {})
+                    geometry_policy = metadata.setdefault("policy", {}).setdefault(
+                        "geometry", {}
+                    )
                     geometry_policy["render_mode"] = FALLBACK_BITMAP
                 self._process_mask_metadata(bitmap_image)
                 self._trace_geometry_decision(
                     element,
                     "bitmap",
-                    bitmap_image.metadata if isinstance(bitmap_image.metadata, dict) else metadata,
+                    (
+                        bitmap_image.metadata
+                        if isinstance(bitmap_image.metadata, dict)
+                        else metadata
+                    ),
                 )
                 return bitmap_image
-            self._logger.warning("Failed to rasterize path; falling back to native rendering.")
+            self._logger.warning(
+                "Failed to rasterize path; falling back to native rendering."
+            )
         elif render_mode == FALLBACK_BITMAP and not allow_bitmap_fallback:
-            self._logger.warning("Bitmap fallback disabled; falling back to native rendering.")
+            self._logger.warning(
+                "Bitmap fallback disabled; falling back to native rendering."
+            )
 
         transformed = coord_space.apply_segments(segments)
         if not transformed:
@@ -505,7 +658,9 @@ class ShapeConversionMixin(ShapeResvgMixin, ShapeFallbackMixin):
             (x + width, y + height),
             (x, y + height),
         ]
-        transformed_points = [coord_space.apply_point(px, py) for (px, py) in rect_points]
+        transformed_points = [
+            coord_space.apply_point(px, py) for (px, py) in rect_points
+        ]
         bbox = _compute_bbox(transformed_points)
 
         image_policy = self._policy_options("image")
@@ -524,7 +679,9 @@ class ShapeConversionMixin(ShapeResvgMixin, ShapeFallbackMixin):
         color_result = None
         if resource and color_service and image_policy:
             normalization = image_policy.get("colorspace_normalization", "rgb")
-            color_result = color_service.normalize_resource(resource, normalization=normalization)
+            color_result = color_service.normalize_resource(
+                resource, normalization=normalization
+            )
             resource = color_result.resource
 
         format_hint = _guess_image_format(
@@ -547,9 +704,13 @@ class ShapeConversionMixin(ShapeResvgMixin, ShapeFallbackMixin):
             if color_result.result.converted:
                 policy_meta["colorspace_mode"] = color_result.result.mode
                 if color_result.result.warnings:
-                    policy_meta["colorspace_warnings"] = list(color_result.result.warnings)
+                    policy_meta["colorspace_warnings"] = list(
+                        color_result.result.warnings
+                    )
             if color_result.result.metadata:
-                policy_meta.setdefault("colorspace_metadata", color_result.result.metadata)
+                policy_meta.setdefault(
+                    "colorspace_metadata", color_result.result.metadata
+                )
 
         image = Image(
             origin=Point(bbox.x, bbox.y),
@@ -585,7 +746,9 @@ class ShapeConversionMixin(ShapeResvgMixin, ShapeFallbackMixin):
         token = href.strip()
         if token.lower().startswith("url(") and token.endswith(")"):
             token = token[4:-1].strip()
-            if (token.startswith("'") and token.endswith("'")) or (token.startswith('"') and token.endswith('"')):
+            if (token.startswith("'") and token.endswith("'")) or (
+                token.startswith('"') and token.endswith('"')
+            ):
                 token = token[1:-1]
         return token or None
 
@@ -632,11 +795,15 @@ class ShapeConversionMixin(ShapeResvgMixin, ShapeFallbackMixin):
             (x + width, y + height),
             (x, y + height),
         ]
-        transformed_points = [coord_space.apply_point(px, py) for (px, py) in rect_points]
+        transformed_points = [
+            coord_space.apply_point(px, py) for (px, py) in rect_points
+        ]
         bbox = _compute_bbox(transformed_points)
 
         payload = _first_foreign_child(element)
-        payload_type = _classify_foreign_payload(payload) if payload is not None else "empty"
+        payload_type = (
+            _classify_foreign_payload(payload) if payload is not None else "empty"
+        )
         style = styles_runtime.extract_style(self, element)
 
         metadata: dict[str, Any] = {
@@ -652,7 +819,9 @@ class ShapeConversionMixin(ShapeResvgMixin, ShapeFallbackMixin):
         mask_ref, mask_instance = self._resolve_mask_ref(element)
 
         if payload is None:
-            placeholder = self._foreign_object_placeholder(bbox, clip_ref, mask_ref, mask_instance, metadata)
+            placeholder = self._foreign_object_placeholder(
+                bbox, clip_ref, mask_ref, mask_instance, metadata
+            )
             placeholder = replace(placeholder, opacity=style.opacity)
             self._trace_geometry_decision(element, "placeholder", placeholder.metadata)
             self._trace_stage(
@@ -673,12 +842,12 @@ class ShapeConversionMixin(ShapeResvgMixin, ShapeFallbackMixin):
             if not children:
                 return None
             group = Group(
-                children=children, 
-                clip=clip_ref, 
-                mask=mask_ref, 
-                mask_instance=mask_instance, 
+                children=children,
+                clip=clip_ref,
+                mask=mask_ref,
+                mask_instance=mask_instance,
                 opacity=style.opacity,
-                metadata=metadata
+                metadata=metadata,
             )
             self._process_mask_metadata(group)
             self._trace_geometry_decision(element, "native", group.metadata)
@@ -693,7 +862,9 @@ class ShapeConversionMixin(ShapeResvgMixin, ShapeFallbackMixin):
         if payload_type == "image":
             href = _extract_image_href(payload)
             if not href:
-                placeholder = self._foreign_object_placeholder(bbox, clip_ref, mask_ref, mask_instance, metadata)
+                placeholder = self._foreign_object_placeholder(
+                    bbox, clip_ref, mask_ref, mask_instance, metadata
+                )
                 return replace(placeholder, opacity=style.opacity)
 
             image_metadata = dict(metadata)
@@ -725,9 +896,13 @@ class ShapeConversionMixin(ShapeResvgMixin, ShapeFallbackMixin):
         if payload_type == "xhtml":
             text_content = _collect_foreign_text(payload)
             if not text_content:
-                placeholder = self._foreign_object_placeholder(bbox, clip_ref, mask_ref, mask_instance, metadata)
+                placeholder = self._foreign_object_placeholder(
+                    bbox, clip_ref, mask_ref, mask_instance, metadata
+                )
                 placeholder = replace(placeholder, opacity=style.opacity)
-                self._trace_geometry_decision(element, "placeholder", placeholder.metadata)
+                self._trace_geometry_decision(
+                    element, "placeholder", placeholder.metadata
+                )
                 self._trace_stage(
                     "foreign_object_placeholder",
                     stage="foreign_object",
@@ -754,7 +929,9 @@ class ShapeConversionMixin(ShapeResvgMixin, ShapeFallbackMixin):
             )
             return frame
 
-        placeholder = self._foreign_object_placeholder(bbox, clip_ref, mask_ref, mask_instance, metadata)
+        placeholder = self._foreign_object_placeholder(
+            bbox, clip_ref, mask_ref, mask_instance, metadata
+        )
         placeholder = replace(placeholder, opacity=style.opacity)
         self._trace_geometry_decision(element, "placeholder", placeholder.metadata)
         self._trace_stage(
@@ -775,7 +952,9 @@ class ShapeConversionMixin(ShapeResvgMixin, ShapeFallbackMixin):
     ) -> Path:
         segments = _rect_segments_from_bbox(bbox)
         fill = SolidPaint(rgb="F0F0F0", opacity=_clamp01(0.4))
-        stroke = Stroke(paint=SolidPaint(rgb="999999", opacity=_clamp01(1.0)), width=1.0)
+        stroke = Stroke(
+            paint=SolidPaint(rgb="999999", opacity=_clamp01(1.0)), width=1.0
+        )
         placeholder_metadata = dict(metadata)
         path = Path(
             segments=segments,
