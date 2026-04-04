@@ -5,7 +5,6 @@ from __future__ import annotations
 import logging
 import os
 import platform
-import plistlib
 import shutil
 import subprocess
 import zipfile
@@ -37,6 +36,23 @@ def _normalize_user_installation(user_installation: str | None) -> str | None:
     if user_installation.startswith("file:"):
         return user_installation
     return Path(user_installation).resolve().as_uri()
+
+
+def _kill_running_soffice() -> None:
+    """Kill any running LibreOffice/soffice processes so headless mode can start cleanly."""
+    try:
+        result = subprocess.run(
+            ["pkill", "-f", "soffice"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+        )
+        if result.returncode == 0:
+            import time
+            time.sleep(0.5)
+            logger.debug("Killed existing soffice process(es) before headless render.")
+    except FileNotFoundError:
+        pass
 
 
 class LibreOfficeRenderer:
@@ -93,6 +109,8 @@ class LibreOfficeRenderer:
 
         if not self.available:
             raise VisualRendererError("LibreOffice (soffice) is not installed or not on PATH.")
+
+        _kill_running_soffice()
 
         pptx_path = Path(pptx_path)
         if not pptx_path.exists():
@@ -186,11 +204,10 @@ class LibreOfficeRenderer:
         if not open_path or not app_path:
             return None
 
-        bundle_id, app_name = self._macos_bundle_info(app_path)
-        if bundle_id:
-            return [open_path, "-W", "-b", bundle_id, "--args", *args]
-        if app_name:
-            return [open_path, "-W", "-a", app_name, "--args", *args]
+        # Always use -a with the .app path.  The bundle-id route
+        # (`open -b org.libreoffice.script`) fails on many macOS installs
+        # with "LSCopyApplicationURLsForBundleIdentifier() failed" because
+        # LaunchServices doesn't register the id reliably.
         return [open_path, "-W", "-a", app_path, "--args", *args]
 
     def _macos_app_path(self) -> str | None:
@@ -201,18 +218,6 @@ class LibreOfficeRenderer:
                 return str(parent)
         return None
 
-    def _macos_bundle_info(self, app_path: str) -> tuple[str | None, str | None]:
-        info_path = Path(app_path) / "Contents" / "Info.plist"
-        if not info_path.exists():
-            return None, None
-        try:
-            with info_path.open("rb") as handle:
-                info = plistlib.load(handle)
-        except Exception:  # pragma: no cover - defensive
-            return None, None
-        bundle_id = info.get("CFBundleIdentifier")
-        app_name = info.get("CFBundleName") or info.get("CFBundleDisplayName")
-        return bundle_id, app_name
 
 
 class PowerPointRenderer:
