@@ -282,7 +282,17 @@ class FilterRenderer:
             )
             return promotion
 
-        source_surface = self._seed_source_surface(viewport.width, viewport.height)
+        source_surface = None
+        try:
+            source_surface = self._raster_adapter.render_source_surface(
+                width_px=viewport.width,
+                height_px=viewport.height,
+                context=filter_context,
+            )
+        except Exception:  # pragma: no cover - defensive fallback
+            source_surface = None
+        if source_surface is None:
+            source_surface = self._seed_source_surface(viewport.width, viewport.height)
         try:
             result_surface = apply_filter(source_surface, plan, bounds, viewport)
         except UnsupportedPrimitiveError as exc:

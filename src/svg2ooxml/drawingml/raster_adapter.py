@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import struct
 import zlib
 from collections.abc import Iterable
@@ -23,6 +24,8 @@ try:  # pragma: no cover - numpy optional for lightweight deployments
 except Exception:  # pragma: no cover - optional dependency
     np = None  # type: ignore[assignment]
     NUMPY_AVAILABLE = False
+
+_UNSUPPORTED_SOURCE_STYLE = object()
 
 
 @dataclass
@@ -146,6 +149,197 @@ class RasterAdapter:
             default_size=default_size,
         )
 
+    def render_source_surface(
+        self,
+        *,
+        width_px: int,
+        height_px: int,
+        context,
+    ):
+        """Render the unfiltered source element subtree into a surface."""
+
+        if skia is None or not NUMPY_AVAILABLE:
+            return None
+        source_descriptor = self._source_graphic_descriptor_from_context(context)
+        descriptor, bounds = self._descriptor_payload(context)
+        if isinstance(source_descriptor, dict):
+            surface = self._render_surface_from_descriptor(
+                descriptor=source_descriptor,
+                bounds=bounds,
+                width_px=width_px,
+                height_px=height_px,
+            )
+            if surface is not None:
+                return surface
+        try:
+            from svg2ooxml.core.resvg.normalizer import normalize_svg_string
+            from svg2ooxml.core.resvg.parser.options import Options
+            from svg2ooxml.render.pipeline import render
+        except Exception:  # pragma: no cover - renderer dependencies missing
+            return None
+
+        source_element = self._source_element_from_context(context)
+        if source_element is None:
+            return None
+
+        source_root = None
+        try:
+            source_root = source_element.getroottree().getroot()
+        except Exception:
+            source_root = None
+
+        svg_markup = self._build_source_svg_markup(
+            source_element=source_element,
+            source_root=source_root,
+            descriptor=descriptor,
+            bounds=bounds,
+            width_px=width_px,
+            height_px=height_px,
+        )
+        if svg_markup is None:
+            return None
+
+        resources_dir = None
+        if context and context.services:
+            image_service = getattr(context.services, "image_service", None)
+            if image_service:
+                from svg2ooxml.services.image_service import FileResolver
+
+                for resolver in image_service.resolvers():
+                    if isinstance(resolver, FileResolver):
+                        resources_dir = resolver.base_dir
+                        break
+
+        try:
+            options = Options(resources_dir=resources_dir) if resources_dir else None
+            normalized = normalize_svg_string(svg_markup, options=options)
+            return render(normalized.tree)
+        except Exception:  # pragma: no cover - renderer failure
+            return None
+
+    def _source_graphic_descriptor_from_context(self, context) -> dict[str, Any] | None:
+        options = getattr(context, "options", None)
+        if not isinstance(options, dict):
+            return None
+        filter_inputs = options.get("filter_inputs")
+        if not isinstance(filter_inputs, dict):
+            return None
+        source_graphic = filter_inputs.get("SourceGraphic")
+        if isinstance(source_graphic, dict):
+            return dict(source_graphic)
+        return None
+
+    def _render_surface_from_descriptor(
+        self,
+        *,
+        descriptor: dict[str, Any],
+        bounds: dict[str, float | Any] | None,
+        width_px: int,
+        height_px: int,
+    ):
+        if skia is None:
+            return None
+        if not _transform_is_identity(descriptor.get("transform")):
+            return None
+
+        source_bounds = bounds
+        descriptor_bbox = descriptor.get("bbox")
+        if isinstance(descriptor_bbox, dict) and descriptor_bbox:
+            source_bounds = descriptor_bbox
+        if not isinstance(source_bounds, dict):
+            return None
+
+        try:
+            x = float(source_bounds.get("x", 0.0))
+            y = float(source_bounds.get("y", 0.0))
+            width = max(1.0, float(source_bounds.get("width", width_px)))
+            height = max(1.0, float(source_bounds.get("height", height_px)))
+        except (TypeError, ValueError):
+            return None
+
+        surface = skia.Surface(int(max(1, width_px)), int(max(1, height_px)))
+        canvas = surface.getCanvas()
+        canvas.clear(skia.Color4f(0.0, 0.0, 0.0, 0.0))
+
+        canvas.save()
+        canvas.scale(width_px / width, height_px / height)
+        canvas.translate(-x, -y)
+
+        path = self._descriptor_to_skia_path(descriptor)
+        if path is None:
+            canvas.restore()
+            return None
+
+        opacity = _float_or(descriptor.get("opacity"), 1.0)
+        fill = descriptor.get("fill")
+        stroke = descriptor.get("stroke")
+        fill_color = _color4f_from_paint_descriptor(fill, opacity)
+        if fill_color is _UNSUPPORTED_SOURCE_STYLE:
+            canvas.restore()
+            return None
+        if fill_color is not None:
+            paint = skia.Paint(
+                AntiAlias=True,
+                Style=skia.Paint.kFill_Style,
+                Color4f=fill_color,
+            )
+            canvas.drawPath(path, paint)
+
+        stroke_paint = _stroke_paint_from_descriptor(stroke, opacity)
+        if stroke_paint is _UNSUPPORTED_SOURCE_STYLE:
+            canvas.restore()
+            return None
+        if stroke_paint is not None:
+            canvas.drawPath(path, stroke_paint)
+
+        canvas.restore()
+        try:
+            image = surface.makeImageSnapshot()
+            return _surface_from_skia_image(image)
+        except Exception:  # pragma: no cover - defensive
+            return None
+
+    def _descriptor_to_skia_path(self, descriptor: dict[str, Any]):
+        geometry = descriptor.get("geometry")
+        if not isinstance(geometry, list) or not geometry:
+            return None
+        path = skia.Path()
+        started = False
+        for segment in geometry:
+            if not isinstance(segment, dict):
+                continue
+            start = segment.get("start")
+            if not started and _is_point_pair(start):
+                path.moveTo(float(start[0]), float(start[1]))
+                started = True
+            segment_type = str(segment.get("type") or "").lower()
+            if segment_type == "line":
+                end = segment.get("end")
+                if _is_point_pair(end):
+                    path.lineTo(float(end[0]), float(end[1]))
+                else:
+                    return None
+            elif segment_type == "cubic":
+                control1 = segment.get("control1")
+                control2 = segment.get("control2")
+                end = segment.get("end")
+                if _is_point_pair(control1) and _is_point_pair(control2) and _is_point_pair(end):
+                    path.cubicTo(
+                        float(control1[0]),
+                        float(control1[1]),
+                        float(control2[0]),
+                        float(control2[1]),
+                        float(end[0]),
+                        float(end[1]),
+                    )
+                else:
+                    return None
+            else:
+                return None
+        if descriptor.get("closed"):
+            path.close()
+        return path if started else None
+
     def generate_placeholder(
         self,
         *,
@@ -202,32 +396,13 @@ class RasterAdapter:
         preview_filter_id = filter_clone.get("id") or f"svg2ooxml_filter_{self._counter + 1}"
         filter_clone.set("id", preview_filter_id)
 
-        svg_root = etree.Element(
-            f"{{{svg_ns}}}svg",
-            nsmap={None: svg_ns},
-            attrib={
-                "width": str(max(1, int(width_px))),
-                "height": str(max(1, int(height_px))),
-                "viewBox": f"0 0 {max(1, int(width_px))} {max(1, int(height_px))}",
-            },
+        svg_markup = self._build_preview_svg_markup(
+            filter_clone=filter_clone,
+            preview_filter_id=preview_filter_id,
+            width_px=width_px,
+            height_px=height_px,
+            context=context,
         )
-        defs = etree.SubElement(svg_root, f"{{{svg_ns}}}defs")
-        defs.append(filter_clone)
-        rect = etree.SubElement(
-            svg_root,
-            f"{{{svg_ns}}}rect",
-            attrib={
-                "x": "0",
-                "y": "0",
-                "width": "100%",
-                "height": "100%",
-                "fill": "#7F8CFF",
-                "filter": f"url(#{preview_filter_id})",
-            },
-        )
-        rect.set("opacity", "1")
-
-        svg_markup = etree.tostring(svg_root, encoding="unicode")
 
         resources_dir = None
         if context and context.services:
@@ -245,6 +420,232 @@ class RasterAdapter:
             return render(normalized.tree)
         except Exception:  # pragma: no cover - renderer failure
             return None
+
+    def _build_preview_svg_markup(
+        self,
+        *,
+        filter_clone: etree._Element,
+        preview_filter_id: str,
+        width_px: int,
+        height_px: int,
+        context,
+    ) -> str:
+        svg_ns = "http://www.w3.org/2000/svg"
+        xlink_ns = "http://www.w3.org/1999/xlink"
+        descriptor, bounds = self._descriptor_payload(context)
+        source_element = self._source_element_from_context(context)
+        source_root = None
+        if source_element is not None:
+            try:
+                source_root = source_element.getroottree().getroot()
+            except Exception:
+                source_root = None
+
+        view_box = self._preview_viewbox(
+            descriptor=descriptor,
+            bounds=bounds,
+            width_px=width_px,
+            height_px=height_px,
+        )
+        svg_root = etree.Element(
+            f"{{{svg_ns}}}svg",
+            nsmap={None: svg_ns, "xlink": xlink_ns},
+            attrib={
+                "width": str(max(1, int(width_px))),
+                "height": str(max(1, int(height_px))),
+                "viewBox": view_box,
+            },
+        )
+        defs = etree.SubElement(svg_root, f"{{{svg_ns}}}defs")
+        if isinstance(source_root, etree._Element):
+            for defs_child in self._iter_defs_children(source_root):
+                defs.append(defs_child)
+        defs.append(filter_clone)
+
+        source_subtree = self._build_source_subtree(
+            source_element=source_element,
+            source_root=source_root,
+            preview_filter_id=preview_filter_id,
+            svg_ns=svg_ns,
+        )
+        if source_subtree is not None:
+            svg_root.append(source_subtree)
+        else:
+            rect = etree.SubElement(
+                svg_root,
+                f"{{{svg_ns}}}rect",
+                attrib={
+                    "x": "0",
+                    "y": "0",
+                    "width": "100%",
+                    "height": "100%",
+                    "fill": "#7F8CFF",
+                    "filter": f"url(#{preview_filter_id})",
+                },
+            )
+            rect.set("opacity", "1")
+
+        return etree.tostring(svg_root, encoding="unicode")
+
+    def _build_source_svg_markup(
+        self,
+        *,
+        source_element: etree._Element,
+        source_root: etree._Element | None,
+        descriptor: dict[str, Any] | None,
+        bounds: dict[str, float | Any] | None,
+        width_px: int,
+        height_px: int,
+    ) -> str | None:
+        svg_ns = "http://www.w3.org/2000/svg"
+        xlink_ns = "http://www.w3.org/1999/xlink"
+        view_box = self._preview_viewbox(
+            descriptor=descriptor,
+            bounds=bounds,
+            width_px=width_px,
+            height_px=height_px,
+        )
+        svg_root = etree.Element(
+            f"{{{svg_ns}}}svg",
+            nsmap={None: svg_ns, "xlink": xlink_ns},
+            attrib={
+                "width": str(max(1, int(width_px))),
+                "height": str(max(1, int(height_px))),
+                "viewBox": view_box,
+            },
+        )
+        defs = etree.SubElement(svg_root, f"{{{svg_ns}}}defs")
+        if isinstance(source_root, etree._Element):
+            for defs_child in self._iter_defs_children(source_root):
+                defs.append(defs_child)
+        source_subtree = self._build_source_subtree(
+            source_element=source_element,
+            source_root=source_root,
+            preview_filter_id=None,
+            svg_ns=svg_ns,
+        )
+        if source_subtree is None:
+            return None
+        svg_root.append(source_subtree)
+        return etree.tostring(svg_root, encoding="unicode")
+
+    def _source_element_from_context(self, context) -> etree._Element | None:
+        options = getattr(context, "options", None)
+        if not isinstance(options, dict):
+            return None
+        candidate = options.get("element")
+        if isinstance(candidate, etree._Element):
+            return candidate
+        return None
+
+    def _iter_defs_children(self, source_root: etree._Element) -> list[etree._Element]:
+        svg_ns = "http://www.w3.org/2000/svg"
+        children: list[etree._Element] = []
+        for defs in source_root.findall(f".//{{{svg_ns}}}defs"):
+            for child in defs:
+                if isinstance(child.tag, str):
+                    children.append(deepcopy(child))
+        return children
+
+    def _build_source_subtree(
+        self,
+        *,
+        source_element: etree._Element | None,
+        source_root: etree._Element | None,
+        preview_filter_id: str | None,
+        svg_ns: str,
+    ) -> etree._Element | None:
+        if source_element is None:
+            return None
+        node = deepcopy(source_element)
+        self._rewrite_filter_reference(node, preview_filter_id)
+        ancestors: list[etree._Element] = []
+        current = source_element.getparent()
+        while current is not None and current is not source_root:
+            local = current.tag.split("}", 1)[-1] if isinstance(current.tag, str) and "}" in current.tag else str(current.tag)
+            if local.lower() != "defs":
+                ancestors.append(current)
+            current = current.getparent()
+        for ancestor in reversed(ancestors):
+            wrapper = etree.Element(ancestor.tag, attrib=dict(ancestor.attrib))
+            wrapper.append(node)
+            node = wrapper
+        return node
+
+    def _rewrite_filter_reference(
+        self, element: etree._Element, preview_filter_id: str | None
+    ) -> None:
+        if preview_filter_id:
+            element.set("filter", f"url(#{preview_filter_id})")
+        else:
+            element.attrib.pop("filter", None)
+        style_attr = element.get("style")
+        if not style_attr or "filter" not in style_attr:
+            return
+        if preview_filter_id:
+            style_attr = re.sub(
+                r"filter\s*:\s*url\([^)]+\)",
+                f"filter:url(#{preview_filter_id})",
+                style_attr,
+            )
+        else:
+            style_attr = re.sub(
+                r"(?:^|;)\s*filter\s*:\s*url\([^)]+\)\s*;?",
+                ";",
+                style_attr,
+            )
+            style_attr = re.sub(r";{2,}", ";", style_attr).strip(" ;")
+        if style_attr:
+            element.set("style", style_attr)
+        else:
+            element.attrib.pop("style", None)
+
+    def _preview_viewbox(
+        self,
+        *,
+        descriptor: dict[str, Any] | None,
+        bounds: dict[str, float | Any] | None,
+        width_px: int,
+        height_px: int,
+    ) -> str:
+        if not bounds:
+            return f"0 0 {max(1, int(width_px))} {max(1, int(height_px))}"
+
+        x = float(bounds.get("x", 0.0))
+        y = float(bounds.get("y", 0.0))
+        width = max(1.0, float(bounds.get("width", width_px)))
+        height = max(1.0, float(bounds.get("height", height_px)))
+        region = (descriptor or {}).get("filter_region") if descriptor else None
+        units = (descriptor or {}).get("filter_units") if descriptor else None
+
+        if isinstance(region, dict):
+            rx = region.get("x")
+            ry = region.get("y")
+            rw = region.get("width")
+            rh = region.get("height")
+            try:
+                if units == "objectBoundingBox":
+                    if _is_number(rx):
+                        x = float(bounds.get("x", 0.0)) + float(rx) * float(bounds.get("width", width))
+                    if _is_number(ry):
+                        y = float(bounds.get("y", 0.0)) + float(ry) * float(bounds.get("height", height))
+                    if _is_number(rw):
+                        width = max(1.0, float(rw) * float(bounds.get("width", width)))
+                    if _is_number(rh):
+                        height = max(1.0, float(rh) * float(bounds.get("height", height)))
+                else:
+                    if _is_number(rx):
+                        x = float(rx)
+                    if _is_number(ry):
+                        y = float(ry)
+                    if _is_number(rw):
+                        width = max(1.0, float(rw))
+                    if _is_number(rh):
+                        height = max(1.0, float(rh))
+            except (TypeError, ValueError):
+                pass
+
+        return f"{x} {y} {width} {height}"
 
     def _render_placeholder_preview(
         self,
@@ -695,6 +1096,134 @@ def _surface_to_png(surface) -> bytes:
     idat = _png_chunk(b"IDAT", zlib.compress(bytes(row_bytes)))
     iend = _png_chunk(b"IEND", b"")
     return header + ihdr + idat + iend
+
+
+def _surface_from_skia_image(image):
+    from svg2ooxml.render.surface import Surface
+
+    rgba = image.toarray().astype(np.float32) / 255.0
+    if image.colorType() == skia.ColorType.kBGRA_8888_ColorType:
+        rgba[:, :, [0, 2]] = rgba[:, :, [2, 0]]
+    rgba[..., :3] *= rgba[..., 3:4]
+    return Surface(width=image.width(), height=image.height(), data=rgba)
+
+
+def _float_or(value: Any, default: float) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _transform_is_identity(transform: Any) -> bool:
+    if transform is None:
+        return True
+    if not isinstance(transform, (list, tuple)) or len(transform) != 3:
+        return False
+    identity = (
+        (1.0, 0.0, 0.0),
+        (0.0, 1.0, 0.0),
+        (0.0, 0.0, 1.0),
+    )
+    try:
+        for row_idx, row in enumerate(transform):
+            if not isinstance(row, (list, tuple)) or len(row) != 3:
+                return False
+            for col_idx, value in enumerate(row):
+                if abs(float(value) - identity[row_idx][col_idx]) >= 1e-9:
+                    return False
+    except (TypeError, ValueError):
+        return False
+    return True
+
+
+def _color4f_from_paint_descriptor(
+    paint_descriptor: Any, base_opacity: float
+):
+    if paint_descriptor is None:
+        return None
+    if not isinstance(paint_descriptor, dict):
+        return _UNSUPPORTED_SOURCE_STYLE
+
+    paint_type = str(paint_descriptor.get("type") or "").strip().lower()
+    if not paint_type or paint_type == "none":
+        return None
+    if paint_type != "solid":
+        return _UNSUPPORTED_SOURCE_STYLE
+
+    token = str(paint_descriptor.get("rgb") or "").strip().lstrip("#")
+    if len(token) == 3:
+        token = "".join(ch * 2 for ch in token)
+    if len(token) != 6:
+        return _UNSUPPORTED_SOURCE_STYLE
+    try:
+        value = int(token, 16)
+    except ValueError:
+        return _UNSUPPORTED_SOURCE_STYLE
+
+    opacity = max(
+        0.0,
+        min(1.0, base_opacity * _float_or(paint_descriptor.get("opacity"), 1.0)),
+    )
+    return skia.Color4f(
+        ((value >> 16) & 0xFF) / 255.0,
+        ((value >> 8) & 0xFF) / 255.0,
+        (value & 0xFF) / 255.0,
+        opacity,
+    )
+
+
+def _stroke_paint_from_descriptor(stroke_descriptor: Any, base_opacity: float):
+    if stroke_descriptor is None:
+        return None
+    if not isinstance(stroke_descriptor, dict):
+        return _UNSUPPORTED_SOURCE_STYLE
+
+    stroke_width = _float_or(stroke_descriptor.get("width"), 0.0)
+    if stroke_width <= 0:
+        return None
+    dash_array = stroke_descriptor.get("dash_array")
+    if isinstance(dash_array, list) and dash_array:
+        return _UNSUPPORTED_SOURCE_STYLE
+
+    stroke_color = _color4f_from_paint_descriptor(
+        stroke_descriptor.get("paint"),
+        base_opacity * _float_or(stroke_descriptor.get("opacity"), 1.0),
+    )
+    if stroke_color is _UNSUPPORTED_SOURCE_STYLE:
+        return _UNSUPPORTED_SOURCE_STYLE
+    if stroke_color is None:
+        return None
+
+    paint = skia.Paint(
+        AntiAlias=True,
+        Style=skia.Paint.kStroke_Style,
+        StrokeWidth=stroke_width,
+        Color4f=stroke_color,
+    )
+    cap = str(stroke_descriptor.get("cap") or "").strip().lower()
+    if cap == "round":
+        paint.setStrokeCap(skia.Paint.kRound_Cap)
+    elif cap == "square":
+        paint.setStrokeCap(skia.Paint.kSquare_Cap)
+    else:
+        paint.setStrokeCap(skia.Paint.kButt_Cap)
+
+    join = str(stroke_descriptor.get("join") or "").strip().lower()
+    if join == "round":
+        paint.setStrokeJoin(skia.Paint.kRound_Join)
+    elif join == "bevel":
+        paint.setStrokeJoin(skia.Paint.kBevel_Join)
+    else:
+        paint.setStrokeJoin(skia.Paint.kMiter_Join)
+    paint.setStrokeMiter(_float_or(stroke_descriptor.get("miter_limit"), 4.0))
+    return paint
+
+
+def _is_point_pair(value: Any) -> bool:
+    if not isinstance(value, (list, tuple)) or len(value) != 2:
+        return False
+    return _is_number(value[0]) and _is_number(value[1])
 
 
 def _is_number(value: object) -> bool:

@@ -81,7 +81,12 @@ class DiffuseLightingFilter(Filter):
             "fallback_reason": "diffuse_lighting_requires_emf",
         }
         policy_options = context.policy
-        approximation_allowed = bool(policy_options.get("approximation_allowed", True))
+        approximation_allowed = bool(
+            policy_options.get(
+                "lighting_approximation_allowed",
+                policy_options.get("approximation_allowed", True),
+            )
+        )
         if approximation_allowed:
             drawingml = _approximate_lighting_glow(
                 color=color,
@@ -130,7 +135,12 @@ class SpecularLightingFilter(Filter):
             "fallback_reason": "specular_lighting_rendered_via_resvg",
         }
         policy_options = context.policy
-        approximation_allowed = bool(policy_options.get("approximation_allowed", True))
+        approximation_allowed = bool(
+            policy_options.get(
+                "lighting_approximation_allowed",
+                policy_options.get("approximation_allowed", True),
+            )
+        )
         if approximation_allowed:
             intensity = _clamp_intensity(specular_constant * 0.7, minimum=0.25)
             radius_px = max(surface_scale, 1.0) * max(1.0, min(specular_exponent, 5.0))

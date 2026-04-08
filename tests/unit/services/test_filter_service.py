@@ -3,11 +3,17 @@
 from __future__ import annotations
 
 import math
+from io import BytesIO
 from pathlib import Path
 
 import pytest
 from lxml import etree
+from PIL import Image
 
+from svg2ooxml.core.ir.shape_converters_utils import _ellipse_segments
+from svg2ooxml.drawingml.raster_adapter import RasterAdapter
+from svg2ooxml.filters.base import FilterContext
+from svg2ooxml.ir.geometry import BezierSegment, LineSegment
 from svg2ooxml.filters.base import FilterResult
 from svg2ooxml.filters.registry import FilterRegistry
 from svg2ooxml.filters.resvg_bridge import (
@@ -199,6 +205,206 @@ def test_raster_adapter_produces_png_asset() -> None:
     assert isinstance(raw, (bytes, bytearray))
     # PNG header check
     assert raw[:8] == b"\x89PNG\r\n\x1a\n"
+
+
+def test_raster_adapter_renders_source_element_with_transparent_edges() -> None:
+    pytest.importorskip("skia")
+
+    service = FilterService(registry=_NoopRegistry())
+    service.register_filter(
+        "lighting",
+        _make_descriptor(
+            "<filter id='lighting'>"
+            "  <feSpecularLighting surfaceScale='5' specularConstant='100' specularExponent='10'>"
+            "    <feDistantLight azimuth='0' elevation='30'/>"
+            "  </feSpecularLighting>"
+            "</filter>"
+        ),
+    )
+    service.set_strategy("raster")
+
+    svg = etree.fromstring(
+        """
+        <svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'>
+            <circle id='target' cx='50' cy='50' r='10' filter='url(#lighting)'/>
+        </svg>
+        """
+    )
+    circle = svg.xpath(".//*[@id='target']")[0]
+    results = service.resolve_effects(
+        "lighting",
+        context={
+            "element": circle,
+            "ir_bbox": {"x": 40.0, "y": 40.0, "width": 20.0, "height": 20.0},
+        },
+    )
+
+    assert results
+    asset = results[-1].metadata["fallback_assets"][0]
+    raw = asset["data"]
+    assert isinstance(raw, (bytes, bytearray))
+    image = Image.open(BytesIO(raw)).convert("RGBA")
+    alpha = image.getchannel("A")
+    assert alpha.getextrema()[0] == 0
+
+
+def test_raster_adapter_source_surface_preserves_solid_fill_color() -> None:
+    pytest.importorskip("skia")
+
+    adapter = RasterAdapter()
+    filter_element = _make_filter_element("<filter id='lighting'/>")
+    context = FilterContext(
+        filter_element=filter_element,
+        options={
+            "filter_inputs": {
+                "SourceGraphic": {
+                    "shape_type": "Path",
+                    "geometry": [
+                        {"type": "line", "start": (0.0, 0.0), "end": (20.0, 0.0)},
+                        {"type": "line", "start": (20.0, 0.0), "end": (20.0, 20.0)},
+                        {"type": "line", "start": (20.0, 20.0), "end": (0.0, 20.0)},
+                        {"type": "line", "start": (0.0, 20.0), "end": (0.0, 0.0)},
+                    ],
+                    "closed": True,
+                    "fill": {"type": "solid", "rgb": "FF0000", "opacity": 1.0},
+                    "stroke": None,
+                    "opacity": 1.0,
+                    "bbox": {"x": 0.0, "y": 0.0, "width": 20.0, "height": 20.0},
+                }
+            }
+        },
+    )
+
+    surface = adapter.render_source_surface(width_px=20, height_px=20, context=context)
+
+    assert surface is not None
+    center = surface.data[10, 10]
+    assert float(center[0]) > 0.8
+    assert float(center[1]) < 0.05
+    assert float(center[2]) < 0.05
+    assert float(center[3]) > 0.8
+
+
+def test_raster_adapter_source_surface_does_not_invent_fill_when_missing() -> None:
+    pytest.importorskip("skia")
+
+    adapter = RasterAdapter()
+    filter_element = _make_filter_element("<filter id='lighting'/>")
+    context = FilterContext(
+        filter_element=filter_element,
+        options={
+            "filter_inputs": {
+                "SourceGraphic": {
+                    "shape_type": "Path",
+                    "geometry": [
+                        {"type": "line", "start": (0.0, 0.0), "end": (20.0, 0.0)},
+                        {"type": "line", "start": (20.0, 0.0), "end": (20.0, 20.0)},
+                        {"type": "line", "start": (20.0, 20.0), "end": (0.0, 20.0)},
+                        {"type": "line", "start": (0.0, 20.0), "end": (0.0, 0.0)},
+                    ],
+                    "closed": True,
+                    "fill": None,
+                    "stroke": None,
+                    "opacity": 1.0,
+                    "bbox": {"x": 0.0, "y": 0.0, "width": 20.0, "height": 20.0},
+                }
+            }
+        },
+    )
+
+    surface = adapter.render_source_surface(width_px=20, height_px=20, context=context)
+
+    assert surface is not None
+    center = surface.data[10, 10]
+    assert float(center[3]) == 0.0
+
+
+def test_resvg_lighting_uses_source_element_alpha() -> None:
+    pytest.importorskip("skia")
+
+    service = FilterService(registry=_NoopRegistry())
+    service.register_filter(
+        "lighting",
+        _make_descriptor(
+            "<filter id='lighting'>"
+            "  <feSpecularLighting surfaceScale='5' specularConstant='100' specularExponent='10'>"
+            "    <feDistantLight azimuth='0' elevation='30'/>"
+            "  </feSpecularLighting>"
+            "</filter>"
+        ),
+    )
+    service.set_strategy("resvg")
+
+    svg = etree.fromstring(
+        """
+        <svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'>
+            <circle id='target' cx='50' cy='50' r='10' filter='url(#lighting)'/>
+        </svg>
+        """
+    )
+    circle = svg.xpath(".//*[@id='target']")[0]
+    geometry: list[dict[str, object]] = []
+    for segment in _ellipse_segments(50.0, 50.0, 10.0, 10.0):
+        if isinstance(segment, LineSegment):
+            geometry.append(
+                {
+                    "type": "line",
+                    "start": (float(segment.start.x), float(segment.start.y)),
+                    "end": (float(segment.end.x), float(segment.end.y)),
+                }
+            )
+        elif isinstance(segment, BezierSegment):
+            geometry.append(
+                {
+                    "type": "cubic",
+                    "start": (float(segment.start.x), float(segment.start.y)),
+                    "control1": (float(segment.control1.x), float(segment.control1.y)),
+                    "control2": (float(segment.control2.x), float(segment.control2.y)),
+                    "end": (float(segment.end.x), float(segment.end.y)),
+                }
+            )
+    results = service.resolve_effects(
+        "lighting",
+        context={
+            "element": circle,
+            "ir_bbox": {"x": 40.0, "y": 40.0, "width": 20.0, "height": 20.0},
+            "policy": {"approximation_allowed": False},
+            "filter_inputs": {
+                "SourceGraphic": {
+                    "shape_type": "Path",
+                    "geometry": geometry,
+                    "closed": True,
+                    "fill": {"type": "solid", "rgb": "000000", "opacity": 1.0},
+                    "stroke": None,
+                    "opacity": 1.0,
+                    "bbox": {"x": 40.0, "y": 40.0, "width": 20.0, "height": 20.0},
+                },
+                "SourceAlpha": {
+                    "shape_type": "Path",
+                    "geometry": geometry,
+                    "closed": True,
+                    "opacity": 1.0,
+                    "bbox": {"x": 40.0, "y": 40.0, "width": 20.0, "height": 20.0},
+                },
+            },
+        },
+    )
+
+    assert results
+    effect = results[-1]
+    assert effect.strategy == "resvg"
+    assert effect.fallback == "bitmap"
+    asset = effect.metadata["fallback_assets"][0]
+    raw = asset["data"]
+    assert isinstance(raw, (bytes, bytearray))
+    image = Image.open(BytesIO(raw)).convert("RGBA")
+    alpha = image.getchannel("A")
+    width, height = image.size
+    assert alpha.getextrema()[1] > 0
+    assert alpha.getpixel((0, 0)) == 0
+    assert alpha.getpixel((width - 1, 0)) == 0
+    assert alpha.getpixel((0, height - 1)) == 0
+    assert alpha.getpixel((width - 1, height - 1)) == 0
 
 
 def test_resvg_path_returns_bitmap_result() -> None:

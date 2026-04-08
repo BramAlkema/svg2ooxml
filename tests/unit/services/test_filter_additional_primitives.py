@@ -13,6 +13,8 @@ from tests.unit.filters.policy import (
 )
 
 from svg2ooxml.common.units import px_to_emu
+from svg2ooxml.filters.base import FilterContext
+from svg2ooxml.filters.primitives.lighting import DiffuseLightingFilter
 from svg2ooxml.services.filter_service import FilterService
 from svg2ooxml.services.filter_types import FilterEffectResult
 
@@ -249,6 +251,24 @@ def test_diffuse_lighting_resvg_path() -> None:
         assert_no_assets(effect)
     else:
         assert_assets(effect, modern="raster")
+
+
+def test_diffuse_lighting_uses_generic_approximation_policy_flag() -> None:
+    primitive = etree.fromstring(
+        "<feDiffuseLighting surfaceScale='2' diffuseConstant='1.3' lighting-color='#ffeeaa'>"
+        "  <feDistantLight azimuth='45' elevation='45'/>"
+        "</feDiffuseLighting>"
+    )
+    context = FilterContext(
+        filter_element=primitive,
+        options={"policy": {"approximation_allowed": True}},
+    )
+
+    result = DiffuseLightingFilter().apply(primitive, context)
+
+    assert result.fallback is None
+    assert result.metadata.get("native_support") is True
+    assert result.metadata.get("approximation") == "glow"
 
 
 def test_specular_lighting_resvg_path() -> None:

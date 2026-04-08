@@ -368,19 +368,26 @@ class StyleExtractor:
         filter_attr = element.get("filter")
         if not filter_attr:
             return []
+        filter_id = _extract_url_id(filter_attr) or filter_attr
 
         filter_service = services.filter_service
         if filter_service and hasattr(filter_service, "resolve_effects"):
             try:
-                effects = filter_service.resolve_effects(filter_attr, context=context)  # type: ignore[call-arg]
+                if isinstance(context, dict):
+                    filter_context = dict(context)
+                else:
+                    filter_context = {}
+                filter_context.setdefault("element", element)
+                effects = filter_service.resolve_effects(  # type: ignore[call-arg]
+                    filter_id,
+                    context=filter_context,
+                )
                 if effects:
-                    filter_id = _extract_url_id(filter_attr) or filter_attr
                     metadata.setdefault("filter_ids", []).append(filter_id)
                     return list(effects)
             except Exception:  # pragma: no cover - defensive
                 pass
 
-        filter_id = _extract_url_id(filter_attr) or filter_attr
         metadata.setdefault("filter_ids", []).append(filter_id)
         return []
 

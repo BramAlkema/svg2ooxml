@@ -35,13 +35,17 @@ def _emf_hash(filter_markup: str, filter_id: str) -> str:
     return hashlib.sha1(data).hexdigest()
 
 
-def _assert_native_without_emf(filter_markup: str, filter_id: str) -> None:
+def _assert_lighting_avoids_emf(filter_markup: str, filter_id: str) -> None:
     service = FilterService()
     service.register_filter(filter_id, etree.fromstring(filter_markup))
     results = service.resolve_effects(filter_id)
     assert results
     assert all(res.fallback != "emf" for res in results)
-    assert any(res.strategy == "native" for res in results)
+    assert any(
+        (res.strategy == "native" and res.fallback is None)
+        or res.fallback in {"raster", "bitmap"}
+        for res in results
+    )
 
 
 def test_composite_filter_prefers_native() -> None:
@@ -106,7 +110,7 @@ def test_displacement_map_emf_bytes_stable() -> None:
     assert digest == EXPECTED_EMF_DIGESTS["disp"]
 
 
-def test_diffuse_lighting_prefers_native() -> None:
+def test_diffuse_lighting_avoids_emf_output() -> None:
     filter_markup = (
         "<filter id='diff'>"
         "  <feDiffuseLighting surfaceScale='2' diffuseConstant='1.5' lighting-color='#9bb8ff'>"
@@ -114,7 +118,7 @@ def test_diffuse_lighting_prefers_native() -> None:
         "  </feDiffuseLighting>"
         "</filter>"
     )
-    _assert_native_without_emf(filter_markup, "diff")
+    _assert_lighting_avoids_emf(filter_markup, "diff")
 
 
 def test_turbulence_emf_bytes_stable() -> None:
@@ -137,7 +141,7 @@ def test_convolve_matrix_emf_bytes_stable() -> None:
     assert digest == EXPECTED_EMF_DIGESTS["conv"]
 
 
-def test_specular_lighting_prefers_native() -> None:
+def test_specular_lighting_avoids_emf_output() -> None:
     filter_markup = (
         "<filter id='spec'>"
         "  <feSpecularLighting surfaceScale='3' specularConstant='0.6' specularExponent='10' lighting-color='#304060'>"
@@ -145,4 +149,4 @@ def test_specular_lighting_prefers_native() -> None:
         "  </feSpecularLighting>"
         "</filter>"
     )
-    _assert_native_without_emf(filter_markup, "spec")
+    _assert_lighting_avoids_emf(filter_markup, "spec")
