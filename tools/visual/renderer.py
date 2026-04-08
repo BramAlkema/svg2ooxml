@@ -291,7 +291,7 @@ class PowerPointRenderer:
                 "--backend",
                 self._backend,
             ],
-            timeout=max(30.0, self._open_timeout + self._capture_timeout + 15.0),
+            timeout=max(80.0, self._open_timeout + self._capture_timeout + 15.0),
         )
 
         generated = sorted(output_dir.glob("slide_*.png"))
@@ -349,7 +349,7 @@ class PowerPointRenderer:
                 self._backend,
             ],
             timeout=max(
-                30.0,
+                80.0,
                 self._open_timeout
                 + duration
                 + (self._capture_timeout * frame_count)

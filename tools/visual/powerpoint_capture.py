@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import platform
+import shutil
 import subprocess
 import sys
 import time
@@ -44,11 +46,213 @@ from tools.visual.pptx_window import (  # noqa: E402
     get_png_type as _get_png_type,
     get_slideshow_window_id as _get_slideshow_window_id,
     get_window_id_via_jxa as _get_window_id_via_jxa,
+    open_presentation_via_ui as _open_presentation_via_ui,
     osascript as _osascript,
     osascript_jxa as _osascript_jxa,
 )
 
 _POWERPOINT_PERMISSION_NOTICE_SHOWN = False
+
+
+def _powerpoint_stage_dir() -> Path:
+    return (
+        Path(__file__).resolve().parents[2]
+        / "reports"
+        / "visual"
+        / "powerpoint"
+        / ".capture-stage"
+    )
+
+
+def _prepare_staged_presentation(pptx_path: Path) -> Path:
+    source = pptx_path.resolve()
+    stage_dir = _powerpoint_stage_dir()
+    stage_dir.mkdir(parents=True, exist_ok=True)
+    staged = stage_dir / "presentation.pptx"
+    shutil.copy2(source, staged)
+    return staged
+
+
+def _powerpoint_lockfile_path(pptx_path: Path) -> Path:
+    return pptx_path.resolve().with_name(f"~${pptx_path.name}")
+
+
+def _diagnostic_artifact_paths(debug_dir: Path) -> tuple[Path, Path]:
+    debug_dir = debug_dir.resolve()
+    return (
+        debug_dir / "powerpoint_diagnostics.json",
+        debug_dir / "powerpoint_debug.png",
+    )
+
+
+def _clear_diagnostic_artifacts(debug_dir: Path) -> None:
+    for path in _diagnostic_artifact_paths(debug_dir):
+        try:
+            path.unlink()
+        except FileNotFoundError:
+            pass
+
+
+def _collect_powerpoint_debug_state() -> dict[str, str]:
+    script = """
+set outText to ""
+on appendLine(existingText, keyText, valueText)
+    return existingText & keyText & tab & valueText & linefeed
+end appendLine
+
+set powerpointRunning to false
+set processWindowCount to 0
+set frontWindowTitle to ""
+set frontWindowSubrole to ""
+
+try
+    tell application "System Events"
+        set powerpointRunning to exists process "Microsoft PowerPoint"
+        if powerpointRunning then
+            tell process "Microsoft PowerPoint"
+                try
+                    set processWindowCount to count of windows
+                end try
+                if processWindowCount > 0 then
+                    try
+                        set frontWindowTitle to name of front window
+                    end try
+                    try
+                        set frontWindowSubrole to subrole of front window
+                    end try
+                end if
+            end tell
+        end if
+    end tell
+on error
+end try
+
+set outText to my appendLine(outText, "powerpoint_running", (powerpointRunning as string))
+set outText to my appendLine(outText, "process_window_count", (processWindowCount as string))
+set outText to my appendLine(outText, "front_window_title", frontWindowTitle)
+set outText to my appendLine(outText, "front_window_subrole", frontWindowSubrole)
+return outText
+"""
+    state: dict[str, str] = {}
+    try:
+        output = _osascript(script, timeout=10.0)
+    except Exception as exc:
+        state["state_error"] = str(exc)
+        return state
+    for line in output.splitlines():
+        if "\t" not in line:
+            continue
+        key, value = line.split("\t", 1)
+        state[key] = value
+    try:
+        state["powerpoint_window_id"] = _get_window_id_via_jxa(
+            ("Microsoft PowerPoint",)
+        )
+    except Exception as exc:
+        state["powerpoint_window_id_error"] = str(exc)
+    try:
+        state["slideshow_window_id"] = _get_window_id_via_jxa(
+            ("Microsoft PowerPoint Slide Show", "PowerPoint Slide Show"),
+            name_excludes=("presenter",),
+        )
+    except Exception as exc:
+        state["slideshow_window_id_error"] = str(exc)
+    if not state.get("slideshow_window_id"):
+        try:
+            state["slideshow_window_id"] = _get_window_id_via_jxa(
+                ("Microsoft PowerPoint",),
+                name_contains=("slide show", "slideshow"),
+                name_excludes=("presenter",),
+            )
+        except Exception as exc:
+            state["slideshow_window_id_error"] = str(exc)
+    return state
+
+
+def _capture_debug_screenshot(output_path: Path, *, capture_timeout: float) -> dict[str, str]:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    owners = (
+        "Microsoft PowerPoint Slide Show",
+        "PowerPoint Slide Show",
+        "Microsoft PowerPoint",
+    )
+    window_id = ""
+    try:
+        window_id = _get_window_id_via_jxa(owners)
+    except Exception:
+        window_id = ""
+    try:
+        if window_id:
+            _capture_window(
+                output_path,
+                window_id,
+                backend="screencapture",
+                timeout=max(1.0, capture_timeout),
+            )
+        else:
+            subprocess.run(
+                ["screencapture", "-x", str(output_path)],
+                check=True,
+                timeout=max(1.0, capture_timeout),
+            )
+        result = {"debug_screenshot": output_path.name}
+        if window_id:
+            result["debug_window_id"] = window_id
+        return result
+    except Exception as exc:
+        return {"debug_screenshot_error": str(exc)}
+
+
+def _write_powerpoint_diagnostics(
+    debug_dir: Path,
+    *,
+    reason: str,
+    error: Exception,
+    source_pptx: Path,
+    staged_pptx: Path | None,
+    capture_timeout: float,
+) -> Path:
+    debug_path, screenshot_path = _diagnostic_artifact_paths(debug_dir)
+    payload: dict[str, object] = {
+        "reason": reason,
+        "error": str(error),
+        "source_pptx": str(source_pptx.resolve()),
+        "staged_pptx": str(staged_pptx.resolve()) if staged_pptx is not None else None,
+        "state": _collect_powerpoint_debug_state(),
+    }
+    if staged_pptx is not None:
+        lockfile_path = _powerpoint_lockfile_path(staged_pptx)
+        payload["staged_lockfile"] = str(lockfile_path)
+        payload["staged_lockfile_exists"] = lockfile_path.exists()
+    payload.update(
+        _capture_debug_screenshot(
+            screenshot_path,
+            capture_timeout=max(3.0, capture_timeout),
+        )
+    )
+    debug_path.parent.mkdir(parents=True, exist_ok=True)
+    debug_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+    return debug_path
+
+
+def _raise_with_powerpoint_diagnostics(
+    *,
+    reason: str,
+    error: Exception,
+    debug_dir: Path,
+    source_pptx: Path,
+    staged_pptx: Path | None,
+    capture_timeout: float,
+) -> None:
+    debug_path = _write_powerpoint_diagnostics(
+        debug_dir,
+        reason=reason,
+        error=error,
+        source_pptx=source_pptx,
+        staged_pptx=staged_pptx,
+        capture_timeout=capture_timeout,
+    )
+    raise RuntimeError(f"{error} [PowerPoint diagnostics: {debug_path}]") from error
 
 
 def _maybe_prompt_for_permissions() -> None:
@@ -309,6 +513,43 @@ end tell
         return 0
 
 
+def _wait_for_powerpoint_window(timeout: float) -> bool:
+    deadline = time.time() + max(0.5, timeout)
+    while time.time() < deadline:
+        try:
+            if (
+                _osascript(
+                    """
+tell application "System Events"
+    if not (exists process "Microsoft PowerPoint") then
+        return "false"
+    end if
+    tell process "Microsoft PowerPoint"
+        return ((count of windows) > 0) as string
+    end tell
+end tell
+""",
+                    timeout=5.0,
+                ).strip().lower()
+                == "true"
+            ):
+                return True
+        except Exception:
+            pass
+        time.sleep(0.2)
+    return False
+
+
+def _wait_for_powerpoint_presentation(pptx_path: Path, timeout: float) -> bool:
+    lockfile_path = _powerpoint_lockfile_path(pptx_path)
+    deadline = time.time() + max(0.5, timeout)
+    while time.time() < deadline:
+        if lockfile_path.exists():
+            return True
+        time.sleep(0.2)
+    return lockfile_path.exists()
+
+
 def _advance_slide() -> None:
     script = """
 tell application "System Events"
@@ -371,238 +612,54 @@ def _start_slideshow(
     allow_reopen: bool,
 ) -> None:
     pptx_path = pptx_path.resolve()
+    open_attempts = 2 if allow_reopen else 1
+    did_open = False
+    for attempt_index in range(open_attempts):
+        _open_presentation_via_ui(
+            pptx_path,
+            timeout=max(15.0, min(open_timeout, 30.0)),
+        )
+        if _wait_for_powerpoint_presentation(
+            pptx_path,
+            timeout=max(5.0, open_timeout / open_attempts),
+        ):
+            did_open = True
+            break
+        if attempt_index < (open_attempts - 1):
+            time.sleep(0.5)
+    if not did_open:
+        raise RuntimeError("No PowerPoint presentation lock after UI open.")
+    if not _wait_for_powerpoint_window(min(open_timeout, 10.0)):
+        raise RuntimeError("No PowerPoint edit window after UI open.")
     script = f"""
-using terms from application "System Events"
-on clickButtonByName(targetWindow, buttonName)
-    tell application "System Events"
-        try
-            if exists (button buttonName of targetWindow) then
-                click button buttonName of targetWindow
-                return true
-            end if
-        end try
-    end tell
-    return false
-end clickButtonByName
-
-on clickDialogButtons(targetWindow)
-    tell application "System Events"
-        if my clickButtonByName(targetWindow, "Repair") then
-            return true
-        end if
-        if my clickButtonByName(targetWindow, "Open") then
-            return true
-        end if
-        if my clickButtonByName(targetWindow, "OK") then
-            return true
-        end if
-        if my clickButtonByName(targetWindow, "Yes") then
-            return true
-        end if
-        if exists (button 1 of targetWindow) then
-            click button 1 of targetWindow
-            return true
-        end if
-    end tell
-    return false
-end clickDialogButtons
-
-on openPresentation(pptPosix)
-    tell application "Microsoft PowerPoint"
-        launch
-        try
-            repeat with pres in presentations
-                close pres saving no
-            end repeat
-        end try
-        open (POSIX file pptPosix)
-    end tell
-end openPresentation
-
-on runSlideshowWindowed()
-    tell application "Microsoft PowerPoint"
-        try
-            set show type of slide show settings of active presentation to slide show type window
-        end try
-        run slide show slide show settings of active presentation
-    end tell
-    return true
-end runSlideshowWindowed
-
-on dismissDialogs(aggressive, maxSeconds)
-    tell application "System Events"
-        if not (exists process "Microsoft PowerPoint") then
-            return false
-        end if
-        tell process "Microsoft PowerPoint"
-            if aggressive then
-                try
-                    set frontmost to true
-                end try
-            end if
-            set t0 to (current date)
-            set lastReturn to (current date) - 10
-            repeat while ((current date) - t0) < maxSeconds
-                set clickedAny to false
-                try
-                    set repairButtons to (buttons whose name is "Repair")
-                    if (count of repairButtons) > 0 then
-                        click item 1 of repairButtons
-                        set clickedAny to true
-                    end if
-                end try
-                try
-                    set okButtons to (buttons whose name is "OK")
-                    if (count of okButtons) > 0 then
-                        click item 1 of okButtons
-                        set clickedAny to true
-                    end if
-                end try
-                if exists (front window) then
-                    if my clickDialogButtons(front window) then
-                        set clickedAny to true
-                    else
-                        try
-                            if aggressive and useKeys and subrole of front window is "AXDialog" then
-                                if ((current date) - lastReturn) > 0.5 then
-                                    key code 36
-                                    set lastReturn to (current date)
-                                    set clickedAny to true
-                                end if
-                            end if
-                        end try
-                    end if
-                end if
-                repeat with w in (windows whose subrole is "AXDialog")
-                    if my clickDialogButtons(w) then
-                        set clickedAny to true
-                    end if
-                end repeat
-                repeat with w in windows
-                    if my clickDialogButtons(w) then
-                        set clickedAny to true
-                    end if
-                    try
-                        repeat with s in sheets of w
-                            if my clickDialogButtons(s) then
-                                set clickedAny to true
-                            end if
-                        end repeat
-                    end try
-                end repeat
-                if clickedAny is false then exit repeat
-                delay 0.2
-            end repeat
-        end tell
-    end tell
-    return true
-end dismissDialogs
-
-on isPowerPointRunning()
-    tell application "System Events"
-        return exists process "Microsoft PowerPoint"
-    end tell
-end isPowerPointRunning
-
-on waitForPresentation(maxSeconds, targetName, pptPosix, allowReopen)
-    set t0 to (current date)
-    set didReopen to false
-    set lastOpen to (current date)
-    repeat while ((current date) - t0) < maxSeconds
-        set presCount to 0
-        set targetOpen to false
-        try
-            tell application "Microsoft PowerPoint"
-                set presCount to count of presentations
-                repeat with pres in presentations
-                    try
-                        if name of pres is targetName then
-                            set targetOpen to true
-                            exit repeat
-                        end if
-                    end try
-                end repeat
-            end tell
-        end try
-        if presCount > 0 and targetOpen then
-            return true
-        end if
-        my dismissDialogs(true, 2)
-        if allowReopen and (didReopen is false) then
-            try
-                if my isPowerPointRunning() is false then
-                    do shell script "open -a " & quoted form of "Microsoft PowerPoint"
-                    delay 0.5
-                    my openPresentation(pptPosix)
-                    set didReopen to true
-                    set lastOpen to (current date)
-                end if
-            end try
-        end if
-        if allowReopen and ((current date) - lastOpen) > 5 then
-            try
-                my openPresentation(pptPosix)
-                set lastOpen to (current date)
-            end try
-        end if
-        delay 0.5
-    end repeat
-    return false
-end waitForPresentation
-
-on waitForSlides(maxSeconds)
-    set t0 to (current date)
-    repeat while ((current date) - t0) < maxSeconds
-        set slideCount to 0
-        try
-            tell application "Microsoft PowerPoint"
-                set slideCount to count slides of active presentation
-            end tell
-        end try
-        if slideCount > 0 then
-            return true
-        end if
-        my dismissDialogs(true, 2)
-        delay 0.5
-    end repeat
-    return false
-end waitForSlides
-end using terms from
-
-set pptPath to POSIX file "{pptx_path}"
-set pptPosix to POSIX path of pptPath
-set targetName to "{pptx_path.name}"
-set useKeys to {str(use_keys).lower()}
-set allowReopen to {str(allow_reopen).lower()}
-my openPresentation(pptPosix)
-delay 0.1
-delay {delay}
-my dismissDialogs(true, 10)
-if my waitForPresentation({open_timeout}, targetName, pptPosix, allowReopen) is false then
-    error "No active presentation after repair."
-end if
-if my waitForSlides({open_timeout}) is false then
-    error "No active slides after repair."
-end if
-set startedSlideshow to false
-try
-    set startedSlideshow to my runSlideshowWindowed()
-end try
-if startedSlideshow is false then
-    if useKeys then
-        tell application "Microsoft PowerPoint"
-            activate
-        end tell
-        delay 0.2
+on sendSlideshowKeys()
+    delay 0.2
+    try
         tell application "System Events"
-            tell process "Microsoft PowerPoint"
-                set frontmost to true
-            end tell
             keystroke return using {{command down, shift down}}
         end tell
-    else
-        error "Unable to start slideshow via PowerPoint object model."
-    end if
+    on error
+        return false
+    end try
+    return true
+end sendSlideshowKeys
+
+on requestSlideshowStart(useKeys)
+    set maxAttempts to 1
+    if useKeys then set maxAttempts to 2
+    repeat maxAttempts times
+        if my sendSlideshowKeys() then
+            return true
+        end if
+        delay 0.5
+    end repeat
+    return false
+end requestSlideshowStart
+
+set useKeys to {str(use_keys).lower()}
+delay {delay}
+if my requestSlideshowStart(useKeys) is false then
+    error "Unable to request slideshow start."
 end if
 delay {slideshow_delay}
 """
@@ -625,23 +682,25 @@ def capture_pptx_slideshow_all(
     backend: str,
 ) -> None:
     _maybe_prompt_for_permissions()
-    pptx_path = pptx_path.resolve()
     output_dir = output_dir.resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
+    _clear_diagnostic_artifacts(output_dir)
+    source_pptx = pptx_path.resolve()
+    staged_pptx = _prepare_staged_presentation(source_pptx)
     _cleanup_powerpoint_state()
     open_failed_path = output_dir / "open_failed.png"
     if open_failed_path.exists():
         open_failed_path.unlink()
 
-    _start_slideshow(
-        pptx_path,
-        delay,
-        slideshow_delay,
-        open_timeout,
-        use_keys=use_keys,
-        allow_reopen=allow_reopen,
-    )
     try:
+        _start_slideshow(
+            staged_pptx,
+            delay,
+            slideshow_delay,
+            open_timeout,
+            use_keys=use_keys,
+            allow_reopen=allow_reopen,
+        )
         slide_count = _get_slide_count()
         if slide_count <= 0:
             for _ in range(10):
@@ -686,6 +745,15 @@ def capture_pptx_slideshow_all(
                 )
             time.sleep(slide_delay)
             _advance_slide()
+    except Exception as exc:
+        _raise_with_powerpoint_diagnostics(
+            reason="slideshow_all_capture_failed",
+            error=exc,
+            debug_dir=output_dir,
+            source_pptx=source_pptx,
+            staged_pptx=staged_pptx,
+            capture_timeout=capture_timeout,
+        )
     finally:
         if exit_after:
             _teardown_powerpoint_session()
@@ -720,16 +788,29 @@ def capture_pptx_window(
     capture_timeout: float,
 ) -> None:
     _maybe_prompt_for_permissions()
-    win_id = _get_front_window_id(pptx_path, delay)
-    if not win_id:
-        raise RuntimeError("No PowerPoint window ID returned.")
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    _capture_window(
-        output_path,
-        win_id,
-        backend=backend,
-        timeout=capture_timeout,
-    )
+    _clear_diagnostic_artifacts(output_path.parent)
+    source_pptx = pptx_path.resolve()
+    staged_pptx = _prepare_staged_presentation(source_pptx)
+    try:
+        win_id = _get_front_window_id(staged_pptx, delay)
+        if not win_id:
+            raise RuntimeError("No PowerPoint window ID returned.")
+        _capture_window(
+            output_path,
+            win_id,
+            backend=backend,
+            timeout=capture_timeout,
+        )
+    except Exception as exc:
+        _raise_with_powerpoint_diagnostics(
+            reason="window_capture_failed",
+            error=exc,
+            debug_dir=output_path.parent,
+            source_pptx=source_pptx,
+            staged_pptx=staged_pptx,
+            capture_timeout=capture_timeout,
+        )
 
 
 def capture_pptx_slideshow(
@@ -746,25 +827,39 @@ def capture_pptx_slideshow(
     backend: str,
 ) -> None:
     _maybe_prompt_for_permissions()
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    _clear_diagnostic_artifacts(output_path.parent)
+    source_pptx = pptx_path.resolve()
+    staged_pptx = _prepare_staged_presentation(source_pptx)
     _cleanup_powerpoint_state()
-    _start_slideshow(
-        pptx_path,
-        delay,
-        slideshow_delay,
-        open_timeout,
-        use_keys=use_keys,
-        allow_reopen=allow_reopen,
-    )
     try:
-        output_path.parent.mkdir(parents=True, exist_ok=True)
+        _start_slideshow(
+            staged_pptx,
+            delay,
+            slideshow_delay,
+            open_timeout,
+            use_keys=use_keys,
+            allow_reopen=allow_reopen,
+        )
         slideshow_window_id = _get_slideshow_window_id(
             timeout=max(5.0, slideshow_delay + 5.0)
         )
+        if not slideshow_window_id:
+            raise RuntimeError("No slideshow window detected after slideshow start.")
         _capture_window(
             output_path,
-            slideshow_window_id or None,
+            slideshow_window_id,
             backend=backend,
             timeout=capture_timeout,
+        )
+    except Exception as exc:
+        _raise_with_powerpoint_diagnostics(
+            reason="slideshow_capture_failed",
+            error=exc,
+            debug_dir=output_path.parent,
+            source_pptx=source_pptx,
+            staged_pptx=staged_pptx,
+            capture_timeout=capture_timeout,
         )
     finally:
         if exit_after:
@@ -787,22 +882,25 @@ def capture_live_animation(
 ) -> list[Path]:
     """Record a single slide's playback by taking fast screenshots."""
     _maybe_prompt_for_permissions()
-    pptx_path = pptx_path.resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
+    _clear_diagnostic_artifacts(output_dir)
+    source_pptx = pptx_path.resolve()
+    staged_pptx = _prepare_staged_presentation(source_pptx)
     _cleanup_powerpoint_state()
-
-    _start_slideshow(
-        pptx_path,
-        delay,
-        slideshow_delay,
-        open_timeout,
-        use_keys=use_keys,
-        allow_reopen=allow_reopen,
-    )
 
     captured_files = []
     try:
+        _start_slideshow(
+            staged_pptx,
+            delay,
+            slideshow_delay,
+            open_timeout,
+            use_keys=use_keys,
+            allow_reopen=allow_reopen,
+        )
         win_id = _get_slideshow_window_id(timeout=max(5.0, slideshow_delay + 5.0))
+        if not win_id:
+            raise RuntimeError("No slideshow window detected after slideshow start.")
         start_time = time.time()
         frame_idx = 0
         interval = 1.0 / fps
@@ -841,7 +939,15 @@ def capture_live_animation(
             wait = next_shot - elapsed
             if wait > 0:
                 time.sleep(wait)
-
+    except Exception as exc:
+        _raise_with_powerpoint_diagnostics(
+            reason="live_capture_failed",
+            error=exc,
+            debug_dir=output_dir,
+            source_pptx=source_pptx,
+            staged_pptx=staged_pptx,
+            capture_timeout=capture_timeout,
+        )
     finally:
         _teardown_powerpoint_session()
 
