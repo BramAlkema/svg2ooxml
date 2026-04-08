@@ -2,9 +2,19 @@
 
 from __future__ import annotations
 
+import shlex
 import subprocess
 import time
 from pathlib import Path
+
+
+_POWERPOINT_APP_ID = "com.microsoft.Powerpoint"
+_POWERPOINT_PROCESS_NAME = "Microsoft PowerPoint"
+
+
+def _applescript_quote(value: str) -> str:
+    escaped = value.replace("\\", "\\\\").replace('"', '\\"')
+    return f'"{escaped}"'
 
 
 def osascript(script: str, *, timeout: float | None = 30.0) -> str:
@@ -19,6 +29,18 @@ def osascript(script: str, *, timeout: float | None = 30.0) -> str:
     if result.returncode != 0:
         raise RuntimeError(result.stderr.strip() or "osascript failed")
     return result.stdout.strip()
+
+
+def launch_powerpoint_app() -> None:
+    app_bundle = Path("/Applications/Microsoft PowerPoint.app")
+    app_target = str(app_bundle) if app_bundle.exists() else _POWERPOINT_PROCESS_NAME
+    launch_cmd = f"open -W -a {shlex.quote(app_target)}"
+    subprocess.Popen(
+        ["/bin/zsh", "-lc", launch_cmd],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,
+    )
 
 
 def osascript_jxa(script: str, *, timeout: float | None = 30.0) -> str:
@@ -144,17 +166,40 @@ if (!matches.length) {{
     return osascript_jxa(script)
 
 
+def open_presentation_via_ui(
+    pptx_path: Path,
+    *,
+    timeout: float | None = 30.0,
+) -> None:
+    pptx_path = pptx_path.resolve()
+    target_posix = _applescript_quote(str(pptx_path))
+    launch_powerpoint_app()
+    script = f"""
+set targetPosix to {target_posix}
+delay 1.0
+tell application "System Events"
+    keystroke "o" using {{command down}}
+    delay 0.5
+    keystroke "g" using {{command down, shift down}}
+    delay 0.3
+    keystroke targetPosix
+    delay 0.2
+    key code 36
+    delay 0.4
+    key code 36
+end tell
+"""
+    osascript(script, timeout=timeout)
+
+
 def get_front_window_id(pptx_path: Path, delay: float) -> str:
     pptx_path = pptx_path.resolve()
-    script = f"""
-set pptPath to POSIX file "{pptx_path}"
-tell application "Microsoft PowerPoint"
-    activate
-    open pptPath
-end tell
+    try:
+        open_presentation_via_ui(pptx_path, timeout=max(10.0, delay + 10.0))
+        script = f"""
 delay {delay}
 tell application "System Events"
-    tell process "Microsoft PowerPoint"
+    tell process "{_POWERPOINT_PROCESS_NAME}"
         set frontmost to true
         delay 0.2
         set winId to value of attribute "AXWindowNumber" of front window
@@ -162,7 +207,6 @@ tell application "System Events"
 end tell
 return winId
 """
-    try:
         win_id = osascript(script)
     except RuntimeError:
         win_id = ""
