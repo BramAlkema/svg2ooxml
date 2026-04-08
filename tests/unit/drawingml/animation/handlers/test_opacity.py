@@ -171,16 +171,28 @@ class TestBuild:
         attr_name = par.find(f".//{{{NS_P}}}attrName")
         assert attr_name.text == "style.opacity"
 
-    def test_multi_keyframe_opacity_uses_property_animation(
+    def test_multi_keyframe_opacity_uses_transparency_effect(
         self, handler: OpacityAnimationHandler
     ):
         anim = make_opacity_animation(values=["0.1", "1", "0.1"])
         par = handler.build(anim, par_id=4, behavior_id=5)
-        assert par.find(f".//{{{NS_P}}}animEffect") is None
-        anim_elem = par.find(f".//{{{NS_P}}}anim")
-        assert anim_elem is not None
-        tavs = par.findall(f".//{{{NS_P}}}tav")
-        assert [tav.get("tm") for tav in tavs] == ["0", "50000", "100000"]
+        anim_effect = par.find(f".//{{{NS_P}}}animEffect")
+        assert anim_effect is not None
+        assert anim_effect.get("filter") == "image"
+        assert anim_effect.get("prLst") == "opacity: 0.1"
+        assert par.find(f".//{{{NS_P}}}anim") is None
+        set_elem = par.find(f".//{{{NS_P}}}set")
+        assert set_elem is not None
+        str_val = set_elem.find(f".//{{{NS_P}}}strVal")
+        assert str_val is not None
+        assert str_val.get("val") == "0.1"
+        ctn = par.find(f"{{{NS_P}}}cTn")
+        assert ctn is not None
+        assert ctn.get("autoRev") == "1"
+        assert ctn.get("presetSubtype") == "0"
+        effect_cbhvr = anim_effect.find(f"{{{NS_P}}}cBhvr")
+        assert effect_cbhvr is not None
+        assert effect_cbhvr.get("rctx") == "IE"
 
     def test_repeat_opacity_uses_property_animation(
         self, handler: OpacityAnimationHandler

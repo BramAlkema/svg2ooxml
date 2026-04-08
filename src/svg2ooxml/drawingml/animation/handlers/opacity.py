@@ -38,6 +38,11 @@ class OpacityAnimationHandler(AnimationHandler):
         behavior_id: int,
     ) -> etree._Element | None:
         """Build opacity animation using fade or generic property animation."""
+        if self._is_symmetric_opacity_pulse(animation):
+            return self._build_transparency_pulse_animation(
+                animation, par_id, behavior_id
+            )
+
         if self._should_use_property_animation(animation):
             return self._build_property_animation(animation, par_id, behavior_id)
 
@@ -71,7 +76,77 @@ class OpacityAnimationHandler(AnimationHandler):
             preset_class="entr",
             begin_triggers=animation.begin_triggers,
             default_target_shape=animation.element_id,
+            effect_group_id=par_id,
         )
+
+    def _build_transparency_pulse_animation(
+        self,
+        animation: AnimationDefinition,
+        par_id: int,
+        behavior_id: int,
+    ) -> etree._Element:
+        half_duration_ms = max(1, int(round(animation.duration_ms / 2.0)))
+        target_opacity = self._format_effect_opacity(
+            min(animation.values, key=self._opacity_float)
+        )
+        effect_behavior_id = behavior_id * 10 + 1
+
+        outer_par = p_elem("par")
+        outer_ctn = p_sub(
+            outer_par,
+            "cTn",
+            id=str(par_id),
+            fill="hold",
+            nodeType="clickEffect",
+            grpId=str(par_id),
+            presetID="9",
+            presetClass="emph",
+            presetSubtype="0",
+            autoRev="1",
+        )
+        self._apply_repeat_count(outer_ctn, animation.repeat_count)
+
+        st_cond_lst = p_sub(outer_ctn, "stCondLst")
+        if animation.begin_triggers:
+            self._xml._append_begin_conditions(
+                st_cond_lst=st_cond_lst,
+                begin_triggers=animation.begin_triggers,
+                fallback_delay_ms=animation.begin_ms,
+                default_target_shape=animation.element_id,
+            )
+        else:
+            p_sub(st_cond_lst, "cond", delay=str(animation.begin_ms))
+
+        child_tn_lst = p_sub(outer_ctn, "childTnLst")
+
+        set_elem = p_sub(child_tn_lst, "set")
+        set_cbhvr = p_sub(set_elem, "cBhvr")
+        p_sub(set_cbhvr, "cTn", id=str(behavior_id), dur=str(half_duration_ms))
+        tgt_el = p_sub(set_cbhvr, "tgtEl")
+        p_sub(tgt_el, "spTgt", spid=animation.element_id)
+        attr_name_lst = p_sub(set_cbhvr, "attrNameLst")
+        attr_name = p_sub(attr_name_lst, "attrName")
+        attr_name.text = "style.opacity"
+        to_elem = p_sub(set_elem, "to")
+        p_sub(to_elem, "strVal", val=target_opacity)
+
+        anim_effect = p_sub(
+            child_tn_lst,
+            "animEffect",
+            filter="image",
+            prLst=f"opacity: {target_opacity}",
+        )
+        effect_cbhvr = p_sub(anim_effect, "cBhvr", rctx="IE")
+        p_sub(
+            effect_cbhvr,
+            "cTn",
+            id=str(effect_behavior_id),
+            dur=str(half_duration_ms),
+        )
+        effect_tgt = p_sub(effect_cbhvr, "tgtEl")
+        p_sub(effect_tgt, "spTgt", spid=animation.element_id)
+
+        return outer_par
 
     def _build_property_animation(
         self,
@@ -118,6 +193,7 @@ class OpacityAnimationHandler(AnimationHandler):
             preset_class="emph",
             begin_triggers=animation.begin_triggers,
             default_target_shape=animation.element_id,
+            effect_group_id=par_id,
         )
 
     def _compute_target_opacity(self, animation: AnimationDefinition) -> str:
@@ -147,3 +223,59 @@ class OpacityAnimationHandler(AnimationHandler):
         if start_opacity > 0.0:
             return True
         return False
+
+    @staticmethod
+    def _opacity_float(value: str) -> float:
+        try:
+            opacity = float(value)
+        except (TypeError, ValueError):
+            return 1.0
+        if opacity > 1.0:
+            opacity = opacity / 100.0
+        return max(0.0, min(1.0, opacity))
+
+    @classmethod
+    def _format_effect_opacity(cls, value: str) -> str:
+        opacity = cls._opacity_float(value)
+        return f"{opacity:.4f}".rstrip("0").rstrip(".")
+
+    @classmethod
+    def _is_symmetric_opacity_pulse(cls, animation: AnimationDefinition) -> bool:
+        if animation.target_attribute != "opacity":
+            return False
+        if len(animation.values) != 3:
+            return False
+        if animation.calc_mode == CalcMode.DISCRETE:
+            return False
+        if animation.key_splines:
+            return False
+        if animation.key_times and [round(t, 6) for t in animation.key_times] != [
+            0.0,
+            0.5,
+            1.0,
+        ]:
+            return False
+        start = cls._opacity_float(animation.values[0])
+        peak = cls._opacity_float(animation.values[1])
+        end = cls._opacity_float(animation.values[2])
+        return abs(start - end) <= 1e-6 and abs(start - peak) > 1e-6
+
+    @staticmethod
+    def _apply_repeat_count(
+        ctn: etree._Element,
+        repeat_count: int | str | None,
+    ) -> None:
+        if repeat_count == "indefinite":
+            ctn.set("repeatCount", "indefinite")
+            return
+
+        if repeat_count is None:
+            return
+
+        try:
+            count = int(repeat_count)
+        except (TypeError, ValueError):
+            return
+
+        if count > 1:
+            ctn.set("repeatCount", str(count * 1000))

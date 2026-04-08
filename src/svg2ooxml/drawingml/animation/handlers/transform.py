@@ -73,17 +73,25 @@ class TransformAnimationHandler(AnimationHandler):
 
             if len(angles) > 2:
                 return self._build_multi_keyframe_rotate(
-                    animation, par_id, behavior_id, angles,
+                    animation,
+                    par_id,
+                    behavior_id,
+                    angles,
                     rotation_center=rotation_center,
                 )
 
             # Check if we need a companion orbital motion path
             orbit_offset = self._compute_orbit_offset(
-                rotation_center, animation.element_center_px,
+                rotation_center,
+                animation.element_center_px,
             )
             if orbit_offset is not None:
                 return self._build_rotate_with_orbit(
-                    animation, par_id, behavior_id, angles, orbit_offset,
+                    animation,
+                    par_id,
+                    behavior_id,
+                    angles,
+                    orbit_offset,
                 )
 
             child = self._build_rotate_element(animation, behavior_id, angles)
@@ -93,7 +101,9 @@ class TransformAnimationHandler(AnimationHandler):
             translation_pairs = [
                 self._processor.parse_translation_pair(v) for v in animation.values
             ]
-            child = self._build_translate_element(animation, behavior_id, translation_pairs)
+            child = self._build_translate_element(
+                animation, behavior_id, translation_pairs
+            )
             preset_class = "path"
             preset_id = 0  # Custom Path
         elif transform_type == TransformType.MATRIX:
@@ -115,6 +125,7 @@ class TransformAnimationHandler(AnimationHandler):
             node_type="withEffect",
             begin_triggers=animation.begin_triggers,
             default_target_shape=animation.element_id,
+            effect_group_id=par_id,
         )
 
     # ------------------------------------------------------------------ #
@@ -146,12 +157,14 @@ class TransformAnimationHandler(AnimationHandler):
         anim_scale.append(cBhvr)
 
         p_sub(
-            anim_scale, "from",
+            anim_scale,
+            "from",
             x=str(scale_to_ppt(from_sx)),
             y=str(scale_to_ppt(from_sy)),
         )
         p_sub(
-            anim_scale, "to",
+            anim_scale,
+            "to",
             x=str(scale_to_ppt(to_sx)),
             y=str(scale_to_ppt(to_sy)),
         )
@@ -250,32 +263,46 @@ class TransformAnimationHandler(AnimationHandler):
         rotation_delta = self._processor.format_ppt_angle(delta_deg)
 
         anim_rot = p_elem("animRot", by=rotation_delta)
-        anim_rot.append(self._xml.build_behavior_core_elem(
-            behavior_id=behavior_id,
-            duration_ms=animation.duration_ms,
-            target_shape=animation.element_id,
-            additive=animation.additive,
-            fill_mode=animation.fill_mode,
-            repeat_count=animation.repeat_count,
-        ))
+        anim_rot.append(
+            self._xml.build_behavior_core_elem(
+                behavior_id=behavior_id,
+                duration_ms=animation.duration_ms,
+                target_shape=animation.element_id,
+                additive=animation.additive,
+                fill_mode=animation.fill_mode,
+                repeat_count=animation.repeat_count,
+            )
+        )
 
         anim_motion = self._build_orbital_motion_element(
-            animation, behavior_id + 2, angles, orbit_offset,
+            animation,
+            behavior_id + 2,
+            angles,
+            orbit_offset,
         )
 
         outer_par = p_elem("par")
         outer_ctn = p_sub(
-            outer_par, "cTn",
+            outer_par,
+            "cTn",
             id=str(par_id),
             dur=str(animation.duration_ms),
             fill="hold",
             nodeType="withEffect",
-            grpId="0",
+            grpId=str(par_id),
             presetID="8",
             presetClass="emph",
         )
         outer_st = p_sub(outer_ctn, "stCondLst")
-        p_sub(outer_st, "cond", delay=str(animation.begin_ms))
+        if animation.begin_triggers:
+            self._xml._append_begin_conditions(
+                st_cond_lst=outer_st,
+                begin_triggers=animation.begin_triggers,
+                fallback_delay_ms=animation.begin_ms,
+                default_target_shape=animation.element_id,
+            )
+        else:
+            p_sub(outer_st, "cond", delay=str(animation.begin_ms))
         outer_children = p_sub(outer_ctn, "childTnLst")
         outer_children.append(anim_rot)
         if anim_motion is not None:
@@ -312,7 +339,11 @@ class TransformAnimationHandler(AnimationHandler):
             # For multi-keyframe, interpolate through all angles
             t = step / n_steps
             # Linear interpolation through the full angle sequence
-            if len(angles) > 2 and animation.key_times and len(animation.key_times) == len(angles):
+            if (
+                len(angles) > 2
+                and animation.key_times
+                and len(animation.key_times) == len(angles)
+            ):
                 theta_deg = self._interpolate_angles(angles, animation.key_times, t)
             else:
                 theta_deg = start_deg + total_sweep * t
@@ -322,7 +353,9 @@ class TransformAnimationHandler(AnimationHandler):
             my_px = dx_px * sin_t + dy_px * (cos_t - 1)
             mx_emu = self._units.to_emu(mx_px, axis="x")
             my_emu = self._units.to_emu(my_px, axis="y")
-            segments.append(f"L {self._format_coord(mx_emu / slide_w)} {self._format_coord(my_emu / slide_h)}")
+            segments.append(
+                f"L {self._format_coord(mx_emu / slide_w)} {self._format_coord(my_emu / slide_h)}"
+            )
 
         path = " ".join(segments) + " E"
         pts_types = "A" * (n_steps + 1)
@@ -398,17 +431,26 @@ class TransformAnimationHandler(AnimationHandler):
         # Outer <p:par> — same structure as build_par_container_elem
         outer_par = p_elem("par")
         outer_ctn = p_sub(
-            outer_par, "cTn",
+            outer_par,
+            "cTn",
             id=str(par_id),
             dur=str(total_ms),
             fill="hold",
             nodeType="withEffect",
-            grpId="0",
+            grpId=str(par_id),
             presetID="8",
             presetClass="emph",
         )
         outer_st = p_sub(outer_ctn, "stCondLst")
-        p_sub(outer_st, "cond", delay=str(animation.begin_ms))
+        if animation.begin_triggers:
+            self._xml._append_begin_conditions(
+                st_cond_lst=outer_st,
+                begin_triggers=animation.begin_triggers,
+                fallback_delay_ms=animation.begin_ms,
+                default_target_shape=animation.element_id,
+            )
+        else:
+            p_sub(outer_st, "cond", delay=str(animation.begin_ms))
         outer_children = p_sub(outer_ctn, "childTnLst")
 
         bid = behavior_id
@@ -434,7 +476,8 @@ class TransformAnimationHandler(AnimationHandler):
             # Each segment in its own <p:par> with cumulative delay
             seg_par = p_elem("par")
             seg_ctn = p_sub(
-                seg_par, "cTn",
+                seg_par,
+                "cTn",
                 id=str(bid + 1),
                 dur=str(seg_dur),
                 fill="hold",
@@ -450,17 +493,22 @@ class TransformAnimationHandler(AnimationHandler):
 
         # Add orbital motion if rotation center ≠ shape center
         orbit_offset = self._compute_orbit_offset(
-            rotation_center, animation.element_center_px,
+            rotation_center,
+            animation.element_center_px,
         )
         if orbit_offset is not None:
             orbit_motion = self._build_orbital_motion_element(
-                animation, bid, angles, orbit_offset,
+                animation,
+                bid,
+                angles,
+                orbit_offset,
             )
             if orbit_motion is not None:
                 # Wrap in par with delay=0 so it plays for the full duration
                 orbit_par = p_elem("par")
                 orbit_ctn = p_sub(
-                    orbit_par, "cTn",
+                    orbit_par,
+                    "cTn",
                     id=str(bid + 1),
                     dur=str(total_ms),
                     fill="hold",
@@ -489,7 +537,9 @@ class TransformAnimationHandler(AnimationHandler):
         # Multi-keyframe: build a motion path with M/L segments
         if len(translation_pairs) > 2:
             return self._build_translate_path_element(
-                animation, behavior_id, translation_pairs,
+                animation,
+                behavior_id,
+                translation_pairs,
             )
 
         # Simple 2-value: use <p:by> delta
@@ -610,7 +660,11 @@ class TransformAnimationHandler(AnimationHandler):
         if len(pairs) < 2 or key_times is None or len(key_times) != len(pairs):
             return pairs
 
-        calc_mode_value = calc_mode.value if isinstance(calc_mode, CalcMode) else str(calc_mode).lower()
+        calc_mode_value = (
+            calc_mode.value
+            if isinstance(calc_mode, CalcMode)
+            else str(calc_mode).lower()
+        )
         if calc_mode_value == CalcMode.DISCRETE.value:
             return TransformAnimationHandler._expand_discrete_pairs(
                 pairs=pairs,
@@ -727,7 +781,9 @@ class TransformAnimationHandler(AnimationHandler):
                 classified.append(self._identity_payload(matrix_type))
             else:
                 classified.append(
-                    payload if payload is not None else self._identity_payload(matrix_type)
+                    payload
+                    if payload is not None
+                    else self._identity_payload(matrix_type)
                 )
 
         if matrix_type == "translate":
@@ -751,7 +807,8 @@ class TransformAnimationHandler(AnimationHandler):
         matrix: Matrix2D, *, tolerance: float = 1e-6
     ) -> tuple[str | None, object | None]:
         if not all(
-            math.isfinite(v) for v in (matrix.a, matrix.b, matrix.c, matrix.d, matrix.e, matrix.f)
+            math.isfinite(v)
+            for v in (matrix.a, matrix.b, matrix.c, matrix.d, matrix.e, matrix.f)
         ):
             return (None, None)
 
@@ -793,7 +850,9 @@ class TransformAnimationHandler(AnimationHandler):
             return ("rotate", angle_deg)
 
         # Fall through to QR decomposition for composite matrices
-        decomposed = TransformAnimationHandler._decompose_matrix(matrix, tolerance=tolerance)
+        decomposed = TransformAnimationHandler._decompose_matrix(
+            matrix, tolerance=tolerance
+        )
         if decomposed is not None:
             return decomposed
 
@@ -801,7 +860,9 @@ class TransformAnimationHandler(AnimationHandler):
 
     @staticmethod
     def _decompose_matrix(
-        matrix: Matrix2D, *, tolerance: float = 1e-6,
+        matrix: Matrix2D,
+        *,
+        tolerance: float = 1e-6,
     ) -> tuple[str, object] | None:
         """Decompose a composite 2D affine matrix via QR decomposition.
 
@@ -817,7 +878,7 @@ class TransformAnimationHandler(AnimationHandler):
         tx, ty = matrix.e, matrix.f
 
         # Scale x = length of first column vector
-        sx = math.sqrt(matrix.a ** 2 + matrix.b ** 2)
+        sx = math.sqrt(matrix.a**2 + matrix.b**2)
         if sx < tolerance:
             return None  # Degenerate matrix
 
@@ -834,7 +895,10 @@ class TransformAnimationHandler(AnimationHandler):
         expected_c = -sy * sin_a
         expected_d = sy * cos_a
 
-        if abs(matrix.c - expected_c) > tolerance or abs(matrix.d - expected_d) > tolerance:
+        if (
+            abs(matrix.c - expected_c) > tolerance
+            or abs(matrix.d - expected_d) > tolerance
+        ):
             logging.getLogger(__name__).debug(
                 "Matrix contains skew — cannot decompose for PowerPoint"
             )

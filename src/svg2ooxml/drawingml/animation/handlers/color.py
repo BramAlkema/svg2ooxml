@@ -72,6 +72,7 @@ class ColorAnimationHandler(AnimationHandler):
             preset_class="emph",
             begin_triggers=animation.begin_triggers,
             default_target_shape=animation.element_id,
+            effect_group_id=par_id,
         )
 
     @staticmethod
@@ -226,7 +227,7 @@ class ColorAnimationHandler(AnimationHandler):
             dur=str(animation.duration_ms),
             fill="hold",
             nodeType="withEffect",
-            grpId="0",
+            grpId=str(par_id),
             presetID="7",
             presetClass="emph",
         )

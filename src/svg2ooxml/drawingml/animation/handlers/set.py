@@ -80,6 +80,7 @@ class SetAnimationHandler(AnimationHandler):
             preset_class=preset_class,
             begin_triggers=animation.begin_triggers,
             default_target_shape=animation.element_id,
+            effect_group_id=par_id,
         )
 
     @staticmethod
