@@ -263,7 +263,9 @@ class TestBuildRotate:
 class TestMultiKeyframeRotate:
     """Multi-keyframe rotate splits into sequential segments."""
 
-    def test_three_values_produces_two_anim_rot(self, handler: TransformAnimationHandler):
+    def test_three_values_produces_two_anim_rot(
+        self, handler: TransformAnimationHandler
+    ):
         anim = make_transform_animation(
             transform_type=TransformType.ROTATE, values=["0", "360", "0"]
         )
@@ -281,18 +283,22 @@ class TestMultiKeyframeRotate:
         assert rots[0].get("by") == "21600000"
         assert rots[1].get("by") == "-21600000"
 
-    def test_four_values_produces_three_segments(self, handler: TransformAnimationHandler):
+    def test_four_values_produces_three_segments(
+        self, handler: TransformAnimationHandler
+    ):
         anim = make_transform_animation(
             transform_type=TransformType.ROTATE, values=["0", "90", "180", "0"]
         )
         par = handler.build(anim, par_id=4, behavior_id=5)
         rots = par.findall(f".//{{{NS_P}}}animRot")
         assert len(rots) == 3
-        assert rots[0].get("by") == "5400000"   # 90°
-        assert rots[1].get("by") == "5400000"   # 90°
+        assert rots[0].get("by") == "5400000"  # 90°
+        assert rots[1].get("by") == "5400000"  # 90°
         assert rots[2].get("by") == "-10800000"  # -180°
 
-    def test_key_times_affect_segment_durations(self, handler: TransformAnimationHandler):
+    def test_key_times_affect_segment_durations(
+        self, handler: TransformAnimationHandler
+    ):
         anim = make_transform_animation(
             transform_type=TransformType.ROTATE,
             values=["0", "360", "0"],
@@ -321,6 +327,16 @@ class TestMultiKeyframeRotate:
         ctn = par.find(f"{{{NS_P}}}cTn")
         assert ctn.get("presetID") == "8"
         assert ctn.get("presetClass") == "emph"
+
+    def test_simple_transform_uses_nonzero_effect_group(
+        self, handler: TransformAnimationHandler
+    ):
+        anim = make_transform_animation(
+            transform_type=TransformType.SCALE, values=["1", "2"]
+        )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        ctn = par.find(f"{{{NS_P}}}cTn")
+        assert ctn.get("grpId") == "4"
 
 
 class TestRotateWithOrbit:
@@ -393,6 +409,18 @@ class TestRotateWithOrbit:
         assert len(rots) == 2  # multi-keyframe split
         assert len(motions) == 1  # orbital companion
 
+    def test_multi_keyframe_rotate_uses_nonzero_effect_group(
+        self, handler: TransformAnimationHandler
+    ):
+        anim = make_transform_animation(
+            transform_type=TransformType.ROTATE,
+            values=["0", "360", "0"],
+        )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        ctn = par.find(f"{{{NS_P}}}cTn")
+        assert ctn is not None
+        assert ctn.get("grpId") == "4"
+
     def test_orbit_path_has_nonzero_values(self, handler: TransformAnimationHandler):
         """Orbit path coordinates should be non-trivial for offset center."""
         anim = make_transform_animation(
@@ -408,7 +436,8 @@ class TestRotateWithOrbit:
         coords = [p.strip().rstrip(" E").split() for p in parts]
         has_nonzero = any(
             abs(float(c[0])) > 1e-6 or abs(float(c[1])) > 1e-6
-            for c in coords if len(c) == 2
+            for c in coords
+            if len(c) == 2
         )
         assert has_nonzero
 
@@ -571,7 +600,9 @@ class TestBuildTranslateMultiKeyframe:
         anim_motion = par.find(f".//{{{NS_P}}}animMotion")
         assert anim_motion.get("path") is None
 
-    def test_discrete_calc_mode_expands_step_path(self, handler: TransformAnimationHandler):
+    def test_discrete_calc_mode_expands_step_path(
+        self, handler: TransformAnimationHandler
+    ):
         anim = make_transform_animation(
             transform_type=TransformType.TRANSLATE,
             values=["0 0", "50 0", "50 50"],
@@ -585,7 +616,9 @@ class TestBuildTranslateMultiKeyframe:
         assert path.count("L ") > 2
         assert len(anim_motion.get("ptsTypes")) > 3
 
-    def test_paced_calc_mode_respects_distance_weighting(self, handler: TransformAnimationHandler):
+    def test_paced_calc_mode_respects_distance_weighting(
+        self, handler: TransformAnimationHandler
+    ):
         anim = make_transform_animation(
             transform_type=TransformType.TRANSLATE,
             values=["0 0", "10 0", "40 0"],
@@ -604,7 +637,9 @@ class TestBuildTranslateMultiKeyframe:
 
 
 class TestBuildMatrix:
-    def test_matrix_translate_returns_anim_motion(self, handler: TransformAnimationHandler):
+    def test_matrix_translate_returns_anim_motion(
+        self, handler: TransformAnimationHandler
+    ):
         anim = make_transform_animation(
             transform_type=TransformType.MATRIX,
             values=["1 0 0 1 0 0", "1 0 0 1 15 5"],
@@ -729,7 +764,9 @@ class TestClassifyMatrix:
         assert mtype == "rotate"
         assert abs(payload - 30.0) < 0.01
 
-    def test_composite_decomposes_to_translate(self, handler: TransformAnimationHandler):
+    def test_composite_decomposes_to_translate(
+        self, handler: TransformAnimationHandler
+    ):
         """Scale+translate composite decomposes; translate wins by priority."""
         m = Matrix2D(2, 0, 0, 2, 5, 5)
         mtype, payload = handler._classify_matrix(m)
@@ -842,7 +879,9 @@ class TestClassifyMatrixComposite:
         mtype, payload = handler._classify_matrix(m)
         assert mtype == "translate"
 
-    def test_classify_falls_through_to_decompose(self, handler: TransformAnimationHandler):
+    def test_classify_falls_through_to_decompose(
+        self, handler: TransformAnimationHandler
+    ):
         """A matrix that fails simple classification is decomposed."""
         import math
 

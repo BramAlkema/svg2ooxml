@@ -4,7 +4,7 @@ from lxml import etree
 
 from svg2ooxml.drawingml.animation.id_allocator import TimingIDAllocator
 from svg2ooxml.drawingml.animation.xml_builders import AnimationXMLBuilder
-from svg2ooxml.drawingml.xml_builder import NS_P
+from svg2ooxml.drawingml.xml_builder import NS_P, p_elem, p_sub
 
 
 class TestAttributeList:
@@ -243,6 +243,27 @@ class TestBuildTimingTree:
         assert click_child_lst is not None
         assert len(click_child_lst) == 2
 
+    def test_click_group_uses_powerpoint_autostart_conditions(self):
+        builder = AnimationXMLBuilder()
+        ids = TimingIDAllocator().allocate(1)
+        tree = builder.build_timing_tree(
+            ids=ids,
+            animation_elements=[self._make_dummy_par()],
+            animated_shape_ids=[],
+        )
+        click_ctn = tree.find(f".//{{{NS_P}}}cTn[@id='3']")
+        assert click_ctn is not None
+        st_cond_lst = click_ctn.find(f"{{{NS_P}}}stCondLst")
+        assert st_cond_lst is not None
+        conds = st_cond_lst.findall(f"{{{NS_P}}}cond")
+        assert len(conds) == 2
+        assert conds[0].get("delay") == "indefinite"
+        assert conds[1].get("evt") == "onBegin"
+        assert conds[1].get("delay") == "0"
+        tn = conds[1].find(f"{{{NS_P}}}tn")
+        assert tn is not None
+        assert tn.get("val") == "2"
+
     def test_navigation_triggers(self):
         builder = AnimationXMLBuilder()
         ids = TimingIDAllocator().allocate(0)
@@ -271,6 +292,44 @@ class TestBuildTimingTree:
         assert len(bld_ps) == 2
         assert bld_ps[0].get("spid") == "42"
         assert bld_ps[1].get("spid") == "99"
+        assert bld_ps[0].get("animBg") is None
+        assert bld_ps[1].get("animBg") is None
+
+    def test_bld_lst_includes_effect_group_entries(self):
+        builder = AnimationXMLBuilder()
+        ids = TimingIDAllocator().allocate(1)
+        par = p_elem("par")
+        ctn = p_sub(
+            par,
+            "cTn",
+            id="4",
+            fill="hold",
+            nodeType="clickEffect",
+            grpId="7",
+            presetID="6",
+            presetClass="emph",
+        )
+        child_tn_lst = p_sub(ctn, "childTnLst")
+        anim_scale = p_sub(child_tn_lst, "animScale")
+        c_bhvr = p_sub(anim_scale, "cBhvr")
+        p_sub(c_bhvr, "cTn", id="5", dur="1000")
+        tgt_el = p_sub(c_bhvr, "tgtEl")
+        p_sub(tgt_el, "spTgt", spid="42")
+
+        tree = builder.build_timing_tree(
+            ids=ids,
+            animation_elements=[par],
+            animated_shape_ids=["42"],
+        )
+
+        bld_ps = tree.findall(f".//{{{NS_P}}}bldP")
+        assert len(bld_ps) == 2
+        assert bld_ps[0].get("spid") == "42"
+        assert bld_ps[0].get("grpId") == "0"
+        assert bld_ps[0].get("animBg") is None
+        assert bld_ps[1].get("spid") == "42"
+        assert bld_ps[1].get("grpId") == "7"
+        assert bld_ps[1].get("animBg") == "1"
 
     def test_no_bld_lst_when_empty(self):
         builder = AnimationXMLBuilder()
@@ -425,6 +484,38 @@ class TestBuildBehaviorCoreElem:
         assert attr_lst is not None
         names = attr_lst.findall(f"{{{NS_P}}}attrName")
         assert len(names) == 2
+
+    def test_ppt_runtime_context_for_ppt_properties(self):
+        builder = AnimationXMLBuilder()
+        elem = builder.build_behavior_core_elem(
+            behavior_id=5,
+            duration_ms=1000,
+            target_shape="shape1",
+            attr_name_list=["ppt_w"],
+        )
+        assert elem.get("rctx") == "PPT"
+
+    def test_ppt_runtime_context_for_style_properties(self):
+        builder = AnimationXMLBuilder()
+        elem = builder.build_behavior_core_elem(
+            behavior_id=5,
+            duration_ms=1000,
+            target_shape="shape1",
+            attr_name_list=["style.opacity"],
+        )
+        assert elem.get("rctx") == "PPT"
+
+    def test_behavior_core_auto_reverse(self):
+        builder = AnimationXMLBuilder()
+        elem = builder.build_behavior_core_elem(
+            behavior_id=5,
+            duration_ms=1000,
+            target_shape="shape1",
+            auto_reverse=True,
+        )
+        ctn = elem.find(f"{{{NS_P}}}cTn")
+        assert ctn is not None
+        assert ctn.get("autoRev") == "1"
 
     def test_additive_sum(self):
         builder = AnimationXMLBuilder()

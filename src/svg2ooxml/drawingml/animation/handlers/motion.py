@@ -87,6 +87,7 @@ class MotionAnimationHandler(AnimationHandler):
             preset_class="path",
             begin_triggers=animation.begin_triggers,
             default_target_shape=animation.element_id,
+            effect_group_id=par_id,
         )
 
     def _resolve_rotation_angle(
@@ -139,9 +140,7 @@ class MotionAnimationHandler(AnimationHandler):
     # Motion path helpers                                                 #
     # ------------------------------------------------------------------ #
 
-    def _build_motion_path_string(
-        self, points: list[tuple[float, float]]
-    ) -> str:
+    def _build_motion_path_string(self, points: list[tuple[float, float]]) -> str:
         """Convert parsed points to a PowerPoint motion path string.
 
         Points are converted from pixel deltas (relative to the first point)

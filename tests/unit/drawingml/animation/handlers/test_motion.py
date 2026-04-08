@@ -95,6 +95,12 @@ class TestBuild:
         ctn = par.find(f"{{{NS_P}}}cTn")
         assert ctn.get("id") == "4"
 
+    def test_ctn_uses_nonzero_effect_group(self, handler: MotionAnimationHandler):
+        anim = make_motion_animation()
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        ctn = par.find(f"{{{NS_P}}}cTn")
+        assert ctn.get("grpId") == "4"
+
     def test_anim_motion_present(self, handler: MotionAnimationHandler):
         anim = make_motion_animation()
         par = handler.build(anim, par_id=4, behavior_id=5)
@@ -109,7 +115,9 @@ class TestBuild:
         assert anim_motion.get("pathEditMode") == "relative"
         assert anim_motion.get("rAng") == "0"
 
-    def test_anim_motion_auto_rotate_sets_non_zero_rang(self, handler: MotionAnimationHandler):
+    def test_anim_motion_auto_rotate_sets_non_zero_rang(
+        self, handler: MotionAnimationHandler
+    ):
         anim = make_motion_animation(
             values=["M0,0 L0,100"],
             motion_rotate="auto",
@@ -168,7 +176,9 @@ class TestBuild:
         assert path.startswith("M ")
         assert " L " in path
 
-    def test_discrete_calc_mode_expands_step_path(self, handler: MotionAnimationHandler):
+    def test_discrete_calc_mode_expands_step_path(
+        self, handler: MotionAnimationHandler
+    ):
         anim = make_motion_animation(
             values=["M0,0 L100,0"],
             key_times=[0.0, 0.4, 1.0],
@@ -180,7 +190,9 @@ class TestBuild:
         assert path.count("L ") > 1
         assert len(anim_motion.get("ptsTypes")) > 2
 
-    def test_paced_calc_mode_with_key_times_retimes_path(self, handler: MotionAnimationHandler):
+    def test_paced_calc_mode_with_key_times_retimes_path(
+        self, handler: MotionAnimationHandler
+    ):
         anim = make_motion_animation(
             values=["M0,0 L10,0 L40,0"],
             key_times=[0.0, 0.9, 1.0],
@@ -200,7 +212,9 @@ class TestParseMotionPath:
     def test_returns_empty_for_empty_path(self, handler: MotionAnimationHandler):
         assert handler._parse_motion_path("") == []
 
-    def test_parses_simple_move_line_path(self, handler: MotionAnimationHandler, monkeypatch):
+    def test_parses_simple_move_line_path(
+        self, handler: MotionAnimationHandler, monkeypatch
+    ):
         mock_parse = Mock()
         start = Point(x=0, y=0)
         end = Point(x=100, y=100)
@@ -221,7 +235,9 @@ class TestParseMotionPath:
         control1 = Point(x=50, y=0)
         control2 = Point(x=50, y=100)
         end = Point(x=100, y=100)
-        segment = BezierSegment(start=start, control1=control1, control2=control2, end=end)
+        segment = BezierSegment(
+            start=start, control1=control1, control2=control2, end=end
+        )
         mock_parse.return_value = [segment]
         monkeypatch.setattr(
             "svg2ooxml.common.geometry.paths.parse_path_data",
@@ -233,7 +249,9 @@ class TestParseMotionPath:
         assert abs(result[-1][0] - 100.0) < 1.0
         assert abs(result[-1][1] - 100.0) < 1.0
 
-    def test_deduplicates_consecutive_points(self, handler: MotionAnimationHandler, monkeypatch):
+    def test_deduplicates_consecutive_points(
+        self, handler: MotionAnimationHandler, monkeypatch
+    ):
         mock_parse = Mock()
         start = Point(x=0, y=0)
         mid = Point(x=0, y=0)
@@ -250,7 +268,9 @@ class TestParseMotionPath:
         result = handler._parse_motion_path("M0,0 L0,0 L100,100")
         assert len(result) == 2
 
-    def test_handles_path_parse_error(self, handler: MotionAnimationHandler, monkeypatch):
+    def test_handles_path_parse_error(
+        self, handler: MotionAnimationHandler, monkeypatch
+    ):
         from svg2ooxml.common.geometry.paths import PathParseError
 
         mock_parse = Mock(side_effect=PathParseError("Invalid path"))

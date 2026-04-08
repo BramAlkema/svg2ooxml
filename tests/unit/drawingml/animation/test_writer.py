@@ -200,6 +200,7 @@ class TestBuildAnimation:
             calc_mode="spline",
         )
         from svg2ooxml.ir.animation import CalcMode
+
         anim = _numeric_anim(
             values=["0", "100"],
             key_times=[0.0, 1.0],
@@ -227,6 +228,7 @@ class TestBuildAnimation:
         anim = _opacity_anim()
         elem, _ = writer._build_animation(anim, {}, par_id=42, behavior_id=43)
         from svg2ooxml.drawingml.xml_builder import to_string
+
         xml = to_string(elem)
         assert 'id="42"' in xml
         assert 'id="43"' in xml
@@ -271,13 +273,11 @@ class TestBuild:
         assert result != ""
         # Should have 3 animation <p:par> elements nested within the tree
         assert result.count("animEffect") >= 1  # opacity
-        assert result.count("animClr") >= 1     # color
-        assert result.count("<p:anim") >= 1      # numeric
+        assert result.count("animClr") >= 1  # color
+        assert result.count("<p:anim") >= 1  # numeric
 
     def test_all_ids_unique(self, writer):
-        anims = [
-            _opacity_anim(element_id=f"s{i}") for i in range(5)
-        ]
+        anims = [_opacity_anim(element_id=f"s{i}") for i in range(5)]
         result = writer.build(anims, [])
         found_ids = re.findall(r'id="(\d+)"', result)
         assert len(found_ids) == len(set(found_ids))
@@ -296,13 +296,24 @@ class TestBuild:
         assert "<p:bldLst>" in result
         assert 'spid="shape42"' in result
 
+    def test_includes_effect_group_build_list_entries(self, writer):
+        result = writer.build(
+            [_motion_anim(element_id="shape42")],
+            [],
+            animated_shape_ids=["shape42"],
+        )
+        assert '<p:bldP spid="shape42" grpId="0"/>' in result
+        assert 'spid="shape42" grpId="4" animBg="1"' in result
+
     def test_handles_none_options(self, writer):
         result = writer.build([_opacity_anim()], [], options=None)
         assert result != ""
 
     def test_passes_options_to_policy(self, writer):
         options = {"max_spline_error": 1.5, "fallback_mode": "raster"}
-        with patch.object(writer, "_build_animation", wraps=writer._build_animation) as mock:
+        with patch.object(
+            writer, "_build_animation", wraps=writer._build_animation
+        ) as mock:
             writer.build([_opacity_anim()], [], options=options)
             mock.assert_called_once()
             call_options = mock.call_args[0][1]

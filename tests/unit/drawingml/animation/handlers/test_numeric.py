@@ -233,13 +233,42 @@ class TestBuild:
         assert anim_scale is not None
         assert anim_scale.find(f"{{{NS_P}}}from").get("x") == "100000"
         assert anim_scale.find(f"{{{NS_P}}}to").get("x") == "200000"
+        attr_names = par.findall(f".//{{{NS_P}}}attrName")
+        assert [node.text for node in attr_names] == ["ScaleX", "ScaleY"]
 
-    def test_multi_keyframe_width_animation_uses_generic_anim(
+    def test_symmetric_multi_keyframe_width_animation_uses_autoreverse_scale(
         self, handler: NumericAnimationHandler
     ):
         anim = make_numeric_animation(
             target_attribute="width",
             values=["10", "40", "10"],
+        )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        anim_scale = par.find(f".//{{{NS_P}}}animScale")
+        assert anim_scale is not None
+        assert par.find(f".//{{{NS_P}}}anim") is None
+        ctn = par.find(f"{{{NS_P}}}cTn")
+        assert ctn is not None
+        assert ctn.get("autoRev") == "1"
+        assert ctn.get("presetSubtype") == "0"
+        bhvr_ctn = par.find(f".//{{{NS_P}}}cBhvr/{{{NS_P}}}cTn")
+        assert bhvr_ctn is not None
+        assert bhvr_ctn.get("dur") == "500"
+        assert bhvr_ctn.get("autoRev") is None
+        attr_names = par.findall(f".//{{{NS_P}}}attrName")
+        assert attr_names == []
+        by = anim_scale.find(f"{{{NS_P}}}by")
+        assert by is not None
+        assert by.get("x") == "300000"
+        assert by.get("y") == "0"
+
+    def test_multi_keyframe_width_animation_with_custom_key_times_uses_generic_anim(
+        self, handler: NumericAnimationHandler
+    ):
+        anim = make_numeric_animation(
+            target_attribute="width",
+            values=["10", "40", "10"],
+            key_times=[0.0, 0.3, 1.0],
         )
         par = handler.build(anim, par_id=4, behavior_id=5)
         assert par.find(f".//{{{NS_P}}}animScale") is None
@@ -248,7 +277,7 @@ class TestBuild:
         attr_name = par.find(f".//{{{NS_P}}}attrName")
         assert attr_name.text == "ppt_w"
         tavs = par.findall(f".//{{{NS_P}}}tav")
-        assert [tav.get("tm") for tav in tavs] == ["0", "50000", "100000"]
+        assert [tav.get("tm") for tav in tavs] == ["0", "30000", "100000"]
 
     def test_position_animation_uses_relative_delta_path(
         self, handler: NumericAnimationHandler

@@ -397,11 +397,29 @@ def test_width_animation_uses_ppt_width_attribute() -> None:
     assert "<p:animScale" in render_result.slide_xml
 
 
-def test_multi_keyframe_width_animation_uses_tav_width_animation() -> None:
+def test_symmetric_multi_keyframe_width_animation_uses_autoreverse_scale() -> None:
     svg = """
     <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">
       <rect id="rect1" width="10" height="10" fill="#000">
         <animate attributeName="width" values="10;40;10" dur="1s" begin="0s"/>
+      </rect>
+    </svg>
+    """
+
+    render_result, _, _ = _render(svg)
+
+    assert "<p:animScale" in render_result.slide_xml
+    assert '<p:by x="300000" y="0"/>' in render_result.slide_xml
+    assert 'autoRev="1"' in render_result.slide_xml
+
+
+def test_multi_keyframe_width_animation_with_custom_key_times_uses_tav_width_animation() -> (
+    None
+):
+    svg = """
+    <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">
+      <rect id="rect1" width="10" height="10" fill="#000">
+        <animate attributeName="width" values="10;40;10" keyTimes="0;0.3;1" dur="1s" begin="0s"/>
       </rect>
     </svg>
     """
@@ -414,7 +432,7 @@ def test_multi_keyframe_width_animation_uses_tav_width_animation() -> None:
     assert render_result.slide_xml.count("<p:tav ") == 3
 
 
-def test_multi_keyframe_opacity_animation_uses_property_anim() -> None:
+def test_multi_keyframe_opacity_animation_uses_transparency_effect() -> None:
     svg = """
     <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">
       <rect id="rect1" width="10" height="10" fill="#000">
@@ -425,9 +443,35 @@ def test_multi_keyframe_opacity_animation_uses_property_anim() -> None:
 
     render_result, _, _ = _render(svg)
 
-    assert "<p:animEffect" not in render_result.slide_xml
-    assert "<p:anim>" in render_result.slide_xml
+    assert (
+        '<p:animEffect filter="image" prLst="opacity: 0.1">' in render_result.slide_xml
+    )
+    assert 'rctx="IE"' in render_result.slide_xml
+    assert '<p:strVal val="0.1"/>' in render_result.slide_xml
+    assert "<p:anim>" not in render_result.slide_xml
     assert "<p:attrName>style.opacity</p:attrName>" in render_result.slide_xml
+
+
+def test_timing_tree_uses_powerpoint_autostart_wrapper() -> None:
+    svg = """
+    <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">
+      <rect id="rect1" width="10" height="10" fill="#000">
+        <animate attributeName="opacity" values="0.1;1;0.1" dur="1s" begin="0s"/>
+      </rect>
+    </svg>
+    """
+
+    render_result, _, _ = _render(svg)
+
+    assert 'delay="indefinite"' in render_result.slide_xml
+    assert 'evt="onBegin"' in render_result.slide_xml
+    main_seq_marker = 'nodeType="mainSeq"'
+    main_seq_index = render_result.slide_xml.index(main_seq_marker)
+    id_attr_index = render_result.slide_xml.rfind('id="', 0, main_seq_index)
+    id_start = id_attr_index + len('id="')
+    id_end = render_result.slide_xml.index('"', id_start)
+    main_seq_id = render_result.slide_xml[id_start:id_end]
+    assert f'<p:tn val="{main_seq_id}"/>' in render_result.slide_xml
 
 
 def test_stroke_width_animation_maps_to_ln_w() -> None:

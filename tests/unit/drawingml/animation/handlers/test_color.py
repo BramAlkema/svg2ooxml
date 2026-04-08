@@ -133,6 +133,12 @@ class TestBuild:
         ctn = par.find(f"{{{NS_P}}}cTn")
         assert ctn.get("id") == "4"
 
+    def test_ctn_uses_nonzero_effect_group(self, handler: ColorAnimationHandler):
+        anim = make_color_animation()
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        ctn = par.find(f"{{{NS_P}}}cTn")
+        assert ctn.get("grpId") == "4"
+
     def test_anim_clr_present(self, handler: ColorAnimationHandler):
         anim = make_color_animation()
         par = handler.build(anim, par_id=4, behavior_id=5)
@@ -269,6 +275,9 @@ class TestTAVList:
             )
             == 1.0
         )
+        ctn = par.find(f"{{{NS_P}}}cTn")
+        assert ctn is not None
+        assert ctn.get("grpId") == "4"
 
     def test_explicit_key_times_split_delay_and_duration(
         self, handler: ColorAnimationHandler
