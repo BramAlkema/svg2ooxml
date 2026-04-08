@@ -26,14 +26,46 @@ def test_get_window_id_via_jxa_guards_non_array_window_lists(monkeypatch) -> Non
     assert "if (!windowsAll || !windowsAll.filter)" in script
 
 
-def test_open_presentation_via_ui_uses_app_id_and_open_dialog(monkeypatch) -> None:
-    calls: list[str] = []
+def test_open_presentation_via_ui_prefers_launchservices(monkeypatch) -> None:
+    run_calls: list[list[str]] = []
+
+    def fake_run(command, **kwargs):
+        run_calls.append(command)
+        return subprocess.CompletedProcess(command, 0)
+
+    monkeypatch.setattr(pptx_window.subprocess, "run", fake_run)
+    monkeypatch.setattr(
+        pptx_window,
+        "launch_powerpoint_app",
+        lambda: pytest.fail("UI fallback should not run when LaunchServices succeeds"),
+    )
+    monkeypatch.setattr(
+        pptx_window,
+        "osascript",
+        lambda *args, **kwargs: pytest.fail("UI fallback should not run when LaunchServices succeeds"),
+    )
+
+    pptx_window.open_presentation_via_ui(Path("/tmp/sample deck.pptx"), timeout=42.0)
+
+    assert run_calls == [
+        ["open", "-b", "com.microsoft.Powerpoint", str(Path("/tmp/sample deck.pptx").resolve())]
+    ]
+
+
+def test_open_presentation_via_ui_falls_back_to_open_dialog(monkeypatch) -> None:
+    run_calls: list[list[str]] = []
     launch_calls: list[str] = []
+    scripts: list[str] = []
+
+    def fake_run(command, **kwargs):
+        run_calls.append(command)
+        raise subprocess.CalledProcessError(1, command)
 
     def fake_osascript(script: str, *, timeout: float | None = 30.0) -> str:
-        calls.append(script)
+        scripts.append(script)
         return ""
 
+    monkeypatch.setattr(pptx_window.subprocess, "run", fake_run)
     monkeypatch.setattr(
         pptx_window,
         "launch_powerpoint_app",
@@ -43,9 +75,13 @@ def test_open_presentation_via_ui_uses_app_id_and_open_dialog(monkeypatch) -> No
 
     pptx_window.open_presentation_via_ui(Path("/tmp/sample deck.pptx"), timeout=42.0)
 
+    assert run_calls == [
+        ["open", "-b", "com.microsoft.Powerpoint", str(Path("/tmp/sample deck.pptx").resolve())],
+        ["open", "-a", "Microsoft PowerPoint", str(Path("/tmp/sample deck.pptx").resolve())],
+    ]
     assert launch_calls == ["launch"]
-    assert len(calls) == 1
-    script = calls[0]
+    assert len(scripts) == 1
+    script = scripts[0]
     assert 'keystroke "o" using {command down}' in script
     assert 'keystroke "g" using {command down, shift down}' in script
     assert str(Path("/tmp/sample deck.pptx").resolve()) in script
@@ -97,16 +133,33 @@ def test_start_slideshow_uses_launchservices_and_ui_start_path(monkeypatch) -> N
     )
 
     script = captured["script"]
+    resolved_path = str(Path("/tmp/sample.pptx").resolve())
     assert captured["open_path"] == Path("/tmp/sample.pptx").resolve()
     assert captured["open_timeout"] == 30.0
     assert captured["presentation_wait_path"] == Path("/tmp/sample.pptx").resolve()
     assert captured["presentation_wait_timeout"] == 60.0
     assert captured["window_wait_timeout"] == 10.0
-    assert "open (POSIX file" not in script
-    assert "runSlideshowViaMenu" not in script
-    assert "run slide show ss" not in script
-    assert "if useKeys then set maxAttempts to 2" in script
-    assert "if my sendSlideshowKeys() then" in script
+    assert f'set targetPosix to "{resolved_path}"' in script
+    assert 'set targetName to "sample.pptx"' in script
+    assert "on findTargetPresentation(targetPosix, targetHfs, targetName)" in script
+    assert "on focusTargetPresentationWindow(targetPosix, targetHfs, targetName)" in script
+    assert 'perform action "AXRaise" of uiWindow' in script
+    assert "click uiWindow" in script
+    assert 'set value of attribute "AXMain" of uiWindow to true' in script
+    assert 'set value of attribute "AXFocused" of uiWindow to true' in script
+    assert "set pres to my findTargetPresentation(targetPosix, targetHfs, targetName)" in script
+    assert "set ss to slide show settings of pres" in script
+    assert "set show type of ss to slide show type window" in script
+    assert "set show with presenter of ss to false" in script
+    assert "run slide show ss" in script
+    assert "on tryDirectOpen(targetPosix)" in script
+    assert "my tryDirectOpen(targetPosix)" in script
+    assert "on tryObjectModelStart(targetPosix, targetHfs, targetName)" in script
+    assert "on tryMenuStart()" in script
+    assert 'click menu item "Play from Start" of menu 1 of menu bar item "Slide Show" of menu bar 1' in script
+    assert 'click menu item "From Beginning" of menu 1 of menu bar item "Slide Show" of menu bar 1' in script
+    assert "repeat with attemptIndex from 1 to 8" in script
+    assert "if useKeys then" in script
     assert "Unable to request slideshow start." in script
 
 
@@ -144,10 +197,167 @@ def test_start_slideshow_retries_before_keystroke_fallback(monkeypatch) -> None:
     )
 
     script = captured["script"]
-    assert "set maxAttempts to 1" in script
-    assert "if useKeys then set maxAttempts to 2" in script
+    assert "if my tryObjectModelStart(targetPosix, targetHfs, targetName) then" in script
+    assert "if not my focusTargetPresentationWindow(targetPosix, targetHfs, targetName) then" in script
+    assert "if my tryMenuStart() then" in script
+    assert "if useKeys then" in script
+    assert 'set frontmost to true' in script
     assert "if my sendSlideshowKeys() then" in script
     assert "keystroke return using {command down, shift down}" in script
+
+
+def test_start_slideshow_continues_when_edit_window_exists_but_presentation_probe_lags(
+    monkeypatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_osascript(script: str, *, timeout: float | None = 30.0) -> str:
+        captured["script"] = script
+        return ""
+
+    monkeypatch.setattr(powerpoint_capture, "_osascript", fake_osascript)
+    monkeypatch.setattr(
+        powerpoint_capture,
+        "_open_presentation_via_ui",
+        lambda path, *, timeout: None,
+    )
+    monkeypatch.setattr(
+        powerpoint_capture,
+        "_wait_for_powerpoint_presentation",
+        lambda path, timeout: False,
+    )
+    monkeypatch.setattr(
+        powerpoint_capture,
+        "_wait_for_powerpoint_window",
+        lambda timeout: True,
+    )
+
+    powerpoint_capture._start_slideshow(
+        Path("/tmp/sample.pptx"),
+        delay=1.0,
+        slideshow_delay=0.5,
+        open_timeout=30.0,
+        use_keys=False,
+        allow_reopen=False,
+    )
+
+    script = captured["script"]
+    assert "on tryObjectModelStart(targetPosix, targetHfs, targetName)" in script
+    assert "on tryMenuStart()" in script
+
+
+def test_wait_for_powerpoint_presentation_prefers_matching_open_deck(
+    monkeypatch,
+) -> None:
+    calls: list[str] = []
+
+    monkeypatch.setattr(powerpoint_capture.time, "sleep", lambda _: None)
+
+    def fake_osascript(script: str, *, timeout: float | None = 30.0) -> str:
+        calls.append(script)
+        return "true"
+
+    monkeypatch.setattr(powerpoint_capture, "_osascript", fake_osascript)
+
+    assert powerpoint_capture._wait_for_powerpoint_presentation(
+        Path("/tmp/sample deck.pptx"),
+        timeout=0.5,
+    )
+
+    assert calls
+    script = calls[0]
+    assert f'set targetPosix to "{Path("/tmp/sample deck.pptx").resolve()}"' in script
+    assert 'set targetName to "sample deck.pptx"' in script
+    assert "set presRef to presentation i" in script
+    assert "return \"true\"" in script
+
+
+def test_wait_for_powerpoint_presentation_confirms_recent_open_when_needed(
+    monkeypatch,
+) -> None:
+    sleep_calls: list[float] = []
+    confirm_calls: list[str] = []
+    state = {"match_count": 0}
+
+    def fake_has_matching_presentation(path: Path) -> bool:
+        state["match_count"] += 1
+        return state["match_count"] >= 3
+
+    monkeypatch.setattr(
+        powerpoint_capture,
+        "_has_matching_powerpoint_presentation",
+        fake_has_matching_presentation,
+    )
+    monkeypatch.setattr(
+        powerpoint_capture,
+        "_wait_for_powerpoint_window",
+        lambda timeout: True,
+    )
+    monkeypatch.setattr(
+        powerpoint_capture,
+        "_confirm_powerpoint_recent_open",
+        lambda target_name: confirm_calls.append(target_name) or True,
+    )
+    monkeypatch.setattr(
+        powerpoint_capture,
+        "_direct_open_powerpoint_presentation",
+        lambda path: pytest.fail("direct open fallback should not run in this scenario"),
+    )
+    monkeypatch.setattr(powerpoint_capture.time, "sleep", lambda value: sleep_calls.append(value))
+    time_values = iter([100.0, 100.0, 100.2, 101.3, 101.5, 101.7])
+    monkeypatch.setattr(powerpoint_capture.time, "time", lambda: next(time_values))
+
+    assert powerpoint_capture._wait_for_powerpoint_presentation(
+        Path("/tmp/sample deck.pptx"),
+        timeout=2.0,
+    )
+
+    assert confirm_calls == ["sample deck.pptx", "sample deck.pptx"]
+    assert sleep_calls
+
+
+def test_wait_for_powerpoint_presentation_tries_direct_open_after_home_screen_stall(
+    monkeypatch,
+) -> None:
+    confirm_calls: list[str] = []
+    direct_open_calls: list[str] = []
+    state = {"match_count": 0}
+
+    def fake_has_matching_presentation(path: Path) -> bool:
+        state["match_count"] += 1
+        return state["match_count"] >= 4
+
+    monkeypatch.setattr(
+        powerpoint_capture,
+        "_has_matching_powerpoint_presentation",
+        fake_has_matching_presentation,
+    )
+    monkeypatch.setattr(
+        powerpoint_capture,
+        "_wait_for_powerpoint_window",
+        lambda timeout: True,
+    )
+    monkeypatch.setattr(
+        powerpoint_capture,
+        "_confirm_powerpoint_recent_open",
+        lambda target_name: confirm_calls.append(target_name) or True,
+    )
+    monkeypatch.setattr(
+        powerpoint_capture,
+        "_direct_open_powerpoint_presentation",
+        lambda path: direct_open_calls.append(str(path.resolve())) or True,
+    )
+    monkeypatch.setattr(powerpoint_capture.time, "sleep", lambda _: None)
+    time_values = iter([100.0, 100.0, 100.2, 101.3, 101.5, 102.4, 102.6, 102.8])
+    monkeypatch.setattr(powerpoint_capture.time, "time", lambda: next(time_values))
+
+    assert powerpoint_capture._wait_for_powerpoint_presentation(
+        Path("/tmp/sample deck.pptx"),
+        timeout=4.0,
+    )
+
+    assert confirm_calls
+    assert direct_open_calls == [str(Path("/tmp/sample deck.pptx").resolve())]
 
 
 def test_capture_pptx_slideshow_closes_presentation_after_capture(
@@ -184,8 +394,8 @@ def test_capture_pptx_slideshow_closes_presentation_after_capture(
     )
     monkeypatch.setattr(
         powerpoint_capture,
-        "_close_active_presentation",
-        lambda: calls.append("close"),
+        "_close_matching_presentation",
+        lambda path: calls.append(f"close:{Path(path).name}"),
     )
 
     output_path = tmp_path / "slide_1.png"
@@ -208,7 +418,7 @@ def test_capture_pptx_slideshow_closes_presentation_after_capture(
         "start:presentation.pptx",
         "capture:123:auto",
         "exit",
-        "close",
+        "close:presentation.pptx",
     ]
 
 
@@ -277,8 +487,8 @@ def test_capture_pptx_slideshow_runs_permission_preflight_first(
     )
     monkeypatch.setattr(
         powerpoint_capture,
-        "_close_active_presentation",
-        lambda: calls.append("close"),
+        "_close_matching_presentation",
+        lambda path: calls.append(f"close:{Path(path).name}"),
     )
 
     output_path = tmp_path / "slide_1.png"
@@ -342,8 +552,8 @@ def test_capture_pptx_slideshow_cleans_up_existing_powerpoint_state(
     )
     monkeypatch.setattr(
         powerpoint_capture,
-        "_close_active_presentation",
-        lambda: calls.append("close"),
+        "_close_matching_presentation",
+        lambda path: calls.append(f"close:{Path(path).name}"),
     )
 
     output_path = tmp_path / "slide_1.png"
@@ -416,8 +626,8 @@ def test_capture_live_animation_cleans_up_and_recovers_window_id(
     )
     monkeypatch.setattr(
         powerpoint_capture,
-        "_close_active_presentation",
-        lambda: calls.append("close"),
+        "_close_matching_presentation",
+        lambda path: calls.append(f"close:{Path(path).name}"),
     )
 
     frames = powerpoint_capture.capture_live_animation(
@@ -435,7 +645,7 @@ def test_capture_live_animation_cleans_up_and_recovers_window_id(
     )
 
     assert calls[:4] == ["prompt", "stage:sample.pptx", "cleanup", "start:presentation.pptx"]
-    assert calls[-2:] == ["exit", "close"]
+    assert calls[-2:] == ["exit", "close:presentation.pptx"]
     assert [frame.name for frame in frames] == ["frame_0000.png", "frame_0001.png"]
     assert "capture:456:auto" in calls
 
@@ -476,8 +686,8 @@ def test_capture_pptx_slideshow_writes_diagnostics_on_failure(
     )
     monkeypatch.setattr(
         powerpoint_capture,
-        "_close_active_presentation",
-        lambda: calls.append("close"),
+        "_close_matching_presentation",
+        lambda path: calls.append(f"close:{Path(path).name}"),
     )
 
     with pytest.raises(RuntimeError, match="powerpoint_diagnostics.json"):
@@ -494,7 +704,12 @@ def test_capture_pptx_slideshow_writes_diagnostics_on_failure(
             backend="auto",
         )
 
-    assert calls == ["cleanup", "slideshow_capture_failed", "exit", "close"]
+    assert calls == [
+        "cleanup",
+        "slideshow_capture_failed",
+        "exit",
+        "close:presentation.pptx",
+    ]
 
 
 def test_teardown_still_closes_presentation_if_exit_slideshow_fails(
