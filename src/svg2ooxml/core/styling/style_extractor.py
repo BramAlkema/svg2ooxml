@@ -542,6 +542,9 @@ class StyleExtractor:
         foreground = None
         background = None
         background_opacity = 1.0
+        tile_image = None
+        tile_width_px = None
+        tile_height_px = None
         processor = self._get_pattern_processor(services)
         if processor is not None:
             try:
@@ -563,6 +566,12 @@ class StyleExtractor:
                     background = cleaned[1]
                 elif len(cleaned) == 1:
                     background_opacity = 0.0
+                tile_payload = processor.build_tile_payload(
+                    pattern_element,
+                    analysis=analysis,
+                )
+                if tile_payload is not None:
+                    tile_image, tile_width_px, tile_height_px = tile_payload
             except Exception:  # pragma: no cover - defensive
                 pass
 
@@ -579,6 +588,9 @@ class StyleExtractor:
             foreground=foreground,
             background=background,
             background_opacity=background_opacity,
+            tile_image=tile_image,
+            tile_width_px=tile_width_px,
+            tile_height_px=tile_height_px,
         )
 
     def _get_gradient_processor(self, services: ConversionServices):

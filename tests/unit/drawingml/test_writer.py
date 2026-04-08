@@ -13,7 +13,7 @@ from svg2ooxml.core.pipeline.navigation import (
     NavigationSpec,
     SlideTarget,
 )
-from svg2ooxml.drawingml.writer import EMU_PER_PX, DrawingMLWriter
+from svg2ooxml.drawingml.writer import EMU_PER_PX, DrawingMLWriter, px_to_emu
 from svg2ooxml.ir.entrypoints import convert_parser_output
 from svg2ooxml.ir.effects import CustomEffect
 from svg2ooxml.ir.geometry import BezierSegment, LineSegment, Point, Rect
@@ -90,6 +90,54 @@ def test_render_rectangle_with_pattern_tile_registers_media() -> None:
     assert "<a:tile" in xml
     # media should be registered
     assert len(result.assets.media) == 1
+
+
+def test_render_path_with_pattern_tile_registers_media() -> None:
+    writer = DrawingMLWriter()
+    tile_data = b"\x89PNG\r\n\x1a\n" + b"\x00" * 50
+    paint = PatternPaint(
+        pattern_id="tile_pat_path",
+        tile_image=tile_data,
+        tile_width_px=8,
+        tile_height_px=8,
+    )
+    path = IRPath(
+        segments=[
+            LineSegment(Point(0, 0), Point(50, 0)),
+            LineSegment(Point(50, 0), Point(50, 50)),
+            LineSegment(Point(50, 50), Point(0, 50)),
+            LineSegment(Point(0, 50), Point(0, 0)),
+        ],
+        fill=paint,
+    )
+
+    result = writer.render_scene([path])
+    xml = result.slide_xml
+
+    assert "<a:blipFill" in xml
+    assert "<a:tile" in xml
+    assert len(result.assets.media) == 1
+
+
+def test_render_reuses_identical_pattern_tile_media_on_slide() -> None:
+    writer = DrawingMLWriter()
+    tile_data = b"\x89PNG\r\n\x1a\n" + b"\x00" * 50
+    paint = PatternPaint(
+        pattern_id="tile_pat_shared",
+        tile_image=tile_data,
+        tile_width_px=8,
+        tile_height_px=8,
+    )
+    scene = [
+        Rectangle(bounds=Rect(x=0, y=0, width=40, height=40), fill=paint),
+        Rectangle(bounds=Rect(x=50, y=0, width=40, height=40), fill=paint),
+    ]
+
+    result = writer.render_scene(scene)
+    media = list(result.assets.media)
+
+    assert len(media) == 1
+    assert result.slide_xml.count(f'r:embed="{media[0].relationship_id}"') == 2
 
 
 def test_render_rectangle_with_pattern_preset_no_media() -> None:
@@ -493,6 +541,54 @@ def test_render_scene_from_ir_uses_wordart_for_text_path_fixture() -> None:
 
     assert "Some text drawn on a curved path!" in result.slide_xml
     assert "prstTxWarp" in result.slide_xml
+
+
+def test_render_scene_from_ir_suppresses_w3c_test_frame() -> None:
+    writer = DrawingMLWriter()
+    scene = IRScene(
+        elements=[
+            Rectangle(
+                bounds=Rect(1, 1, 478, 358),
+                fill=None,
+                stroke=Stroke(paint=SolidPaint("000000"), width=1.0),
+                metadata={"element_ids": ["test-frame"]},
+                element_id="test-frame",
+            ),
+            Rectangle(bounds=Rect(20, 20, 40, 30), fill=SolidPaint("FF0000")),
+        ],
+        width_px=480,
+        height_px=360,
+        metadata={"source_path": "/tmp/project/tests/svg/animate-elem-02-t.svg"},
+    )
+
+    result = writer.render_scene_from_ir(scene)
+
+    assert len(result.shape_xml) == 1
+    assert "FF0000" in result.slide_xml
+    assert "000000" not in result.slide_xml
+
+
+def test_render_scene_from_ir_preserves_test_frame_outside_w3c_corpus() -> None:
+    writer = DrawingMLWriter()
+    scene = IRScene(
+        elements=[
+            Rectangle(
+                bounds=Rect(1, 1, 478, 358),
+                fill=None,
+                stroke=Stroke(paint=SolidPaint("000000"), width=1.0),
+                metadata={"element_ids": ["test-frame"]},
+                element_id="test-frame",
+            )
+        ],
+        width_px=480,
+        height_px=360,
+        metadata={"source_path": "/tmp/project/tests/visual/fixtures/example.svg"},
+    )
+
+    result = writer.render_scene_from_ir(scene)
+
+    assert len(result.shape_xml) == 1
+    assert "000000" in result.slide_xml
 
 
 def test_writer_collects_font_embedding_plans() -> None:
@@ -1170,6 +1266,41 @@ def test_render_scene_exposes_shape_fragments() -> None:
     # Leaf groups (no nested groups) are flattened
     assert len(result.shape_xml) == 2
     assert all(fragment.startswith("<p:sp>") for fragment in result.shape_xml)
+
+
+def test_nested_group_uses_real_group_bounds() -> None:
+    writer = DrawingMLWriter()
+    group = Group(
+        children=[
+            Group(
+                children=[
+                    Rectangle(bounds=Rect(10, 15, 20, 12), fill=SolidPaint("4472C4"))
+                ]
+            )
+        ]
+    )
+
+    result = writer.render_scene([group])
+    root = ET.fromstring(result.slide_xml.encode("utf-8"))
+    ns = {
+        "a": "http://schemas.openxmlformats.org/drawingml/2006/main",
+        "p": "http://schemas.openxmlformats.org/presentationml/2006/main",
+    }
+    xfrm = root.find(".//p:grpSp/p:grpSpPr/a:xfrm", ns)
+
+    assert xfrm is not None
+    off = xfrm.find("a:off", ns)
+    ext = xfrm.find("a:ext", ns)
+    ch_off = xfrm.find("a:chOff", ns)
+    ch_ext = xfrm.find("a:chExt", ns)
+    assert off is not None
+    assert ext is not None
+    assert ch_off is not None
+    assert ch_ext is not None
+    assert off.attrib == {"x": str(px_to_emu(10)), "y": str(px_to_emu(15))}
+    assert ext.attrib == {"cx": str(px_to_emu(20)), "cy": str(px_to_emu(12))}
+    assert ch_off.attrib == {"x": str(px_to_emu(10)), "y": str(px_to_emu(15))}
+    assert ch_ext.attrib == {"cx": str(px_to_emu(20)), "cy": str(px_to_emu(12))}
 
 
 def test_render_shapes_returns_flattened_group_fragments() -> None:

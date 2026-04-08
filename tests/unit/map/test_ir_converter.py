@@ -127,6 +127,20 @@ def _convert_fixture_with_resvg(name: str) -> IRScene:
     )
 
 
+def test_scene_metadata_preserves_source_path() -> None:
+    svg = "<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10'><rect width='10' height='10'/></svg>"
+    parser = SVGParser(ParserConfig())
+    result = parser.parse(
+        svg,
+        source_path="/tmp/project/tests/svg/sample.svg",
+    )
+
+    scene = convert_parser_output(result)
+
+    assert scene.metadata is not None
+    assert scene.metadata["source_path"] == "/tmp/project/tests/svg/sample.svg"
+
+
 def _iter_scene_elements(element: object):
     if isinstance(element, Group):
         yield element
@@ -1088,14 +1102,18 @@ def test_grouped_dot_pattern_stays_native() -> None:
         "           patternTransform='translate(12,4)'>"
         "    <g transform='translate(-12,-4)'>"
         "      <rect width='8' height='7' style='fill:none;stroke:none'/>"
-        "      <path sodipodi:type='arc' style='fill:#000000;stroke:none' "
-        "            d='M 10,10 A 3,3 0 1 1 10,9.99'/>"
-        "      <path sodipodi:type='arc' style='fill:#000000;stroke:none' "
-        "            d='M 10,10 A 3,3 0 1 1 10,9.99' transform='translate(4,0)'/>"
-        "      <path sodipodi:type='arc' style='fill:#000000;stroke:none' "
-        "            d='M 10,10 A 3,3 0 1 1 10,9.99' transform='translate(0,3)'/>"
-        "      <path sodipodi:type='arc' style='fill:#000000;stroke:none' "
-        "            d='M 10,10 A 3,3 0 1 1 10,9.99' transform='translate(4,3)'/>"
+        "      <path sodipodi:type='arc' sodipodi:cx='14' sodipodi:cy='5' "
+        "            sodipodi:rx='1' sodipodi:ry='1' style='fill:#000000;stroke:none' "
+        "            d='M 15,5 A 1,1 0 1 1 15,4.99'/>"
+        "      <path sodipodi:type='arc' sodipodi:cx='14' sodipodi:cy='5' "
+        "            sodipodi:rx='1' sodipodi:ry='1' style='fill:#000000;stroke:none' "
+        "            d='M 15,5 A 1,1 0 1 1 15,4.99' transform='translate(4,0)'/>"
+        "      <path sodipodi:type='arc' sodipodi:cx='14' sodipodi:cy='5' "
+        "            sodipodi:rx='1' sodipodi:ry='1' style='fill:#000000;stroke:none' "
+        "            d='M 15,5 A 1,1 0 1 1 15,4.99' transform='translate(0,3)'/>"
+        "      <path sodipodi:type='arc' sodipodi:cx='14' sodipodi:cy='5' "
+        "            sodipodi:rx='1' sodipodi:ry='1' style='fill:#000000;stroke:none' "
+        "            d='M 15,5 A 1,1 0 1 1 15,4.99' transform='translate(4,3)'/>"
         "    </g>"
         "  </pattern>"
         "</defs>"
@@ -1123,7 +1141,7 @@ def test_grouped_dot_pattern_stays_native() -> None:
     assert analysis["preset_candidate"] is not None
 
 
-def test_grouped_dot_pattern_on_path_uses_fallback() -> None:
+def test_grouped_dot_pattern_on_path_stays_native_with_tile() -> None:
     svg = (
         "<svg width='50' height='50' xmlns='http://www.w3.org/2000/svg' "
         "xmlns:sodipodi='http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd'>"
@@ -1132,14 +1150,18 @@ def test_grouped_dot_pattern_on_path_uses_fallback() -> None:
         "           patternTransform='translate(12,4)'>"
         "    <g transform='translate(-12,-4)'>"
         "      <rect width='8' height='7' style='fill:none;stroke:none'/>"
-        "      <path sodipodi:type='arc' style='fill:#000000;stroke:none' "
-        "            d='M 10,10 A 3,3 0 1 1 10,9.99'/>"
-        "      <path sodipodi:type='arc' style='fill:#000000;stroke:none' "
-        "            d='M 10,10 A 3,3 0 1 1 10,9.99' transform='translate(4,0)'/>"
-        "      <path sodipodi:type='arc' style='fill:#000000;stroke:none' "
-        "            d='M 10,10 A 3,3 0 1 1 10,9.99' transform='translate(0,3)'/>"
-        "      <path sodipodi:type='arc' style='fill:#000000;stroke:none' "
-        "            d='M 10,10 A 3,3 0 1 1 10,9.99' transform='translate(4,3)'/>"
+        "      <path sodipodi:type='arc' sodipodi:cx='14' sodipodi:cy='5' "
+        "            sodipodi:rx='1' sodipodi:ry='1' style='fill:#000000;stroke:none' "
+        "            d='M 15,5 A 1,1 0 1 1 15,4.99'/>"
+        "      <path sodipodi:type='arc' sodipodi:cx='14' sodipodi:cy='5' "
+        "            sodipodi:rx='1' sodipodi:ry='1' style='fill:#000000;stroke:none' "
+        "            d='M 15,5 A 1,1 0 1 1 15,4.99' transform='translate(4,0)'/>"
+        "      <path sodipodi:type='arc' sodipodi:cx='14' sodipodi:cy='5' "
+        "            sodipodi:rx='1' sodipodi:ry='1' style='fill:#000000;stroke:none' "
+        "            d='M 15,5 A 1,1 0 1 1 15,4.99' transform='translate(0,3)'/>"
+        "      <path sodipodi:type='arc' sodipodi:cx='14' sodipodi:cy='5' "
+        "            sodipodi:rx='1' sodipodi:ry='1' style='fill:#000000;stroke:none' "
+        "            d='M 15,5 A 1,1 0 1 1 15,4.99' transform='translate(4,3)'/>"
         "    </g>"
         "  </pattern>"
         "</defs>"
@@ -1151,8 +1173,10 @@ def test_grouped_dot_pattern_on_path_uses_fallback() -> None:
     scene = _convert_with_resvg(parse_result)
 
     element = scene.elements[0]
-    assert isinstance(element, Image)
-    assert element.format in {"emf", "png"}
+    assert isinstance(element, Path)
+    assert isinstance(element.fill, PatternPaint)
+    assert element.fill.tile_image is not None
+    assert element.fill.tile_image.startswith(b"\x89PNG")
     assert (
         element.metadata.get("paint_analysis", {})
         .get("fill", {})
@@ -1160,9 +1184,33 @@ def test_grouped_dot_pattern_on_path_uses_fallback() -> None:
         .get("type")
         == "dots"
     )
-    assert element.metadata.get("policy", {}).get("geometry", {}).get(
-        "suggest_fallback"
-    ) in {FALLBACK_EMF, FALLBACK_BITMAP}
+    assert (
+        element.metadata.get("policy", {}).get("geometry", {}).get(
+            "suggest_fallback"
+        )
+        is None
+    )
+
+
+def test_gallardo_driver_side_pattern_paths_stay_native() -> None:
+    scene = _convert_fixture_with_resvg("gallardo.svg")
+    target_ids = {"path26665", "path27636", "path29576", "path23756"}
+    seen: set[str] = set()
+
+    for element in scene.elements:
+        for node in _iter_scene_elements(element):
+            ids = set(_element_ids(node))
+            matches = ids & target_ids
+            if not matches:
+                continue
+            seen.update(matches)
+            assert not isinstance(node, Image)
+            assert isinstance(node, Path)
+            assert isinstance(node.fill, PatternPaint)
+            assert node.fill.tile_image is not None
+            assert node.fill.tile_image.startswith(b"\x89PNG")
+
+    assert seen == target_ids
 
 
 def test_polygon_respects_geometry_policy(monkeypatch):

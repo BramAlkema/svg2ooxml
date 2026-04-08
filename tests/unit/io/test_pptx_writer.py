@@ -22,7 +22,7 @@ from svg2ooxml.io.pptx_assembly import PPTXPackageBuilder
 from svg2ooxml.io.pptx_writer import StreamingPackageWriter
 from svg2ooxml.ir.effects import CustomEffect
 from svg2ooxml.ir.geometry import Point, Rect
-from svg2ooxml.ir.paint import SolidPaint
+from svg2ooxml.ir.paint import PatternPaint, SolidPaint
 from svg2ooxml.ir.shapes import Rectangle
 from svg2ooxml.ir.text import EmbeddedFontPlan, Run, TextAnchor, TextFrame
 from svg2ooxml.services.fonts.eot import build_eot
@@ -232,6 +232,45 @@ def test_pptx_builder_supports_multiple_slides() -> None:
 
             content_types = archive.read("[Content_Types].xml").decode("utf-8")
             assert 'PartName="/ppt/slides/slide2.xml"' in content_types
+
+
+def test_pptx_builder_reuses_pattern_tile_relationship_on_slide() -> None:
+    builder = PPTXPackageBuilder()
+    tile_data = b"\x89PNG\r\n\x1a\n" + b"\x00" * 50
+    paint = PatternPaint(
+        pattern_id="tile_pat_shared",
+        tile_image=tile_data,
+        tile_width_px=8,
+        tile_height_px=8,
+    )
+    scene = IRScene(
+        elements=[
+            Rectangle(bounds=Rect(0, 0, 40, 40), fill=paint),
+            Rectangle(bounds=Rect(50, 0, 40, 40), fill=paint),
+        ],
+        width_px=120,
+        height_px=60,
+    )
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        output = Path(tmpdir) / "pattern_tile_reuse.pptx"
+        builder.build(scene, output)
+
+        with zipfile.ZipFile(output, "r") as archive:
+            slide_xml = archive.read("ppt/slides/slide1.xml").decode("utf-8")
+            rels_xml = archive.read("ppt/slides/_rels/slide1.xml.rels")
+            rels_root = ET.fromstring(rels_xml)
+            rels = rels_root.findall('{http://schemas.openxmlformats.org/package/2006/relationships}Relationship')
+            image_rels = [
+                rel
+                for rel in rels
+                if rel.get("Type") == "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image"
+            ]
+
+            assert len(image_rels) == 1
+            assert image_rels[0].get("Id") == "rIdMedia1"
+            assert image_rels[0].get("Target") == "../media/image1.png"
+            assert slide_xml.count('r:embed="rIdMedia1"') == 2
 
 
 # ------------------------------------------------------------------
