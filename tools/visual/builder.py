@@ -98,7 +98,11 @@ class PptxBuilder:
             setattr(services, "viewport_height", parse_result.height_px)
 
         scene = convert_parser_output(parse_result, services=services, tracer=tracer)
-        render_result = self._writer.render_scene_from_ir(scene, animations=animations) # Pass animations here
+        render_result = self._writer.render_scene_from_ir(
+            scene,
+            tracer=tracer,
+            animations=animations,
+        )
 
         pptx_path = self._builder.build_from_results(
             [render_result],

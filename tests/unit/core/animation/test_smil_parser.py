@@ -114,6 +114,27 @@ def test_parse_begin_event_triggers() -> None:
     assert animation.timing.begin_triggers[1].target_element_id is None
 
 
+def test_parse_animation_id_is_preserved_for_begin_references() -> None:
+    parser = SMILParser()
+    svg = _parse(
+        """
+        <svg xmlns="http://www.w3.org/2000/svg">
+          <rect id="shape">
+            <animate id="grow" attributeName="width" values="10;20" dur="1s" begin="0s" />
+            <animate attributeName="opacity" values="0;1" begin="grow.end" dur="1s" />
+          </rect>
+        </svg>
+        """
+    )
+
+    animations = parser.parse_svg_animations(svg)
+
+    assert len(animations) == 2
+    assert animations[0].animation_id == "grow"
+    assert animations[1].timing.begin_triggers is not None
+    assert animations[1].timing.begin_triggers[0].target_element_id == "grow"
+
+
 def test_parse_invalid_begin_expression_adds_warning_and_falls_back() -> None:
     parser = SMILParser()
     svg = _parse(

@@ -16,7 +16,12 @@ from lxml import etree
 
 from svg2ooxml.common.units import UnitConverter
 from svg2ooxml.drawingml.xml_builder import to_string
-from svg2ooxml.ir.animation import AnimationDefinition, AnimationScene
+from svg2ooxml.ir.animation import (
+    AnimationDefinition,
+    AnimationScene,
+    AnimationType,
+    TransformType,
+)
 
 from .handlers import (
     AnimationHandler,
@@ -204,7 +209,7 @@ class DrawingMLAnimationWriter:
 
         handler = self._find_handler(animation)
         if handler is None:
-            return None, {"reason": "no_handler_found"}
+            return None, {"reason": self._unsupported_reason(animation)}
 
         try:
             result = handler.build(animation, par_id, behavior_id)
@@ -213,6 +218,18 @@ class DrawingMLAnimationWriter:
             return result, None
         except Exception as e:
             return None, {"reason": f"handler_error: {str(e)}"}
+
+    @staticmethod
+    def _unsupported_reason(animation: AnimationDefinition) -> str:
+        """Return a stable reason code for animations with no registered handler."""
+        if (
+            animation.animation_type == AnimationType.ANIMATE_TRANSFORM
+            and animation.transform_type in {TransformType.SKEWX, TransformType.SKEWY}
+        ):
+            return f"unsupported_transform_{animation.transform_type.value.lower()}"
+        if animation.target_attribute == "color":
+            return "unsupported_attribute_color"
+        return "no_handler_found"
 
     @staticmethod
     def _bake_accumulate(animation: AnimationDefinition) -> AnimationDefinition:

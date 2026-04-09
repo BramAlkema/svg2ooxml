@@ -190,6 +190,7 @@ class SMILParser:
             target_attribute=target_attribute,
             values=values,
             timing=timing,
+            animation_id=element.get("id"),
             key_times=key_times,
             key_splines=key_splines,
             calc_mode=calc_mode,

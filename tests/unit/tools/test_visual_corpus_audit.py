@@ -153,6 +153,9 @@ def test_render_markdown_summary_includes_animation_columns() -> None:
         diff_status="ok",
         animation_status="mismatch",
         animation_min_ssim=0.8123,
+        animation_emitted_count=3,
+        animation_skipped_count=1,
+        animation_reason_counts={"unsupported_begin_target_missing": 1},
         score=42.0,
     )
 
@@ -160,8 +163,47 @@ def test_render_markdown_summary_includes_animation_columns() -> None:
     summary = build_summary([item])
 
     assert "| Anim |" in markdown
+    assert "| Reason | Count |" in markdown
+    assert "unsupported_begin_target_missing" in markdown
+    assert "3/1" in markdown
     assert "0.8123" in markdown
     assert summary["animation_mismatches"] == 1
+    assert summary["animation_fragments_emitted"] == 3
+    assert summary["animation_fragments_skipped"] == 1
+    assert summary["animation_reason_totals"] == {"unsupported_begin_target_missing": 1}
+
+
+def test_build_summary_aggregates_animation_reason_totals() -> None:
+    first = AuditResult(
+        svg_path="one.svg",
+        artifact_dir="out/one",
+        animation_reason_counts={
+            "unsupported_begin_target_missing": 2,
+            "timing_skipped": 1,
+        },
+        animation_emitted_count=4,
+        animation_skipped_count=2,
+    )
+    second = AuditResult(
+        svg_path="two.svg",
+        artifact_dir="out/two",
+        animation_reason_counts={
+            "unsupported_begin_target_missing": 1,
+            "begin_expression_invalid": 3,
+        },
+        animation_emitted_count=1,
+        animation_skipped_count=1,
+    )
+
+    summary = build_summary([first, second])
+
+    assert summary["animation_fragments_emitted"] == 5
+    assert summary["animation_fragments_skipped"] == 3
+    assert summary["animation_reason_totals"] == {
+        "begin_expression_invalid": 3,
+        "unsupported_begin_target_missing": 3,
+        "timing_skipped": 1,
+    }
 
 
 def test_svg_has_animation_detects_smil_tags() -> None:

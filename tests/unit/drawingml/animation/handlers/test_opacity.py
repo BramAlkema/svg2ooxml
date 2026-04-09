@@ -117,26 +117,33 @@ class TestBuild:
         anim_effect = par.find(f".//{{{NS_P}}}animEffect")
         assert anim_effect.get("transition") == "in"
 
-    def test_fade_opacity_value(self, handler: OpacityAnimationHandler):
+    def test_partial_fade_uses_property_animation(self, handler: OpacityAnimationHandler):
         anim = make_opacity_animation(values=["0", "0.75"])
-        par = handler.build(anim, par_id=4, behavior_id=5)
-        anim_effect = par.find(f".//{{{NS_P}}}animEffect")
-        assert "75000" in anim_effect.get("filter")
-
-    def test_fade_in(self, handler: OpacityAnimationHandler):
-        anim = make_opacity_animation(values=["0", "1"])
-        par = handler.build(anim, par_id=4, behavior_id=5)
-        anim_effect = par.find(f".//{{{NS_P}}}animEffect")
-        assert "100000" in anim_effect.get("filter")
-
-    def test_fade_out(self, handler: OpacityAnimationHandler):
-        anim = make_opacity_animation(values=["1", "0"])
         par = handler.build(anim, par_id=4, behavior_id=5)
         assert par.find(f".//{{{NS_P}}}animEffect") is None
         anim_elem = par.find(f".//{{{NS_P}}}anim")
         assert anim_elem is not None
         attr_name = par.find(f".//{{{NS_P}}}attrName")
+        assert attr_name is not None
         assert attr_name.text == "style.opacity"
+
+    def test_fade_in(self, handler: OpacityAnimationHandler):
+        anim = make_opacity_animation(values=["0", "1"])
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        anim_effect = par.find(f".//{{{NS_P}}}animEffect")
+        assert anim_effect.get("filter") == "fade"
+
+    def test_fade_out(self, handler: OpacityAnimationHandler):
+        anim = make_opacity_animation(values=["1", "0"])
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        anim_effect = par.find(f".//{{{NS_P}}}animEffect")
+        assert anim_effect is not None
+        assert anim_effect.get("transition") == "out"
+        assert anim_effect.get("filter") == "fade"
+        assert par.find(f".//{{{NS_P}}}anim") is None
+        ctn = par.find(f"{{{NS_P}}}cTn")
+        assert ctn is not None
+        assert ctn.get("presetClass") == "exit"
 
     def test_delay_from_begin(self, handler: OpacityAnimationHandler):
         anim = make_opacity_animation(
@@ -179,7 +186,7 @@ class TestBuild:
         anim_effect = par.find(f".//{{{NS_P}}}animEffect")
         assert anim_effect is not None
         assert anim_effect.get("filter") == "image"
-        assert anim_effect.get("prLst") == "opacity: 0.1"
+        assert anim_effect.get("prLst") == "opacity: 1"
         assert par.find(f".//{{{NS_P}}}anim") is None
         set_elem = par.find(f".//{{{NS_P}}}set")
         assert set_elem is not None
@@ -188,11 +195,14 @@ class TestBuild:
         assert str_val.get("val") == "0.1"
         ctn = par.find(f"{{{NS_P}}}cTn")
         assert ctn is not None
-        assert ctn.get("autoRev") == "1"
         assert ctn.get("presetSubtype") == "0"
+        assert ctn.get("autoRev") is None
         effect_cbhvr = anim_effect.find(f"{{{NS_P}}}cBhvr")
         assert effect_cbhvr is not None
         assert effect_cbhvr.get("rctx") == "IE"
+        effect_ctn = effect_cbhvr.find(f"{{{NS_P}}}cTn")
+        assert effect_ctn is not None
+        assert effect_ctn.get("autoRev") == "1"
 
     def test_repeat_opacity_uses_property_animation(
         self, handler: OpacityAnimationHandler

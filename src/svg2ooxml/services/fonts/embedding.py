@@ -389,9 +389,9 @@ class FontEmbeddingEngine:
             for glyph_name in (".notdef", ".null", "nonmarkingreturn"):
                 try:
                     if selected_any:
-                        selection.select(("more", "glyphs"), glyph_name)
+                        selection.select(("more",), glyph_name)
                     else:
-                        selection.select(("glyphs",), glyph_name)
+                        selection.select(glyph_name)
                         selected_any = True
                 except Exception:
                     continue
@@ -442,9 +442,9 @@ class FontEmbeddingEngine:
                         continue
                 try:
                     if selected_any:
-                        selection.select(("more", "glyphs"), glyph.glyphname)
+                        selection.select(("more",), glyph.glyphname)
                     else:
-                        selection.select(("glyphs",), glyph.glyphname)
+                        selection.select(glyph.glyphname)
                         selected_any = True
                     break
                 except Exception:
@@ -478,9 +478,9 @@ class FontEmbeddingEngine:
                     continue
                 try:
                     if selected_any:
-                        selection.select(("more", "glyphs"), glyph.glyphname)
+                        selection.select(("more",), glyph.glyphname)
                     else:
-                        selection.select(("glyphs",), glyph.glyphname)
+                        selection.select(glyph.glyphname)
                         selected_any = True
                     break
                 except Exception:

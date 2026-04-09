@@ -1220,10 +1220,15 @@ def capture_live_animation(
         if not win_id:
             raise RuntimeError("No slideshow window detected after slideshow start.")
         start_time = time.time()
-        frame_idx = 0
         interval = 1.0 / fps
+        frame_count = max(1, int(duration * fps)) if duration > 0 else 1
 
-        while (time.time() - start_time) < duration:
+        for frame_idx in range(frame_count):
+            target_elapsed = frame_idx * interval
+            now = time.time()
+            wait = target_elapsed - (now - start_time)
+            if wait > 0:
+                time.sleep(wait)
             frame_path = output_dir / f"frame_{frame_idx:04d}.png"
             if win_id:
                 try:
@@ -1249,14 +1254,6 @@ def capture_live_animation(
                     timeout=capture_timeout,
                 )
             captured_files.append(frame_path)
-            frame_idx += 1
-
-            # Simple pacing
-            elapsed = time.time() - start_time
-            next_shot = frame_idx * interval
-            wait = next_shot - elapsed
-            if wait > 0:
-                time.sleep(wait)
     except Exception as exc:
         _raise_with_powerpoint_diagnostics(
             reason="live_capture_failed",

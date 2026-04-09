@@ -293,6 +293,60 @@ class AnimationXMLBuilder:
 
         return par
 
+    def build_par_container_with_children_elem(
+        self,
+        *,
+        par_id: int,
+        duration_ms: int,
+        delay_ms: int,
+        child_elements: list[etree._Element],
+        preset_id: int | None = None,
+        preset_class: str | None = None,
+        preset_subtype: int | None = None,
+        node_type: str = "withEffect",
+        begin_triggers: list[BeginTrigger] | None = None,
+        default_target_shape: str | None = None,
+        auto_reverse: bool = False,
+        effect_group_id: int | str | None = None,
+    ) -> etree._Element:
+        """Build ``<p:par>`` containing multiple child timing elements."""
+        par = p_elem("par")
+
+        ctn_attrs: dict[str, str] = {
+            "id": str(par_id),
+            "dur": str(duration_ms),
+            "fill": "hold",
+            "nodeType": node_type,
+            "grpId": (str(effect_group_id) if effect_group_id is not None else "0"),
+        }
+        if preset_id:
+            ctn_attrs["presetID"] = str(preset_id)
+        if preset_class:
+            ctn_attrs["presetClass"] = preset_class
+        if preset_subtype is not None and preset_id:
+            ctn_attrs["presetSubtype"] = str(preset_subtype)
+        if auto_reverse:
+            ctn_attrs["autoRev"] = "1"
+
+        ctn = p_sub(par, "cTn", **ctn_attrs)
+
+        st_cond_lst = p_sub(ctn, "stCondLst")
+        if begin_triggers:
+            self._append_begin_conditions(
+                st_cond_lst=st_cond_lst,
+                begin_triggers=begin_triggers,
+                fallback_delay_ms=delay_ms,
+                default_target_shape=default_target_shape,
+            )
+        else:
+            p_sub(st_cond_lst, "cond", delay=str(delay_ms))
+
+        child_tn_lst = p_sub(ctn, "childTnLst")
+        for child_element in child_elements:
+            child_tn_lst.append(child_element)
+
+        return par
+
     def _append_begin_conditions(
         self,
         *,

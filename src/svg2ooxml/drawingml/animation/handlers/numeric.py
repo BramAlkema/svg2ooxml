@@ -119,14 +119,29 @@ class NumericAnimationHandler(AnimationHandler):
         animScale.append(cBhvr)
         p_sub(animScale, "from", x=str(from_x), y=str(from_y))
         p_sub(animScale, "to", x=str(to_x), y=str(to_y))
+        child_elements = [animScale]
+        anchor_motion = self._build_scale_anchor_motion(
+            ppt_attribute=ppt_attribute,
+            start_value=from_val,
+            end_value=to_val,
+            behavior_id=behavior_id * 10 + 1,
+            target_shape=animation.element_id,
+            duration_ms=animation.duration_ms,
+            fill_mode=animation.fill_mode,
+            repeat_count=animation.repeat_count,
+        )
+        if anchor_motion is not None:
+            child_elements.append(anchor_motion)
 
-        return self._xml.build_par_container_elem(
+        return self._xml.build_par_container_with_children_elem(
             par_id=par_id,
             duration_ms=animation.duration_ms,
             delay_ms=animation.begin_ms,
-            child_element=animScale,
+            child_elements=child_elements,
             preset_id=6,  # Grow emphasis
             preset_class="emph",
+            preset_subtype=0,
+            node_type="clickEffect",
             begin_triggers=animation.begin_triggers,
             default_target_shape=animation.element_id,
             effect_group_id=par_id,
@@ -145,49 +160,51 @@ class NumericAnimationHandler(AnimationHandler):
         peak_val = float(self._normalize_value(ppt_attribute, values[1]))
 
         half_duration_ms = max(1, int(round(animation.duration_ms / 2.0)))
-        by_x, by_y = self._scale_by_pair(
+        baseline = self._scale_baseline(start_val, peak_val)
+        from_x, from_y = self._scale_pair(ppt_attribute, start_val, baseline)
+        to_x, to_y = self._scale_pair(ppt_attribute, peak_val, baseline)
+
+        anim_scale = p_elem("animScale")
+        c_bhvr = self._xml.build_behavior_core_elem(
+            behavior_id=behavior_id,
+            duration_ms=half_duration_ms,
+            target_shape=animation.element_id,
+            repeat_count=animation.repeat_count,
+            fill_mode="remove",
+            attr_name_list=["ScaleX", "ScaleY"],
+            auto_reverse=True,
+        )
+        anim_scale.append(c_bhvr)
+        p_sub(anim_scale, "from", x=str(from_x), y=str(from_y))
+        p_sub(anim_scale, "to", x=str(to_x), y=str(to_y))
+        child_elements = [anim_scale]
+        anchor_motion = self._build_scale_anchor_motion(
             ppt_attribute=ppt_attribute,
             start_value=start_val,
-            peak_value=peak_val,
+            end_value=peak_val,
+            behavior_id=behavior_id * 10 + 1,
+            target_shape=animation.element_id,
+            duration_ms=half_duration_ms,
+            fill_mode="remove",
+            repeat_count=animation.repeat_count,
+            auto_reverse=True,
         )
+        if anchor_motion is not None:
+            child_elements.append(anchor_motion)
 
-        outer_par = p_elem("par")
-        outer_ctn = p_sub(
-            outer_par,
-            "cTn",
-            id=str(par_id),
-            fill="hold",
-            nodeType="clickEffect",
-            grpId=str(par_id),
-            presetID="6",
-            presetClass="emph",
-            presetSubtype="0",
-            autoRev="1",
+        return self._xml.build_par_container_with_children_elem(
+            par_id=par_id,
+            duration_ms=animation.duration_ms,
+            delay_ms=animation.begin_ms,
+            child_elements=child_elements,
+            preset_id=6,
+            preset_class="emph",
+            preset_subtype=0,
+            node_type="clickEffect",
+            begin_triggers=animation.begin_triggers,
+            default_target_shape=animation.element_id,
+            effect_group_id=par_id,
         )
-        self._apply_repeat_count(outer_ctn, animation.repeat_count)
-
-        st_cond_lst = p_sub(outer_ctn, "stCondLst")
-        if animation.begin_triggers:
-            self._xml._append_begin_conditions(
-                st_cond_lst=st_cond_lst,
-                begin_triggers=animation.begin_triggers,
-                fallback_delay_ms=animation.begin_ms,
-                default_target_shape=animation.element_id,
-            )
-        else:
-            p_sub(st_cond_lst, "cond", delay=str(animation.begin_ms))
-
-        child_tn_lst = p_sub(outer_ctn, "childTnLst")
-        anim_scale = p_sub(child_tn_lst, "animScale")
-        c_bhvr = p_sub(anim_scale, "cBhvr")
-        p_sub(
-            c_bhvr, "cTn", id=str(behavior_id), dur=str(half_duration_ms), fill="hold"
-        )
-        tgt_el = p_sub(c_bhvr, "tgtEl")
-        p_sub(tgt_el, "spTgt", spid=animation.element_id)
-        p_sub(anim_scale, "by", x=str(by_x), y=str(by_y))
-
-        return outer_par
 
     def _build_position_animation(
         self,
@@ -332,38 +349,57 @@ class NumericAnimationHandler(AnimationHandler):
         y_pct = scale_pct if is_height else 100000
         return (x_pct, y_pct)
 
-    @classmethod
-    def _scale_by_pair(
-        cls,
+    def _build_scale_anchor_motion(
+        self,
         *,
         ppt_attribute: str,
         start_value: float,
-        peak_value: float,
-    ) -> tuple[int, int]:
-        baseline = cls._scale_baseline(start_value, peak_value)
-        start_x, start_y = cls._scale_pair(ppt_attribute, start_value, baseline)
-        peak_x, peak_y = cls._scale_pair(ppt_attribute, peak_value, baseline)
-        return (peak_x - start_x, peak_y - start_y)
-
-    @staticmethod
-    def _apply_repeat_count(
-        ctn: etree._Element,
+        end_value: float,
+        behavior_id: int,
+        target_shape: str,
+        duration_ms: int,
+        fill_mode: str | None,
         repeat_count: int | str | None,
-    ) -> None:
-        if repeat_count == "indefinite":
-            ctn.set("repeatCount", "indefinite")
-            return
+        auto_reverse: bool = False,
+    ) -> etree._Element | None:
+        """Compensate for PowerPoint scaling around shape center.
 
-        if repeat_count is None:
-            return
+        SVG width/height changes grow from the shape's top-left origin, while
+        PowerPoint animScale grows from the center. Pair a matching motion
+        effect with scale so the anchored edge stays in place.
+        """
+        is_width = ppt_attribute in ("ppt_w", "width", "w")
+        is_height = ppt_attribute in ("ppt_h", "height", "h")
+        if not is_width and not is_height:
+            return None
 
-        try:
-            count = int(repeat_count)
-        except (TypeError, ValueError):
-            return
+        delta = (end_value - start_value) / 2.0
+        if abs(delta) <= 1e-6:
+            return None
 
-        if count > 1:
-            ctn.set("repeatCount", str(count * 1000))
+        if is_width:
+            slide_dim = 9144000
+            dx_rel = delta / slide_dim
+            path = f"M 0 0 L {dx_rel:.6f} 0 E"
+        else:
+            slide_dim = 6858000
+            dy_rel = delta / slide_dim
+            path = f"M 0 0 L 0 {dy_rel:.6f} E"
+
+        anim_motion = p_elem("animMotion")
+        anim_motion.set("origin", "layout")
+        anim_motion.set("path", path)
+        anim_motion.set("pathEditMode", "relative")
+        c_bhvr = self._xml.build_behavior_core_elem(
+            behavior_id=behavior_id,
+            duration_ms=duration_ms,
+            target_shape=target_shape,
+            fill_mode=fill_mode,
+            repeat_count=repeat_count,
+            auto_reverse=auto_reverse,
+        )
+        anim_motion.append(c_bhvr)
+        return anim_motion
 
     def _build_wipe_entrance(
         self,

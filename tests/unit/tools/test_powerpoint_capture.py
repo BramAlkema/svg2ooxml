@@ -578,7 +578,7 @@ def test_capture_live_animation_cleans_up_and_recovers_window_id(
     monkeypatch,
 ) -> None:
     calls: list[str] = []
-    time_values = iter([100.0, 100.0, 100.2, 100.5, 100.55, 100.9])
+    time_values = iter([100.0, 100.0, 100.2, 100.5])
     window_ids = iter(["123", "456"])
     staged_path = tmp_path / "stage" / "presentation.pptx"
 
@@ -646,7 +646,7 @@ def test_capture_live_animation_cleans_up_and_recovers_window_id(
 
     assert calls[:4] == ["prompt", "stage:sample.pptx", "cleanup", "start:presentation.pptx"]
     assert calls[-2:] == ["exit", "close:presentation.pptx"]
-    assert [frame.name for frame in frames] == ["frame_0000.png", "frame_0001.png"]
+    assert [frame.name for frame in frames] == ["frame_0000.png"]
     assert "capture:456:auto" in calls
 
 

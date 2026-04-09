@@ -187,9 +187,11 @@ class BrowserSvgRenderer:
         output_dir = Path(output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
         width, height = _extract_dimensions(svg_text)
-        svg_src, temp_svg_path = _resolve_svg_src(svg_text, source_path=source_path)
-        html = _wrap_svg(
-            svg_src, width=width, height=height, background=self._background
+        inline_svg, temp_svg_path = _resolve_inline_svg_markup(
+            svg_text, source_path=source_path
+        )
+        html = _wrap_inline_svg(
+            inline_svg, width=width, height=height, background=self._background
         )
         html_path: Path | None = None
         captured: list[Path] = []
@@ -215,17 +217,14 @@ class BrowserSvgRenderer:
                         suffix=".html",
                         delete=False,
                         encoding="utf-8",
+                        dir=Path(source_path).resolve().parent,
                     ) as handle:
                         handle.write(html)
                         html_path = Path(handle.name)
                     page.goto(html_path.as_uri(), wait_until="load")
                 else:
                     page.set_content(html, wait_until="load")
-                page.wait_for_function(
-                    "document.images.length > 0 && "
-                    "document.images[0].complete && "
-                    "document.images[0].naturalWidth > 0"
-                )
+                page.wait_for_function("document.querySelector('svg') !== null")
                 if start_delay > 0:
                     page.wait_for_timeout(int(start_delay * 1000))
 
@@ -312,6 +311,24 @@ def _resolve_svg_src(
     return svg_src, temp_svg_path
 
 
+def _resolve_inline_svg_markup(
+    svg_text: str,
+    *,
+    source_path: Path | str | None,
+) -> tuple[str, Path | None]:
+    if source_path is not None:
+        svg_path = Path(source_path)
+        if not svg_path.exists():
+            raise BrowserRenderError(f"SVG source path not found: {svg_path}")
+        if not svg_path.is_file():
+            raise BrowserRenderError(f"SVG source path is not a file: {svg_path}")
+        source_text = svg_path.read_text(encoding="utf-8")
+    else:
+        source_text = svg_text
+    prepared = _prepare_browser_source_text(source_text)
+    return _strip_xml_prolog(prepared), None
+
+
 def _prepare_browser_source_text(source_text: str) -> str:
     from lxml import etree as ET
 
@@ -325,6 +342,12 @@ def _prepare_browser_source_text(source_text: str) -> str:
         if root is None:
             return rewritten
         return ET.tostring(root, encoding="unicode")
+
+
+def _strip_xml_prolog(svg_text: str) -> str:
+    stripped = re.sub(r"^\s*<\?xml[^>]*\?>\s*", "", svg_text, count=1)
+    stripped = re.sub(r"^\s*<!DOCTYPE[^>]*>\s*", "", stripped, count=1)
+    return stripped
 
 
 def _frame_timestamps(duration: float, fps: float) -> list[float]:
@@ -429,6 +452,40 @@ def _wrap_svg(svg_src: str, *, width: int, height: int, background: str | None) 
   </head>
   <body>
     <img alt="svg" src="{svg_src}" />
+  </body>
+</html>
+"""
+
+
+def _wrap_inline_svg(
+    svg_markup: str,
+    *,
+    width: int,
+    height: int,
+    background: str | None,
+) -> str:
+    background_value = background or "transparent"
+    return f"""<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      html, body {{
+        margin: 0;
+        padding: 0;
+        width: {width}px;
+        height: {height}px;
+        background: {background_value};
+      }}
+      svg {{
+        display: block;
+        width: {width}px;
+        height: {height}px;
+      }}
+    </style>
+  </head>
+  <body>
+    {svg_markup}
   </body>
 </html>
 """
