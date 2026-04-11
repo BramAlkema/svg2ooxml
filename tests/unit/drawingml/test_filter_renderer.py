@@ -150,3 +150,24 @@ def test_filter_renderer_reads_direct_filter_policy_payload() -> None:
 
     assert len(effects) == 1
     assert effects[0].strategy == "vector"
+
+
+def test_filter_renderer_materializes_raster_placeholder_from_comment_only_fragment() -> None:
+    renderer = FilterRenderer()
+    result = FilterResult(
+        success=True,
+        drawingml="<!-- Intermediate Gaussian blur rendered via raster fallback -->",
+        fallback="bitmap",
+        metadata={"filter_type": "gaussian_blur"},
+    )
+
+    effects = renderer.render([result])
+
+    assert len(effects) == 1
+    effect_result = effects[0]
+    assert effect_result.strategy == "raster"
+    assert "svg2ooxml:raster" in effect_result.effect.drawingml
+    assert "r:embed=" in effect_result.effect.drawingml
+    assets = effect_result.metadata.get("fallback_assets")
+    assert isinstance(assets, list) and assets
+    assert assets[0]["type"] == "raster"

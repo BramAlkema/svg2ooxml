@@ -409,6 +409,10 @@ class FilterPolicyProvider(PolicyProvider):
                 entry["allow_promotion"] = self._coerce_bool(
                     config.get("allow_promotion")
                 )
+            if "allow_group_mimic" in config:
+                entry["allow_group_mimic"] = self._coerce_bool(
+                    config.get("allow_group_mimic")
+                )
             if "max_pixels" in config:
                 max_pixels = self._coerce_int(config.get("max_pixels"))
                 if max_pixels is not None and max_pixels > 0:
@@ -417,6 +421,18 @@ class FilterPolicyProvider(PolicyProvider):
                 coeff = self._coerce_float(config.get("max_arithmetic_coeff"))
                 if coeff is not None and coeff >= 0:
                     entry["max_arithmetic_coeff"] = coeff
+            if "group_blur_strategy" in config:
+                entry["group_blur_strategy"] = self._coerce_blur_strategy(
+                    config.get("group_blur_strategy")
+                )
+            if "radius_scale" in config:
+                scale = self._coerce_float(config.get("radius_scale"))
+                if scale is not None and scale > 0:
+                    entry["radius_scale"] = scale
+            if "group_radius_scale" in config:
+                group_scale = self._coerce_float(config.get("group_radius_scale"))
+                if group_scale is not None and group_scale > 0:
+                    entry["group_radius_scale"] = group_scale
             if "max_offset_distance" in config:
                 distance = self._coerce_float(config.get("max_offset_distance"))
                 if distance is not None and distance >= 0:

@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from io import BytesIO
 from pathlib import Path
 
 from lxml import etree as ET
+from PIL import Image as PILImage
 
 from svg2ooxml.core.ir import IRScene
 from svg2ooxml.core.parser import ParserConfig, SVGParser
@@ -117,6 +119,49 @@ def test_render_path_with_pattern_tile_registers_media() -> None:
     assert "<a:blipFill" in xml
     assert "<a:tile" in xml
     assert len(result.assets.media) == 1
+
+
+def test_render_scene_from_ir_flattens_filter_png_assets_for_powerpoint() -> None:
+    writer = DrawingMLWriter()
+    image = PILImage.new("RGBA", (2, 1), (0, 0, 0, 0))
+    image.putpixel((0, 0), (255, 0, 0, 255))
+    buffer = BytesIO()
+    image.save(buffer, format="PNG")
+    png_bytes = buffer.getvalue()
+
+    rect = Rectangle(
+        bounds=Rect(x=0, y=0, width=10, height=10),
+        fill=SolidPaint("FF0000"),
+        metadata={
+            "policy": {
+                "media": {
+                    "filter_assets": {
+                        "blur": [
+                            {
+                                "type": "raster",
+                                "data": png_bytes,
+                                "relationship_id": "rIdRasterTest",
+                            }
+                        ]
+                    }
+                }
+            },
+            "filters": [{"id": "blur", "fallback": "bitmap"}],
+            "filter_metadata": {
+                "blur": {"bounds": {"x": 0.0, "y": 0.0, "width": 10.0, "height": 10.0}}
+            },
+        },
+    )
+    scene = IRScene(elements=[rect], width_px=20, height_px=20, background_color="FFFFFF")
+
+    result = writer.render_scene_from_ir(scene)
+
+    filter_media = next(
+        asset for asset in result.assets.media if asset.relationship_id == "rIdRasterTest"
+    )
+    flattened = PILImage.open(BytesIO(filter_media.data)).convert("RGBA")
+    assert flattened.getpixel((0, 0)) == (255, 0, 0, 255)
+    assert flattened.getpixel((1, 0)) == (255, 255, 255, 255)
 
 
 def test_render_reuses_identical_pattern_tile_media_on_slide() -> None:
@@ -677,6 +722,41 @@ def test_writer_registers_filter_assets() -> None:
     assert any(item.relationship_id == "rIdCustom" for item in first.assets.media)
     second = writer.render_scene([rect])
     assert "<a:effectLst>" in second.slide_xml
+
+
+def test_leaf_group_with_filter_fallback_renders_single_picture() -> None:
+    writer = DrawingMLWriter()
+    group = Group(
+        children=[
+            Rectangle(bounds=Rect(0, 0, 20, 20), fill=SolidPaint("4472C4")),
+            Rectangle(bounds=Rect(10, 10, 20, 20), fill=SolidPaint("ED7D31")),
+        ],
+        metadata={
+            "filters": [{"id": "blur", "fallback": "bitmap"}],
+            "filter_metadata": {
+                "blur": {"bounds": {"x": 0.0, "y": 0.0, "width": 30.0, "height": 30.0}}
+            },
+            "policy": {
+                "media": {
+                    "filter_assets": {
+                        "blur": [
+                            {
+                                "type": "raster",
+                                "data": b"\x89PNG\r\n\x1a\n",
+                                "relationship_id": "rIdFilterBlur",
+                            }
+                        ]
+                    }
+                }
+            },
+        },
+    )
+
+    result = writer.render_scene([group])
+
+    assert len(result.shape_xml) == 1
+    assert result.shape_xml[0].startswith("<p:pic>")
+    assert 'r:embed="rIdFilterBlur"' in result.slide_xml
 
 
 def test_writer_preserves_effect_dag_custom_effect() -> None:

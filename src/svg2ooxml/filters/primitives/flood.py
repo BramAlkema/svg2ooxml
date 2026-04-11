@@ -54,9 +54,31 @@ class FloodFilter(Filter):
         return FilterResult(success=True, drawingml=drawingml, metadata=metadata)
 
     def _parse_params(self, primitive: etree._Element) -> FloodParams:
-        color = _normalise_color(primitive.get("flood-color"))
-        opacity = max(0.0, min(parse_number(primitive.get("flood-opacity"), default=1.0), 1.0))
+        style_map = self._parse_style(primitive.get("style"))
+        color = _normalise_color(primitive.get("flood-color") or style_map.get("flood-color"))
+        opacity = max(
+            0.0,
+            min(
+                parse_number(
+                    primitive.get("flood-opacity") or style_map.get("flood-opacity"),
+                    default=1.0,
+                ),
+                1.0,
+            ),
+        )
         return FloodParams(color=color, opacity=opacity)
+
+    @staticmethod
+    def _parse_style(value: str | None) -> dict[str, str]:
+        if not value:
+            return {}
+        properties: dict[str, str] = {}
+        for part in value.split(";"):
+            if ":" not in part:
+                continue
+            key, raw = part.split(":", 1)
+            properties[key.strip()] = raw.strip()
+        return properties
 
 
 __all__ = ["FloodFilter"]

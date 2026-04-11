@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+from io import BytesIO
 from collections.abc import Iterable
 from dataclasses import replace
 from pathlib import Path
@@ -11,6 +12,7 @@ from typing import TYPE_CHECKING, Any
 
 from svg2ooxml.core.ir import IRScene
 from svg2ooxml.io.emf import EMFRelationshipManager
+from svg2ooxml.ir.geometry import Rect
 from svg2ooxml.ir.scene import Group, Image, SceneGraph
 from svg2ooxml.ir.shapes import Rectangle
 from svg2ooxml.ir.text import TextFrame
@@ -143,6 +145,7 @@ class DrawingMLWriter:
         self._text_renderer: DrawingMLTextRenderer | None = None
         self._shape_renderer: DrawingMLShapeRenderer | None = None
         self._scene_metadata: dict[str, Any] | None = None
+        self._scene_background_color: str | None = None
         if SKIA_AVAILABLE:  # pragma: no branch
             try:
                 self._rasterizer = Rasterizer()
@@ -285,7 +288,9 @@ class DrawingMLWriter:
             animations=animations,
         )
         prev_scene_metadata = self._scene_metadata
+        prev_scene_background_color = self._scene_background_color
         self._scene_metadata = scene.metadata if isinstance(scene.metadata, dict) else None
+        self._scene_background_color = scene.background_color or "FFFFFF"
         try:
             result = self.render_scene(
                 scene.elements,
@@ -296,6 +301,7 @@ class DrawingMLWriter:
             return result._apply_background(scene.background_color)
         finally:
             self._scene_metadata = prev_scene_metadata
+            self._scene_background_color = prev_scene_background_color
 
     def render_shapes_from_ir(
         self,
@@ -559,12 +565,17 @@ class DrawingMLWriter:
                 if not isinstance(asset, dict):
                     continue
                 data_hex = asset.get("data_hex")
+                raw_data = asset.get("data")
                 if not isinstance(data_hex, str) or not data_hex:
-                    continue
+                    if isinstance(raw_data, (bytes, bytearray)):
+                        binary = bytes(raw_data)
+                    else:
+                        continue
+                else:
+                    binary = bytes.fromhex(data_hex)
 
                 asset_type = asset.get("type")
                 if asset_type == "emf":
-                    binary = bytes.fromhex(data_hex)
                     preferred_id = asset.get("relationship_id")
                     if not isinstance(preferred_id, str) or not preferred_id:
                         preferred_id = None
@@ -610,13 +621,13 @@ class DrawingMLWriter:
 
                 ext = "png"
                 content_type = "image/png"
-                binary = bytes.fromhex(data_hex)
                 rel_id = asset.get("relationship_id")
                 if not isinstance(rel_id, str) or not rel_id:
                     rel_id = f"rId{self._next_media_index}"
                     asset["relationship_id"] = rel_id
                 if rel_id in self._seen_filter_relationships:
                     continue
+                binary = self._flatten_filter_png_for_powerpoint(binary)
                 filename = f"media_{self._next_media_index}.{ext}"
                 self._next_media_index += 1
                 self._assets.add_media(
@@ -635,6 +646,119 @@ class DrawingMLWriter:
                     },
                 )
                 self._seen_filter_relationships.add(rel_id)
+
+    def _flatten_filter_png_for_powerpoint(self, data: bytes) -> bytes:
+        background = (self._scene_background_color or "FFFFFF").lstrip("#").upper()
+        if len(background) != 6:
+            background = "FFFFFF"
+        try:
+            from PIL import Image
+
+            image = Image.open(BytesIO(data)).convert("RGBA")
+        except Exception:
+            return data
+
+        alpha = image.getchannel("A")
+        if alpha.getextrema() == (255, 255):
+            return data
+
+        try:
+            bg_rgb = tuple(int(background[index:index + 2], 16) for index in (0, 2, 4))
+        except ValueError:
+            bg_rgb = (255, 255, 255)
+
+        flattened = Image.new("RGBA", image.size, bg_rgb + (255,))
+        flattened.alpha_composite(image)
+        buffer = BytesIO()
+        flattened.save(buffer, format="PNG")
+        return buffer.getvalue()
+
+    def _render_group_filter_fallback(
+        self,
+        group: Group,
+        shape_id: int,
+        metadata: dict[str, object],
+    ) -> str | None:
+        policy = metadata.get("policy")
+        if not isinstance(policy, dict):
+            return None
+        media_policy = policy.get("media")
+        if not isinstance(media_policy, dict):
+            return None
+        filter_assets = media_policy.get("filter_assets")
+        if not isinstance(filter_assets, dict):
+            return None
+        filters = metadata.get("filters")
+        if not isinstance(filters, list):
+            return None
+        filter_meta = metadata.get("filter_metadata")
+        if not isinstance(filter_meta, dict):
+            filter_meta = {}
+
+        for entry in filters:
+            if not isinstance(entry, dict):
+                continue
+            filter_id = entry.get("id")
+            if not isinstance(filter_id, str) or not filter_id:
+                continue
+            fallback = entry.get("fallback")
+            fallback = fallback.lower() if isinstance(fallback, str) else None
+            if fallback not in {"bitmap", "raster", "emf", "vector"}:
+                continue
+            assets = filter_assets.get(filter_id)
+            if not isinstance(assets, list):
+                continue
+            asset_type = "emf" if fallback in {"emf", "vector"} else "raster"
+            asset = next(
+                (
+                    item
+                    for item in assets
+                    if isinstance(item, dict)
+                    and item.get("type") == asset_type
+                    and isinstance(item.get("relationship_id"), str)
+                ),
+                None,
+            )
+            if asset is None:
+                continue
+            rel_id = asset["relationship_id"]
+            meta = filter_meta.get(filter_id)
+            bounds = group.bbox
+            if isinstance(meta, dict):
+                bounds_dict = meta.get("bounds")
+                if isinstance(bounds_dict, dict):
+                    try:
+                        bounds = Rect(
+                            float(bounds_dict.get("x", bounds.x)),
+                            float(bounds_dict.get("y", bounds.y)),
+                            float(bounds_dict.get("width", bounds.width)),
+                            float(bounds_dict.get("height", bounds.height)),
+                        )
+                    except (TypeError, ValueError):
+                        pass
+            if bounds.width <= 0 or bounds.height <= 0:
+                continue
+            return (
+                f'<p:pic>'
+                f'<p:nvPicPr>'
+                f'<p:cNvPr id="{shape_id}" name="Picture {shape_id}"/>'
+                f'<p:cNvPicPr><a:picLocks noChangeAspect="1"/></p:cNvPicPr>'
+                f'<p:nvPr/>'
+                f'</p:nvPicPr>'
+                f'<p:blipFill>'
+                f'<a:blip r:embed="{rel_id}"/>'
+                f'<a:stretch><a:fillRect/></a:stretch>'
+                f'</p:blipFill>'
+                f'<p:spPr>'
+                f'<a:xfrm>'
+                f'<a:off x="{px_to_emu(bounds.x)}" y="{px_to_emu(bounds.y)}"/>'
+                f'<a:ext cx="{px_to_emu(bounds.width)}" cy="{px_to_emu(bounds.height)}"/>'
+                f'</a:xfrm>'
+                f'<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>'
+                f'</p:spPr>'
+                f'</p:pic>'
+            )
+        return None
 
     @staticmethod
     def _content_type_for_format(ext: str) -> str:
@@ -725,6 +849,19 @@ class DrawingMLWriter:
                 if self._assets is not None:
                     self._assets.add_diagnostic("Group-level navigation is not yet supported; hyperlink ignored.")
                 logger.warning("Navigation on group elements is not supported; skipping hyperlink metadata.")
+
+            filter_fallback_fragment = self._render_group_filter_fallback(
+                element,
+                shape_id,
+                metadata,
+            )
+            if filter_fallback_fragment is not None:
+                self._trace_writer(
+                    "group_filter_fallback_rendered",
+                    stage="filter",
+                    metadata={"shape_id": shape_id},
+                )
+                return [filter_fallback_fragment], shape_id + 1
 
             # Group opacity with overlapping children: rasterize to avoid
             # double-blending artifacts from per-child alpha application.

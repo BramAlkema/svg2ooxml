@@ -139,3 +139,27 @@ def test_filter_policy_collects_dotted_primitive_overrides() -> None:
     assert result["enable_effect_dag"] is True
     assert result["enable_native_color_transforms"] is True
     assert result["enable_blip_effect_enrichment"] is True
+
+
+def test_filter_policy_preserves_group_blur_mimic_overrides() -> None:
+    provider = FilterPolicyProvider()
+    target = PolicyTarget("filter")
+
+    result = provider.evaluate(
+        target,
+        {
+            "quality": "balanced",
+            "filter.primitives.feGaussianBlur.allow_group_mimic": "true",
+            "filter.primitives.feGaussianBlur.group_blur_strategy": "outer-shadow",
+            "filter.primitives.feGaussianBlur.radius_scale": "2.5",
+            "filter.primitives.feGaussianBlur.group_radius_scale": "4.25",
+        },
+    )
+
+    primitives = result.get("primitives")
+    assert primitives is not None
+    blur = primitives["fegaussianblur"]
+    assert blur["allow_group_mimic"] is True
+    assert blur["group_blur_strategy"] == "outer_shadow"
+    assert blur["radius_scale"] == 2.5
+    assert blur["group_radius_scale"] == 4.25

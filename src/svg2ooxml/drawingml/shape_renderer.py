@@ -44,8 +44,7 @@ from .rasterizer import Rasterizer
 class DrawingMLShapeRenderer:
     """Render shapes, paths, and images into DrawingML fragments."""
 
-    _INVALID_EFFECT_MARKERS = (
-        "<a:solidfill",
+    _INVALID_EFFECT_SUBSTRINGS = (
         "svg2ooxml:sourcegraphic",
         "svg2ooxml:sourcealpha",
         "svg2ooxml:emf",
@@ -425,6 +424,16 @@ class DrawingMLShapeRenderer:
                 "filter_id": filter_id,
                 "fallback": fallback,
             }
+            for source in (
+                meta if isinstance(meta, dict) else None,
+                asset.get("metadata") if isinstance(asset.get("metadata"), dict) else None,
+            ):
+                if not isinstance(source, dict):
+                    continue
+                blip_color_transforms = source.get("blip_color_transforms")
+                if isinstance(blip_color_transforms, list) and blip_color_transforms:
+                    image_metadata["blip_color_transforms"] = list(blip_color_transforms)
+                    break
             if asset_type == "emf":
                 image_metadata["emf_asset"] = {
                     "relationship_id": asset.get("relationship_id"),
@@ -470,8 +479,11 @@ class DrawingMLShapeRenderer:
         cleaned = []
         for effect in effects:
             if isinstance(effect, CustomEffect):
-                xml = (effect.drawingml or "").lower()
-                if any(marker in xml for marker in self._INVALID_EFFECT_MARKERS):
+                xml = effect.drawingml or ""
+                if _is_invalid_custom_effect_xml(
+                    xml,
+                    invalid_substrings=self._INVALID_EFFECT_SUBSTRINGS,
+                ):
                     continue
             cleaned.append(effect)
         if len(cleaned) == len(effects):
@@ -484,7 +496,6 @@ class DrawingMLShapeRenderer:
             except Exception:  # pragma: no cover - defensive
                 return element
             return element
-
     def _maybe_rasterize(
         self,
         element,
@@ -745,6 +756,18 @@ def _apply_clip_bounds(element, metadata: dict[str, object]):
 
     # Circle, Ellipse, Path — geometry-driven; clip approximation not applied.
     return element
+
+
+def _is_invalid_custom_effect_xml(
+    xml: str,
+    *,
+    invalid_substrings: tuple[str, ...],
+) -> bool:
+    lowered = xml.lower()
+    stripped = lowered.lstrip()
+    if stripped.startswith("<a:solidfill") or stripped.startswith("<solidfill"):
+        return True
+    return any(marker in lowered for marker in invalid_substrings)
 
 
 __all__ = ["DrawingMLShapeRenderer"]

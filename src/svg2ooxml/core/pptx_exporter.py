@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
+from copy import deepcopy
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -437,7 +438,7 @@ class SvgToPptxExporter:
             animation_parser.reset_summary()
 
         # Inject geometry_mode into policy_overrides
-        effective_overrides = policy_overrides or {}
+        effective_overrides = deepcopy(policy_overrides) if policy_overrides else {}
         if self._geometry_mode != "legacy":  # Only inject when not using legacy fallback
             geometry_overrides = effective_overrides.get("geometry", {})
             geometry_overrides["geometry_mode"] = self._geometry_mode

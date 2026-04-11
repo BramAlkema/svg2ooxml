@@ -3,6 +3,7 @@ from __future__ import annotations
 from tools.visual.browser_renderer import (
     _extract_dimensions as extract_browser_dimensions,
     _prepare_browser_source_text,
+    _resolve_svg_src,
     _resolve_inline_svg_markup,
 )
 from tools.visual.suite_runner import _extract_dimensions as extract_suite_dimensions
@@ -59,3 +60,21 @@ def test_resolve_inline_svg_markup_strips_xml_prolog() -> None:
     assert inline_svg.lstrip().startswith("<svg")
     assert "<?xml" not in inline_svg
     assert "<!DOCTYPE" not in inline_svg
+
+
+def test_resolve_svg_src_recovers_malformed_file_source(tmp_path) -> None:
+    svg_path = tmp_path / "broken.svg"
+    svg_path.write_text(
+        """<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="1000">
+<
+<path d="M0,0 L10,10"/>
+</svg>
+""",
+        encoding="utf-8",
+    )
+
+    svg_src, temp_path = _resolve_svg_src("", source_path=svg_path)
+
+    assert temp_path is not None
+    assert svg_src == temp_path.resolve().as_uri()
+    assert "<\n<path" not in temp_path.read_text(encoding="utf-8")

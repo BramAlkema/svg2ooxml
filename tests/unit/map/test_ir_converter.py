@@ -346,6 +346,21 @@ def test_convert_polygon_produces_native_polygon() -> None:
     assert shape.fill is not None and shape.fill.rgb == "AA5500"
 
 
+def test_convert_rect_preserves_explicit_fill_none_with_stroke() -> None:
+    parse_result = _build_parse_result(
+        "<svg width='100' height='100' xmlns='http://www.w3.org/2000/svg'>"
+        "<rect x='10' y='10' width='40' height='30' fill='none' stroke='#0000FF' stroke-width='0.5'/>"
+        "</svg>"
+    )
+
+    scene = _convert_with_resvg(parse_result)
+
+    shape = scene.elements[0]
+    assert isinstance(shape, Rectangle)
+    assert shape.fill is None
+    assert shape.stroke is not None and shape.stroke.paint.rgb == "0000FF"
+
+
 def test_convert_rotated_rounded_rect_generates_bezier_path() -> None:
     parse_result = _build_parse_result(
         "<svg width='120' height='120' xmlns='http://www.w3.org/2000/svg'>"
@@ -472,6 +487,30 @@ def test_use_element_reuses_existing_geometry() -> None:
     assert second_rect.fill is not None and second_rect.fill.rgb == "FF00FF"
     element_ids = set(metadata.get("element_ids", []))
     assert "copyRect" in element_ids
+
+
+def test_use_group_preserves_child_fill_none() -> None:
+    parse_result = _build_parse_result(
+        "<svg width='160' height='160' xmlns='http://www.w3.org/2000/svg'>"
+        "<defs>"
+        "  <g id='outlines'>"
+        "    <rect x='0' y='0' width='8' height='9' fill='none' stroke='#0000FF'/>"
+        "    <rect x='2' y='2' width='10' height='11' fill='none' stroke='#0000FF'/>"
+        "  </g>"
+        "</defs>"
+        "<use id='outlineCopy' href='#outlines' x='25' y='35'/>"
+        "</svg>"
+    )
+
+    scene = _convert_with_resvg(parse_result)
+
+    assert len(scene.elements) == 1
+    group = scene.elements[0]
+    assert isinstance(group, Group)
+    rectangles = _collect_rectangles(group.children)
+    assert len(rectangles) == 2
+    assert all(rect.fill is None for rect in rectangles)
+    assert all(rect.stroke is not None and rect.stroke.paint.rgb == "0000FF" for rect in rectangles)
 
 
 def test_use_image_expands_when_resvg_use_node_is_unsupported() -> None:
@@ -698,18 +737,72 @@ def test_filter_metadata_carries_fallback_assets_into_policy() -> None:
     scene = _convert_with_resvg(parse_result)
 
     assert len(scene.elements) == 1
-    rect = scene.elements[0]
-    assert isinstance(rect, Rectangle)
-    filter_meta = rect.metadata.get("filter_metadata", {})
+    shape = scene.elements[0]
+    assert hasattr(shape, "metadata")
+    filter_meta = shape.metadata.get("filter_metadata", {})
     assert "glow" in filter_meta
     assets = filter_meta["glow"].get("fallback_assets")
-    media_policy = rect.metadata.get("policy", {}).get("media", {})
+    media_policy = shape.metadata.get("policy", {}).get("media", {})
     filter_assets = media_policy.get("filter_assets", {})
     if assets:
         assert any(asset.get("type") in {"emf", "raster"} for asset in assets)
         assert "glow" in filter_assets
     else:
         assert "glow" not in filter_assets
+
+
+def test_native_filter_chain_carries_aggregate_raster_fallback() -> None:
+    svg = (
+        "<svg width='120' height='120' xmlns='http://www.w3.org/2000/svg'>"
+        "  <defs>"
+        "    <filter id='glow'>"
+        "      <feFlood flood-color='#112233' flood-opacity='0.7' result='flood'/>"
+        "      <feGaussianBlur in='flood' stdDeviation='3' result='halo'/>"
+        "      <feMerge>"
+        "        <feMergeNode in='halo'/>"
+        "        <feMergeNode in='SourceGraphic'/>"
+        "      </feMerge>"
+        "    </filter>"
+        "  </defs>"
+        "  <rect id='shape' x='10' y='10' width='40' height='40' filter='url(#glow)'/>"
+        "</svg>"
+    )
+
+    parse_result = _build_parse_result(svg)
+    _register_filter(
+        parse_result,
+        "<filter id='glow'>"
+        "  <feFlood flood-color='#112233' flood-opacity='0.7' result='flood'/>"
+        "  <feGaussianBlur in='flood' stdDeviation='3' result='halo'/>"
+        "  <feMerge>"
+        "    <feMergeNode in='halo'/>"
+        "    <feMergeNode in='SourceGraphic'/>"
+        "  </feMerge>"
+        "</filter>",
+    )
+
+    scene = convert_parser_output(
+        parse_result,
+        overrides={
+            "geometry": {"geometry_mode": "resvg-only"},
+            "filter": {"strategy": "native", "approximation_allowed": False},
+        },
+    )
+
+    assert len(scene.elements) == 1
+    shape = scene.elements[0]
+    assert hasattr(shape, "metadata")
+    filters_meta = shape.metadata.get("filters", [])
+    entry = next(item for item in filters_meta if item.get("id") == "glow")
+    assert entry["fallback"] in {FALLBACK_BITMAP, "raster"}
+    filter_meta = shape.metadata.get("filter_metadata", {}).get("glow", {})
+    assert filter_meta.get("fallback") in {FALLBACK_BITMAP, "raster"}
+    assets = filter_meta.get("fallback_assets")
+    assert isinstance(assets, list) and assets
+    assert any(asset.get("type") == "raster" for asset in assets)
+    media_policy = shape.metadata.get("policy", {}).get("media", {})
+    filter_assets = media_policy.get("filter_assets", {})
+    assert "glow" in filter_assets
 
 
 def test_gradient_fill_resolves_to_linear_gradient() -> None:
@@ -942,9 +1035,9 @@ def test_filter_reference_marks_bitmap_fallback() -> None:
 
     scene = _convert_with_resvg(parse_result)
 
-    rect = scene.elements[0]
-    assert isinstance(rect, Rectangle)
-    filters_meta = rect.metadata.get("filters")
+    shape = scene.elements[0]
+    assert hasattr(shape, "metadata")
+    filters_meta = shape.metadata.get("filters")
     assert isinstance(filters_meta, list)
     entry = next(iter(filters_meta))
     assert entry["id"] == "glow"
@@ -952,12 +1045,12 @@ def test_filter_reference_marks_bitmap_fallback() -> None:
     # Entry may omit fallback when a native strategy is selected
     if entry.get("fallback"):
         assert entry["fallback"] in {"bitmap", "emf", "vector"}
-    geometry_policy = rect.metadata.get("policy", {}).get("geometry", {})
+    geometry_policy = shape.metadata.get("policy", {}).get("geometry", {})
     if "suggest_fallback" in geometry_policy:
         assert geometry_policy["suggest_fallback"] in {FALLBACK_BITMAP, "emf", "vector"}
-    assert rect.effects, "expected filter to add custom effects"
+    assert shape.effects, "expected filter to add custom effects"
     filters_policy = (
-        rect.metadata.get("policy", {}).get("effects", {}).get("filters", [])
+        shape.metadata.get("policy", {}).get("effects", {}).get("filters", [])
     )
     assert any(item.get("id") == "glow" for item in filters_policy)
 
@@ -975,13 +1068,13 @@ def test_displacement_map_filter_metadata() -> None:
 
     scene = _convert_with_resvg(parse_result)
 
-    rect = scene.elements[0]
-    assert isinstance(rect, Rectangle)
-    filters_meta = rect.metadata.get("filters", [])
+    shape = scene.elements[0]
+    assert hasattr(shape, "metadata")
+    filters_meta = shape.metadata.get("filters", [])
     assert any(entry.get("id") == "disp" for entry in filters_meta)
-    filter_meta = rect.metadata.get("filter_metadata", {}).get("disp", {})
+    filter_meta = shape.metadata.get("filter_metadata", {}).get("disp", {})
     assert filter_meta is not None
-    geometry_policy = rect.metadata.get("policy", {}).get("geometry", {})
+    geometry_policy = shape.metadata.get("policy", {}).get("geometry", {})
     if "suggest_fallback" in geometry_policy:
         assert geometry_policy["suggest_fallback"] in {
             FALLBACK_BITMAP,
@@ -989,7 +1082,7 @@ def test_displacement_map_filter_metadata() -> None:
             "vector",
         }
     filters_policy = (
-        rect.metadata.get("policy", {}).get("effects", {}).get("filters", [])
+        shape.metadata.get("policy", {}).get("effects", {}).get("filters", [])
     )
     assert any(item.get("id") == "disp" for item in filters_policy)
 
@@ -1008,15 +1101,235 @@ def test_style_based_filter_metadata_adds_effects() -> None:
 
     scene = _convert_with_resvg(parse_result)
 
-    rect = scene.elements[0]
-    assert isinstance(rect, Rectangle)
-    filters_meta = rect.metadata.get("filters", [])
+    shape = scene.elements[0]
+    assert hasattr(shape, "metadata")
+    filters_meta = shape.metadata.get("filters", [])
     assert any(entry.get("id") == "glow" for entry in filters_meta)
-    assert rect.effects, "expected inline style filter to add custom effects"
+    assert shape.effects, "expected inline style filter to add custom effects"
     filters_policy = (
-        rect.metadata.get("policy", {}).get("effects", {}).get("filters", [])
+        shape.metadata.get("policy", {}).get("effects", {}).get("filters", [])
     )
     assert any(item.get("id") == "glow" for item in filters_policy)
+
+
+def test_grouped_gaussian_blur_policy_override_attaches_mimic_effects() -> None:
+    svg = (
+        "<svg width='480' height='360' viewBox='0 0 480 360' "
+        "xmlns='http://www.w3.org/2000/svg' xmlns:xlink='http://www.w3.org/1999/xlink'>"
+        "  <defs>"
+        "    <g id='rects'>"
+        "      <rect x='0' y='0' width='90' height='90' fill='blue'/>"
+        "      <rect x='45' y='45' width='90' height='90' fill='yellow'/>"
+        "    </g>"
+        "    <filter id='blur'>"
+        "      <feGaussianBlur stdDeviation='10'/>"
+        "    </filter>"
+        "  </defs>"
+        "  <g transform='translate(310,15)'>"
+        "    <use xlink:href='#rects' filter='url(#blur)'/>"
+        "  </g>"
+        "</svg>"
+    )
+
+    parser = SVGParser(ParserConfig())
+    parse_result = parser.parse(svg)
+
+    scene = convert_parser_output(
+        parse_result,
+        services=parse_result.services,
+        overrides={
+            "geometry": {"geometry_mode": "resvg-only"},
+            "filter": {
+                "strategy": "native",
+                "approximation_allowed": True,
+                "prefer_rasterization": False,
+                "blur_strategy": "soft_edge",
+                "primitives": {
+                    "fegaussianblur": {
+                        "allow_group_mimic": True,
+                        "group_blur_strategy": "blur",
+                    }
+                },
+            },
+        },
+    )
+
+    filtered_groups: list[Group] = []
+    filtered_paths: list[Path] = []
+
+    def _walk(node: object) -> None:
+        if isinstance(node, Group):
+            metadata = node.metadata if isinstance(node.metadata, dict) else {}
+            if metadata.get("filter_metadata"):
+                filtered_groups.append(node)
+            for child in node.children:
+                _walk(child)
+            return
+        if isinstance(node, Path):
+            effects = getattr(node, "effects", None) or []
+            if any(getattr(effect, "drawingml", "") for effect in effects):
+                filtered_paths.append(node)
+
+    for element in scene.elements:
+        _walk(element)
+
+    assert filtered_groups, "expected converted group filter metadata"
+    group_meta = filtered_groups[0].metadata["filter_metadata"]["blur"]
+    assert group_meta["approximation"] == "group_per_child"
+    assert group_meta["mimic_scope"] == "group_children"
+
+    assert filtered_paths, "expected child paths to receive blur effects"
+    effect_xml = [
+        getattr(effect, "drawingml", "")
+        for path in filtered_paths
+        for effect in (path.effects or [])
+        if getattr(effect, "drawingml", "")
+    ]
+    assert any("<a:blur " in xml for xml in effect_xml)
+    assert not any("Group Gaussian blur rendered via raster fallback" in xml for xml in effect_xml)
+
+
+def test_grouped_diffuse_lighting_policy_override_attaches_mimic_effects() -> None:
+    svg = (
+        "<svg width='480' height='360' viewBox='0 0 480 360' "
+        "xmlns='http://www.w3.org/2000/svg' xmlns:xlink='http://www.w3.org/1999/xlink'>"
+        "  <defs>"
+        "    <g id='bars'>"
+        "      <rect x='0' y='0' width='70' height='90' rx='12' fill='#355070'/>"
+        "      <rect x='84' y='0' width='70' height='90' rx='12' fill='#6D597A'/>"
+        "    </g>"
+        "    <filter id='lit'>"
+        "      <feDiffuseLighting in='SourceAlpha' surfaceScale='4' diffuseConstant='1.2' lighting-color='#CDEBFF' result='light'>"
+        "        <feDistantLight azimuth='20' elevation='35'/>"
+        "      </feDiffuseLighting>"
+        "      <feComposite in='light' in2='SourceGraphic' operator='arithmetic' k2='1' k3='1'/>"
+        "    </filter>"
+        "  </defs>"
+        "  <g transform='translate(150,40)'>"
+        "    <use xlink:href='#bars' filter='url(#lit)'/>"
+        "  </g>"
+        "</svg>"
+    )
+
+    parser = SVGParser(ParserConfig())
+    parse_result = parser.parse(svg)
+
+    scene = convert_parser_output(
+        parse_result,
+        services=parse_result.services,
+        overrides={
+            "geometry": {"geometry_mode": "resvg-only"},
+            "filter": {
+                "strategy": "native",
+                "approximation_allowed": True,
+                "prefer_rasterization": False,
+            },
+        },
+    )
+
+    filtered_groups: list[Group] = []
+    effected_nodes: list[object] = []
+
+    def _walk(node: object) -> None:
+        if isinstance(node, Group):
+            metadata = node.metadata if isinstance(node.metadata, dict) else {}
+            if metadata.get("filter_metadata"):
+                filtered_groups.append(node)
+            for child in node.children:
+                _walk(child)
+            return
+        effects = getattr(node, "effects", None) or []
+        if any(getattr(effect, "drawingml", "") for effect in effects):
+            effected_nodes.append(node)
+
+    for element in scene.elements:
+        _walk(element)
+
+    assert filtered_groups, "expected converted group filter metadata"
+    group_meta = filtered_groups[0].metadata["filter_metadata"]["lit"]
+    assert group_meta["stack_type"] == "diffuse_lighting_composite"
+
+    assert effected_nodes, "expected child shapes to receive lighting effects"
+    effect_xml = [
+        getattr(effect, "drawingml", "")
+        for node in effected_nodes
+        for effect in (getattr(node, "effects", None) or [])
+        if getattr(effect, "drawingml", "")
+    ]
+    assert any("<a:fillOverlay" in xml for xml in effect_xml)
+    assert any("<a:innerShdw" in xml for xml in effect_xml)
+
+
+def test_grouped_specular_lighting_policy_override_attaches_mimic_effects() -> None:
+    svg = (
+        "<svg width='480' height='360' viewBox='0 0 480 360' "
+        "xmlns='http://www.w3.org/2000/svg' xmlns:xlink='http://www.w3.org/1999/xlink'>"
+        "  <defs>"
+        "    <g id='chips'>"
+        "      <rect x='0' y='0' width='160' height='90' rx='45' fill='#335C67'/>"
+        "      <circle cx='48' cy='42' r='12' fill='#FFFFFF' opacity='0.2'/>"
+        "    </g>"
+        "    <filter id='spec'>"
+        "      <feSpecularLighting in='SourceAlpha' surfaceScale='5' specularConstant='1.1' specularExponent='24' lighting-color='#DFF4FF' result='light'>"
+        "        <feDistantLight azimuth='25' elevation='38'/>"
+        "      </feSpecularLighting>"
+        "      <feComposite in='light' in2='SourceGraphic' operator='arithmetic' k2='1' k3='1'/>"
+        "    </filter>"
+        "  </defs>"
+        "  <g transform='translate(140,60)'>"
+        "    <use xlink:href='#chips' filter='url(#spec)'/>"
+        "  </g>"
+        "</svg>"
+    )
+
+    parser = SVGParser(ParserConfig())
+    parse_result = parser.parse(svg)
+
+    scene = convert_parser_output(
+        parse_result,
+        services=parse_result.services,
+        overrides={
+            "geometry": {"geometry_mode": "resvg-only"},
+            "filter": {
+                "strategy": "native",
+                "approximation_allowed": True,
+                "prefer_rasterization": False,
+            },
+        },
+    )
+
+    filtered_groups: list[Group] = []
+    effected_nodes: list[object] = []
+
+    def _walk(node: object) -> None:
+        if isinstance(node, Group):
+            metadata = node.metadata if isinstance(node.metadata, dict) else {}
+            if metadata.get("filter_metadata"):
+                filtered_groups.append(node)
+            for child in node.children:
+                _walk(child)
+            return
+        effects = getattr(node, "effects", None) or []
+        if any(getattr(effect, "drawingml", "") for effect in effects):
+            effected_nodes.append(node)
+
+    for element in scene.elements:
+        _walk(element)
+
+    assert filtered_groups, "expected converted group filter metadata"
+    group_meta = filtered_groups[0].metadata["filter_metadata"]["spec"]
+    assert group_meta["stack_type"] == "specular_lighting_composite"
+
+    assert effected_nodes, "expected child shapes to receive lighting effects"
+    effect_xml = [
+        getattr(effect, "drawingml", "")
+        for node in effected_nodes
+        for effect in (getattr(node, "effects", None) or [])
+        if getattr(effect, "drawingml", "")
+    ]
+    assert any("<a:fillOverlay" in xml for xml in effect_xml)
+    assert any("<a:glow" in xml for xml in effect_xml)
+    assert any("<a:innerShdw" in xml for xml in effect_xml)
 
 
 def test_path_with_marker_metadata() -> None:

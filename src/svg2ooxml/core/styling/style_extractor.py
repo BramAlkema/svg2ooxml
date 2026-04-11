@@ -377,6 +377,16 @@ class StyleExtractor:
                     filter_context = dict(context)
                 else:
                     filter_context = {}
+                if "policy" not in filter_context:
+                    policy_context = getattr(services, "policy_context", None)
+                    if policy_context is None and hasattr(services, "resolve"):
+                        policy_context = services.resolve("policy_context")
+                    if policy_context is not None and hasattr(policy_context, "get"):
+                        filter_policy = policy_context.get("filter")
+                        if isinstance(filter_policy, dict) and filter_policy:
+                            filter_context["policy"] = dict(filter_policy)
+                if self._tracer is not None and "tracer" not in filter_context:
+                    filter_context["tracer"] = self._tracer
                 filter_context.setdefault("element", element)
                 effects = filter_service.resolve_effects(  # type: ignore[call-arg]
                     filter_id,

@@ -688,8 +688,6 @@ def _wait_for_powerpoint_presentation(pptx_path: Path, timeout: float) -> bool:
 def _advance_slide() -> None:
     script = """
 tell application "System Events"
-    key code 49
-    delay 0.02
     key code 124
 end tell
 """

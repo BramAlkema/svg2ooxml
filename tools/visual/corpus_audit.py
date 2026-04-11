@@ -137,11 +137,16 @@ def audit_svgs(
     check_animation: bool = False,
     animation_duration: float = 4.0,
     animation_fps: float = 4.0,
+    fidelity_tier: str | None = None,
 ) -> list[AuditResult]:
     """Audit a collection of SVG paths and return ranked results."""
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    builder = PptxBuilder(filter_strategy="resvg", geometry_mode="resvg")
+    builder = PptxBuilder(
+        filter_strategy="resvg",
+        geometry_mode="resvg",
+        fidelity_tier=fidelity_tier,
+    )
     renderer = None
     render_available = False
     if not skip_render:
@@ -465,7 +470,8 @@ def _run_animation_audit(
 
 def _svg_has_animation(svg_text: str) -> bool:
     try:
-        root = ET.fromstring(svg_text.encode("utf-8"))
+        parser = ET.XMLParser(recover=True)
+        root = ET.fromstring(svg_text.encode("utf-8"), parser)
     except ET.XMLSyntaxError:
         return False
     animation_tags = {
@@ -864,6 +870,11 @@ def main() -> None:
         help="Disable periodic reopen attempts while waiting for slides.",
     )
     parser.add_argument(
+        "--fidelity-tier",
+        choices=("direct", "mimic", "emf", "bitmap"),
+        help="Audit a specific fidelity tier so fallback paths can be exercised explicitly.",
+    )
+    parser.add_argument(
         "--check-animation",
         action="store_true",
         help="Capture live PowerPoint/browser animation frames for animated SVGs.",
@@ -920,6 +931,7 @@ def main() -> None:
         powerpoint_capture_timeout=args.powerpoint_capture_timeout,
         powerpoint_use_keys=args.powerpoint_use_keys,
         powerpoint_no_reopen=args.powerpoint_no_reopen,
+        fidelity_tier=args.fidelity_tier,
         check_animation=args.check_animation,
         animation_duration=args.animation_duration,
         animation_fps=args.animation_fps,

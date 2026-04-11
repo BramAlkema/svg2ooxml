@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
+from svg2ooxml.core.slide_orchestrator import resolve_fidelity_tier_variant
 from svg2ooxml.core.parser import ParserConfig, SVGParser
 from svg2ooxml.drawingml.writer import DrawingMLWriter
 from svg2ooxml.io.pptx_assembly import PPTXPackageBuilder
@@ -32,6 +34,7 @@ class PptxBuilder:
         geometry_mode: str | None = "resvg",
         slide_size_mode: str | None = "same",
         allow_promotion: bool = True,
+        fidelity_tier: str | None = None,
     ) -> None:
         self._parser = SVGParser(ParserConfig())
         self._writer = DrawingMLWriter()
@@ -40,6 +43,7 @@ class PptxBuilder:
         self._geometry_mode = geometry_mode
         self._slide_size_mode = slide_size_mode or "same"
         self._allow_promotion = allow_promotion
+        self._fidelity_tier = fidelity_tier.strip().lower() if isinstance(fidelity_tier, str) and fidelity_tier.strip() else None
 
     def build_from_svg(
         self,
@@ -60,44 +64,93 @@ class PptxBuilder:
         if not parse_result.success or parse_result.svg_root is None:
             raise VisualBuildError(f"SVG parsing failed: {parse_result.error_message}")
 
+        tier_variant = (
+            resolve_fidelity_tier_variant(self._fidelity_tier)
+            if self._fidelity_tier is not None
+            else None
+        )
+        tier_filter_policy = (
+            dict(tier_variant.policy_overrides.get("filter", {}))
+            if tier_variant is not None
+            else {}
+        )
+        tier_filter_strategy = None
+        if isinstance(tier_filter_policy.get("strategy"), str):
+            tier_filter_strategy = str(tier_filter_policy["strategy"])
+
         # Use the parser's services which includes the StyleResolver with loaded CSS rules.
         services = parse_result.services
         if services is None:
             services = configure_services(
-                filter_strategy=self._filter_strategy,
+                filter_strategy=tier_filter_strategy or self._filter_strategy,
                 geometry_mode=self._geometry_mode,
             )
         else:
-            if self._filter_strategy and services.filter_service is not None:
-                services.filter_service.set_strategy(self._filter_strategy)
-            
-            # Apply policy overrides
-            policy_context = getattr(services, "policy_context", None)
-            if policy_context:
-                # Update geometry policy
-                if self._geometry_mode:
-                    geometry_policy = policy_context.get("geometry", {})
-                    if isinstance(geometry_policy, dict):
-                        geometry_policy["geometry_mode"] = self._geometry_mode
-                
-                # Update filter policy to disable promotions if requested
-                if not self._allow_promotion:
-                    filter_policy = policy_context.get("filter", {})
-                    if isinstance(filter_policy, dict):
-                        # Disable global promotion
-                        filter_policy["allow_promotion"] = False
-                        # Also disable promotion for all primitives
-                        primitives = filter_policy.setdefault("primitives", {})
-                        # Apply to common primitives
-                        for p in ["fediffuselighting", "fespecularlighting", "fegaussianblur", "feoffset", "fecomposite", "feblend"]:
-                            primitives.setdefault(p, {})["allow_promotion"] = False
+            effective_filter_strategy = tier_filter_strategy or self._filter_strategy
+            if effective_filter_strategy and services.filter_service is not None:
+                services.filter_service.set_strategy(effective_filter_strategy)
+
+        policy_context = getattr(services, "policy_context", None)
+        effective_overrides: dict[str, dict[str, object]] = {}
+        if policy_context:
+            # Update geometry policy
+            if self._geometry_mode:
+                geometry_policy = policy_context.get("geometry", {})
+                if isinstance(geometry_policy, dict):
+                    geometry_policy["geometry_mode"] = self._geometry_mode
+
+            # Update filter policy to disable promotions if requested
+            if not self._allow_promotion:
+                filter_policy = policy_context.get("filter", {})
+                if isinstance(filter_policy, dict):
+                    # Disable global promotion
+                    filter_policy["allow_promotion"] = False
+                    # Also disable promotion for all primitives
+                    primitives = filter_policy.setdefault("primitives", {})
+                    # Apply to common primitives
+                    for p in ["fediffuselighting", "fespecularlighting", "fegaussianblur", "feoffset", "fecomposite", "feblend"]:
+                        primitives.setdefault(p, {})["allow_promotion"] = False
+
+            if tier_variant is not None:
+                for category, overrides in tier_variant.policy_overrides.items():
+                    bucket = policy_context.get(category, {})
+                    if not isinstance(bucket, dict):
+                        continue
+                    bucket.update(overrides)
+
+        if tier_variant is not None:
+            for category, overrides in tier_variant.policy_overrides.items():
+                effective_overrides[category] = dict(overrides)
+
+        if not self._allow_promotion:
+            filter_overrides = dict(effective_overrides.get("filter", {}))
+            filter_overrides["allow_promotion"] = False
+            primitives = dict(filter_overrides.get("primitives", {}))
+            for primitive_name in [
+                "fediffuselighting",
+                "fespecularlighting",
+                "fegaussianblur",
+                "feoffset",
+                "fecomposite",
+                "feblend",
+            ]:
+                primitive_policy = dict(primitives.get(primitive_name, {}))
+                primitive_policy["allow_promotion"] = False
+                primitives[primitive_name] = primitive_policy
+            filter_overrides["primitives"] = primitives
+            effective_overrides["filter"] = filter_overrides
 
         if parse_result.width_px is not None:
             setattr(services, "viewport_width", parse_result.width_px)
         if parse_result.height_px is not None:
             setattr(services, "viewport_height", parse_result.height_px)
 
-        scene = convert_parser_output(parse_result, services=services, tracer=tracer)
+        scene = convert_parser_output(
+            parse_result,
+            services=services,
+            tracer=tracer,
+            overrides=effective_overrides or None,
+        )
         render_result = self._writer.render_scene_from_ir(
             scene,
             tracer=tracer,

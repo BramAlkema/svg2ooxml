@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
@@ -17,6 +18,100 @@ class FallbackVariant:
     name: str
     policy_overrides: dict[str, dict[str, object]] = field(default_factory=dict)
     title_suffix: str = ""
+
+
+_FIDELITY_TIER_SPECS: tuple[tuple[str, str, dict[str, dict[str, object]]], ...] = (
+    (
+        "direct",
+        " (Direct)",
+        {
+            "geometry": {
+                "allow_emf_fallback": False,
+                "allow_bitmap_fallback": False,
+                "simplify_paths": False,
+            },
+            "filter": {
+                "strategy": "native",
+                "approximation_allowed": False,
+                "prefer_rasterization": False,
+            },
+            "mask": {
+                "allow_vector_mask": True,
+                "force_emf": False,
+                "force_raster": False,
+                "fallback_order": ("native",),
+            },
+            "clip": {"fallback_order": ("native",)},
+        },
+    ),
+    (
+        "mimic",
+        " (Mimic)",
+        {
+            "geometry": {
+                "allow_emf_fallback": False,
+                "allow_bitmap_fallback": False,
+                "simplify_paths": True,
+            },
+            "filter": {
+                "strategy": "native",
+                "approximation_allowed": True,
+                "prefer_rasterization": False,
+            },
+            "mask": {
+                "allow_vector_mask": True,
+                "force_emf": False,
+                "force_raster": False,
+                "fallback_order": ("native", "mimic"),
+            },
+            "clip": {"fallback_order": ("native", "mimic")},
+        },
+    ),
+    (
+        "emf",
+        " (EMF)",
+        {
+            "geometry": {
+                "allow_emf_fallback": True,
+                "allow_bitmap_fallback": False,
+            },
+            "filter": {
+                "strategy": "emf",
+                "approximation_allowed": False,
+                "prefer_rasterization": False,
+            },
+            "mask": {
+                "allow_vector_mask": True,
+                "force_emf": False,
+                "force_raster": False,
+                "fallback_order": ("native", "mimic", "emf"),
+            },
+            "clip": {"fallback_order": ("native", "mimic", "emf")},
+        },
+    ),
+    (
+        "bitmap",
+        " (Bitmap)",
+        {
+            "geometry": {
+                "allow_emf_fallback": True,
+                "allow_bitmap_fallback": True,
+            },
+            "filter": {
+                "strategy": "raster",
+                "approximation_allowed": False,
+                "prefer_rasterization": True,
+            },
+            "mask": {
+                "allow_vector_mask": True,
+                "force_emf": False,
+                "force_raster": False,
+                "fallback_order": ("native", "mimic", "emf", "raster"),
+            },
+            "clip": {"fallback_order": ("native", "mimic", "emf", "raster")},
+        },
+    ),
+)
 
 
 def derive_variants_from_trace(
@@ -105,94 +200,28 @@ def derive_variants_from_trace(
 
 def build_fidelity_tier_variants() -> list[FallbackVariant]:
     """Return tiered slide variants covering direct, mimic, EMF, and bitmap output."""
-
-    base_vector_overrides = {
-        "geometry": {
-            "allow_emf_fallback": False,
-            "allow_bitmap_fallback": False,
-            "simplify_paths": False,
-        },
-        "filter": {"strategy": "native"},
-        "mask": {
-            "allow_vector_mask": True,
-            "force_emf": False,
-            "force_raster": False,
-        },
-        "clip": {},
-    }
-
-    tiers = [
-        (
-            "direct",
-            " (Direct)",
-            {
-                **base_vector_overrides,
-                "mask": {**base_vector_overrides["mask"], "fallback_order": ("native",)},
-                "clip": {"fallback_order": ("native",)},
-            },
-        ),
-        (
-            "mimic",
-            " (Mimic)",
-            {
-                **base_vector_overrides,
-                "geometry": {
-                    **base_vector_overrides["geometry"],
-                    "simplify_paths": True,
-                },
-                "mask": {**base_vector_overrides["mask"], "fallback_order": ("native", "mimic")},
-                "clip": {"fallback_order": ("native", "mimic")},
-            },
-        ),
-        (
-            "emf",
-            " (EMF)",
-            {
-                "geometry": {
-                    "allow_emf_fallback": True,
-                    "allow_bitmap_fallback": False,
-                },
-                "filter": {"strategy": "emf"},
-                "mask": {
-                    "allow_vector_mask": True,
-                    "force_emf": False,
-                    "force_raster": False,
-                    "fallback_order": ("native", "mimic", "emf"),
-                },
-                "clip": {"fallback_order": ("native", "mimic", "emf")},
-            },
-        ),
-        (
-            "bitmap",
-            " (Bitmap)",
-            {
-                "geometry": {
-                    "allow_emf_fallback": True,
-                    "allow_bitmap_fallback": True,
-                },
-                "filter": {"strategy": "raster"},
-                "mask": {
-                    "allow_vector_mask": True,
-                    "force_emf": False,
-                    "force_raster": False,
-                    "fallback_order": ("native", "mimic", "emf", "raster"),
-                },
-                "clip": {"fallback_order": ("native", "mimic", "emf", "raster")},
-            },
-        ),
+    return [
+        FallbackVariant(
+            name=name,
+            policy_overrides=deepcopy(overrides),
+            title_suffix=suffix,
+        )
+        for name, suffix, overrides in _FIDELITY_TIER_SPECS
     ]
 
-    variants: list[FallbackVariant] = []
-    for name, suffix, overrides in tiers:
-        variants.append(
-            FallbackVariant(
-                name=name,
-                policy_overrides=overrides,
+
+def resolve_fidelity_tier_variant(name: str) -> FallbackVariant:
+    """Return a single fidelity tier variant by name."""
+
+    token = name.strip().lower()
+    for variant_name, suffix, overrides in _FIDELITY_TIER_SPECS:
+        if variant_name == token:
+            return FallbackVariant(
+                name=variant_name,
+                policy_overrides=deepcopy(overrides),
                 title_suffix=suffix,
             )
-        )
-
-    return variants
+    raise ValueError(f"Unknown fidelity tier: {name!r}")
 
 
 def expand_page_with_variants(
@@ -204,7 +233,7 @@ def expand_page_with_variants(
     clones: list[SvgPageSource] = []
 
     for variant in variants:
-        metadata: dict[str, Any] = dict(page.metadata or {})
+        metadata: dict[str, Any] = deepcopy(page.metadata or {})
         variant_meta = metadata.setdefault("variant", {})
         variant_meta["type"] = variant.name
         policy_bucket = metadata.setdefault("policy_overrides", {})
@@ -232,4 +261,5 @@ __all__ = [
     "build_fidelity_tier_variants",
     "derive_variants_from_trace",
     "expand_page_with_variants",
+    "resolve_fidelity_tier_variant",
 ]

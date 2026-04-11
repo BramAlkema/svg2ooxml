@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 from lxml import etree
 
+from svg2ooxml.common.conversions.angles import radians_to_ppt
 from svg2ooxml.common.conversions.opacity import opacity_to_ppt
 # Import centralized XML builders for safe DrawingML generation
 from svg2ooxml.drawingml.xml_builder import a_elem, a_sub, to_string
@@ -87,14 +89,18 @@ class DiffuseLightingFilter(Filter):
                 policy_options.get("approximation_allowed", True),
             )
         )
+        if approximation_allowed and _source_is_svg_image(context):
+            approximation_allowed = False
+            metadata["approximation_blocked"] = "image_source"
         if approximation_allowed:
-            drawingml = _approximate_lighting_glow(
+            drawingml, approximation_meta = _approximate_diffuse_lighting_effect(
                 color=color,
-                intensity=_clamp_intensity(diffuse_constant / 2.0, minimum=0.2),
-                radius_px=max(surface_scale, 1.0),
+                light=light,
+                diffuse_constant=diffuse_constant,
+                surface_scale=surface_scale,
             )
+            metadata.update(approximation_meta)
             metadata["native_support"] = True
-            metadata["approximation"] = "glow"
             metadata["no_op"] = False
             return FilterResult(
                 success=True,
@@ -141,16 +147,19 @@ class SpecularLightingFilter(Filter):
                 policy_options.get("approximation_allowed", True),
             )
         )
+        if approximation_allowed and _source_is_svg_image(context):
+            approximation_allowed = False
+            metadata["approximation_blocked"] = "image_source"
         if approximation_allowed:
-            intensity = _clamp_intensity(specular_constant * 0.7, minimum=0.25)
-            radius_px = max(surface_scale, 1.0) * max(1.0, min(specular_exponent, 5.0))
-            drawingml = _approximate_lighting_glow(
+            drawingml, approximation_meta = _approximate_specular_lighting_effect(
                 color=color,
-                intensity=intensity,
-                radius_px=radius_px,
+                light=light,
+                surface_scale=surface_scale,
+                specular_constant=specular_constant,
+                specular_exponent=specular_exponent,
             )
+            metadata.update(approximation_meta)
             metadata["native_support"] = True
-            metadata["approximation"] = "glow"
             metadata["no_op"] = False
             return FilterResult(
                 success=True,
@@ -158,6 +167,7 @@ class SpecularLightingFilter(Filter):
                 fallback=None,
                 metadata=metadata,
             )
+        metadata.setdefault("approximation_blocked", "approximation_disabled")
         return FilterResult(
             success=True,
             drawingml="",
@@ -180,23 +190,209 @@ def _parse_kernel_unit(value: str | None) -> tuple[float | None, float | None]:
     )
 
 
-def _approximate_lighting_glow(*, color: str, intensity: float, radius_px: float) -> str:
-    token = color.strip().lstrip("#")
+def _approximate_diffuse_lighting_effect(
+    *,
+    color: str,
+    light: LightSource | None,
+    diffuse_constant: float,
+    surface_scale: float,
+) -> tuple[str, dict[str, object]]:
+    token = _normalise_color_token(color)
+    overlay_token = _mix_toward_white(token, 0.68)
+    overlay_alpha = _clamp_ratio(0.32 + diffuse_constant * 0.14, minimum=0.28, maximum=0.58)
+    glow_alpha = _clamp_ratio(overlay_alpha * 0.34, minimum=0.10, maximum=0.22)
+    inner_alpha = _clamp_ratio(0.04 + diffuse_constant * 0.05, minimum=0.04, maximum=0.16)
+    glow_px = max(surface_scale * 0.7, 1.0)
+    blur_px = max(surface_scale * 0.55, 0.8)
+    soft_edge_px = max(surface_scale * 1.15, 1.25)
+    distance_px = _lighting_distance_px(light, base=surface_scale * 0.5, maximum=3.0)
+    direction = _lighting_direction_ppt(light)
+
+    effectLst = a_elem("effectLst")
+    fillOverlay = a_sub(effectLst, "fillOverlay", blend="screen")
+    solidFill = a_sub(fillOverlay, "solidFill")
+    overlayClr = a_sub(solidFill, "srgbClr", val=overlay_token)
+    a_sub(overlayClr, "alpha", val=opacity_to_ppt(overlay_alpha))
+
+    glow = a_sub(effectLst, "glow", rad=int(px_to_emu(glow_px)))
+    glowClr = a_sub(glow, "srgbClr", val=overlay_token)
+    a_sub(glowClr, "alpha", val=opacity_to_ppt(glow_alpha))
+
+    inner = a_sub(
+        effectLst,
+        "innerShdw",
+        blurRad=int(px_to_emu(blur_px)),
+        dist=int(px_to_emu(distance_px)),
+        dir=direction,
+        algn="ctr",
+        rotWithShape="0",
+    )
+    innerClr = a_sub(inner, "srgbClr", val=token)
+    a_sub(innerClr, "alpha", val=opacity_to_ppt(inner_alpha))
+    a_sub(effectLst, "softEdge", rad=int(px_to_emu(soft_edge_px)))
+
+    return to_string(effectLst), {
+        "approximation": "editable_lighting",
+        "mimic_strategy": "fill_overlay_glow_inner_shadow_soft_edge",
+        "overlay_alpha": overlay_alpha,
+        "glow_alpha": glow_alpha,
+        "glow_radius_px": glow_px,
+        "inner_shadow_alpha": inner_alpha,
+        "inner_shadow_blur_px": blur_px,
+        "inner_shadow_distance_px": distance_px,
+        "inner_shadow_direction": direction,
+        "soft_edge_radius_px": soft_edge_px,
+    }
+
+
+def _approximate_specular_lighting_effect(
+    *,
+    color: str,
+    light: LightSource | None,
+    surface_scale: float,
+    specular_constant: float,
+    specular_exponent: float,
+) -> tuple[str, dict[str, object]]:
+    token = _normalise_color_token(color)
+    overlay_token = _mix_toward_white(token, 0.48)
+    exponent_weight = max(0.0, min(specular_exponent, 32.0)) / 32.0
+    concentration = 1.0 - exponent_weight
+    overlay_alpha = _clamp_ratio(
+        0.03 + specular_constant * 0.05 + concentration * 0.03,
+        minimum=0.03,
+        maximum=0.12,
+    )
+    glow_alpha = _clamp_ratio(
+        0.20 + specular_constant * 0.11 + exponent_weight * 0.17,
+        minimum=0.20,
+        maximum=0.46,
+    )
+    inner_alpha = _clamp_ratio(
+        0.05 + specular_constant * 0.06 + exponent_weight * 0.08,
+        minimum=0.05,
+        maximum=0.22,
+    )
+    glow_px = max(surface_scale * (0.18 + concentration * 0.24), 0.45)
+    blur_px = max(glow_px * 0.38, 0.3)
+    distance_px = _lighting_distance_px(
+        light,
+        base=surface_scale * (0.14 + concentration * 0.08),
+        maximum=1.8,
+    )
+    direction = _lighting_direction_ppt(light)
+
+    effectLst = a_elem("effectLst")
+    fillOverlay = a_sub(effectLst, "fillOverlay", blend="screen")
+    solidFill = a_sub(fillOverlay, "solidFill")
+    overlayClr = a_sub(solidFill, "srgbClr", val=overlay_token)
+    a_sub(overlayClr, "alpha", val=opacity_to_ppt(overlay_alpha))
+
+    glow = a_sub(effectLst, "glow", rad=int(px_to_emu(glow_px)))
+    glowClr = a_sub(glow, "srgbClr", val=token)
+    a_sub(glowClr, "alpha", val=opacity_to_ppt(glow_alpha))
+
+    inner = a_sub(
+        effectLst,
+        "innerShdw",
+        blurRad=int(px_to_emu(blur_px)),
+        dist=int(px_to_emu(distance_px)),
+        dir=direction,
+        algn="ctr",
+        rotWithShape="0",
+    )
+    innerClr = a_sub(inner, "srgbClr", val=token)
+    a_sub(innerClr, "alpha", val=opacity_to_ppt(inner_alpha))
+
+    return to_string(effectLst), {
+        "approximation": "editable_lighting",
+        "mimic_strategy": "fill_overlay_glow_inner_shadow",
+        "overlay_alpha": overlay_alpha,
+        "glow_alpha": glow_alpha,
+        "glow_radius_px": glow_px,
+        "inner_shadow_alpha": inner_alpha,
+        "inner_shadow_blur_px": blur_px,
+        "inner_shadow_distance_px": distance_px,
+        "inner_shadow_direction": direction,
+    }
+
+
+def _normalise_color_token(value: str) -> str:
+    token = value.strip().lstrip("#")
     if len(token) == 3:
         token = "".join(ch * 2 for ch in token)
     if len(token) != 6:
-        token = "FFFFFF"
-    alpha = opacity_to_ppt(_clamp_intensity(intensity))
-    radius_emu = int(px_to_emu(max(0.0, radius_px)))
-    effectLst = a_elem("effectLst")
-    glow_elem = a_sub(effectLst, "glow", rad=radius_emu)
-    srgb = a_sub(glow_elem, "srgbClr", val=token.upper())
-    a_sub(srgb, "alpha", val=alpha)
-    return to_string(effectLst)
+        return "FFFFFF"
+    return token.upper()
 
 
-def _clamp_intensity(value: float, *, minimum: float = 0.1) -> float:
-    return max(minimum, min(float(value), 1.0))
+def _mix_toward_white(token: str, weight: float) -> str:
+    weight = max(0.0, min(float(weight), 1.0))
+    try:
+        red = int(token[0:2], 16)
+        green = int(token[2:4], 16)
+        blue = int(token[4:6], 16)
+    except ValueError:
+        return token
+    red = int(round(red + (255 - red) * weight))
+    green = int(round(green + (255 - green) * weight))
+    blue = int(round(blue + (255 - blue) * weight))
+    return f"{red:02X}{green:02X}{blue:02X}"
+
+
+def _lighting_direction_ppt(light: LightSource | None) -> int:
+    if light is None:
+        return 0
+    if light.kind == "distant":
+        azimuth = math.radians(float(light.params.get("azimuth", 0.0)))
+        elevation = math.radians(float(light.params.get("elevation", 0.0)))
+        dx = math.cos(elevation) * math.cos(azimuth)
+        dy = math.cos(elevation) * math.sin(azimuth)
+    elif light.kind == "spot":
+        dx = float(light.params.get("pointsAtX", 0.0)) - float(light.params.get("x", 0.0))
+        dy = float(light.params.get("pointsAtY", 0.0)) - float(light.params.get("y", 0.0))
+        if abs(dx) <= 1e-6 and abs(dy) <= 1e-6:
+            dx = float(light.params.get("x", 0.0))
+            dy = float(light.params.get("y", 0.0))
+    else:
+        dx = float(light.params.get("x", 0.0))
+        dy = float(light.params.get("y", 0.0))
+
+    if abs(dx) <= 1e-6 and abs(dy) <= 1e-6:
+        return 0
+    return radians_to_ppt(math.atan2(dy, dx) % (2 * math.pi))
+
+
+def _lighting_distance_px(light: LightSource | None, *, base: float, maximum: float) -> float:
+    if light is None:
+        return 0.0
+    strength = 0.75
+    if light.kind == "distant":
+        elevation = max(0.0, min(float(light.params.get("elevation", 45.0)), 89.0))
+        strength = max(0.15, math.cos(math.radians(elevation)))
+    return min(max(base, 0.0) * strength, maximum)
+
+
+def _clamp_ratio(value: float, *, minimum: float = 0.1, maximum: float = 1.0) -> float:
+    return max(minimum, min(float(value), maximum))
+
+
+def _source_is_svg_image(context: FilterContext) -> bool:
+    options = context.options if isinstance(context.options, dict) else {}
+    element = options.get("element")
+    tag = getattr(element, "tag", None)
+    if isinstance(tag, str):
+        local = tag.split("}", 1)[-1] if "}" in tag else tag
+        if local == "image":
+            return True
+
+    filter_inputs = options.get("filter_inputs")
+    if isinstance(filter_inputs, dict):
+        source = filter_inputs.get("SourceGraphic")
+        if isinstance(source, dict):
+            shape_type = source.get("shape_type")
+            if isinstance(shape_type, str) and shape_type.lower() == "image":
+                return True
+    return False
 
 
 __all__ = ["DiffuseLightingFilter", "SpecularLightingFilter"]

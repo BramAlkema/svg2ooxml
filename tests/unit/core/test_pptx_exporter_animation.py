@@ -211,7 +211,7 @@ def test_animate_motion_path_emits_point_list() -> None:
 
     assert "<p:animMotion" in render_result.slide_xml
     assert 'path="M' in render_result.slide_xml
-    assert "ptsTypes=" in render_result.slide_xml
+    assert "pathEditMode=\"relative\"" in render_result.slide_xml
 
 
 def test_motion_rotate_auto_emits_fidelity_downgrade_trace() -> None:

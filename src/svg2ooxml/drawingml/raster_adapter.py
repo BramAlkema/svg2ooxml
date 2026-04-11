@@ -26,6 +26,7 @@ except Exception:  # pragma: no cover - optional dependency
     NUMPY_AVAILABLE = False
 
 _UNSUPPORTED_SOURCE_STYLE = object()
+_URL_REF_RE = re.compile(r"url\(\s*#([^)]+?)\s*\)")
 
 
 @dataclass
@@ -79,6 +80,8 @@ class RasterAdapter:
         """Render a PNG fallback for ``filter_id`` using skia when available."""
 
         descriptor, bounds = self._descriptor_payload(context)
+        if descriptor is None:
+            descriptor = self._descriptor_from_filter_element(filter_element, filter_id)
         primitive_tags = tuple(descriptor.get("primitive_tags", ())) if descriptor else ()
         filter_units = (descriptor or {}).get("filter_units")
         primitive_units = (descriptor or {}).get("primitive_units")
@@ -98,11 +101,28 @@ class RasterAdapter:
                 },
             )
 
-        width_px, height_px = self._derive_dimensions(context, default_size, descriptor, bounds)
+        resolved_bounds = self._resolved_filter_bounds(
+            descriptor=descriptor,
+            bounds=bounds,
+            default_width=default_size[0],
+            default_height=default_size[1],
+        )
+        width_px, height_px = self._derive_dimensions(context, default_size, descriptor, resolved_bounds)
         passes = self._pass_count(descriptor, complexity)
         scale = self._scale_factor(descriptor, bounds, complexity)
 
-        surface = self._render_preview_with_resvg(filter_element, filter_id, width_px, height_px, context=context)
+        surface = self._render_surface_with_filter_pipeline(
+            filter_element=filter_element,
+            context=context,
+        )
+        if surface is None:
+            surface = self._render_preview_with_resvg(
+                filter_element,
+                filter_id,
+                width_px,
+                height_px,
+                context=context,
+            )
         if surface is not None:
             self._counter += 1
             relationship_id = f"rIdRaster{self._counter}"
@@ -123,8 +143,8 @@ class RasterAdapter:
             }
             if descriptor:
                 metadata["descriptor"] = descriptor
-            if bounds:
-                metadata["bounds"] = bounds
+            if resolved_bounds:
+                metadata["bounds"] = resolved_bounds
             return RasterResult(
                 image_bytes=_surface_to_png(surface),
                 relationship_id=relationship_id,
@@ -148,6 +168,54 @@ class RasterAdapter:
             bounds=bounds,
             default_size=default_size,
         )
+
+    def _render_surface_with_filter_pipeline(
+        self,
+        *,
+        filter_element: etree._Element,
+        context,
+    ):
+        if skia is None or not NUMPY_AVAILABLE:
+            return None
+        try:
+            from svg2ooxml.filters.planner import FilterPlanner
+            from svg2ooxml.filters.resvg_bridge import resolve_filter_element
+            from svg2ooxml.render.filters import apply_filter
+        except Exception:  # pragma: no cover - optional render path
+            return None
+
+        try:
+            resolved_filter = resolve_filter_element(filter_element)
+        except Exception:
+            return None
+
+        planner = FilterPlanner()
+        options = getattr(context, "options", None)
+        if not isinstance(options, dict):
+            options = {}
+
+        plan = planner.build_resvg_plan(resolved_filter, options=options)
+        if plan is None:
+            return None
+
+        try:
+            bounds = planner.resvg_bounds(options, resolved_filter)
+            viewport = planner.resvg_viewport(bounds)
+        except Exception:
+            return None
+
+        source_surface = self.render_source_surface(
+            width_px=viewport.width,
+            height_px=viewport.height,
+            context=context,
+        )
+        if source_surface is None:
+            return None
+
+        try:
+            return apply_filter(source_surface, plan, bounds, viewport)
+        except Exception:
+            return None
 
     def render_source_surface(
         self,
@@ -441,11 +509,11 @@ class RasterAdapter:
             except Exception:
                 source_root = None
 
-        view_box = self._preview_viewbox(
+        resolved_bounds = self._resolved_filter_bounds(
             descriptor=descriptor,
             bounds=bounds,
-            width_px=width_px,
-            height_px=height_px,
+            default_width=width_px,
+            default_height=height_px,
         )
         svg_root = etree.Element(
             f"{{{svg_ns}}}svg",
@@ -453,7 +521,6 @@ class RasterAdapter:
             attrib={
                 "width": str(max(1, int(width_px))),
                 "height": str(max(1, int(height_px))),
-                "viewBox": view_box,
             },
         )
         defs = etree.SubElement(svg_root, f"{{{svg_ns}}}defs")
@@ -469,8 +536,32 @@ class RasterAdapter:
             svg_ns=svg_ns,
         )
         if source_subtree is not None:
-            svg_root.append(source_subtree)
+            preserve_user_space = self._requires_original_user_space(
+                source_subtree,
+                source_root,
+            )
+            svg_root.set(
+                "viewBox",
+                self._preview_viewbox(
+                    bounds=resolved_bounds,
+                    width_px=width_px,
+                    height_px=height_px,
+                    preserve_user_space=preserve_user_space,
+                ),
+            )
+            svg_root.append(
+                self._localize_source_subtree(
+                    source_subtree,
+                    resolved_bounds,
+                    svg_ns,
+                    preserve_user_space=preserve_user_space,
+                )
+            )
         else:
+            svg_root.set(
+                "viewBox",
+                self._preview_viewbox(bounds=resolved_bounds, width_px=width_px, height_px=height_px),
+            )
             rect = etree.SubElement(
                 svg_root,
                 f"{{{svg_ns}}}rect",
@@ -499,11 +590,11 @@ class RasterAdapter:
     ) -> str | None:
         svg_ns = "http://www.w3.org/2000/svg"
         xlink_ns = "http://www.w3.org/1999/xlink"
-        view_box = self._preview_viewbox(
+        resolved_bounds = self._resolved_filter_bounds(
             descriptor=descriptor,
             bounds=bounds,
-            width_px=width_px,
-            height_px=height_px,
+            default_width=width_px,
+            default_height=height_px,
         )
         svg_root = etree.Element(
             f"{{{svg_ns}}}svg",
@@ -511,7 +602,6 @@ class RasterAdapter:
             attrib={
                 "width": str(max(1, int(width_px))),
                 "height": str(max(1, int(height_px))),
-                "viewBox": view_box,
             },
         )
         defs = etree.SubElement(svg_root, f"{{{svg_ns}}}defs")
@@ -526,7 +616,27 @@ class RasterAdapter:
         )
         if source_subtree is None:
             return None
-        svg_root.append(source_subtree)
+        preserve_user_space = self._requires_original_user_space(
+            source_subtree,
+            source_root,
+        )
+        svg_root.set(
+            "viewBox",
+            self._preview_viewbox(
+                bounds=resolved_bounds,
+                width_px=width_px,
+                height_px=height_px,
+                preserve_user_space=preserve_user_space,
+            ),
+        )
+        svg_root.append(
+            self._localize_source_subtree(
+                source_subtree,
+                resolved_bounds,
+                svg_ns,
+                preserve_user_space=preserve_user_space,
+            )
+        )
         return etree.tostring(svg_root, encoding="unicode")
 
     def _source_element_from_context(self, context) -> etree._Element | None:
@@ -603,10 +713,10 @@ class RasterAdapter:
     def _preview_viewbox(
         self,
         *,
-        descriptor: dict[str, Any] | None,
         bounds: dict[str, float | Any] | None,
         width_px: int,
         height_px: int,
+        preserve_user_space: bool = False,
     ) -> str:
         if not bounds:
             return f"0 0 {max(1, int(width_px))} {max(1, int(height_px))}"
@@ -615,37 +725,99 @@ class RasterAdapter:
         y = float(bounds.get("y", 0.0))
         width = max(1.0, float(bounds.get("width", width_px)))
         height = max(1.0, float(bounds.get("height", height_px)))
-        region = (descriptor or {}).get("filter_region") if descriptor else None
-        units = (descriptor or {}).get("filter_units") if descriptor else None
 
-        if isinstance(region, dict):
-            rx = region.get("x")
-            ry = region.get("y")
-            rw = region.get("width")
-            rh = region.get("height")
-            try:
-                if units == "objectBoundingBox":
-                    if _is_number(rx):
-                        x = float(bounds.get("x", 0.0)) + float(rx) * float(bounds.get("width", width))
-                    if _is_number(ry):
-                        y = float(bounds.get("y", 0.0)) + float(ry) * float(bounds.get("height", height))
-                    if _is_number(rw):
-                        width = max(1.0, float(rw) * float(bounds.get("width", width)))
-                    if _is_number(rh):
-                        height = max(1.0, float(rh) * float(bounds.get("height", height)))
-                else:
-                    if _is_number(rx):
-                        x = float(rx)
-                    if _is_number(ry):
-                        y = float(ry)
-                    if _is_number(rw):
-                        width = max(1.0, float(rw))
-                    if _is_number(rh):
-                        height = max(1.0, float(rh))
-            except (TypeError, ValueError):
-                pass
+        if preserve_user_space:
+            return f"{x:g} {y:g} {width:g} {height:g}"
+        return f"0 0 {width:g} {height:g}"
 
-        return f"{x} {y} {width} {height}"
+    def _localize_source_subtree(
+        self,
+        source_subtree: etree._Element,
+        bounds: dict[str, float | Any] | None,
+        svg_ns: str,
+        *,
+        preserve_user_space: bool = False,
+    ) -> etree._Element:
+        if preserve_user_space or not isinstance(bounds, dict):
+            return source_subtree
+        try:
+            x = float(bounds.get("x", 0.0))
+            y = float(bounds.get("y", 0.0))
+        except (TypeError, ValueError):
+            return source_subtree
+        if abs(x) <= 1e-6 and abs(y) <= 1e-6:
+            return source_subtree
+        wrapper = etree.Element(
+            f"{{{svg_ns}}}g",
+            attrib={"transform": f"translate({-x:g},{-y:g})"},
+        )
+        wrapper.append(source_subtree)
+        return wrapper
+
+    def _requires_original_user_space(
+        self,
+        source_subtree: etree._Element,
+        source_root: etree._Element | None,
+    ) -> bool:
+        if not isinstance(source_root, etree._Element):
+            return False
+
+        referenced_ids: set[str] = set()
+        for node in source_subtree.iter():
+            if not isinstance(node.tag, str):
+                continue
+            for attr_name, attr_value in node.attrib.items():
+                if not isinstance(attr_value, str):
+                    continue
+                if attr_name in {
+                    "fill",
+                    "stroke",
+                    "filter",
+                    "clip-path",
+                    "mask",
+                    "href",
+                    "{http://www.w3.org/1999/xlink}href",
+                }:
+                    referenced_ids.update(_URL_REF_RE.findall(attr_value))
+                    if attr_value.startswith("#"):
+                        referenced_ids.add(attr_value[1:])
+                elif attr_name == "style":
+                    referenced_ids.update(_URL_REF_RE.findall(attr_value))
+
+        if not referenced_ids:
+            return False
+
+        targets = {
+            element.get("id"): element
+            for element in source_root.xpath(".//*[@id]")
+            if isinstance(element.tag, str) and isinstance(element.get("id"), str)
+        }
+        for ref_id in referenced_ids:
+            target = targets.get(ref_id)
+            if target is None:
+                continue
+            local_tag = target.tag.split("}", 1)[-1] if "}" in target.tag else target.tag
+            if local_tag in {"linearGradient", "radialGradient"}:
+                if (target.get("gradientUnits") or "").strip() == "userSpaceOnUse":
+                    return True
+            elif local_tag == "pattern":
+                if (
+                    (target.get("patternUnits") or "").strip() == "userSpaceOnUse"
+                    or (target.get("patternContentUnits") or "userSpaceOnUse").strip()
+                    == "userSpaceOnUse"
+                ):
+                    return True
+            elif local_tag == "clipPath":
+                if (target.get("clipPathUnits") or "userSpaceOnUse").strip() == "userSpaceOnUse":
+                    return True
+            elif local_tag == "mask":
+                if (
+                    (target.get("maskUnits") or "").strip() == "userSpaceOnUse"
+                    or (target.get("maskContentUnits") or "userSpaceOnUse").strip()
+                    == "userSpaceOnUse"
+                ):
+                    return True
+        return False
 
     def _render_placeholder_preview(
         self,
@@ -798,23 +970,101 @@ class RasterAdapter:
         if bounds:
             width = max(width, _coerce_positive(bounds.get("width"), width))
             height = max(height, _coerce_positive(bounds.get("height"), height))
-        region = (descriptor or {}).get("filter_region") if descriptor else None
-        if isinstance(region, dict):
-            try:
-                reg_width = _coerce_positive(region.get("width"))
-                reg_height = _coerce_positive(region.get("height"))
-                units = (descriptor or {}).get("filter_units")
-                if units == "objectBoundingBox" and bounds:
-                    reg_width = reg_width * _coerce_positive(bounds.get("width"), defaults[0])
-                    reg_height = reg_height * _coerce_positive(bounds.get("height"), defaults[1])
-                width = max(width, reg_width or width)
-                height = max(height, reg_height or height)
-            except (TypeError, ValueError):
-                pass
-
         width *= self._viewport_scale(descriptor)
         height *= self._viewport_scale(descriptor)
         return int(min(width, 1024)), int(min(height, 1024))
+
+    def _resolved_filter_bounds(
+        self,
+        *,
+        descriptor: dict[str, Any] | None,
+        bounds: dict[str, float | Any] | None,
+        default_width: float,
+        default_height: float,
+    ) -> dict[str, float] | None:
+        if isinstance(bounds, dict):
+            try:
+                x = float(bounds.get("x", 0.0))
+                y = float(bounds.get("y", 0.0))
+                width = max(1.0, float(bounds.get("width", default_width)))
+                height = max(1.0, float(bounds.get("height", default_height)))
+            except (TypeError, ValueError):
+                x = 0.0
+                y = 0.0
+                width = max(1.0, float(default_width))
+                height = max(1.0, float(default_height))
+        else:
+            x = 0.0
+            y = 0.0
+            width = max(1.0, float(default_width))
+            height = max(1.0, float(default_height))
+
+        region = (descriptor or {}).get("filter_region") if descriptor else None
+        units = (descriptor or {}).get("filter_units") if descriptor else None
+        if isinstance(region, dict):
+            base_width = width
+            base_height = height
+            if units == "objectBoundingBox":
+                rx = self._parse_object_bbox_region_value(region.get("x"), reference=base_width)
+                ry = self._parse_object_bbox_region_value(region.get("y"), reference=base_height)
+                rw = self._parse_object_bbox_region_value(region.get("width"), reference=base_width)
+                rh = self._parse_object_bbox_region_value(region.get("height"), reference=base_height)
+                if rx is not None:
+                    x += rx
+                if ry is not None:
+                    y += ry
+                if rw is not None and rw > 0:
+                    width = rw
+                if rh is not None and rh > 0:
+                    height = rh
+            else:
+                rx = self._parse_region_value(region.get("x"), reference=base_width)
+                ry = self._parse_region_value(region.get("y"), reference=base_height)
+                rw = self._parse_region_value(region.get("width"), reference=base_width)
+                rh = self._parse_region_value(region.get("height"), reference=base_height)
+                if rx is not None:
+                    x = rx
+                if ry is not None:
+                    y = ry
+                if rw is not None and rw > 0:
+                    width = rw
+                if rh is not None and rh > 0:
+                    height = rh
+
+        return {"x": x, "y": y, "width": width, "height": height}
+
+    def _parse_region_value(self, value: object, *, reference: float) -> float | None:
+        if value is None:
+            return None
+        if isinstance(value, str):
+            token = value.strip()
+            if token.endswith("%"):
+                try:
+                    return (float(token[:-1]) / 100.0) * reference
+                except ValueError:
+                    return None
+        if _is_number(value):
+            return float(value)
+        return None
+
+    def _parse_object_bbox_region_value(
+        self,
+        value: object,
+        *,
+        reference: float,
+    ) -> float | None:
+        if value is None:
+            return None
+        if isinstance(value, str):
+            token = value.strip()
+            if token.endswith("%"):
+                try:
+                    return (float(token[:-1]) / 100.0) * reference
+                except ValueError:
+                    return None
+        if _is_number(value):
+            return float(value) * reference
+        return None
 
     def _color_from_seed(self, seed: int) -> skia.Color4f:
         hue = (seed % 360) / 360.0
@@ -848,6 +1098,33 @@ class RasterAdapter:
         else:
             bounds = None
         return descriptor, bounds
+
+    def _descriptor_from_filter_element(
+        self,
+        filter_element: etree._Element | None,
+        filter_id: str,
+    ) -> dict[str, Any] | None:
+        if not isinstance(filter_element, etree._Element):
+            return None
+        region = {
+            key: filter_element.get(key)
+            for key in ("x", "y", "width", "height")
+            if filter_element.get(key) is not None
+        }
+        primitive_tags: list[str] = []
+        for child in filter_element:
+            if not isinstance(child.tag, str):
+                continue
+            primitive_tags.append(child.tag.split("}", 1)[-1])
+        if not region and not primitive_tags and not filter_element.attrib:
+            return None
+        return {
+            "filter_id": filter_id,
+            "filter_units": filter_element.get("filterUnits", "objectBoundingBox"),
+            "primitive_units": filter_element.get("primitiveUnits", "userSpaceOnUse"),
+            "primitive_tags": primitive_tags,
+            "filter_region": region,
+        }
 
     def _viewport_scale(self, descriptor: dict[str, Any] | None) -> float:
         if not descriptor:
@@ -1083,6 +1360,14 @@ def _surface_to_png(surface) -> bytes:
         raise RuntimeError("numpy is required to encode raster surfaces")
     if rgba.dtype != np.uint8:
         rgba = rgba.astype(np.uint8, copy=False)
+    alpha = rgba[..., 3:4].astype(np.float32)
+    safe_alpha = np.where(alpha > 0.0, alpha, 1.0)
+    rgb = rgba[..., :3].astype(np.float32)
+    rgba[..., :3] = np.where(
+        alpha > 0.0,
+        np.clip((rgb * 255.0) / safe_alpha, 0.0, 255.0),
+        0.0,
+    ).astype(np.uint8)
     height, width, _ = rgba.shape
     header = b"\x89PNG\r\n\x1a\n"
     ihdr = _png_chunk(

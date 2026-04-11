@@ -7,6 +7,7 @@ from tools.visual.corpus_audit import (
     _default_output_dir,
     _svg_has_animation,
     AuditResult,
+    audit_svgs,
     build_summary,
     discover_svg_paths,
     render_markdown_summary,
@@ -213,3 +214,49 @@ def test_svg_has_animation_detects_smil_tags() -> None:
     assert not _svg_has_animation(
         "<svg xmlns='http://www.w3.org/2000/svg'><rect x='0' y='0' width='10' height='10'/></svg>"
     )
+
+
+def test_svg_has_animation_recovers_malformed_header() -> None:
+    assert _svg_has_animation(
+        """<svg xmlns='http://www.w3.org/2000/svg' width='1000' height='1000'>
+<
+<path d='M0,0 L10,10'>
+  <animateMotion dur='1s' path='M0,0 L10,10'/>
+</path>
+</svg>"""
+    )
+
+
+def test_audit_svgs_passes_fidelity_tier_to_builder(monkeypatch, tmp_path: Path) -> None:
+    svg_path = tmp_path / "sample.svg"
+    svg_path.write_text("<svg xmlns='http://www.w3.org/2000/svg'/>", encoding="utf-8")
+
+    recorded: dict[str, object] = {}
+
+    class StubBuilder:
+        def __init__(self, **kwargs) -> None:
+            recorded.update(kwargs)
+
+    def fake_audit_svg(*args, **kwargs):
+        return AuditResult(
+            svg_path=svg_path.as_posix(),
+            artifact_dir=(tmp_path / "out").as_posix(),
+            build_status="ok",
+            render_status="skipped",
+            browser_status="skipped",
+            diff_status="skipped",
+        )
+
+    monkeypatch.setattr("tools.visual.corpus_audit.PptxBuilder", StubBuilder)
+    monkeypatch.setattr("tools.visual.corpus_audit.audit_svg", fake_audit_svg)
+
+    results = audit_svgs(
+        [svg_path],
+        output_dir=tmp_path / "audit",
+        skip_render=True,
+        skip_browser=True,
+        fidelity_tier="bitmap",
+    )
+
+    assert len(results) == 1
+    assert recorded["fidelity_tier"] == "bitmap"

@@ -79,32 +79,7 @@ class BrowserSvgRenderer:
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
         width, height = _extract_dimensions(svg_text)
-        svg_text = _rewrite_svg_font_aliases(svg_text)
-        temp_svg_path: Path | None = None
-        if source_path is not None:
-            svg_path = Path(source_path)
-            if not svg_path.exists():
-                raise BrowserRenderError(f"SVG source path not found: {svg_path}")
-            if not svg_path.is_file():
-                raise BrowserRenderError(f"SVG source path is not a file: {svg_path}")
-            source_text = svg_path.read_text(encoding="utf-8")
-            rewritten = _rewrite_svg_font_aliases(source_text)
-            if rewritten != source_text:
-                with tempfile.NamedTemporaryFile(
-                    "w",
-                    suffix=".svg",
-                    delete=False,
-                    encoding="utf-8",
-                    dir=svg_path.parent,
-                ) as handle:
-                    handle.write(rewritten)
-                    temp_svg_path = Path(handle.name)
-                svg_src = temp_svg_path.resolve().as_uri()
-            else:
-                svg_src = svg_path.resolve().as_uri()
-        else:
-            svg_b64 = base64.b64encode(svg_text.encode("utf-8")).decode("ascii")
-            svg_src = f"data:image/svg+xml;base64,{svg_b64}"
+        svg_src, temp_svg_path = _resolve_svg_src(svg_text, source_path=source_path)
         html = _wrap_svg(
             svg_src, width=width, height=height, background=self._background
         )

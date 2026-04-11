@@ -6,6 +6,7 @@ from dataclasses import replace
 
 from lxml import etree
 
+from svg2ooxml.core.styling.style_helpers import parse_style_attr
 from svg2ooxml.paint.resvg_bridge import resolve_paints_for_node
 from svg2ooxml.policy.fidelity import FidelityDecision, resolve_fidelity
 from svg2ooxml.ir.paint import PatternPaint
@@ -129,11 +130,14 @@ def extract_style(converter, element: etree._Element) -> StyleResult:
             metadata=metadata,
         )
 
-    fill = paints.fill if paints.fill is not None else base_style.fill
+    fill_disabled = _element_explicitly_disables_paint(element, "fill")
+    stroke_disabled = _element_explicitly_disables_paint(element, "stroke")
+
+    fill = None if fill_disabled else (paints.fill if paints.fill is not None else base_style.fill)
     if isinstance(fill, PatternPaint) and isinstance(base_style.fill, PatternPaint):
         fill = _merge_pattern_paint(fill, base_style.fill)
 
-    stroke = paints.stroke if paints.stroke is not None else base_style.stroke
+    stroke = None if stroke_disabled else (paints.stroke if paints.stroke is not None else base_style.stroke)
     if (
         stroke is not None
         and base_style.stroke is not None
@@ -164,6 +168,21 @@ def extract_style(converter, element: etree._Element) -> StyleResult:
 
 
 __all__ = ["extract_style"]
+
+
+def _element_explicitly_disables_paint(
+    element: etree._Element,
+    attribute: str,
+) -> bool:
+    attr_value = element.get(attribute)
+    if isinstance(attr_value, str) and attr_value.strip().lower() == "none":
+        return True
+    style_attr = element.get("style")
+    if not isinstance(style_attr, str) or attribute not in style_attr:
+        return False
+    parsed = parse_style_attr(style_attr)
+    value = parsed.get(attribute)
+    return isinstance(value, str) and value.strip().lower() == "none"
 
 
 def _merge_pattern_paint(

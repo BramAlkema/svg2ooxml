@@ -246,6 +246,22 @@ def test_start_slideshow_continues_when_edit_window_exists_but_presentation_prob
     assert "on tryMenuStart()" in script
 
 
+def test_advance_slide_sends_single_next_slide_keystroke(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_osascript(script: str, *, timeout: float | None = 30.0) -> str:
+        captured["script"] = script
+        return ""
+
+    monkeypatch.setattr(powerpoint_capture, "_osascript", fake_osascript)
+
+    powerpoint_capture._advance_slide()
+
+    script = captured["script"]
+    assert "key code 124" in script
+    assert "key code 49" not in script
+
+
 def test_wait_for_powerpoint_presentation_prefers_matching_open_deck(
     monkeypatch,
 ) -> None:
