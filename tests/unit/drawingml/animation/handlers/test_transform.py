@@ -249,6 +249,14 @@ class TestBuildRotate:
         bhvr_ctn = par.find(f".//{{{NS_P}}}cBhvr/{{{NS_P}}}cTn")
         assert bhvr_ctn.get("id") == "5"
 
+    def test_rotate_targets_r_attribute(self, handler: TransformAnimationHandler):
+        anim = make_transform_animation(
+            transform_type=TransformType.ROTATE, values=["0", "360"]
+        )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        attr_names = [node.text for node in par.findall(f".//{{{NS_P}}}attrName")]
+        assert "r" in attr_names
+
     def test_single_rotate_value(self, handler: TransformAnimationHandler):
         anim = make_transform_animation(
             transform_type=TransformType.ROTATE, values=["45"]

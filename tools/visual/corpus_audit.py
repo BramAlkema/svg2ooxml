@@ -52,6 +52,9 @@ class AuditResult:
     ssim_score: float | None = None
     pixel_diff_percentage: float | None = None
     animation_status: str = "skipped"
+    animation_emitted_count: int | None = None
+    animation_skipped_count: int | None = None
+    animation_reason_counts: dict[str, int] = field(default_factory=dict)
     animation_frame_count: int | None = None
     animation_avg_ssim: float | None = None
     animation_min_ssim: float | None = None
@@ -134,11 +137,16 @@ def audit_svgs(
     check_animation: bool = False,
     animation_duration: float = 4.0,
     animation_fps: float = 4.0,
+    fidelity_tier: str | None = None,
 ) -> list[AuditResult]:
     """Audit a collection of SVG paths and return ranked results."""
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    builder = PptxBuilder(filter_strategy="resvg", geometry_mode="resvg")
+    builder = PptxBuilder(
+        filter_strategy="resvg",
+        geometry_mode="resvg",
+        fidelity_tier=fidelity_tier,
+    )
     renderer = None
     render_available = False
     if not skip_render:
@@ -233,6 +241,7 @@ def audit_svg(
         build_ok = True
         result.build_status = "ok"
         trace_report = tracer.report().to_dict()
+        _apply_animation_trace_metrics(result, trace_report)
         geometry_totals = trace_report.get("geometry_totals", {})
         if isinstance(geometry_totals, dict):
             result.geometry_totals = {
@@ -461,7 +470,8 @@ def _run_animation_audit(
 
 def _svg_has_animation(svg_text: str) -> bool:
     try:
-        root = ET.fromstring(svg_text.encode("utf-8"))
+        parser = ET.XMLParser(recover=True)
+        root = ET.fromstring(svg_text.encode("utf-8"), parser)
     except ET.XMLSyntaxError:
         return False
     animation_tags = {
@@ -476,6 +486,64 @@ def _svg_has_animation(svg_text: str) -> bool:
         if isinstance(tag, str) and tag.split("}")[-1] in animation_tags:
             return True
     return False
+
+
+def _apply_animation_trace_metrics(
+    result: AuditResult,
+    trace_report: dict[str, object] | None,
+) -> None:
+    if not isinstance(trace_report, dict):
+        return
+    stage_events = trace_report.get("stage_events")
+    if not isinstance(stage_events, list):
+        return
+
+    emitted = 0
+    skipped = 0
+    reason_counts: dict[str, int] = {}
+
+    def _bump(reason: str | None) -> None:
+        if not reason:
+            return
+        reason_counts[reason] = reason_counts.get(reason, 0) + 1
+
+    for event in stage_events:
+        if not isinstance(event, dict):
+            continue
+        if event.get("stage") != "animation":
+            continue
+        action = event.get("action")
+        metadata = event.get("metadata")
+        metadata_dict = metadata if isinstance(metadata, dict) else {}
+        if action == "fragment_emitted":
+            emitted += 1
+            continue
+        if action == "fragment_skipped":
+            skipped += 1
+            _bump(str(metadata_dict.get("reason")) if metadata_dict.get("reason") else None)
+            continue
+        if action == "parse_fallback":
+            reason = metadata_dict.get("reason")
+            count = metadata_dict.get("count")
+            try:
+                count_value = int(count)
+            except (TypeError, ValueError):
+                count_value = 1
+            if reason:
+                reason_counts[str(reason)] = reason_counts.get(str(reason), 0) + count_value
+            continue
+        if action in {"timing_skipped", "unmapped_begin_trigger_target"}:
+            _bump(action)
+            reason = metadata_dict.get("reason")
+            if reason:
+                _bump(str(reason))
+
+    if emitted or skipped or reason_counts:
+        result.animation_emitted_count = emitted
+        result.animation_skipped_count = skipped
+        result.animation_reason_counts = dict(
+            sorted(reason_counts.items(), key=lambda pair: (-pair[1], pair[0]))
+        )
 
 
 def score_audit_result(result: AuditResult) -> float:
@@ -544,6 +612,12 @@ def write_audit_report(
 def build_summary(results: Sequence[AuditResult]) -> dict[str, object]:
     """Build an aggregate summary for a set of audit results."""
     total = len(results)
+    animation_reason_totals: dict[str, int] = {}
+    for item in results:
+        for reason, count in (item.animation_reason_counts or {}).items():
+            animation_reason_totals[reason] = (
+                animation_reason_totals.get(reason, 0) + count
+            )
     return {
         "total": total,
         "build_errors": sum(1 for item in results if item.build_status == "error"),
@@ -558,6 +632,18 @@ def build_summary(results: Sequence[AuditResult]) -> dict[str, object]:
         ),
         "animation_mismatches": sum(
             1 for item in results if item.animation_status == "mismatch"
+        ),
+        "animation_fragments_emitted": sum(
+            item.animation_emitted_count or 0 for item in results
+        ),
+        "animation_fragments_skipped": sum(
+            item.animation_skipped_count or 0 for item in results
+        ),
+        "animation_reason_totals": dict(
+            sorted(
+                animation_reason_totals.items(),
+                key=lambda pair: (-pair[1], pair[0]),
+            )
         ),
         "total_rasterized": sum(item.rasterized_count or 0 for item in results),
         "max_score": max((item.score for item in results), default=0.0),
@@ -580,13 +666,31 @@ def render_markdown_summary(
         f"- Render errors: {summary['render_errors']}",
         f"- Browser diff mismatches: {summary['diff_mismatches']}",
         f"- Animation mismatches: {summary['animation_mismatches']}",
+        f"- Animation fragments emitted: {summary['animation_fragments_emitted']}",
+        f"- Animation fragments skipped: {summary['animation_fragments_skipped']}",
         f"- Total rasterized leaves: {summary['total_rasterized']}",
         "",
+    ]
+    reason_totals = summary.get("animation_reason_totals", {})
+    if isinstance(reason_totals, dict) and reason_totals:
+        lines.extend(
+            [
+                "## Animation Reason Codes",
+                "",
+                "| Reason | Count |",
+                "| --- | ---: |",
+            ]
+        )
+        for reason, count in reason_totals.items():
+            lines.append(f"| {reason} | {count} |")
+        lines.append("")
+    lines.extend(
+        [
         "## Top Offenders",
         "",
-        "| Score | SVG | Build | Render | Browser | Diff | Anim | SSIM | Anim SSIM | Bitmaps | Max Δ |",
-        "| ---: | --- | --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: |",
-    ]
+        "| Score | SVG | Build | Render | Browser | Diff | Anim | Anim Frag | SSIM | Anim SSIM | Bitmaps | Max Δ |",
+        "| ---: | --- | --- | --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: |",
+    ])
     for item in list(results)[: max(top_n, 0)]:
         ssim = f"{item.ssim_score:.4f}" if item.ssim_score is not None else "-"
         animation_ssim = (
@@ -594,6 +698,11 @@ def render_markdown_summary(
             if item.animation_min_ssim is not None
             else "-"
         )
+        animation_fragments = "-"
+        if item.animation_emitted_count is not None or item.animation_skipped_count is not None:
+            emitted = item.animation_emitted_count or 0
+            skipped = item.animation_skipped_count or 0
+            animation_fragments = f"{emitted}/{skipped}"
         bitmaps = (
             str(item.rasterized_count) if item.rasterized_count is not None else "-"
         )
@@ -602,11 +711,23 @@ def render_markdown_summary(
             "| "
             f"{item.score:.1f} | {item.svg_path} | {item.build_status} | "
             f"{item.render_status} | {item.browser_status} | {item.diff_status} | "
-            f"{item.animation_status} | {ssim} | {animation_ssim} | {bitmaps} | {bbox} |"
+            f"{item.animation_status} | {animation_fragments} | {ssim} | {animation_ssim} | {bitmaps} | {bbox} |"
         )
         if item.notes:
             lines.append(
-                "|  | notes: " f"{'; '.join(item.notes)} |  |  |  |  |  |  |  |  |  |"
+                "|  | notes: " f"{'; '.join(item.notes)} |  |  |  |  |  |  |  |  |  |  |"
+            )
+        if item.animation_reason_counts:
+            reason_summary = "; ".join(
+                f"{reason}={count}"
+                for reason, count in sorted(
+                    item.animation_reason_counts.items(),
+                    key=lambda pair: (-pair[1], pair[0]),
+                )
+            )
+            lines.append(
+                "|  | animation reasons: "
+                f"{reason_summary} |  |  |  |  |  |  |  |  |  |  |"
             )
     lines.append("")
     return "\n".join(lines)
@@ -749,6 +870,11 @@ def main() -> None:
         help="Disable periodic reopen attempts while waiting for slides.",
     )
     parser.add_argument(
+        "--fidelity-tier",
+        choices=("direct", "mimic", "emf", "bitmap"),
+        help="Audit a specific fidelity tier so fallback paths can be exercised explicitly.",
+    )
+    parser.add_argument(
         "--check-animation",
         action="store_true",
         help="Capture live PowerPoint/browser animation frames for animated SVGs.",
@@ -805,6 +931,7 @@ def main() -> None:
         powerpoint_capture_timeout=args.powerpoint_capture_timeout,
         powerpoint_use_keys=args.powerpoint_use_keys,
         powerpoint_no_reopen=args.powerpoint_no_reopen,
+        fidelity_tier=args.fidelity_tier,
         check_animation=args.check_animation,
         animation_duration=args.animation_duration,
         animation_fps=args.animation_fps,

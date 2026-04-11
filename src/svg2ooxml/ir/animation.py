@@ -142,6 +142,7 @@ class AnimationDefinition:
     target_attribute: str
     values: list[str]
     timing: AnimationTiming
+    animation_id: str | None = None
     key_times: list[float] | None = None
     key_splines: list[list[float]] | None = None
     calc_mode: CalcMode = CalcMode.LINEAR

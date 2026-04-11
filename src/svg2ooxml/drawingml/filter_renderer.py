@@ -82,8 +82,9 @@ class FilterRenderer:
                         drawingml = remainder or ""
                 else:
                     drawingml = remainder or ""
-            elif drawingml and drawingml.strip().startswith("<!--") and not remainder:
-                # Unhandled comment; drop it.
+            elif drawingml and drawingml.strip().startswith("<!--") and drawingml.strip().endswith("-->"):
+                # Comment-only fragments are placeholders from the primitive layer.
+                # Drop them here so fallback assets can be materialized below.
                 drawingml = ""
 
             fragment = drawingml.strip()

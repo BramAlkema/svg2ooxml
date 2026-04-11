@@ -2,8 +2,53 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 from svg2ooxml.drawingml.generator import px_to_emu
 from svg2ooxml.ir.scene import Image
+
+_ALLOWED_BLIP_TAGS = frozenset(
+    {
+        "alphaModFix",
+        "alphaMod",
+        "alphaOff",
+        "satMod",
+        "satOff",
+        "hueOff",
+        "lumMod",
+        "lumOff",
+        "tint",
+        "shade",
+    }
+)
+
+
+def _serialize_blip_color_transforms(metadata: Mapping[str, object] | None) -> str:
+    if not isinstance(metadata, Mapping):
+        return ""
+    candidates = metadata.get("blip_color_transforms")
+    if not isinstance(candidates, list):
+        return ""
+
+    fragments: list[str] = []
+    for candidate in candidates:
+        if not isinstance(candidate, Mapping):
+            continue
+        tag = candidate.get("tag")
+        if not isinstance(tag, str) or tag not in _ALLOWED_BLIP_TAGS:
+            continue
+        attrs: list[str] = []
+        for attr_name in ("val", "amt"):
+            if attr_name not in candidate:
+                continue
+            raw = candidate[attr_name]
+            if isinstance(raw, (int, float)):
+                attrs.append(f'{attr_name}="{int(round(raw))}"')
+            elif isinstance(raw, str) and raw.strip():
+                attrs.append(f'{attr_name}="{raw.strip()}"')
+        if attrs:
+            fragments.append(f"<a:{tag} {' '.join(attrs)}/>")
+    return "".join(fragments)
 
 
 def render_picture(
@@ -52,12 +97,17 @@ def render_picture(
         geometry_xml = '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>'
 
     blip_extensions_xml = ""
+    metadata_extensions = _serialize_blip_color_transforms(
+        image.metadata if isinstance(image.metadata, Mapping) else None
+    )
+    if metadata_extensions:
+        blip_extensions_xml += metadata_extensions
     if callable(lookup_blip_extensions):
         blip_extensions = lookup_blip_extensions(r_id)
         if isinstance(blip_extensions, str):
-            blip_extensions_xml = blip_extensions
+            blip_extensions_xml += blip_extensions
         elif blip_extensions:
-            blip_extensions_xml = str(blip_extensions)
+            blip_extensions_xml += str(blip_extensions)
 
     return template.format(
         SHAPE_ID=shape_id,

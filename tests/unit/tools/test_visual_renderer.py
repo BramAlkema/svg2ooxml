@@ -3,6 +3,7 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
+from PIL import Image, ImageDraw
 import pytest
 
 from tools.visual.renderer import (
@@ -10,6 +11,8 @@ from tools.visual.renderer import (
     PowerPointRenderer,
     VisualRendererError,
     resolve_renderer,
+    _detect_slide_crop_box,
+    _normalize_pngs,
 )
 from tools.visual.stack import default_visual_stack
 
@@ -91,9 +94,9 @@ def test_powerpoint_renderer_uses_slideshow_capture(
     def fake_run(cmd, **kwargs):
         captured["cmd"] = cmd
         captured["timeout"] = kwargs["timeout"]
-        output_path = Path(cmd[4])
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_bytes(
+        output_dir = Path(cmd[4])
+        output_dir.mkdir(parents=True, exist_ok=True)
+        (output_dir / "slide_1.png").write_bytes(
             b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR"
             b"\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02\x00\x00\x00"
             b"\x90wS\xde\x00\x00\x00\x0cIDAT\x08\x99c``\x00\x00\x00\x04\x00\x01"
@@ -112,10 +115,55 @@ def test_powerpoint_renderer_uses_slideshow_capture(
 
     assert result.images == (output_dir / "slide_1.png",)
     assert captured["cmd"][1:4] == ["-m", "tools.visual.powerpoint_capture", str(pptx_path)]
-    assert captured["cmd"][4] == str(output_dir / "slide_1.png")
+    assert captured["cmd"][4] == str(output_dir)
     assert "--mode" in captured["cmd"]
-    assert "slideshow" in captured["cmd"]
+    assert "slideshow-all" in captured["cmd"]
+    assert "--slide-delay" in captured["cmd"]
     assert "--no-keys" in captured["cmd"]
+
+
+def test_powerpoint_renderer_sorts_slide_images_numerically(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    pptx_path = tmp_path / "sample.pptx"
+    pptx_path.write_bytes(b"fake-pptx")
+    output_dir = tmp_path / "render"
+
+    renderer = PowerPointRenderer()
+
+    monkeypatch.setattr("tools.visual.renderer.platform.system", lambda: "Darwin")
+    monkeypatch.setattr(
+        "tools.visual.renderer.shutil.which", lambda cmd: "/usr/bin/osascript"
+    )
+
+    def fake_run(cmd, **kwargs):  # noqa: ARG001
+        output_dir = Path(cmd[4])
+        output_dir.mkdir(parents=True, exist_ok=True)
+        payload = (
+            b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR"
+            b"\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02\x00\x00\x00"
+            b"\x90wS\xde\x00\x00\x00\x0cIDAT\x08\x99c``\x00\x00\x00\x04\x00\x01"
+            b"\x0b\xe7\x02\x9d\x00\x00\x00\x00IEND\xaeB`\x82"
+        )
+        for name in ("slide_10.png", "slide_2.png", "slide_1.png"):
+            (output_dir / name).write_bytes(payload)
+        return subprocess.CompletedProcess(
+            args=cmd,
+            returncode=0,
+            stdout="",
+            stderr="",
+        )
+
+    monkeypatch.setattr("tools.visual.renderer.subprocess.run", fake_run)
+
+    result = renderer.render(pptx_path, output_dir)
+
+    assert result.images == (
+        output_dir / "slide_1.png",
+        output_dir / "slide_2.png",
+        output_dir / "slide_10.png",
+    )
 
 
 def test_powerpoint_renderer_captures_live_animation(
@@ -168,3 +216,49 @@ def test_powerpoint_renderer_captures_live_animation(
     assert "live" in captured["cmd"]
     assert "2.5" in captured["cmd"]
     assert "8.0" in captured["cmd"]
+
+
+def test_detect_slide_crop_box_finds_square_slide_inside_window() -> None:
+    image = Image.new("RGB", (3164, 2070), "black")
+    draw = ImageDraw.Draw(image)
+    draw.rectangle((686, 133, 2475, 1921), fill="white")
+
+    crop_box = _detect_slide_crop_box(image, target_size=(1000, 1000))
+
+    assert crop_box == (686, 133, 2476, 1922)
+
+
+def test_detect_slide_crop_box_finds_widescreenish_slide_inside_window() -> None:
+    image = Image.new("RGB", (3164, 2070), "black")
+    draw = ImageDraw.Draw(image)
+    draw.rectangle((388, 133, 2773, 1921), fill="white")
+
+    crop_box = _detect_slide_crop_box(image, target_size=(480, 360))
+
+    assert crop_box == (388, 133, 2774, 1922)
+
+
+def test_normalize_pngs_crops_before_resizing(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    pptx_path = tmp_path / "sample.pptx"
+    pptx_path.write_bytes(b"fake-pptx")
+    image_path = tmp_path / "slide_1.png"
+
+    image = Image.new("RGB", (3164, 2070), "black")
+    draw = ImageDraw.Draw(image)
+    draw.rectangle((686, 133, 2475, 1921), fill="white")
+    image.save(image_path)
+
+    monkeypatch.setattr(
+        "tools.visual.renderer._slide_size_to_pixels",
+        lambda pptx_path, dpi: (1000, 1000),
+    )
+
+    _normalize_pngs(pptx_path, (image_path,), 96.0)
+
+    with Image.open(image_path) as normalized:
+        assert normalized.size == (1000, 1000)
+        assert normalized.getpixel((10, 10)) == (255, 255, 255)
+        assert normalized.getpixel((normalized.width - 10, 10)) == (255, 255, 255)

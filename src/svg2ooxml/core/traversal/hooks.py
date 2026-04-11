@@ -342,11 +342,27 @@ class TraversalHooksMixin:
         selected_result = self._select_filter_result(effect_results)
         chosen_strategy = selected_result.strategy
         fallback_mode = selected_result.fallback
+        effective_fallback = fallback_mode
+        if effective_fallback is None and chosen_strategy == "native":
+            fallback_ranks = {"bitmap": 3, "raster": 3, "emf": 2, "vector": 1}
+            for candidate in effect_results:
+                candidate_fallback = (
+                    candidate.fallback.lower()
+                    if isinstance(candidate.fallback, str)
+                    else None
+                )
+                if candidate_fallback not in fallback_ranks:
+                    continue
+                if effective_fallback is None:
+                    effective_fallback = candidate_fallback
+                    continue
+                if fallback_ranks[candidate_fallback] > fallback_ranks.get(effective_fallback, 0):
+                    effective_fallback = candidate_fallback
 
         filter_entry["strategy"] = chosen_strategy
 
-        if fallback_mode:
-            filter_entry["fallback"] = fallback_mode
+        if effective_fallback:
+            filter_entry["fallback"] = effective_fallback
 
         detailed = metadata.setdefault("filter_metadata", {})
         selected_meta = dict(selected_result.metadata or {})
@@ -355,6 +371,8 @@ class TraversalHooksMixin:
         if "bounds" not in selected_meta and bbox_dict is not None:
             selected_meta["bounds"] = bbox_dict
         selected_meta["strategy"] = chosen_strategy
+        if effective_fallback:
+            selected_meta["fallback"] = effective_fallback
 
         if len(effect_results) > 1:
             assets = selected_meta.setdefault("fallback_assets", [])
@@ -378,11 +396,21 @@ class TraversalHooksMixin:
                 if isinstance(result.metadata, dict)
                 and result.metadata.get("filter_type")
             }
+            stack_types = {
+                str(result.metadata.get("stack_type", "")).lower()
+                for result in effect_results
+                if isinstance(result.metadata, dict)
+                and result.metadata.get("stack_type")
+            }
             if not filter_types:
                 fallback_type = selected_meta.get("filter_type")
                 if isinstance(fallback_type, str) and fallback_type:
                     filter_types = {fallback_type.lower()}
-            targets = self._collect_group_effect_targets(ir_object, filter_types)
+            if not stack_types:
+                fallback_stack = selected_meta.get("stack_type")
+                if isinstance(fallback_stack, str) and fallback_stack:
+                    stack_types = {fallback_stack.lower()}
+            targets = self._collect_group_effect_targets(ir_object, filter_types, stack_types)
         elif hasattr(ir_object, "effects"):
             targets = [ir_object]
         else:
@@ -405,8 +433,8 @@ class TraversalHooksMixin:
             filter_assets[filter_id] = assets
 
         geometry_policy = policy.setdefault("geometry", {})
-        if fallback_mode and "suggest_fallback" not in geometry_policy:
-            geometry_policy["suggest_fallback"] = fallback_mode
+        if effective_fallback and "suggest_fallback" not in geometry_policy:
+            geometry_policy["suggest_fallback"] = effective_fallback
         effects_policy = policy.setdefault("effects", {})
         filters_policy = effects_policy.setdefault("filters", [])
         if filter_id not in (
@@ -416,7 +444,7 @@ class TraversalHooksMixin:
                 {
                     "id": filter_id,
                     "strategy": chosen_strategy,
-                    "mode": fallback_mode or chosen_strategy,
+                    "mode": effective_fallback or chosen_strategy,
                 }
             )
 
@@ -455,8 +483,14 @@ class TraversalHooksMixin:
         self,
         group: Group,
         filter_types: set[str],
+        stack_types: set[str] | None = None,
     ) -> list[Any]:
-        if "gaussian_blur" not in filter_types:
+        stack_types = stack_types or set()
+        supported_stack_types = {
+            "diffuse_lighting_composite",
+            "specular_lighting_composite",
+        }
+        if "gaussian_blur" not in filter_types and not (stack_types & supported_stack_types):
             return []
 
         targets: list[Any] = []

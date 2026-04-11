@@ -249,18 +249,22 @@ class TestBuild:
         assert par.find(f".//{{{NS_P}}}anim") is None
         ctn = par.find(f"{{{NS_P}}}cTn")
         assert ctn is not None
-        assert ctn.get("autoRev") == "1"
         assert ctn.get("presetSubtype") == "0"
         bhvr_ctn = par.find(f".//{{{NS_P}}}cBhvr/{{{NS_P}}}cTn")
         assert bhvr_ctn is not None
         assert bhvr_ctn.get("dur") == "500"
-        assert bhvr_ctn.get("autoRev") is None
+        assert bhvr_ctn.get("autoRev") == "1"
+        assert bhvr_ctn.get("repeatCount") is None
         attr_names = par.findall(f".//{{{NS_P}}}attrName")
-        assert attr_names == []
-        by = anim_scale.find(f"{{{NS_P}}}by")
-        assert by is not None
-        assert by.get("x") == "300000"
-        assert by.get("y") == "0"
+        assert [node.text for node in attr_names] == ["ScaleX", "ScaleY"]
+        from_elem = anim_scale.find(f"{{{NS_P}}}from")
+        to_elem = anim_scale.find(f"{{{NS_P}}}to")
+        assert from_elem is not None
+        assert to_elem is not None
+        assert from_elem.get("x") == "100000"
+        assert from_elem.get("y") == "100000"
+        assert to_elem.get("x") == "400000"
+        assert to_elem.get("y") == "100000"
 
     def test_multi_keyframe_width_animation_with_custom_key_times_uses_generic_anim(
         self, handler: NumericAnimationHandler

@@ -31,9 +31,13 @@ def osascript(script: str, *, timeout: float | None = 30.0) -> str:
     return result.stdout.strip()
 
 
-def launch_powerpoint_app() -> None:
+def _powerpoint_app_target() -> str:
     app_bundle = Path("/Applications/Microsoft PowerPoint.app")
-    app_target = str(app_bundle) if app_bundle.exists() else _POWERPOINT_PROCESS_NAME
+    return str(app_bundle) if app_bundle.exists() else _POWERPOINT_PROCESS_NAME
+
+
+def launch_powerpoint_app() -> None:
+    app_target = _powerpoint_app_target()
     launch_cmd = f"open -W -a {shlex.quote(app_target)}"
     subprocess.Popen(
         ["/bin/zsh", "-lc", launch_cmd],
@@ -172,6 +176,24 @@ def open_presentation_via_ui(
     timeout: float | None = 30.0,
 ) -> None:
     pptx_path = pptx_path.resolve()
+    launch_timeout = max(5.0, min(timeout or 30.0, 15.0))
+    launch_attempts = (
+        ["open", "-b", _POWERPOINT_APP_ID, str(pptx_path)],
+        ["open", "-a", _POWERPOINT_PROCESS_NAME, str(pptx_path)],
+    )
+    for command in launch_attempts:
+        try:
+            subprocess.run(
+                command,
+                check=True,
+                timeout=launch_timeout,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            return
+        except Exception:
+            continue
+
     target_posix = _applescript_quote(str(pptx_path))
     launch_powerpoint_app()
     script = f"""

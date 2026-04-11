@@ -10,12 +10,13 @@ import shutil
 import subprocess
 import sys
 import time
+import uuid
 from pathlib import Path
 
 try:
     import objc
+    import ScreenCaptureKit as SCK  # noqa: N817
     from Foundation import NSObject
-    import ScreenCaptureKit as SCK
 
     class _SCKStreamOutput(NSObject):
         def init(self):
@@ -43,12 +44,21 @@ except Exception:
 
 from tools.visual.pptx_window import (  # noqa: E402
     get_front_window_id as _get_front_window_id,
+)
+from tools.visual.pptx_window import (
     get_png_type as _get_png_type,
+)
+from tools.visual.pptx_window import (
     get_slideshow_window_id as _get_slideshow_window_id,
+)
+from tools.visual.pptx_window import (
     get_window_id_via_jxa as _get_window_id_via_jxa,
+)
+from tools.visual.pptx_window import (
     open_presentation_via_ui as _open_presentation_via_ui,
+)
+from tools.visual.pptx_window import (
     osascript as _osascript,
-    osascript_jxa as _osascript_jxa,
 )
 
 _POWERPOINT_PERMISSION_NOTICE_SHOWN = False
@@ -68,7 +78,9 @@ def _prepare_staged_presentation(pptx_path: Path) -> Path:
     source = pptx_path.resolve()
     stage_dir = _powerpoint_stage_dir()
     stage_dir.mkdir(parents=True, exist_ok=True)
-    staged = stage_dir / "presentation.pptx"
+    suffix = source.suffix or ".pptx"
+    stage_name = f"{source.stem or 'presentation'}-{uuid.uuid4().hex[:12]}{suffix}"
+    staged = stage_dir / stage_name
     shutil.copy2(source, staged)
     return staged
 
@@ -291,11 +303,11 @@ def _capture_window_screen_capture_kit(
     timeout: float,
 ) -> None:
     try:
-        from Foundation import NSDate, NSRunLoop, NSURL
-        from AppKit import NSApplication
         import CoreMedia
         import Quartz
-        import ScreenCaptureKit as SCK
+        import ScreenCaptureKit as SCK  # noqa: N817
+        from AppKit import NSApplication
+        from Foundation import NSURL, NSDate, NSRunLoop
     except Exception as exc:
         raise RuntimeError("ScreenCaptureKit unavailable") from exc
     if _SCKStreamOutput is None:
@@ -513,6 +525,78 @@ end tell
         return 0
 
 
+def _applescript_string(value: str) -> str:
+    return json.dumps(value)
+
+
+def _matching_presentation_script(pptx_path: Path) -> str:
+    target_posix = _applescript_string(str(pptx_path.resolve()))
+    target_name = _applescript_string(pptx_path.name)
+    return f"""
+set targetPosix to {target_posix}
+set targetName to {target_name}
+set targetHfs to ""
+try
+    set targetHfs to ((POSIX file targetPosix) as text)
+end try
+
+on presentationMatches(presRef, targetPosix, targetHfs, targetName)
+    -- Callers MUST use index-based iteration (repeat with i from 1 to count).
+    -- "repeat with presRef in presentations" + this nested tell causes infinite loops.
+    tell application "Microsoft PowerPoint"
+    try
+        set presFullName to (full name of presRef) as text
+        if presFullName is targetPosix then
+            return true
+        end if
+        if targetHfs is not "" and presFullName is targetHfs then
+            return true
+        end if
+    end try
+    try
+        set presPath to (path of presRef) as text
+        set presName to (name of presRef) as text
+        set combinedPath to presPath & presName
+        if combinedPath is targetPosix then
+            return true
+        end if
+        if targetHfs is not "" and combinedPath is targetHfs then
+            return true
+        end if
+    end try
+    try
+        if ((name of presRef) as text) is targetName then
+            return true
+        end if
+    end try
+    end tell
+    return false
+end presentationMatches
+"""
+
+
+def _has_matching_powerpoint_presentation(pptx_path: Path) -> bool:
+    script = (
+        _matching_presentation_script(pptx_path)
+        + """
+tell application "Microsoft PowerPoint"
+    set presCount to count of presentations
+    repeat with i from 1 to presCount
+        set presRef to presentation i
+        if my presentationMatches(presRef, targetPosix, targetHfs, targetName) then
+            return "true"
+        end if
+    end repeat
+end tell
+return "false"
+"""
+    )
+    try:
+        return _osascript(script, timeout=5.0).strip().lower() == "true"
+    except Exception:
+        return False
+
+
 def _wait_for_powerpoint_window(timeout: float) -> bool:
     deadline = time.time() + max(0.5, timeout)
     while time.time() < deadline:
@@ -540,21 +624,82 @@ end tell
     return False
 
 
+def _confirm_powerpoint_recent_open(target_name: str) -> bool:
+    script = f"""
+set targetName to {_applescript_string(target_name)}
+try
+    tell application "System Events"
+        if not (exists process "Microsoft PowerPoint") then
+            return "false"
+        end if
+        tell process "Microsoft PowerPoint"
+            if (count of windows) is 0 then
+                return "false"
+            end if
+            set frontmost to true
+            try
+                set openButton to button "Open" of window 1
+                if enabled of openButton then
+                    click openButton
+                    return "true"
+                end if
+            end try
+            try
+                key code 36
+                return "true"
+            end try
+        end tell
+    end tell
+on error
+end try
+return "false"
+"""
+    try:
+        return _osascript(script, timeout=5.0).strip().lower() == "true"
+    except Exception:
+        return False
+
+
+def _direct_open_powerpoint_presentation(pptx_path: Path) -> bool:
+    script = f"""
+set targetPosix to {_applescript_string(str(pptx_path.resolve()))}
+tell application "Microsoft PowerPoint"
+    activate
+    open (POSIX file targetPosix)
+end tell
+"""
+    try:
+        _osascript(script, timeout=10.0)
+        return True
+    except Exception:
+        return False
+
+
 def _wait_for_powerpoint_presentation(pptx_path: Path, timeout: float) -> bool:
     lockfile_path = _powerpoint_lockfile_path(pptx_path)
-    deadline = time.time() + max(0.5, timeout)
+    wait_start = time.time()
+    deadline = wait_start + max(0.5, timeout)
+    last_open_confirm = 0.0
+    did_direct_open = False
     while time.time() < deadline:
-        if lockfile_path.exists():
+        if _has_matching_powerpoint_presentation(pptx_path):
+            return True
+        now = time.time()
+        if now - last_open_confirm >= 1.0 and _wait_for_powerpoint_window(0.2):
+            _confirm_powerpoint_recent_open(pptx_path.name)
+            last_open_confirm = now
+        if not did_direct_open and now - wait_start >= 2.0:
+            _direct_open_powerpoint_presentation(pptx_path)
+            did_direct_open = True
+        if lockfile_path.exists() and _has_matching_powerpoint_presentation(pptx_path):
             return True
         time.sleep(0.2)
-    return lockfile_path.exists()
+    return _has_matching_powerpoint_presentation(pptx_path)
 
 
 def _advance_slide() -> None:
     script = """
 tell application "System Events"
-    key code 49
-    delay 0.02
     key code 124
 end tell
 """
@@ -572,13 +717,37 @@ end tell
     _osascript(script)
 
 
-def _teardown_powerpoint_session() -> None:
+def _close_matching_presentation(pptx_path: Path) -> None:
+    script = (
+        _matching_presentation_script(pptx_path)
+        + """
+tell application "Microsoft PowerPoint"
+    set presCount to count of presentations
+    repeat with i from presCount to 1 by -1
+        set presRef to presentation i
+        if my presentationMatches(presRef, targetPosix, targetHfs, targetName) then
+            try
+                close presRef saving no
+            end try
+            exit repeat
+        end if
+    end repeat
+end tell
+"""
+    )
+    _osascript(script)
+
+
+def _teardown_powerpoint_session(pptx_path: Path | None = None) -> None:
     try:
         _exit_slideshow()
     except RuntimeError:
         pass
     try:
-        _close_active_presentation()
+        if pptx_path is not None:
+            _close_matching_presentation(pptx_path)
+        else:
+            _close_active_presentation()
     except RuntimeError:
         pass
 
@@ -590,8 +759,9 @@ tell application "Microsoft PowerPoint"
         try
             exit slide show slide show view of slide show window of active presentation
         end try
-        repeat with pres in presentations
-            close pres saving no
+        set presCount to count of presentations
+        repeat with i from presCount to 1 by -1
+            close presentation i saving no
         end repeat
     end try
 end tell
@@ -612,8 +782,10 @@ def _start_slideshow(
     allow_reopen: bool,
 ) -> None:
     pptx_path = pptx_path.resolve()
+    selector_script = _matching_presentation_script(pptx_path)
     open_attempts = 2 if allow_reopen else 1
     did_open = False
+    saw_window = False
     for attempt_index in range(open_attempts):
         _open_presentation_via_ui(
             pptx_path,
@@ -625,17 +797,126 @@ def _start_slideshow(
         ):
             did_open = True
             break
+        if _wait_for_powerpoint_window(min(open_timeout, 10.0)):
+            saw_window = True
         if attempt_index < (open_attempts - 1):
             time.sleep(0.5)
-    if not did_open:
-        raise RuntimeError("No PowerPoint presentation lock after UI open.")
-    if not _wait_for_powerpoint_window(min(open_timeout, 10.0)):
+    if not did_open and not saw_window:
+        raise RuntimeError("No PowerPoint presentation after UI open.")
+    if not saw_window and not _wait_for_powerpoint_window(min(open_timeout, 10.0)):
         raise RuntimeError("No PowerPoint edit window after UI open.")
-    script = f"""
+    script = selector_script + f"""
+on slideShowWindowCount()
+    tell application "Microsoft PowerPoint"
+        try
+            return count of slide show windows
+        on error
+            return 0
+        end try
+    end tell
+end slideShowWindowCount
+
+on findTargetPresentation(targetPosix, targetHfs, targetName)
+    tell application "Microsoft PowerPoint"
+        set presCount to count of presentations
+        repeat with i from 1 to presCount
+            set presRef to presentation i
+            if my presentationMatches(presRef, targetPosix, targetHfs, targetName) then
+                return presRef
+            end if
+        end repeat
+    end tell
+    return missing value
+end findTargetPresentation
+
+on focusTargetPresentationWindow(targetPosix, targetHfs, targetName)
+    set foundTarget to false
+    tell application "Microsoft PowerPoint"
+        activate
+        set presRef to my findTargetPresentation(targetPosix, targetHfs, targetName)
+        if presRef is missing value then
+            return false
+        end if
+        set foundTarget to true
+        try
+            if (count of document windows of presRef) > 0 then
+                set targetWindow to document window 1 of presRef
+                try
+                    set index of targetWindow to 1
+                end try
+            end if
+        end try
+    end tell
+    if not foundTarget then
+        return false
+    end if
+    try
+        tell application "System Events"
+            tell process "Microsoft PowerPoint"
+                set frontmost to true
+                repeat with uiWindow in windows
+                    try
+                        if (name of uiWindow) contains targetName then
+                            try
+                                perform action "AXRaise" of uiWindow
+                            end try
+                            try
+                                click uiWindow
+                            end try
+                            try
+                                set value of attribute "AXMain" of uiWindow to true
+                            end try
+                            try
+                                set value of attribute "AXFocused" of uiWindow to true
+                            end try
+                            exit repeat
+                        end if
+                    end try
+                end repeat
+            end tell
+        end tell
+    end try
+    return true
+end focusTargetPresentationWindow
+
+on tryObjectModelStart(targetPosix, targetHfs, targetName)
+    if not my focusTargetPresentationWindow(targetPosix, targetHfs, targetName) then
+        return false
+    end if
+    tell application "Microsoft PowerPoint"
+        if (count of presentations) is 0 then
+            return false
+        end if
+        try
+            set pres to my findTargetPresentation(targetPosix, targetHfs, targetName)
+            if pres is missing value then
+                return false
+            end if
+            set ss to slide show settings of pres
+            try
+                set show type of ss to slide show type window
+            end try
+            try
+                set show with presenter of ss to false
+            end try
+            try
+                set loop until stopped of ss to true
+            end try
+            run slide show ss
+            return true
+        on error
+            return false
+        end try
+    end tell
+end tryObjectModelStart
+
 on sendSlideshowKeys()
     delay 0.2
     try
         tell application "System Events"
+            tell process "Microsoft PowerPoint"
+                set frontmost to true
+            end tell
             keystroke return using {{command down, shift down}}
         end tell
     on error
@@ -644,24 +925,72 @@ on sendSlideshowKeys()
     return true
 end sendSlideshowKeys
 
-on requestSlideshowStart(useKeys)
-    set maxAttempts to 1
-    if useKeys then set maxAttempts to 2
-    repeat maxAttempts times
-        if my sendSlideshowKeys() then
-            return true
-        end if
-        delay 0.5
-    end repeat
+on tryDirectOpen(targetPosix)
+    tell application "Microsoft PowerPoint"
+        try
+            open (POSIX file targetPosix)
+            delay 1.0
+        end try
+    end tell
+end tryDirectOpen
+
+on tryMenuStart()
+    try
+        tell application "System Events"
+            tell process "Microsoft PowerPoint"
+                set frontmost to true
+                try
+                    click menu item "Play from Start" of menu 1 of menu bar item "Slide Show" of menu bar 1
+                    return true
+                end try
+                try
+                    click menu item "Play From Start" of menu 1 of menu bar item "Slide Show" of menu bar 1
+                    return true
+                end try
+                try
+                    click menu item "From Beginning" of menu 1 of menu bar item "Slide Show" of menu bar 1
+                    return true
+                end try
+            end tell
+        end tell
+    on error
+        return false
+    end try
     return false
-end requestSlideshowStart
+end tryMenuStart
 
 set useKeys to {str(use_keys).lower()}
 delay {delay}
-if my requestSlideshowStart(useKeys) is false then
-    error "Unable to request slideshow start."
-end if
-delay {slideshow_delay}
+repeat with attemptIndex from 1 to 8
+    if my findTargetPresentation(targetPosix, targetHfs, targetName) is missing value then
+        my tryDirectOpen(targetPosix)
+    end if
+    if my tryObjectModelStart(targetPosix, targetHfs, targetName) then
+        delay {slideshow_delay}
+        if my slideShowWindowCount() > 0 then
+            return "object-model"
+        end if
+    end if
+
+    if my tryMenuStart() then
+        delay {slideshow_delay}
+        if my slideShowWindowCount() > 0 then
+            return "menu"
+        end if
+    end if
+
+    if useKeys then
+        if my sendSlideshowKeys() then
+            delay {slideshow_delay}
+            if my slideShowWindowCount() > 0 then
+                return "keystroke"
+            end if
+        end if
+    end if
+    delay 0.35
+end repeat
+
+error "Unable to request slideshow start."
 """
     timeout = max(60.0, open_timeout + 30.0)
     _osascript(script, timeout=timeout)
@@ -756,7 +1085,7 @@ def capture_pptx_slideshow_all(
         )
     finally:
         if exit_after:
-            _teardown_powerpoint_session()
+            _teardown_powerpoint_session(staged_pptx)
 
 
 def _exit_slideshow() -> None:
@@ -863,7 +1192,7 @@ def capture_pptx_slideshow(
         )
     finally:
         if exit_after:
-            _teardown_powerpoint_session()
+            _teardown_powerpoint_session(staged_pptx)
 
 
 def capture_live_animation(
@@ -902,10 +1231,15 @@ def capture_live_animation(
         if not win_id:
             raise RuntimeError("No slideshow window detected after slideshow start.")
         start_time = time.time()
-        frame_idx = 0
         interval = 1.0 / fps
+        frame_count = max(1, int(duration * fps)) if duration > 0 else 1
 
-        while (time.time() - start_time) < duration:
+        for frame_idx in range(frame_count):
+            target_elapsed = frame_idx * interval
+            now = time.time()
+            wait = target_elapsed - (now - start_time)
+            if wait > 0:
+                time.sleep(wait)
             frame_path = output_dir / f"frame_{frame_idx:04d}.png"
             if win_id:
                 try:
@@ -931,14 +1265,6 @@ def capture_live_animation(
                     timeout=capture_timeout,
                 )
             captured_files.append(frame_path)
-            frame_idx += 1
-
-            # Simple pacing
-            elapsed = time.time() - start_time
-            next_shot = frame_idx * interval
-            wait = next_shot - elapsed
-            if wait > 0:
-                time.sleep(wait)
     except Exception as exc:
         _raise_with_powerpoint_diagnostics(
             reason="live_capture_failed",
@@ -949,7 +1275,7 @@ def capture_live_animation(
             capture_timeout=capture_timeout,
         )
     finally:
-        _teardown_powerpoint_session()
+        _teardown_powerpoint_session(staged_pptx)
 
     return captured_files
 

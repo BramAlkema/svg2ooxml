@@ -113,7 +113,7 @@ class TestBuild:
         anim_motion = par.find(f".//{{{NS_P}}}animMotion")
         assert anim_motion.get("origin") == "layout"
         assert anim_motion.get("pathEditMode") == "relative"
-        assert anim_motion.get("rAng") == "0"
+        assert anim_motion.get("rAng") is None
 
     def test_anim_motion_auto_rotate_sets_non_zero_rang(
         self, handler: MotionAnimationHandler
@@ -138,21 +138,17 @@ class TestBuild:
         sp_tgt = par.find(f".//{{{NS_P}}}spTgt")
         assert sp_tgt.get("spid") == "motion_shape"
 
-    def test_attr_name_list(self, handler: MotionAnimationHandler):
+    def test_does_not_emit_attr_name_list(self, handler: MotionAnimationHandler):
         anim = make_motion_animation()
         par = handler.build(anim, par_id=4, behavior_id=5)
         attr_names = par.findall(f".//{{{NS_P}}}attrName")
-        texts = [a.text for a in attr_names]
-        assert "ppt_x" in texts
-        assert "ppt_y" in texts
+        assert not attr_names
 
-    def test_rotation_center(self, handler: MotionAnimationHandler):
+    def test_does_not_emit_rotation_center_child(self, handler: MotionAnimationHandler):
         anim = make_motion_animation()
         par = handler.build(anim, par_id=4, behavior_id=5)
         rctr = par.find(f".//{{{NS_P}}}rCtr")
-        assert rctr is not None
-        assert rctr.get("x") == "4306"
-        assert rctr.get("y") == "0"
+        assert rctr is None
 
     def test_preset_class_is_path(self, handler: MotionAnimationHandler):
         anim = make_motion_animation()
@@ -175,6 +171,7 @@ class TestBuild:
         path = anim_motion.get("path")
         assert path.startswith("M ")
         assert " L " in path
+        assert path.endswith(" E")
 
     def test_discrete_calc_mode_expands_step_path(
         self, handler: MotionAnimationHandler
@@ -188,7 +185,7 @@ class TestBuild:
         anim_motion = par.find(f".//{{{NS_P}}}animMotion")
         path = anim_motion.get("path")
         assert path.count("L ") > 1
-        assert len(anim_motion.get("ptsTypes")) > 2
+        assert path.endswith(" E")
 
     def test_paced_calc_mode_with_key_times_retimes_path(
         self, handler: MotionAnimationHandler
@@ -200,7 +197,9 @@ class TestBuild:
         )
         par = handler.build(anim, par_id=4, behavior_id=5)
         anim_motion = par.find(f".//{{{NS_P}}}animMotion")
-        assert len(anim_motion.get("ptsTypes")) > 3
+        path = anim_motion.get("path")
+        assert path is not None
+        assert path.count("L ") > 2
 
 
 # ------------------------------------------------------------------ #

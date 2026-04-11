@@ -87,6 +87,18 @@ class TestGoldenMaster:
         ])
         _assert_golden(actual, "opacity_fade_in", update_golden)
 
+    def test_opacity_fade_out(self, update_golden):
+        actual = _build([
+            AnimationDefinition(
+                element_id="shape1",
+                animation_type=AnimationType.ANIMATE,
+                target_attribute="opacity",
+                values=["1", "0"],
+                timing=AnimationTiming(begin=0.0, duration=1.0),
+            ),
+        ])
+        _assert_golden(actual, "opacity_fade_out", update_golden)
+
     def test_color_red_to_blue(self, update_golden):
         actual = _build([
             AnimationDefinition(

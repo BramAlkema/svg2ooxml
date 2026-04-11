@@ -211,7 +211,7 @@ def test_animate_motion_path_emits_point_list() -> None:
 
     assert "<p:animMotion" in render_result.slide_xml
     assert 'path="M' in render_result.slide_xml
-    assert "ptsTypes=" in render_result.slide_xml
+    assert "pathEditMode=\"relative\"" in render_result.slide_xml
 
 
 def test_motion_rotate_auto_emits_fidelity_downgrade_trace() -> None:
@@ -335,6 +335,132 @@ def test_begin_element_end_with_offset_emits_onend_condition() -> None:
     assert 'delay="500"' in render_result.slide_xml
 
 
+def test_begin_animation_id_end_remaps_to_owning_shape() -> None:
+    svg = """
+    <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">
+      <rect id="rect1" width="10" height="10" fill="#000">
+        <animate id="grow" attributeName="width" values="10;20" begin="0s" dur="1s"/>
+      </rect>
+      <rect id="rect2" x="20" width="10" height="10" fill="#000">
+        <animate attributeName="x" values="20;30" begin="grow.end+0.5s" dur="1s"/>
+      </rect>
+    </svg>
+    """
+
+    render_result, _, _ = _render(svg)
+
+    assert "<p:timing" in render_result.slide_xml
+    assert 'evt="onEnd"' in render_result.slide_xml
+    assert 'delay="500"' in render_result.slide_xml
+    # rect1 is shape 2 in the emitted slide.
+    assert '<p:spTgt spid="2"/>' in render_result.slide_xml
+
+
+def test_begin_indefinite_remaps_to_bookmark_button_click_trigger() -> None:
+    svg = """
+    <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="100" height="100">
+      <rect id="target" x="0" y="0" width="40" height="40" fill="#fff">
+        <animate id="fadein" attributeName="fill" from="#fff" to="blue" begin="indefinite" dur="3s" fill="freeze"/>
+      </rect>
+      <a xlink:href="#fadein">
+        <rect id="button" x="60" y="0" width="30" height="30" fill="green"/>
+      </a>
+    </svg>
+    """
+
+    render_result, _, tracer = _render(svg)
+
+    assert 'evt="onClick"' in render_result.slide_xml
+    assert '<p:spTgt spid="3"/>' in render_result.slide_xml
+    assert '<p:bldP spid="3" grpId="7" animBg="1"/>' in render_result.slide_xml
+    skipped = [
+        event
+        for event in tracer.report().stage_events
+        if event.stage == "animation" and event.action == "fragment_skipped"
+    ]
+    assert not any(
+        event.metadata.get("reason") == "unsupported_begin_indefinite"
+        for event in skipped
+    )
+
+
+def test_begin_indefinite_bookmark_trigger_preserves_chained_begin() -> None:
+    svg = """
+    <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="100" height="100">
+      <rect id="target" x="0" y="0" width="40" height="40" fill="#fff">
+        <animate id="fadein" attributeName="fill" from="#fff" to="blue" begin="indefinite" dur="3s" fill="freeze"/>
+      </rect>
+      <rect id="other" x="0" y="50" width="40" height="40" fill="#fff">
+        <animate attributeName="fill" from="#fff" to="red" begin="fadein.begin" dur="3s" fill="freeze"/>
+      </rect>
+      <a xlink:href="#fadein">
+        <rect id="button" x="60" y="0" width="30" height="30" fill="green"/>
+      </a>
+    </svg>
+    """
+
+    render_result, _, tracer = _render(svg)
+
+    assert 'evt="onClick"' in render_result.slide_xml
+    assert 'evt="onBegin"' in render_result.slide_xml
+    assert '<p:spTgt spid="4"/>' in render_result.slide_xml
+    assert '<p:spTgt spid="2"/>' in render_result.slide_xml
+    assert '<p:bldP spid="4" grpId="8" animBg="1"/>' in render_result.slide_xml
+    assert '<p:bldP spid="2" grpId="10" animBg="1"/>' in render_result.slide_xml
+    skipped = [
+        event
+        for event in tracer.report().stage_events
+        if event.stage == "animation" and event.action == "fragment_skipped"
+    ]
+    assert not skipped
+
+
+def test_skew_transform_reports_specific_reason_codes() -> None:
+    svg = """
+    <svg xmlns="http://www.w3.org/2000/svg" width="100" height="100">
+      <line id="line1" x1="10" y1="10" x2="50" y2="10" stroke="#000" stroke-width="4">
+        <animateTransform attributeName="transform" type="skewX" values="0;45;-45;0" begin="0s" dur="4s"/>
+      </line>
+      <line id="line2" x1="10" y1="40" x2="50" y2="40" stroke="#000" stroke-width="4">
+        <animateTransform attributeName="transform" type="skewY" values="0;30;-30;0" begin="0s" dur="4s"/>
+      </line>
+    </svg>
+    """
+
+    _, _, tracer = _render(svg)
+
+    skipped = [
+        event
+        for event in tracer.report().stage_events
+        if event.stage == "animation" and event.action == "fragment_skipped"
+    ]
+    reasons = {event.metadata.get("reason") for event in skipped}
+    assert "unsupported_transform_skewx" in reasons
+    assert "unsupported_transform_skewy" in reasons
+    assert "no_handler_found" not in reasons
+
+
+def test_color_property_animation_reports_specific_reason_code() -> None:
+    svg = """
+    <svg xmlns="http://www.w3.org/2000/svg" width="100" height="100">
+      <rect id="rect1" color="black" fill="blue" x="10" y="10" width="60" height="40">
+        <animateColor attributeName="color" from="blue" to="cyan" begin="0s" dur="5s" fill="freeze"/>
+      </rect>
+    </svg>
+    """
+
+    _, _, tracer = _render(svg)
+
+    skipped = [
+        event
+        for event in tracer.report().stage_events
+        if event.stage == "animation" and event.action == "fragment_skipped"
+    ]
+    reasons = {event.metadata.get("reason") for event in skipped}
+    assert "unsupported_attribute_color" in reasons
+    assert "no_handler_found" not in reasons
+
+
 def test_numeric_attribute_animation_emits_anim() -> None:
     svg = """
     <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">
@@ -409,7 +535,10 @@ def test_symmetric_multi_keyframe_width_animation_uses_autoreverse_scale() -> No
     render_result, _, _ = _render(svg)
 
     assert "<p:animScale" in render_result.slide_xml
-    assert '<p:by x="300000" y="0"/>' in render_result.slide_xml
+    assert '<p:attrName>ScaleX</p:attrName>' in render_result.slide_xml
+    assert '<p:attrName>ScaleY</p:attrName>' in render_result.slide_xml
+    assert '<p:from x="100000" y="100000"/>' in render_result.slide_xml
+    assert '<p:to x="400000" y="100000"/>' in render_result.slide_xml
     assert 'autoRev="1"' in render_result.slide_xml
 
 
@@ -443,13 +572,27 @@ def test_multi_keyframe_opacity_animation_uses_transparency_effect() -> None:
 
     render_result, _, _ = _render(svg)
 
-    assert (
-        '<p:animEffect filter="image" prLst="opacity: 0.1">' in render_result.slide_xml
-    )
+    assert '<p:animEffect filter="image" prLst="opacity: 1">' in render_result.slide_xml
     assert 'rctx="IE"' in render_result.slide_xml
     assert '<p:strVal val="0.1"/>' in render_result.slide_xml
     assert "<p:anim>" not in render_result.slide_xml
     assert "<p:attrName>style.opacity</p:attrName>" in render_result.slide_xml
+
+
+def test_simple_fade_out_animation_uses_exit_fade_effect() -> None:
+    svg = """
+    <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">
+      <rect id="rect1" width="10" height="10" fill="#000">
+        <animate attributeName="opacity" values="1;0" dur="1s" begin="0s"/>
+      </rect>
+    </svg>
+    """
+
+    render_result, _, _ = _render(svg)
+
+    assert '<p:animEffect transition="out" filter="fade">' in render_result.slide_xml
+    assert 'presetClass="exit"' in render_result.slide_xml
+    assert "<p:anim>" not in render_result.slide_xml
 
 
 def test_timing_tree_uses_powerpoint_autostart_wrapper() -> None:

@@ -43,15 +43,27 @@ class OpacityAnimationHandler(AnimationHandler):
                 animation, par_id, behavior_id
             )
 
-        if self._should_use_property_animation(animation):
-            return self._build_property_animation(animation, par_id, behavior_id)
+        fade_effect = self._build_authored_fade_effect(
+            animation, par_id, behavior_id
+        )
+        if fade_effect is not None:
+            return fade_effect
 
-        target_opacity = self._compute_target_opacity(animation)
+        return self._build_property_animation(animation, par_id, behavior_id)
 
-        # Build <p:animEffect>
+    def _build_authored_fade_effect(
+        self,
+        animation: AnimationDefinition,
+        par_id: int,
+        behavior_id: int,
+    ) -> etree._Element | None:
+        fade_params = self._resolve_authored_fade(animation)
+        if fade_params is None:
+            return None
+
+        transition, preset_class = fade_params
+
         anim_effect = p_elem("animEffect")
-
-        # Behavior core
         cBhvr = self._xml.build_behavior_core_elem(
             behavior_id=behavior_id,
             duration_ms=animation.duration_ms,
@@ -61,19 +73,16 @@ class OpacityAnimationHandler(AnimationHandler):
             repeat_count=animation.repeat_count,
         )
         anim_effect.append(cBhvr)
+        anim_effect.set("transition", transition)
+        anim_effect.set("filter", "fade")
 
-        # Filter (ECMA-376: animEffect allows only cBhvr + progress)
-        anim_effect.set("transition", "in")
-        anim_effect.set("filter", f"fade(opacity={target_opacity})")
-
-        # Wrap in <p:par>
         return self._xml.build_par_container_elem(
             par_id=par_id,
             duration_ms=animation.duration_ms,
             delay_ms=animation.begin_ms,
             child_element=anim_effect,
             preset_id=10,
-            preset_class="entr",
+            preset_class=preset_class,
             begin_triggers=animation.begin_triggers,
             default_target_shape=animation.element_id,
             effect_group_id=par_id,
@@ -86,8 +95,11 @@ class OpacityAnimationHandler(AnimationHandler):
         behavior_id: int,
     ) -> etree._Element:
         half_duration_ms = max(1, int(round(animation.duration_ms / 2.0)))
-        target_opacity = self._format_effect_opacity(
+        base_opacity = self._format_effect_opacity(
             min(animation.values, key=self._opacity_float)
+        )
+        peak_opacity = self._format_effect_opacity(
+            max(animation.values, key=self._opacity_float)
         )
         effect_behavior_id = behavior_id * 10 + 1
 
@@ -102,9 +114,7 @@ class OpacityAnimationHandler(AnimationHandler):
             presetID="9",
             presetClass="emph",
             presetSubtype="0",
-            autoRev="1",
         )
-        self._apply_repeat_count(outer_ctn, animation.repeat_count)
 
         st_cond_lst = p_sub(outer_ctn, "stCondLst")
         if animation.begin_triggers:
@@ -121,28 +131,39 @@ class OpacityAnimationHandler(AnimationHandler):
 
         set_elem = p_sub(child_tn_lst, "set")
         set_cbhvr = p_sub(set_elem, "cBhvr")
-        p_sub(set_cbhvr, "cTn", id=str(behavior_id), dur=str(half_duration_ms))
+        p_sub(
+            set_cbhvr,
+            "cTn",
+            id=str(behavior_id),
+            dur="1",
+            fill="hold",
+            nodeType="withEffect",
+        )
         tgt_el = p_sub(set_cbhvr, "tgtEl")
         p_sub(tgt_el, "spTgt", spid=animation.element_id)
         attr_name_lst = p_sub(set_cbhvr, "attrNameLst")
         attr_name = p_sub(attr_name_lst, "attrName")
         attr_name.text = "style.opacity"
         to_elem = p_sub(set_elem, "to")
-        p_sub(to_elem, "strVal", val=target_opacity)
+        p_sub(to_elem, "strVal", val=base_opacity)
 
         anim_effect = p_sub(
             child_tn_lst,
             "animEffect",
             filter="image",
-            prLst=f"opacity: {target_opacity}",
+            prLst=f"opacity: {peak_opacity}",
         )
         effect_cbhvr = p_sub(anim_effect, "cBhvr", rctx="IE")
-        p_sub(
+        effect_ctn = p_sub(
             effect_cbhvr,
             "cTn",
             id=str(effect_behavior_id),
             dur=str(half_duration_ms),
+            fill="remove",
+            nodeType="withEffect",
+            autoRev="1",
         )
+        self._apply_repeat_count(effect_ctn, animation.repeat_count)
         effect_tgt = p_sub(effect_cbhvr, "tgtEl")
         p_sub(effect_tgt, "spTgt", spid=animation.element_id)
 
@@ -203,6 +224,25 @@ class OpacityAnimationHandler(AnimationHandler):
         default = "1" if animation.fill_mode == "freeze" else "0"
         return self._processor.parse_opacity(default)
 
+    def _resolve_authored_fade(
+        self, animation: AnimationDefinition
+    ) -> tuple[str, str] | None:
+        if animation.target_attribute != "opacity":
+            return None
+        if len(animation.values) != 2 or animation.key_times:
+            return None
+        if animation.repeat_count not in (None, 1, "1"):
+            return None
+
+        start_opacity = self._opacity_float(animation.values[0])
+        end_opacity = self._opacity_float(animation.values[-1])
+        if start_opacity <= 0.0 and end_opacity >= 0.999:
+            return ("in", "entr")
+        if end_opacity <= 0.0 and start_opacity >= 0.999:
+            return ("out", "exit")
+
+        return None
+
     @staticmethod
     def _map_opacity_attribute(attribute: str) -> str:
         return "style.opacity"
@@ -215,6 +255,8 @@ class OpacityAnimationHandler(AnimationHandler):
         if animation.repeat_count not in (None, 1, "1"):
             return True
         if not animation.values:
+            return False
+        if self._resolve_authored_fade(animation) is not None:
             return False
         try:
             start_opacity = float(animation.values[0])

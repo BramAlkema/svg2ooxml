@@ -76,3 +76,60 @@ def test_blend_multiply_approximates_gradient_overlay() -> None:
     assert 'val="800080"' in result.drawingml
     assert result.metadata.get("overlay_approximation") == "gradient_avg"
     assert result.fallback is None
+
+
+def test_blend_multiply_blocks_gradient_overlay_when_approximation_disallowed() -> None:
+    pipeline = {
+        "SourceGraphic": FilterResult(success=True, drawingml="<a:effectLst><a:fill/></a:effectLst>", metadata={}),
+        "layer": FilterResult(
+            success=True,
+            drawingml="",
+            metadata={
+                "fill": {
+                    "type": "linearGradient",
+                    "stops": [
+                        {"offset": 0.0, "rgb": "FF0000", "opacity": 1.0},
+                        {"offset": 1.0, "rgb": "0000FF", "opacity": 1.0},
+                    ],
+                }
+            },
+        ),
+    }
+    context = FilterContext(
+        filter_element=etree.Element("filter"),
+        pipeline_state=pipeline,
+        options={"policy": {"approximation_allowed": False}},
+    )
+    primitive = etree.fromstring('<feBlend mode="multiply" in="SourceGraphic" in2="layer"/>')
+
+    result = BlendFilter().apply(primitive, context)
+
+    assert result.drawingml == ""
+    assert result.fallback == "emf"
+    assert result.metadata.get("native_support") is False
+    assert result.metadata.get("fallback_reason") == "missing_overlay"
+    assert result.metadata.get("overlay_approximation") is None
+
+
+def test_blend_multiply_allows_exact_flood_overlay_when_approximation_disallowed() -> None:
+    pipeline = {
+        "SourceGraphic": FilterResult(success=True, drawingml="<a:effectLst><a:fill/></a:effectLst>", metadata={}),
+        "layer": FilterResult(
+            success=True,
+            drawingml="",
+            metadata={"flood_color": "008000", "flood_opacity": 0.5},
+        ),
+    }
+    context = FilterContext(
+        filter_element=etree.Element("filter"),
+        pipeline_state=pipeline,
+        options={"policy": {"approximation_allowed": False}},
+    )
+    primitive = etree.fromstring('<feBlend mode="multiply" in="SourceGraphic" in2="layer"/>')
+
+    result = BlendFilter().apply(primitive, context)
+
+    assert result.fallback is None
+    assert result.metadata.get("native_support") is True
+    assert result.metadata.get("overlay_approximation") is None
+    assert '<a:fillOverlay blend="mult">' in result.drawingml

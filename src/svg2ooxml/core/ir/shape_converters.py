@@ -97,6 +97,8 @@ class ShapeConversionMixin(ShapeResvgMixin, ShapeFallbackMixin):
     def _pattern_fill_requires_path_fallback(fill) -> bool:
         if not isinstance(fill, PatternPaint):
             return False
+        if fill.tile_image or fill.tile_relationship_id:
+            return False
 
         transform = fill.transform
         if transform is None:
@@ -125,12 +127,26 @@ class ShapeConversionMixin(ShapeResvgMixin, ShapeFallbackMixin):
         allow_bitmap_fallback: bool,
     ) -> str | None:
         geometry_policy = metadata.setdefault("policy", {}).setdefault("geometry", {})
-        if allow_emf_fallback:
-            geometry_policy.setdefault("suggest_fallback", FALLBACK_EMF)
-            return FALLBACK_EMF
         if allow_bitmap_fallback:
             geometry_policy.setdefault("suggest_fallback", FALLBACK_BITMAP)
             return FALLBACK_BITMAP
+        return None
+
+    @staticmethod
+    def _prefer_non_native_fill_fallback(
+        fill,
+        *,
+        allow_emf_fallback: bool,
+        allow_bitmap_fallback: bool,
+    ) -> str | None:
+        if isinstance(fill, PatternPaint):
+            if allow_bitmap_fallback:
+                return FALLBACK_BITMAP
+            return None
+        if allow_bitmap_fallback:
+            return FALLBACK_BITMAP
+        if allow_emf_fallback:
+            return FALLBACK_EMF
         return None
 
     def _convert_use(
@@ -416,10 +432,13 @@ class ShapeConversionMixin(ShapeResvgMixin, ShapeFallbackMixin):
         if pattern_fallback is not None:
             render_mode = pattern_fallback
         elif style.fill and not self._fill_can_render_natively(style.fill, metadata):
-            if allow_bitmap_fallback:
-                render_mode = FALLBACK_BITMAP
-            elif allow_emf_fallback:
-                render_mode = FALLBACK_EMF
+            fill_fallback = self._prefer_non_native_fill_fallback(
+                style.fill,
+                allow_emf_fallback=allow_emf_fallback,
+                allow_bitmap_fallback=allow_bitmap_fallback,
+            )
+            if fill_fallback is not None:
+                render_mode = fill_fallback
 
         if render_mode == FALLBACK_EMF:
             emf_image = self._convert_path_to_emf(
@@ -539,10 +558,13 @@ class ShapeConversionMixin(ShapeResvgMixin, ShapeFallbackMixin):
         if pattern_fallback is not None:
             render_mode = pattern_fallback
         elif style.fill and not self._fill_can_render_natively(style.fill, metadata):
-            if allow_bitmap_fallback:
-                render_mode = FALLBACK_BITMAP
-            elif allow_emf_fallback:
-                render_mode = FALLBACK_EMF
+            fill_fallback = self._prefer_non_native_fill_fallback(
+                style.fill,
+                allow_emf_fallback=allow_emf_fallback,
+                allow_bitmap_fallback=allow_bitmap_fallback,
+            )
+            if fill_fallback is not None:
+                render_mode = fill_fallback
 
         fallback_to_bitmap = False
         if render_mode == FALLBACK_EMF:

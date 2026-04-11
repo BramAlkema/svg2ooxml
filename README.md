@@ -121,6 +121,8 @@ source .venv/bin/activate
 pip install -e .[dev,render,color,slides,api,cloud]
 ```
 
+Use the project venv for all local Python, pytest, and visual-tool commands. On macOS, `./tools/bootstrap_venv.sh` now prefers Python 3.14 so Homebrew `fontforge` bindings and `skia-python` both load inside `.venv`.
+
 ```bash
 pytest                            # full test suite
 pytest -m "unit and not slow"     # fast dev loop

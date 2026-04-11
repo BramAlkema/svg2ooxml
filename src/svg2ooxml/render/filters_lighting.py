@@ -38,7 +38,8 @@ def apply_diffuse_lighting(
     light_vec, light_weight = light_direction(light, surface.shape[1], surface.shape[0], units, height_map)
     dot = np.maximum(0.0, np.sum(normal * light_vec, axis=-1)) * light_weight
 
-    intensity = diffuse_constant * dot
+    source_alpha = np.clip(surface.data[..., 3], 0.0, 1.0)
+    intensity = diffuse_constant * dot * source_alpha
     rgb = np.clip(intensity[..., None] * color, 0.0, 1.0)
     alpha = np.clip(intensity, 0.0, 1.0)
 
@@ -84,10 +85,12 @@ def apply_specular_lighting(
     spec_amount = np.maximum(
         0.0, reflection[..., 0] * view[0] + reflection[..., 1] * view[1] + reflection[..., 2] * view[2]
     )
+    source_alpha = np.clip(surface.data[..., 3], 0.0, 1.0)
     intensity = specular_constant * np.power(spec_amount, specular_exponent)
     if light_type == "spot":
         intensity *= light_weight
     intensity *= light_weight
+    intensity *= source_alpha
     intensity = np.clip(intensity, 0.0, 1.0)
 
     rgb = color * intensity[..., None]

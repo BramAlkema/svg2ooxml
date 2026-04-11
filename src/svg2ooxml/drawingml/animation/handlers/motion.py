@@ -47,35 +47,32 @@ class MotionAnimationHandler(AnimationHandler):
         if len(points) < 2:
             return None
 
-        # Convert points to normalised slide-fraction coordinates
+        # Convert points to normalised slide-fraction coordinates.
+        # PowerPoint-authored motion paths terminate with "E" and do not
+        # include the synthetic rCtr child we used in the early prototype.
         motion_path = self._build_motion_path_string(points)
-        pts_types = "A" * len(points)
         rotation = self._resolve_rotation_angle(animation, points)
 
         # Build <p:animMotion>
-        anim_motion = p_elem(
-            "animMotion",
-            origin="layout",
-            path=motion_path,
-            pathEditMode="relative",
-            rAng=rotation,
-            ptsTypes=pts_types,
-        )
+        anim_motion_attrs = {
+            "origin": "layout",
+            "path": motion_path,
+            "pathEditMode": "relative",
+        }
+        if rotation != "0":
+            anim_motion_attrs["rAng"] = rotation
+        anim_motion = p_elem("animMotion", **anim_motion_attrs)
 
         # Behavior core
         cBhvr = self._xml.build_behavior_core_elem(
             behavior_id=behavior_id,
             duration_ms=animation.duration_ms,
             target_shape=animation.element_id,
-            attr_name_list=["ppt_x", "ppt_y"],
             additive=animation.additive,
             fill_mode=animation.fill_mode,
             repeat_count=animation.repeat_count,
         )
         anim_motion.append(cBhvr)
-
-        # Rotation center
-        p_sub(anim_motion, "rCtr", x="4306", y="0")
 
         # Wrap in <p:par>
         return self._xml.build_par_container_elem(
@@ -85,6 +82,8 @@ class MotionAnimationHandler(AnimationHandler):
             child_element=anim_motion,
             preset_id=0,
             preset_class="path",
+            preset_subtype=0,
+            node_type="clickEffect",
             begin_triggers=animation.begin_triggers,
             default_target_shape=animation.element_id,
             effect_group_id=par_id,
@@ -143,29 +142,28 @@ class MotionAnimationHandler(AnimationHandler):
     def _build_motion_path_string(self, points: list[tuple[float, float]]) -> str:
         """Convert parsed points to a PowerPoint motion path string.
 
-        Points are converted from pixel deltas (relative to the first point)
-        into slide-fraction coordinates.
+        ``animateMotion`` paths in PowerPoint use the SVG-style command case:
+        uppercase commands are absolute slide coordinates and lowercase
+        commands are relative offsets. SVG motion paths are defined in the
+        document coordinate space, so we emit absolute slide-fraction
+        coordinates here instead of zero-based deltas from the first point.
         """
         from svg2ooxml.drawingml.writer import DEFAULT_SLIDE_SIZE
 
         slide_w, slide_h = DEFAULT_SLIDE_SIZE
-        start_x, start_y = points[0]
 
         segments: list[str] = []
         for i, (x_px, y_px) in enumerate(points):
-            dx_px = x_px - start_x
-            dy_px = y_px - start_y
+            x_emu = self._units.to_emu(x_px, axis="x")
+            y_emu = self._units.to_emu(y_px, axis="y")
 
-            dx_emu = self._units.to_emu(dx_px, axis="x")
-            dy_emu = self._units.to_emu(dy_px, axis="y")
-
-            nx = dx_emu / slide_w
-            ny = dy_emu / slide_h
+            nx = x_emu / slide_w
+            ny = y_emu / slide_h
 
             cmd = "M" if i == 0 else "L"
             segments.append(f"{cmd} {self._format_coord(nx)} {self._format_coord(ny)}")
 
-        return " ".join(segments) + " "
+        return " ".join(segments) + " E"
 
     @staticmethod
     def _format_coord(value: float) -> str:

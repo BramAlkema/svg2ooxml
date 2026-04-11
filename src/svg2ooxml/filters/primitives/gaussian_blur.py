@@ -20,6 +20,7 @@ class GaussianBlurParams:
     std_dev_x: float
     std_dev_y: float
     edge_mode: str
+    input_name: str | None
 
     @property
     def is_isotropic(self) -> bool:
@@ -33,19 +34,62 @@ class GaussianBlurFilter(Filter):
     def apply(self, primitive: etree._Element, context: FilterContext) -> FilterResult:
         params = self._parse_params(primitive)
         policy_options = context.policy
+        primitive_policy = self._primitive_policy(policy_options)
         allow_anisotropic = bool(policy_options.get("allow_anisotropic_native", False))
+        approximation_allowed = bool(policy_options.get("approximation_allowed", True))
         max_bitmap_stddev = policy_options.get("max_bitmap_stddev")
-        blur_strategy = self._normalize_blur_strategy(policy_options.get("blur_strategy"))
+        group_mimic_enabled = self._group_mimic_enabled(context, primitive_policy)
+        blur_strategy = self._resolve_blur_strategy(
+            policy_options.get("blur_strategy"),
+            primitive_policy,
+            group_mimic_enabled,
+        )
+        radius_scale = self._resolve_radius_scale(
+            primitive_policy,
+            group_mimic_enabled,
+        )
 
         metadata = {
             "filter_type": self.filter_type,
             "std_deviation_x": params.std_dev_x,
             "std_deviation_y": params.std_dev_y,
             "edge_mode": params.edge_mode,
+            "input": params.input_name,
             "is_isotropic": params.is_isotropic,
             "native_support": params.is_isotropic,
             "blur_strategy": blur_strategy,
+            "radius_scale": radius_scale,
         }
+        if (
+            params.input_name
+            and params.input_name not in {"SourceGraphic", "SourceAlpha"}
+            and not approximation_allowed
+        ):
+            metadata["native_support"] = False
+            metadata["approximation_blocked"] = "intermediate_input"
+            drawingml = "<!-- Intermediate Gaussian blur rendered via raster fallback -->"
+            return FilterResult(
+                success=True,
+                drawingml=drawingml,
+                fallback="bitmap",
+                metadata=metadata,
+                warnings=["Intermediate Gaussian blur rendered via raster fallback"],
+            )
+        grouped_source = _source_is_grouped_reference(context)
+        if grouped_source and not group_mimic_enabled:
+            metadata["native_support"] = False
+            metadata["approximation_blocked"] = "group_source"
+            drawingml = "<!-- Group Gaussian blur rendered via raster fallback -->"
+            return FilterResult(
+                success=True,
+                drawingml=drawingml,
+                fallback="bitmap",
+                metadata=metadata,
+                warnings=["Grouped Gaussian blur rendered via raster fallback"],
+            )
+        if grouped_source and group_mimic_enabled:
+            metadata["approximation"] = "group_per_child"
+            metadata["mimic_scope"] = "group_children"
         effective_std = max(params.std_dev_x, params.std_dev_y)
         if max_bitmap_stddev is not None and effective_std > float(max_bitmap_stddev):
             metadata["native_support"] = False
@@ -64,7 +108,7 @@ class GaussianBlurFilter(Filter):
                 if allow_anisotropic and not params.is_isotropic
                 else params.std_dev_x
             )
-            radius_emu = self._std_dev_to_emu(radius_source)
+            radius_emu = self._std_dev_to_emu(radius_source, radius_scale=radius_scale)
             effectLst = a_elem("effectLst")
             if blur_strategy == "outer_shadow":
                 color, alpha = self._shadow_color_from_context(context)
@@ -130,12 +174,82 @@ class GaussianBlurFilter(Filter):
         std_dev_x = max(0.0, parse_number(sx_str))
         std_dev_y = max(0.0, parse_number(sy_str))
         edge_mode = (primitive.get("edgeMode") or "duplicate").strip().lower()
-        return GaussianBlurParams(std_dev_x=std_dev_x, std_dev_y=std_dev_y, edge_mode=edge_mode)
+        input_name = primitive.get("in")
+        return GaussianBlurParams(
+            std_dev_x=std_dev_x,
+            std_dev_y=std_dev_y,
+            edge_mode=edge_mode,
+            input_name=input_name.strip() if isinstance(input_name, str) and input_name.strip() else None,
+        )
 
-    def _std_dev_to_emu(self, std_dev: float) -> int:
+    def _std_dev_to_emu(self, std_dev: float, *, radius_scale: float = 2.0) -> int:
         # PowerPoint blur radius is specified in EMUs; stdDeviation is roughly sigma.
-        # Empirical mapping: radius ≈ std_dev * 2 * px_to_emu(1)
-        return int(max(0.0, std_dev * 2.0 * px_to_emu(1.0)))
+        return int(max(0.0, std_dev * radius_scale * px_to_emu(1.0)))
+
+    @staticmethod
+    def _primitive_policy(policy_options: dict[str, object]) -> dict[str, object]:
+        primitives = policy_options.get("primitives")
+        if not isinstance(primitives, dict):
+            return {}
+        candidate = primitives.get("fegaussianblur")
+        if not isinstance(candidate, dict):
+            return {}
+        return candidate
+
+    @staticmethod
+    def _group_mimic_enabled(
+        context: FilterContext,
+        primitive_policy: dict[str, object],
+    ) -> bool:
+        if not _source_is_grouped_reference(context):
+            return False
+        if not bool(context.policy.get("approximation_allowed", False)):
+            return False
+        return bool(primitive_policy.get("allow_group_mimic", False))
+
+    @staticmethod
+    def _resolve_blur_strategy(
+        strategy_value: object | None,
+        primitive_policy: dict[str, object],
+        group_mimic_enabled: bool,
+    ) -> str:
+        if group_mimic_enabled:
+            group_strategy = primitive_policy.get("group_blur_strategy")
+            if group_strategy is not None:
+                return GaussianBlurFilter._normalize_blur_strategy(group_strategy)
+            if GaussianBlurFilter._normalize_blur_strategy(strategy_value) == "soft_edge":
+                # For grouped content, native <a:blur> tracks PowerPoint's appearance
+                # more closely than softEdge while remaining editable.
+                return "blur"
+        return GaussianBlurFilter._normalize_blur_strategy(strategy_value)
+
+    @staticmethod
+    def _resolve_radius_scale(
+        primitive_policy: dict[str, object],
+        group_mimic_enabled: bool,
+    ) -> float:
+        if group_mimic_enabled:
+            group_scale = GaussianBlurFilter._coerce_positive_float(
+                primitive_policy.get("group_radius_scale")
+            )
+            if group_scale is not None:
+                return group_scale
+        base_scale = GaussianBlurFilter._coerce_positive_float(
+            primitive_policy.get("radius_scale")
+        )
+        if base_scale is not None:
+            return base_scale
+        return 2.0
+
+    @staticmethod
+    def _coerce_positive_float(value: object | None) -> float | None:
+        try:
+            scale = float(value)
+        except (TypeError, ValueError):
+            return None
+        if scale <= 0:
+            return None
+        return scale
 
     @staticmethod
     def _normalize_blur_strategy(value: object | None) -> str:
@@ -176,6 +290,17 @@ class GaussianBlurFilter(Filter):
                 if isinstance(opacity, (int, float)):
                     alpha = opacity_to_ppt(float(opacity))
         return color, alpha
+
+
+def _source_is_grouped_reference(context: FilterContext) -> bool:
+    options = context.options if isinstance(context.options, dict) else {}
+    element = options.get("element")
+    tag = getattr(element, "tag", None)
+    if isinstance(tag, str):
+        local = tag.split("}", 1)[-1] if "}" in tag else tag
+        if local in {"use", "g"}:
+            return True
+    return False
 
 
 __all__ = ["GaussianBlurFilter"]

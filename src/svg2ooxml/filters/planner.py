@@ -88,30 +88,55 @@ class FilterPlanner:
         width = self._coerce_float(bbox.get("width"), 0.0)
         height = self._coerce_float(bbox.get("height"), 0.0)
 
-        region = descriptor.region or {}
-        region_width = self._coerce_float(region.get("width"), 0.0)
-        region_height = self._coerce_float(region.get("height"), 0.0)
-
         base_width = width if width > 0 else 128.0
         base_height = height if height > 0 else 96.0
+        region = descriptor.region or {}
+        units = (descriptor.filter_units or "objectBoundingBox").strip()
 
-        if descriptor.filter_units == "objectBoundingBox" and region_width > 0:
-            width = max(width, region_width * base_width)
-        elif region_width > 0:
-            width = max(width, region_width)
-        if descriptor.filter_units == "objectBoundingBox" and region_height > 0:
-            height = max(height, region_height * base_height)
-        elif region_height > 0:
-            height = max(height, region_height)
+        viewport_width = self._coerce_float(
+            options.get("viewport_width") if isinstance(options, Mapping) else None,
+            base_width,
+        )
+        viewport_height = self._coerce_float(
+            options.get("viewport_height") if isinstance(options, Mapping) else None,
+            base_height,
+        )
 
-        if width <= 0:
-            width = base_width
-        if height <= 0:
-            height = base_height
+        if units == "objectBoundingBox":
+            region_x = x + self._parse_fraction(region.get("x"), -0.1) * base_width
+            region_y = y + self._parse_fraction(region.get("y"), -0.1) * base_height
+            region_width = self._parse_fraction(region.get("width"), 1.2) * base_width
+            region_height = self._parse_fraction(region.get("height"), 1.2) * base_height
+        else:
+            region_x = self._parse_user_length(
+                region.get("x"),
+                x - 0.1 * base_width,
+                viewport_width,
+            )
+            region_y = self._parse_user_length(
+                region.get("y"),
+                y - 0.1 * base_height,
+                viewport_height,
+            )
+            region_width = self._parse_user_length(
+                region.get("width"),
+                base_width * 1.2,
+                viewport_width,
+            )
+            region_height = self._parse_user_length(
+                region.get("height"),
+                base_height * 1.2,
+                viewport_height,
+            )
 
-        width = max(width, 1.0)
-        height = max(height, 1.0)
-        return (x, y, x + width, y + height)
+        region_width = max(region_width, 1.0)
+        region_height = max(region_height, 1.0)
+        return (
+            region_x,
+            region_y,
+            region_x + region_width,
+            region_y + region_height,
+        )
 
     def _primitive_is_neutral(self, primitive: FilterPrimitiveDescriptor) -> bool:
         tag = (primitive.tag or "").strip().lower()
@@ -288,6 +313,34 @@ class FilterPlanner:
             return float(str(value).strip())
         except (TypeError, ValueError):
             return None
+
+    @staticmethod
+    def _parse_fraction(value: Any, default: float) -> float:
+        if value is None:
+            return default
+        token = str(value).strip()
+        if not token:
+            return default
+        try:
+            if token.endswith("%"):
+                return float(token[:-1]) / 100.0
+            return float(token)
+        except (TypeError, ValueError):
+            return default
+
+    @staticmethod
+    def _parse_user_length(value: Any, default: float, viewport_length: float) -> float:
+        if value is None:
+            return default
+        token = str(value).strip()
+        if not token:
+            return default
+        try:
+            if token.endswith("%"):
+                return (float(token[:-1]) / 100.0) * viewport_length
+            return float(token)
+        except (TypeError, ValueError):
+            return default
 
     @staticmethod
     def _is_identity_matrix(values: list[float]) -> bool:

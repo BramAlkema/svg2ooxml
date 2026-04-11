@@ -165,6 +165,8 @@ class IRConverter:
             "namespaces": result.namespaces,
             "has_external_references": result.has_external_references,
         }
+        if isinstance(source_path, str) and source_path:
+            scene_metadata["source_path"] = source_path
         if self._context.tracer is not None:
             scene_metadata["trace_report"] = self._context.tracer.report().to_dict()
         background_color = _extract_background(

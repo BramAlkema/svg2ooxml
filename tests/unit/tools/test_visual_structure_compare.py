@@ -124,3 +124,31 @@ def test_compare_substructures_keeps_interactive_annotations_aligned(
     ):
         assert pairs_by_id[element_id].target.shape_tag == "sp"
         assert pairs_by_id[element_id].max_abs_delta < 0.1
+
+
+def test_pptx_builder_forwards_tracer_into_animation_writer(tmp_path: Path) -> None:
+    svg = """
+    <svg xmlns="http://www.w3.org/2000/svg" width="120" height="80">
+      <rect id="rect1" x="10" y="10" width="30" height="20" fill="#ff0000">
+        <animate attributeName="opacity" values="0;1" dur="1s" begin="0s" />
+      </rect>
+    </svg>
+    """
+    pptx_path = tmp_path / "animated.pptx"
+
+    builder = PptxBuilder(
+        filter_strategy="resvg",
+        geometry_mode="resvg",
+        slide_size_mode="same",
+        allow_promotion=False,
+    )
+    tracer = ConversionTracer()
+    builder.build_from_svg(svg, pptx_path, tracer=tracer)
+
+    report = tracer.report().to_dict()
+
+    assert report["stage_totals"].get("animation:fragment_emitted") == 1
+    assert any(
+        event["stage"] == "animation" and event["action"] == "fragment_emitted"
+        for event in report["stage_events"]
+    )

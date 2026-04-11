@@ -12,8 +12,14 @@ from svg2ooxml.ir.paint import PatternPaint, RadialGradientPaint, SolidPaint
 from svg2ooxml.ir.scene import Group, Image
 from svg2ooxml.ir.scene import Path as IRPath
 from svg2ooxml.ir.shapes import Circle, Ellipse, Line, Polygon, Polyline, Rectangle
-from svg2ooxml.ir.paint import Stroke
 from svg2ooxml.policy.constants import FALLBACK_BITMAP, FALLBACK_RASTERIZE
+
+from . import paint_runtime, shapes_runtime
+from .animation_pipeline import AnimationPipeline
+from .filter_fallback import resolve_filter_fallback_bounds
+from .generator import DrawingMLPathGenerator
+from .image import render_picture
+from .rasterizer import Rasterizer
 
 
 def _is_stroke_first(metadata: dict[str, object]) -> bool:
@@ -34,18 +40,11 @@ def _is_stroke_first(metadata: dict[str, object]) -> bool:
 def _has_fill_and_stroke(element) -> bool:
     return getattr(element, "fill", None) is not None and getattr(element, "stroke", None) is not None
 
-from . import paint_runtime, shapes_runtime
-from .animation_pipeline import AnimationPipeline
-from .generator import DrawingMLPathGenerator
-from .image import render_picture
-from .rasterizer import Rasterizer
-
 
 class DrawingMLShapeRenderer:
     """Render shapes, paths, and images into DrawingML fragments."""
 
-    _INVALID_EFFECT_MARKERS = (
-        "<a:solidfill",
+    _INVALID_EFFECT_SUBSTRINGS = (
         "svg2ooxml:sourcegraphic",
         "svg2ooxml:sourcealpha",
         "svg2ooxml:emf",
@@ -404,19 +403,10 @@ class DrawingMLShapeRenderer:
             else:
                 continue
 
-            bounds = getattr(element, "bbox", None)
-            if bounds is None and isinstance(meta, dict):
-                bounds_dict = meta.get("bounds")
-                if isinstance(bounds_dict, dict):
-                    try:
-                        bounds = Rect(
-                            float(bounds_dict.get("x", 0.0)),
-                            float(bounds_dict.get("y", 0.0)),
-                            float(bounds_dict.get("width", 0.0)),
-                            float(bounds_dict.get("height", 0.0)),
-                        )
-                    except (TypeError, ValueError):
-                        bounds = None
+            bounds = resolve_filter_fallback_bounds(
+                getattr(element, "bbox", None),
+                meta if isinstance(meta, dict) else None,
+            )
             if bounds is None or bounds.width <= 0 or bounds.height <= 0:
                 continue
 
@@ -425,6 +415,16 @@ class DrawingMLShapeRenderer:
                 "filter_id": filter_id,
                 "fallback": fallback,
             }
+            for source in (
+                meta if isinstance(meta, dict) else None,
+                asset.get("metadata") if isinstance(asset.get("metadata"), dict) else None,
+            ):
+                if not isinstance(source, dict):
+                    continue
+                blip_color_transforms = source.get("blip_color_transforms")
+                if isinstance(blip_color_transforms, list) and blip_color_transforms:
+                    image_metadata["blip_color_transforms"] = list(blip_color_transforms)
+                    break
             if asset_type == "emf":
                 image_metadata["emf_asset"] = {
                     "relationship_id": asset.get("relationship_id"),
@@ -470,8 +470,11 @@ class DrawingMLShapeRenderer:
         cleaned = []
         for effect in effects:
             if isinstance(effect, CustomEffect):
-                xml = (effect.drawingml or "").lower()
-                if any(marker in xml for marker in self._INVALID_EFFECT_MARKERS):
+                xml = effect.drawingml or ""
+                if _is_invalid_custom_effect_xml(
+                    xml,
+                    invalid_substrings=self._INVALID_EFFECT_SUBSTRINGS,
+                ):
                     continue
             cleaned.append(effect)
         if len(cleaned) == len(effects):
@@ -484,7 +487,6 @@ class DrawingMLShapeRenderer:
             except Exception:  # pragma: no cover - defensive
                 return element
             return element
-
     def _maybe_rasterize(
         self,
         element,
@@ -745,6 +747,18 @@ def _apply_clip_bounds(element, metadata: dict[str, object]):
 
     # Circle, Ellipse, Path — geometry-driven; clip approximation not applied.
     return element
+
+
+def _is_invalid_custom_effect_xml(
+    xml: str,
+    *,
+    invalid_substrings: tuple[str, ...],
+) -> bool:
+    lowered = xml.lower()
+    stripped = lowered.lstrip()
+    if stripped.startswith("<a:solidfill") or stripped.startswith("<solidfill"):
+        return True
+    return any(marker in lowered for marker in invalid_substrings)
 
 
 __all__ = ["DrawingMLShapeRenderer"]
