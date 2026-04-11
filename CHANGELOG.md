@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.6.4 - 2026-04-11
+
+- fixed single-shape filter fallbacks so expanded filter bounds are honored instead of being squeezed back into the source geometry box
+- preserved raster filter alpha by default and limited PowerPoint background flattening to explicitly opted-in fallback assets
+- hardened PowerPoint visual capture staging with unique per-run deck copies so failed cleanup cannot silently reuse a stale in-memory presentation
+- added regression tests covering filter fallback bounds, raster alpha preservation, opt-in flattening, and unique staged PowerPoint copies
+
 ## 0.6.3 - 2026-04-11
 
 - expanded the editable-first filter pipeline with stronger mimic planning and rendering for blur, flood, merge, blend, composite, lighting, and color-transform stacks

@@ -4,15 +4,14 @@ from __future__ import annotations
 
 import hashlib
 import logging
-from io import BytesIO
 from collections.abc import Iterable
 from dataclasses import replace
+from io import BytesIO
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from svg2ooxml.core.ir import IRScene
 from svg2ooxml.io.emf import EMFRelationshipManager
-from svg2ooxml.ir.geometry import Rect
 from svg2ooxml.ir.scene import Group, Image, SceneGraph
 from svg2ooxml.ir.shapes import Rectangle
 from svg2ooxml.ir.text import TextFrame
@@ -20,6 +19,7 @@ from svg2ooxml.ir.text import TextFrame
 from .animation_pipeline import AnimationPipeline
 from .assets import AssetRegistry
 from .clipmask import clip_bounds_for
+from .filter_fallback import resolve_filter_fallback_bounds
 from .generator import EMU_PER_PX, DrawingMLPathGenerator, px_to_emu
 from .mask_pipeline import MaskPipeline
 from .navigation import register_navigation
@@ -627,7 +627,8 @@ class DrawingMLWriter:
                     asset["relationship_id"] = rel_id
                 if rel_id in self._seen_filter_relationships:
                     continue
-                binary = self._flatten_filter_png_for_powerpoint(binary)
+                if self._should_flatten_filter_png_for_powerpoint(asset):
+                    binary = self._flatten_filter_png_for_powerpoint(binary)
                 filename = f"media_{self._next_media_index}.{ext}"
                 self._next_media_index += 1
                 self._assets.add_media(
@@ -646,6 +647,13 @@ class DrawingMLWriter:
                     },
                 )
                 self._seen_filter_relationships.add(rel_id)
+
+    @staticmethod
+    def _should_flatten_filter_png_for_powerpoint(asset: dict[str, object]) -> bool:
+        if bool(asset.get("flatten_for_powerpoint")):
+            return True
+        metadata = asset.get("metadata")
+        return isinstance(metadata, dict) and bool(metadata.get("flatten_for_powerpoint"))
 
     def _flatten_filter_png_for_powerpoint(self, data: bytes) -> bytes:
         background = (self._scene_background_color or "FFFFFF").lstrip("#").upper()
@@ -723,19 +731,12 @@ class DrawingMLWriter:
                 continue
             rel_id = asset["relationship_id"]
             meta = filter_meta.get(filter_id)
-            bounds = group.bbox
-            if isinstance(meta, dict):
-                bounds_dict = meta.get("bounds")
-                if isinstance(bounds_dict, dict):
-                    try:
-                        bounds = Rect(
-                            float(bounds_dict.get("x", bounds.x)),
-                            float(bounds_dict.get("y", bounds.y)),
-                            float(bounds_dict.get("width", bounds.width)),
-                            float(bounds_dict.get("height", bounds.height)),
-                        )
-                    except (TypeError, ValueError):
-                        pass
+            bounds = resolve_filter_fallback_bounds(
+                group.bbox,
+                meta if isinstance(meta, dict) else None,
+            )
+            if bounds is None:
+                continue
             if bounds.width <= 0 or bounds.height <= 0:
                 continue
             return (

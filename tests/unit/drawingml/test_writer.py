@@ -16,8 +16,8 @@ from svg2ooxml.core.pipeline.navigation import (
     SlideTarget,
 )
 from svg2ooxml.drawingml.writer import EMU_PER_PX, DrawingMLWriter, px_to_emu
-from svg2ooxml.ir.entrypoints import convert_parser_output
 from svg2ooxml.ir.effects import CustomEffect
+from svg2ooxml.ir.entrypoints import convert_parser_output
 from svg2ooxml.ir.geometry import BezierSegment, LineSegment, Point, Rect
 from svg2ooxml.ir.paint import (
     GradientStop,
@@ -121,7 +121,7 @@ def test_render_path_with_pattern_tile_registers_media() -> None:
     assert len(result.assets.media) == 1
 
 
-def test_render_scene_from_ir_flattens_filter_png_assets_for_powerpoint() -> None:
+def test_render_scene_from_ir_preserves_filter_png_alpha_by_default() -> None:
     writer = DrawingMLWriter()
     image = PILImage.new("RGBA", (2, 1), (0, 0, 0, 0))
     image.putpixel((0, 0), (255, 0, 0, 255))
@@ -141,6 +141,50 @@ def test_render_scene_from_ir_flattens_filter_png_assets_for_powerpoint() -> Non
                                 "type": "raster",
                                 "data": png_bytes,
                                 "relationship_id": "rIdRasterTest",
+                            }
+                        ]
+                    }
+                }
+            },
+            "filters": [{"id": "blur", "fallback": "bitmap"}],
+            "filter_metadata": {
+                "blur": {"bounds": {"x": 0.0, "y": 0.0, "width": 10.0, "height": 10.0}}
+            },
+        },
+    )
+    scene = IRScene(elements=[rect], width_px=20, height_px=20, background_color="FFFFFF")
+
+    result = writer.render_scene_from_ir(scene)
+
+    filter_media = next(
+        asset for asset in result.assets.media if asset.relationship_id == "rIdRasterTest"
+    )
+    preserved = PILImage.open(BytesIO(filter_media.data)).convert("RGBA")
+    assert preserved.getpixel((0, 0)) == (255, 0, 0, 255)
+    assert preserved.getpixel((1, 0)) == (0, 0, 0, 0)
+
+
+def test_render_scene_from_ir_flattens_filter_png_assets_when_requested() -> None:
+    writer = DrawingMLWriter()
+    image = PILImage.new("RGBA", (2, 1), (0, 0, 0, 0))
+    image.putpixel((0, 0), (255, 0, 0, 255))
+    buffer = BytesIO()
+    image.save(buffer, format="PNG")
+    png_bytes = buffer.getvalue()
+
+    rect = Rectangle(
+        bounds=Rect(x=0, y=0, width=10, height=10),
+        fill=SolidPaint("FF0000"),
+        metadata={
+            "policy": {
+                "media": {
+                    "filter_assets": {
+                        "blur": [
+                            {
+                                "type": "raster",
+                                "data": png_bytes,
+                                "relationship_id": "rIdRasterTest",
+                                "flatten_for_powerpoint": True,
                             }
                         ]
                     }
@@ -757,6 +801,53 @@ def test_leaf_group_with_filter_fallback_renders_single_picture() -> None:
     assert len(result.shape_xml) == 1
     assert result.shape_xml[0].startswith("<p:pic>")
     assert 'r:embed="rIdFilterBlur"' in result.slide_xml
+
+
+def test_shape_filter_fallback_uses_filter_expanded_bounds() -> None:
+    writer = DrawingMLWriter()
+    buffer = BytesIO()
+    PILImage.new("RGBA", (1, 1), (255, 0, 0, 255)).save(buffer, format="PNG")
+    rect = Rectangle(
+        bounds=Rect(10, 20, 30, 40),
+        fill=SolidPaint("4472C4"),
+        metadata={
+            "filters": [{"id": "blur", "fallback": "bitmap"}],
+            "filter_metadata": {
+                "blur": {"bounds": {"x": 5.0, "y": 15.0, "width": 50.0, "height": 60.0}}
+            },
+            "policy": {
+                "media": {
+                    "filter_assets": {
+                        "blur": [
+                            {
+                                "type": "raster",
+                                "data": buffer.getvalue(),
+                                "relationship_id": "rIdFilterBlur",
+                            }
+                        ]
+                    }
+                }
+            },
+        },
+    )
+
+    result = writer.render_scene([rect])
+
+    assert len(result.shape_xml) == 1
+    assert result.shape_xml[0].startswith("<p:pic>")
+
+    root = ET.fromstring(result.slide_xml.encode("utf-8"))
+    ns = {
+        "a": "http://schemas.openxmlformats.org/drawingml/2006/main",
+        "p": "http://schemas.openxmlformats.org/presentationml/2006/main",
+    }
+    off = root.find(".//p:pic/p:spPr/a:xfrm/a:off", ns)
+    ext = root.find(".//p:pic/p:spPr/a:xfrm/a:ext", ns)
+
+    assert off is not None
+    assert ext is not None
+    assert off.attrib == {"x": str(px_to_emu(5.0)), "y": str(px_to_emu(15.0))}
+    assert ext.attrib == {"cx": str(px_to_emu(50.0)), "cy": str(px_to_emu(60.0))}
 
 
 def test_writer_preserves_effect_dag_custom_effect() -> None:

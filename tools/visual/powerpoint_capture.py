@@ -10,12 +10,13 @@ import shutil
 import subprocess
 import sys
 import time
+import uuid
 from pathlib import Path
 
 try:
     import objc
+    import ScreenCaptureKit as SCK  # noqa: N817
     from Foundation import NSObject
-    import ScreenCaptureKit as SCK
 
     class _SCKStreamOutput(NSObject):
         def init(self):
@@ -43,12 +44,21 @@ except Exception:
 
 from tools.visual.pptx_window import (  # noqa: E402
     get_front_window_id as _get_front_window_id,
+)
+from tools.visual.pptx_window import (
     get_png_type as _get_png_type,
+)
+from tools.visual.pptx_window import (
     get_slideshow_window_id as _get_slideshow_window_id,
+)
+from tools.visual.pptx_window import (
     get_window_id_via_jxa as _get_window_id_via_jxa,
+)
+from tools.visual.pptx_window import (
     open_presentation_via_ui as _open_presentation_via_ui,
+)
+from tools.visual.pptx_window import (
     osascript as _osascript,
-    osascript_jxa as _osascript_jxa,
 )
 
 _POWERPOINT_PERMISSION_NOTICE_SHOWN = False
@@ -68,7 +78,9 @@ def _prepare_staged_presentation(pptx_path: Path) -> Path:
     source = pptx_path.resolve()
     stage_dir = _powerpoint_stage_dir()
     stage_dir.mkdir(parents=True, exist_ok=True)
-    staged = stage_dir / "presentation.pptx"
+    suffix = source.suffix or ".pptx"
+    stage_name = f"{source.stem or 'presentation'}-{uuid.uuid4().hex[:12]}{suffix}"
+    staged = stage_dir / stage_name
     shutil.copy2(source, staged)
     return staged
 
@@ -291,11 +303,11 @@ def _capture_window_screen_capture_kit(
     timeout: float,
 ) -> None:
     try:
-        from Foundation import NSDate, NSRunLoop, NSURL
-        from AppKit import NSApplication
         import CoreMedia
         import Quartz
-        import ScreenCaptureKit as SCK
+        import ScreenCaptureKit as SCK  # noqa: N817
+        from AppKit import NSApplication
+        from Foundation import NSURL, NSDate, NSRunLoop
     except Exception as exc:
         raise RuntimeError("ScreenCaptureKit unavailable") from exc
     if _SCKStreamOutput is None:
@@ -747,8 +759,9 @@ tell application "Microsoft PowerPoint"
         try
             exit slide show slide show view of slide show window of active presentation
         end try
-        repeat with pres in presentations
-            close pres saving no
+        set presCount to count of presentations
+        repeat with i from presCount to 1 by -1
+            close presentation i saving no
         end repeat
     end try
 end tell

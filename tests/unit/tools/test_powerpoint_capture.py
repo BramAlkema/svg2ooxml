@@ -4,7 +4,6 @@ import subprocess
 from pathlib import Path
 
 import pytest
-
 import tools.visual.pptx_window as pptx_window
 from tools.visual import powerpoint_capture
 
@@ -260,6 +259,26 @@ def test_advance_slide_sends_single_next_slide_keystroke(monkeypatch) -> None:
     script = captured["script"]
     assert "key code 124" in script
     assert "key code 49" not in script
+
+
+def test_prepare_staged_presentation_creates_unique_copy(tmp_path: Path, monkeypatch) -> None:
+    source_path = tmp_path / "sample deck.pptx"
+    source_bytes = b"pptx-bytes"
+    source_path.write_bytes(source_bytes)
+    stage_dir = tmp_path / "stage"
+
+    monkeypatch.setattr(powerpoint_capture, "_powerpoint_stage_dir", lambda: stage_dir)
+
+    first = powerpoint_capture._prepare_staged_presentation(source_path)
+    second = powerpoint_capture._prepare_staged_presentation(source_path)
+
+    assert first.parent == stage_dir
+    assert second.parent == stage_dir
+    assert first != second
+    assert first.name.startswith("sample deck-")
+    assert second.name.startswith("sample deck-")
+    assert first.read_bytes() == source_bytes
+    assert second.read_bytes() == source_bytes
 
 
 def test_wait_for_powerpoint_presentation_prefers_matching_open_deck(
