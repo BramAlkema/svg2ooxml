@@ -154,7 +154,13 @@ def _render_image(
 
     src_rect = skia.Rect.MakeWH(image.width(), image.height())
     dst_rect = skia.Rect.MakeXYWH(x, y, width, height)
-    canvas.drawImageRect(image, src_rect, dst_rect, paint)
+    canvas.drawImageRect(
+        image,
+        src_rect,
+        dst_rect,
+        skia.SamplingOptions(),
+        paint,
+    )
 
     snapshot = layer_surface.makeImageSnapshot()
     rgba = snapshot.toarray().astype(np.float32) / 255.0
@@ -180,7 +186,7 @@ def _render_image(
     # For objectBoundingBox, it needs the bounds *before* the filter effect is applied?
     # SVG spec says: "The bounding box is the tightest fitting rectangle aligned with the axes of that element's user coordinate system that entirely encloses it and its descendants."
     # So it's x, y, width, height.
-    bounds = (x, y, x + width, y + height)
+    bounds = _transformed_image_bounds(node, x, y, width, height)
 
     if filter_href:
         filter_node = tree.resolve_filter(filter_href)
@@ -392,6 +398,28 @@ def _draw_path_with_skia(path: skia.Path, paint: skia.Paint, viewport: Viewport)
 
     rgba[..., :3] *= rgba[..., 3:4]
     return Surface(width=viewport.width, height=viewport.height, data=rgba)
+
+
+def _transformed_image_bounds(
+    node: ImageNode,
+    x: float,
+    y: float,
+    width: float,
+    height: float,
+) -> tuple[float, float, float, float]:
+    matrix = getattr(node, "transform", None)
+    if matrix is None:
+        return (x, y, x + width, y + height)
+
+    corners = (
+        matrix.apply_to_point(x, y),
+        matrix.apply_to_point(x + width, y),
+        matrix.apply_to_point(x, y + height),
+        matrix.apply_to_point(x + width, y + height),
+    )
+    xs = [point[0] for point in corners]
+    ys = [point[1] for point in corners]
+    return (min(xs), min(ys), max(xs), max(ys))
 
 
 def _make_fill_paint(fill: FillStyle, tree: Tree, bounds: tuple[float, float, float, float] | None) -> skia.Paint | None:

@@ -63,7 +63,10 @@ def _select_font(svg_bytes: bytes, font_id: str | None) -> bytes | None:
 
 
 def _iter_fonts(root: etree._Element) -> Iterable[etree._Element]:
-    return root.xpath(".//svg:font", namespaces={"svg": _SVG_NS})
+    fonts = root.xpath(".//svg:font", namespaces={"svg": _SVG_NS})
+    if fonts:
+        return fonts
+    return root.xpath(".//*[local-name()='font']")
 
 
 def _font_matches_id(font_el: etree._Element, font_id: str) -> bool:

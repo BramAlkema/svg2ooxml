@@ -302,6 +302,24 @@ class TestDrawingMLTextGenerator:
         # 12 points = 1200 hundredths
         assert 'sz="1200"' in xml
 
+    def test_generate_text_with_scaled_font_size(self):
+        """Text scale should adjust serialized DrawingML size."""
+        generator = DrawingMLTextGenerator(text_scale=0.5)
+        text_style = MockTextStyle(
+            font_families=(),
+            font_size=12.0,
+            font_style=None,
+            font_weight=None,
+        )
+        node = MockTextNode(
+            text_content="Hello",
+            text_style=text_style,
+        )
+
+        xml = generator.generate_text_body(node)
+
+        assert 'sz="600"' in xml
+
     def test_generate_text_with_large_font_size(self):
         """Test large font size (24pt)."""
         generator = DrawingMLTextGenerator()

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.6.5 - 2026-04-11
+
+- fixed W3C lighting and specular PowerPoint fallbacks so isolated SVG previews resolve relative image assets again instead of collapsing to black panels
+- corrected raster preview rendering for transformed image/filter content by flattening localized group transforms and using transformed image bounds during filter application
+- aligned Skia image drawing with the installed `skia-python` API and added regressions covering transformed-group filter previews
+- improved text fidelity in converted decks by scaling resvg text metrics into the active coordinate space, fixing legacy SVG web-font conversion, and removing stale outline fallback metadata on live text
+
 ## 0.6.4 - 2026-04-11
 
 - fixed single-shape filter fallbacks so expanded filter bounds are honored instead of being squeezed back into the source geometry box

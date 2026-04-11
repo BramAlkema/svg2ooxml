@@ -241,7 +241,7 @@ class RasterAdapter:
                 return surface
         try:
             from svg2ooxml.core.resvg.normalizer import normalize_svg_string
-            from svg2ooxml.core.resvg.parser.options import Options
+            from svg2ooxml.core.resvg.parser.options import build_default_options
             from svg2ooxml.render.pipeline import render
         except Exception:  # pragma: no cover - renderer dependencies missing
             return None
@@ -279,7 +279,7 @@ class RasterAdapter:
                         break
 
         try:
-            options = Options(resources_dir=resources_dir) if resources_dir else None
+            options = build_default_options(resources_dir=resources_dir)
             normalized = normalize_svg_string(svg_markup, options=options)
             return render(normalized.tree)
         except Exception:  # pragma: no cover - renderer failure
@@ -447,7 +447,7 @@ class RasterAdapter:
             return None
         try:
             from svg2ooxml.core.resvg.normalizer import normalize_svg_string
-            from svg2ooxml.core.resvg.parser.options import Options
+            from svg2ooxml.core.resvg.parser.options import build_default_options
             from svg2ooxml.render.pipeline import render
         except Exception:  # pragma: no cover - renderer dependencies missing
             return None
@@ -483,7 +483,7 @@ class RasterAdapter:
                         break
 
         try:
-            options = Options(resources_dir=resources_dir) if resources_dir else None
+            options = build_default_options(resources_dir=resources_dir)
             normalized = normalize_svg_string(svg_markup, options=options)
             return render(normalized.tree)
         except Exception:  # pragma: no cover - renderer failure
@@ -680,6 +680,7 @@ class RasterAdapter:
             wrapper = etree.Element(ancestor.tag, attrib=dict(ancestor.attrib))
             wrapper.append(node)
             node = wrapper
+        self._flatten_transforms_in_place(node)
         return node
 
     def _rewrite_filter_reference(
@@ -747,12 +748,36 @@ class RasterAdapter:
             return source_subtree
         if abs(x) <= 1e-6 and abs(y) <= 1e-6:
             return source_subtree
-        wrapper = etree.Element(
-            f"{{{svg_ns}}}g",
-            attrib={"transform": f"translate({-x:g},{-y:g})"},
+        self._flatten_transforms_in_place(
+            source_subtree,
+            inherited_transform=f"translate({-x:g},{-y:g})",
         )
-        wrapper.append(source_subtree)
-        return wrapper
+        return source_subtree
+
+    def _flatten_transforms_in_place(
+        self,
+        element: etree._Element,
+        inherited_transform: str = "",
+    ) -> None:
+        if not isinstance(element.tag, str):
+            return
+
+        local_tag = element.tag.split("}", 1)[-1] if "}" in element.tag else element.tag
+        current_transform = (element.get("transform") or "").strip()
+        combined_transform = " ".join(
+            part for part in (inherited_transform.strip(), current_transform) if part
+        )
+
+        if local_tag in {"g", "svg"}:
+            element.attrib.pop("transform", None)
+        elif combined_transform:
+            element.set("transform", combined_transform)
+        else:
+            element.attrib.pop("transform", None)
+
+        for child in element:
+            if isinstance(child.tag, str):
+                self._flatten_transforms_in_place(child, combined_transform)
 
     def _requires_original_user_space(
         self,

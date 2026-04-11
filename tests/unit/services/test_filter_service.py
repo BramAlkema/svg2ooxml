@@ -10,24 +10,24 @@ import numpy as np
 import pytest
 from lxml import etree
 from PIL import Image
+from tests.unit.filters.policy import assert_fallback
 
 from svg2ooxml.core.ir.shape_converters_utils import _ellipse_segments
 from svg2ooxml.drawingml.raster_adapter import RasterAdapter, _surface_to_png
-from svg2ooxml.filters.base import FilterContext
+from svg2ooxml.filters.base import FilterContext, FilterResult
 from svg2ooxml.filters.planner import FilterPlanner
-from svg2ooxml.ir.geometry import BezierSegment, LineSegment
-from svg2ooxml.filters.base import FilterResult
 from svg2ooxml.filters.registry import FilterRegistry
 from svg2ooxml.filters.resvg_bridge import (
     ResolvedFilter,
     build_filter_node,
     resolve_filter_element,
 )
-from svg2ooxml.render.surface import Surface
+from svg2ooxml.ir.geometry import BezierSegment, LineSegment
 from svg2ooxml.render.filters import plan_filter
+from svg2ooxml.render.surface import Surface
 from svg2ooxml.services.conversion import ConversionServices
 from svg2ooxml.services.filter_service import FilterService
-from tests.unit.filters.policy import assert_fallback
+from svg2ooxml.services.image_service import FileResolver, ImageService
 
 ASSETS_DIR = Path(__file__).resolve().parents[2] / "assets"
 
@@ -74,6 +74,33 @@ class _TraceRecorder:
                 "metadata": dict(metadata),
             }
         )
+
+
+def _make_w3c_image_filter_context(
+    *,
+    fixture_name: str,
+    filter_id: str,
+    bbox: dict[str, float],
+) -> tuple[etree._Element, FilterContext]:
+    svg_path = Path(__file__).resolve().parents[2] / "svg" / fixture_name
+    svg = etree.fromstring(svg_path.read_bytes())
+    ns = {"svg": "http://www.w3.org/2000/svg"}
+    filter_element = svg.xpath(f".//svg:filter[@id='{filter_id}']", namespaces=ns)[0]
+    image_element = svg.xpath(f".//svg:image[@filter='url(#{filter_id})']", namespaces=ns)[0]
+
+    services = ConversionServices()
+    image_service = ImageService()
+    image_service.register_resolver(FileResolver(svg_path.parent))
+    services.register("image", image_service)
+
+    return filter_element, FilterContext(
+        filter_element=filter_element,
+        services=services,
+        options={
+            "element": image_element,
+            "ir_bbox": bbox,
+        },
+    )
 
 
 def test_filter_service_registers_and_requires_definitions() -> None:
@@ -320,6 +347,51 @@ def test_raster_adapter_source_surface_does_not_invent_fill_when_missing() -> No
     assert surface is not None
     center = surface.data[10, 10]
     assert float(center[3]) == 0.0
+
+
+def test_raster_adapter_source_surface_resolves_relative_images_in_transformed_groups() -> None:
+    pytest.importorskip("skia")
+
+    adapter = RasterAdapter()
+    _, context = _make_w3c_image_filter_context(
+        fixture_name="filters-specular-01-f.svg",
+        filter_id="specularConstantB",
+        bbox={"x": 205.0, "y": 120.0, "width": 50.0, "height": 30.0},
+    )
+
+    surface = adapter.render_source_surface(width_px=50, height_px=30, context=context)
+
+    assert surface is not None
+    rgba = surface.to_rgba8()
+    assert rgba[..., 3].max() > 0
+    assert rgba[..., :3].max() > 0
+
+
+def test_raster_adapter_preview_resolves_relative_images_in_transformed_groups(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    pytest.importorskip("skia")
+
+    adapter = RasterAdapter()
+    filter_element, context = _make_w3c_image_filter_context(
+        fixture_name="filters-specular-01-f.svg",
+        filter_id="lightingColorA",
+        bbox={"x": 90.0, "y": 260.0, "width": 50.0, "height": 30.0},
+    )
+    monkeypatch.setattr(adapter, "_render_surface_with_filter_pipeline", lambda **_: None)
+
+    result = adapter.render_filter(
+        filter_id="lightingColorA",
+        filter_element=filter_element,
+        context=context,
+        default_size=(50, 30),
+    )
+
+    image = Image.open(BytesIO(result.image_bytes)).convert("RGBA")
+    red, green, blue, alpha = image.getextrema()
+    assert result.metadata.get("renderer") == "resvg"
+    assert alpha[1] > 0
+    assert red[1] > 0
 
 
 def test_raster_adapter_filter_preview_localizes_nonzero_bounds() -> None:
