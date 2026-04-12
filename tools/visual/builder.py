@@ -6,8 +6,15 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from svg2ooxml.core.slide_orchestrator import resolve_fidelity_tier_variant
 from svg2ooxml.core.parser import ParserConfig, SVGParser
+from svg2ooxml.core.pptx_exporter import (
+    _apply_immediate_motion_starts,
+    _coalesce_simple_position_motions,
+    _compose_sampled_center_motions,
+    _compose_simple_line_endpoint_animations,
+    _enrich_animations_with_element_centers,
+)
+from svg2ooxml.core.slide_orchestrator import resolve_fidelity_tier_variant
 from svg2ooxml.drawingml.writer import DrawingMLWriter
 from svg2ooxml.io.pptx_assembly import PPTXPackageBuilder
 from svg2ooxml.ir.entrypoints import convert_parser_output
@@ -52,12 +59,12 @@ class PptxBuilder:
         *,
         source_path: Path | None = None,
         tracer: Any | None = None,
-        animations: list | None = None, # Add animations parameter
+        animations: list | None = None,
     ) -> PptxBuildResult:
         """Parse *svg_text*, convert to IR, and materialise a PPTX file."""
 
         parse_result = self._parser.parse(
-            svg_text, 
+            svg_text,
             source_path=str(source_path) if source_path else None,
             tracer=tracer,
         )
@@ -141,9 +148,9 @@ class PptxBuilder:
             effective_overrides["filter"] = filter_overrides
 
         if parse_result.width_px is not None:
-            setattr(services, "viewport_width", parse_result.width_px)
+            services.viewport_width = parse_result.width_px
         if parse_result.height_px is not None:
-            setattr(services, "viewport_height", parse_result.height_px)
+            services.viewport_height = parse_result.height_px
 
         scene = convert_parser_output(
             parse_result,
@@ -151,10 +158,37 @@ class PptxBuilder:
             tracer=tracer,
             overrides=effective_overrides or None,
         )
+
+        active_animations = (
+            list(animations)
+            if animations is not None
+            else list(scene.animations or [])
+        )
+        if active_animations:
+            active_animations = _enrich_animations_with_element_centers(
+                active_animations,
+                scene,
+            )
+            active_animations = _compose_sampled_center_motions(
+                active_animations,
+                scene,
+            )
+            active_animations = _compose_simple_line_endpoint_animations(
+                active_animations,
+                scene,
+            )
+            _apply_immediate_motion_starts(scene, active_animations)
+            active_animations = _coalesce_simple_position_motions(
+                active_animations,
+                scene,
+            )
+            scene.animations = active_animations
+        elif animations is not None:
+            scene.animations = []
+
         render_result = self._writer.render_scene_from_ir(
             scene,
             tracer=tracer,
-            animations=animations,
         )
 
         pptx_path = self._builder.build_from_results(

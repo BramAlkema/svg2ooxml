@@ -330,6 +330,86 @@ class TestBuild:
         result = writer.build([anim], [])
         assert result == ""
 
+    def test_merges_concurrent_simple_numeric_motions(self, writer):
+        result = writer.build(
+            [
+                _numeric_anim(
+                    target_attribute="x",
+                    values=["0", "100"],
+                    motion_viewport_px=(1000.0, 1000.0),
+                ),
+                _numeric_anim(
+                    target_attribute="y",
+                    values=["0", "200"],
+                    motion_viewport_px=(1000.0, 1000.0),
+                ),
+            ],
+            [],
+        )
+
+        assert result.count("<p:animMotion") == 1
+        assert 'path="M 0 0 L 0.1 0.2 E"' in result
+        assert result.count('<p:bldP spid="shape1"') == 1
+
+    def test_merges_scale_origin_motion_with_concurrent_translate(self, writer):
+        result = writer.build(
+            [
+                _transform_anim(
+                    values=["1 1", "2 2"],
+                    additive="sum",
+                    element_center_px=(50.0, 60.0),
+                    motion_viewport_px=(1000.0, 1000.0),
+                ),
+                _numeric_anim(
+                    target_attribute="x",
+                    values=["0", "100"],
+                    motion_viewport_px=(1000.0, 1000.0),
+                ),
+            ],
+            [],
+        )
+
+        assert "animScale" in result
+        assert result.count("<p:animMotion") == 1
+        assert 'path="M 0 0 L 0.15 0.06 E"' in result
+
+    def test_merges_numeric_scale_anchor_motion_with_translate(self, writer):
+        result = writer.build(
+            [
+                _numeric_anim(
+                    target_attribute="width",
+                    values=["100", "200"],
+                    additive="sum",
+                    motion_viewport_px=(1000.0, 1000.0),
+                ),
+                _numeric_anim(
+                    target_attribute="x",
+                    values=["0", "100"],
+                    motion_viewport_px=(1000.0, 1000.0),
+                ),
+            ],
+            [],
+        )
+
+        assert "animScale" in result
+        assert result.count("<p:animMotion") == 1
+        assert 'path="M 0 0 L 0.15 0 E"' in result
+
+    def test_does_not_merge_complex_authored_motion_paths(self, writer):
+        result = writer.build(
+            [
+                _motion_anim(values=["M0,0 L100,0 L100,100"]),
+                _numeric_anim(
+                    target_attribute="x",
+                    values=["0", "100"],
+                    motion_viewport_px=(1000.0, 1000.0),
+                ),
+            ],
+            [],
+        )
+
+        assert result.count("<p:animMotion") == 2
+
 
 # ------------------------------------------------------------------ #
 # Tracer integration                                                   #

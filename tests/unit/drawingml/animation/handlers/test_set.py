@@ -69,10 +69,10 @@ class TestMapAttributeName:
         assert handler._map_attribute_name("x") == "ppt_x"
 
     def test_maps_fill_color(self, handler: SetAnimationHandler):
-        assert handler._map_attribute_name("fill") == "fillClr"
+        assert handler._map_attribute_name("fill") == "fill.color"
 
     def test_maps_stroke_color(self, handler: SetAnimationHandler):
-        assert handler._map_attribute_name("stroke") == "lnClr"
+        assert handler._map_attribute_name("stroke") == "stroke.color"
 
     def test_unmapped_passthrough(self, handler: SetAnimationHandler):
         assert handler._map_attribute_name("visibility") == "visibility"

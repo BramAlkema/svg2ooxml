@@ -10,18 +10,20 @@ from typing import TYPE_CHECKING
 
 from lxml import etree
 
-from svg2ooxml.drawingml.xml_builder import p_elem, p_sub
-from svg2ooxml.ir.animation import AnimationType, CalcMode
-
-from ..constants import (
+from svg2ooxml.drawingml.animation.constants import (
     ATTRIBUTE_NAME_MAP,
     COLOR_ATTRIBUTES,
     FADE_ATTRIBUTES,
     WIPE_ATTRIBUTES,
 )
-from ..timing_utils import compute_paced_key_times
-from ..value_formatters import format_numeric_value
-from .base import AnimationHandler
+from svg2ooxml.drawingml.animation.handlers.base import AnimationHandler
+from svg2ooxml.drawingml.animation.timing_utils import (
+    compute_paced_key_times,
+    sample_spline_keyframes,
+)
+from svg2ooxml.drawingml.animation.value_formatters import format_numeric_value
+from svg2ooxml.drawingml.xml_builder import p_elem, p_sub
+from svg2ooxml.ir.animation import AnimationType, CalcMode
 
 if TYPE_CHECKING:
     from svg2ooxml.ir.animation import AnimationDefinition
@@ -32,10 +34,16 @@ __all__ = ["NumericAnimationHandler"]
 class NumericAnimationHandler(AnimationHandler):
     """Handler for numeric animations (position, size, rotation, etc.)."""
 
+    _DEFAULT_SLIDE_WIDTH_EMU = 9_144_000
+    _DEFAULT_SLIDE_HEIGHT_EMU = 6_858_000
+    _LINE_ENDPOINT_ATTRS = {"x1", "x2", "y1", "y2"}
+
     def can_handle(self, animation: AnimationDefinition) -> bool:
         if animation.animation_type != AnimationType.ANIMATE:
             return False
         attr = animation.target_attribute
+        if attr in self._LINE_ENDPOINT_ATTRS:
+            return False
         if attr in FADE_ATTRIBUTES:
             return False
         if attr in COLOR_ATTRIBUTES:
@@ -58,16 +66,23 @@ class NumericAnimationHandler(AnimationHandler):
             return self._build_wipe_entrance(animation, par_id, behavior_id)
 
         ppt_attribute = self._map_attribute_name(animation.target_attribute)
+        has_non_linear_timing = (
+            animation.calc_mode in {CalcMode.DISCRETE, CalcMode.SPLINE}
+            or bool(animation.key_splines)
+        )
 
         if (
             ppt_attribute in self._SCALE_ATTRS
             or animation.target_attribute in self._SCALE_ATTRS
         ):
-            if self._is_symmetric_scale_pulse(animation, ppt_attribute):
+            if (
+                self._is_symmetric_scale_pulse(animation, ppt_attribute)
+                and not has_non_linear_timing
+            ):
                 return self._build_scale_pulse_animation(
                     animation, par_id, behavior_id, ppt_attribute
                 )
-            if len(animation.values) > 2 or animation.key_times:
+            if len(animation.values) > 2 or animation.key_times or has_non_linear_timing:
                 return self._build_generic_anim(
                     animation,
                     par_id,
@@ -81,7 +96,7 @@ class NumericAnimationHandler(AnimationHandler):
             )
 
         is_simple = len(animation.values) <= 2 and not animation.key_times
-        if is_simple and (
+        if is_simple and not has_non_linear_timing and (
             ppt_attribute in self._MOTION_ATTRS
             or animation.target_attribute in self._MOTION_ATTRS
         ):
@@ -121,6 +136,7 @@ class NumericAnimationHandler(AnimationHandler):
         p_sub(animScale, "to", x=str(to_x), y=str(to_y))
         child_elements = [animScale]
         anchor_motion = self._build_scale_anchor_motion(
+            animation=animation,
             ppt_attribute=ppt_attribute,
             start_value=from_val,
             end_value=to_val,
@@ -179,6 +195,7 @@ class NumericAnimationHandler(AnimationHandler):
         p_sub(anim_scale, "to", x=str(to_x), y=str(to_y))
         child_elements = [anim_scale]
         anchor_motion = self._build_scale_anchor_motion(
+            animation=animation,
             ppt_attribute=ppt_attribute,
             start_value=start_val,
             end_value=peak_val,
@@ -219,15 +236,20 @@ class NumericAnimationHandler(AnimationHandler):
         to_val = float(self._normalize_value(ppt_attribute, values[-1]))
 
         is_x = ppt_attribute in ("ppt_x", "x", "cx")
-        # animMotion path uses relative coordinates (0-1 range of slide)
-        # The values are in EMU, convert to slide-relative
-        slide_dim = 9144000 if is_x else 6858000  # default slide size
-        delta_rel = (to_val - from_val) / slide_dim
+        delta_x = (to_val - from_val) if is_x else 0.0
+        delta_y = 0.0 if is_x else (to_val - from_val)
+        delta_x, delta_y = self._project_motion_delta(
+            animation,
+            delta_x,
+            delta_y,
+        )
 
-        if is_x:
-            path = f"M 0 0 L {delta_rel:.6f} 0 E"
-        else:
-            path = f"M 0 0 L 0 {delta_rel:.6f} E"
+        # animMotion path uses slide-relative coordinates.
+        slide_w_emu, slide_h_emu = self._resolve_slide_dims_emu(animation)
+        path = (
+            f"M 0 0 L {delta_x / slide_w_emu:.6f} "
+            f"{delta_y / slide_h_emu:.6f} E"
+        )
 
         animMotion = p_elem("animMotion")
         animMotion.set("origin", "layout")
@@ -352,6 +374,7 @@ class NumericAnimationHandler(AnimationHandler):
     def _build_scale_anchor_motion(
         self,
         *,
+        animation: AnimationDefinition,
         ppt_attribute: str,
         start_value: float,
         end_value: float,
@@ -377,14 +400,17 @@ class NumericAnimationHandler(AnimationHandler):
         if abs(delta) <= 1e-6:
             return None
 
+        slide_w_emu, slide_h_emu = self._resolve_slide_dims_emu(animation)
+
         if is_width:
-            slide_dim = 9144000
-            dx_rel = delta / slide_dim
-            path = f"M 0 0 L {dx_rel:.6f} 0 E"
+            delta_x, delta_y = self._project_motion_delta(animation, delta, 0.0)
         else:
-            slide_dim = 6858000
-            dy_rel = delta / slide_dim
-            path = f"M 0 0 L 0 {dy_rel:.6f} E"
+            delta_x, delta_y = self._project_motion_delta(animation, 0.0, delta)
+
+        path = (
+            f"M 0 0 L {delta_x / slide_w_emu:.6f} "
+            f"{delta_y / slide_h_emu:.6f} E"
+        )
 
         anim_motion = p_elem("animMotion")
         anim_motion.set("origin", "layout")
@@ -400,6 +426,35 @@ class NumericAnimationHandler(AnimationHandler):
         )
         anim_motion.append(c_bhvr)
         return anim_motion
+
+    def _resolve_slide_dims_emu(
+        self,
+        animation: AnimationDefinition,
+    ) -> tuple[float, float]:
+        viewport = animation.motion_viewport_px
+        if viewport is not None:
+            width_px = max(float(viewport[0]), 1.0)
+            height_px = max(float(viewport[1]), 1.0)
+            return (
+                max(float(self._units.to_emu(width_px, axis="x")), 1.0),
+                max(float(self._units.to_emu(height_px, axis="y")), 1.0),
+            )
+        return (
+            float(self._DEFAULT_SLIDE_WIDTH_EMU),
+            float(self._DEFAULT_SLIDE_HEIGHT_EMU),
+        )
+
+    @staticmethod
+    def _project_motion_delta(
+        animation: AnimationDefinition,
+        dx: float,
+        dy: float,
+    ) -> tuple[float, float]:
+        matrix = animation.motion_space_matrix
+        if matrix is None:
+            return (dx, dy)
+        a, b, c, d, _e, _f = matrix
+        return (a * dx + c * dy, b * dx + d * dy)
 
     def _build_wipe_entrance(
         self,
@@ -484,6 +539,22 @@ class NumericAnimationHandler(AnimationHandler):
                 key_times=key_times,
                 value_formatter=format_numeric_value,
             )
+
+        if animation.calc_mode == CalcMode.SPLINE and animation.key_splines:
+            sampled_values, sampled_times = sample_spline_keyframes(
+                values=normalized,
+                key_times=key_times,
+                key_splines=animation.key_splines,
+                attribute_name=animation.target_attribute,
+            )
+            tav_elements, _ = self._tav.build_tav_list(
+                values=sampled_values,
+                key_times=sampled_times,
+                key_splines=None,
+                duration_ms=animation.duration_ms,
+                value_formatter=format_numeric_value,
+            )
+            return tav_elements
 
         # Multi-keyframe: delegate to TAVBuilder with normalized values
         if len(values) > 2 or key_times:

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.6 - 2026-04-12
+
+- improved PowerPoint animation fidelity across motion, rotate, opacity, and line endpoint handling, including safer composition of sampled motion stacks and clearer unsupported-case tracing
+- fixed editable line and polyline animation export by materializing simple animated lines as native connector lines and splitting stroked animated polylines into per-segment editable lines, including fade-compatible segment targeting
+- corrected image layout and visual sizing for converted decks by honoring painted image content bounds and `preserveAspectRatio` when resolving embedded image geometry
+- hardened PowerPoint visual tooling with slideshow/window capture fixes plus new motion-lab and W3C proof-deck utilities for end-to-end fidelity checks
+- expanded parser, exporter, animation-handler, paint, capture, and visual regression coverage around the new animation and rendering paths
+
 ## 0.6.5 - 2026-04-11
 
 - fixed W3C lighting and specular PowerPoint fallbacks so isolated SVG previews resolve relative image assets again instead of collapsing to black panels

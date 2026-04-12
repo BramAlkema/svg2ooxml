@@ -8,6 +8,7 @@ from dataclasses import dataclass
 
 from lxml import etree
 
+from svg2ooxml.common.geometry import Matrix2D, parse_transform_list
 from svg2ooxml.common.time import parse_time_value
 from svg2ooxml.ir.animation import (
     AnimationDefinition,
@@ -165,7 +166,7 @@ class SMILParser:
         timing = self._parse_timing(element)
         key_times = self._parse_key_times(element)
         key_splines = self._parse_key_splines(element)
-        calc_mode = self._parse_calc_mode(element)
+        calc_mode = self._parse_calc_mode(element, animation_type)
         key_times, key_splines = self._sanitize_interpolation_inputs(
             animation_type=animation_type,
             values=values,
@@ -175,6 +176,12 @@ class SMILParser:
         )
         transform_type = self._parse_transform_type(element, animation_type)
         motion_rotate = self._parse_motion_rotate(element, animation_type)
+        motion_space_matrix = self._resolve_motion_space_matrix(
+            element,
+            animation_type=animation_type,
+            target_attribute=target_attribute,
+            transform_type=transform_type,
+        )
 
         additive = element.get("additive", "replace")
         accumulate = element.get("accumulate", "none")
@@ -198,6 +205,7 @@ class SMILParser:
             additive=additive,
             accumulate=accumulate,
             motion_rotate=motion_rotate,
+            motion_space_matrix=motion_space_matrix,
             restart=restart if restart in ("always", "whenNotActive", "never") else None,
             min_ms=min_ms,
             max_ms=max_ms,
@@ -391,6 +399,110 @@ class SMILParser:
             return None
         return path_data.strip()
 
+    def _resolve_motion_space_matrix(
+        self,
+        animation_element: etree._Element,
+        *,
+        animation_type: AnimationType,
+        target_attribute: str | None = None,
+        transform_type: TransformType | None = None,
+    ) -> tuple[float, float, float, float, float, float] | None:
+        if not self._animation_uses_local_motion_space(
+            animation_type=animation_type,
+            target_attribute=target_attribute,
+            transform_type=transform_type,
+        ):
+            return None
+
+        target = self._resolve_target_element(animation_element)
+        if target is None:
+            return None
+
+        matrix = Matrix2D.identity()
+        lineage = [*target.iterancestors()][::-1]
+        lineage.append(target)
+
+        for node in lineage:
+            transform_attr = node.get("transform")
+            if transform_attr:
+                matrix = matrix.multiply(parse_transform_list(transform_attr))
+
+        if matrix.is_identity():
+            return None
+        return matrix.as_tuple()
+
+    @staticmethod
+    def _animation_uses_local_motion_space(
+        *,
+        animation_type: AnimationType,
+        target_attribute: str | None,
+        transform_type: TransformType | None,
+    ) -> bool:
+        if animation_type == AnimationType.ANIMATE_MOTION:
+            return True
+
+        if animation_type == AnimationType.ANIMATE_TRANSFORM:
+            return transform_type in {
+                TransformType.TRANSLATE,
+                TransformType.SCALE,
+            }
+
+        if animation_type != AnimationType.ANIMATE:
+            return False
+
+        return (target_attribute or "") in {
+            "x",
+            "y",
+            "cx",
+            "cy",
+            "x1",
+            "x2",
+            "y1",
+            "y2",
+            "width",
+            "height",
+            "w",
+            "h",
+            "rx",
+            "ry",
+        }
+
+    def _resolve_target_element(
+        self,
+        animation_element: etree._Element,
+    ) -> etree._Element | None:
+        root = animation_element.getroottree().getroot()
+
+        href = animation_element.get("href") or animation_element.get("{http://www.w3.org/1999/xlink}href")
+        if href and href.startswith("#"):
+            target = self._lookup_element_by_id(root, href[1:])
+            if target is not None:
+                return target
+
+        parent = animation_element.getparent()
+        if parent is not None and etree.QName(parent).localname not in self._ANIMATION_TAGS:
+            return parent
+
+        target = animation_element.get("target")
+        if target and target.startswith("#"):
+            return self._lookup_element_by_id(root, target[1:])
+
+        return None
+
+    @staticmethod
+    def _lookup_element_by_id(
+        root: etree._Element,
+        element_id: str,
+    ) -> etree._Element | None:
+        element_id = element_id.strip()
+        if not element_id:
+            return None
+
+        matches = root.xpath(".//*[@id=$target_id]", target_id=element_id)
+        if not matches:
+            return None
+        return matches[0]
+
     def _parse_timing(self, element: etree._Element) -> AnimationTiming:
         begin, begin_triggers = self._parse_begin(element.get("begin"))
         dur_value = element.get("dur", "1s")
@@ -542,14 +654,22 @@ class SMILParser:
 
         return splines or None
 
-    def _parse_calc_mode(self, element: etree._Element) -> CalcMode:
-        attr = (element.get("calcMode") or "linear").lower()
+    def _parse_calc_mode(
+        self,
+        element: etree._Element,
+        animation_type: AnimationType,
+    ) -> CalcMode:
+        attr = (element.get("calcMode") or "").strip().lower()
         mapping = {
             "linear": CalcMode.LINEAR,
             "discrete": CalcMode.DISCRETE,
             "paced": CalcMode.PACED,
             "spline": CalcMode.SPLINE,
         }
+        if not attr:
+            if animation_type == AnimationType.ANIMATE_MOTION:
+                return CalcMode.PACED
+            return CalcMode.LINEAR
         return mapping.get(attr, CalcMode.LINEAR)
 
     def _parse_transform_type(

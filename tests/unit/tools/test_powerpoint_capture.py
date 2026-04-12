@@ -245,6 +245,48 @@ def test_start_slideshow_continues_when_edit_window_exists_but_presentation_prob
     assert "on tryMenuStart()" in script
 
 
+def test_start_slideshow_continues_when_presentation_is_open_but_edit_window_probe_lags(
+    monkeypatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_osascript(script: str, *, timeout: float | None = 30.0) -> str:
+        captured["script"] = script
+        return ""
+
+    monkeypatch.setattr(powerpoint_capture, "_osascript", fake_osascript)
+    monkeypatch.setattr(
+        powerpoint_capture,
+        "_open_presentation_via_ui",
+        lambda path, *, timeout: None,
+    )
+    monkeypatch.setattr(
+        powerpoint_capture,
+        "_wait_for_powerpoint_presentation",
+        lambda path, timeout: True,
+    )
+    window_waits: list[float] = []
+    monkeypatch.setattr(
+        powerpoint_capture,
+        "_wait_for_powerpoint_window",
+        lambda timeout: window_waits.append(timeout) or False,
+    )
+
+    powerpoint_capture._start_slideshow(
+        Path("/tmp/sample.pptx"),
+        delay=1.0,
+        slideshow_delay=0.5,
+        open_timeout=30.0,
+        use_keys=False,
+        allow_reopen=False,
+    )
+
+    script = captured["script"]
+    assert window_waits == [10.0]
+    assert "on tryObjectModelStart(targetPosix, targetHfs, targetName)" in script
+    assert "run slide show ss" in script
+
+
 def test_advance_slide_sends_single_next_slide_keystroke(monkeypatch) -> None:
     captured: dict[str, object] = {}
 
@@ -432,6 +474,11 @@ def test_capture_pptx_slideshow_closes_presentation_after_capture(
         "_close_matching_presentation",
         lambda path: calls.append(f"close:{Path(path).name}"),
     )
+    monkeypatch.setattr(
+        powerpoint_capture,
+        "_discard_staged_presentation",
+        lambda path: calls.append(f"discard:{Path(path).name}"),
+    )
 
     output_path = tmp_path / "slide_1.png"
     powerpoint_capture.capture_pptx_slideshow(
@@ -454,6 +501,75 @@ def test_capture_pptx_slideshow_closes_presentation_after_capture(
         "capture:123:auto",
         "exit",
         "close:presentation.pptx",
+        "discard:presentation.pptx",
+    ]
+
+
+def test_capture_pptx_window_closes_staged_presentation_after_capture(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    calls: list[str] = []
+    staged_path = tmp_path / "stage" / "presentation.pptx"
+
+    monkeypatch.setattr(
+        powerpoint_capture,
+        "_maybe_prompt_for_permissions",
+        lambda: None,
+    )
+    monkeypatch.setattr(
+        powerpoint_capture,
+        "_prepare_staged_presentation",
+        lambda path: calls.append(f"stage:{Path(path).name}") or staged_path,
+    )
+    monkeypatch.setattr(
+        powerpoint_capture,
+        "_get_front_window_id",
+        lambda pptx_path, delay: calls.append(
+            f"front:{Path(pptx_path).name}:{delay}"
+        )
+        or "123",
+    )
+    monkeypatch.setattr(
+        powerpoint_capture,
+        "_capture_window",
+        lambda output_path, window_id, *, backend, timeout: (
+            calls.append(f"capture:{window_id}:{backend}"),
+            output_path.parent.mkdir(parents=True, exist_ok=True),
+            output_path.write_bytes(b"png"),
+        ),
+    )
+    monkeypatch.setattr(
+        powerpoint_capture, "_exit_slideshow", lambda: calls.append("exit")
+    )
+    monkeypatch.setattr(
+        powerpoint_capture,
+        "_close_matching_presentation",
+        lambda path: calls.append(f"close:{Path(path).name}"),
+    )
+    monkeypatch.setattr(
+        powerpoint_capture,
+        "_discard_staged_presentation",
+        lambda path: calls.append(f"discard:{Path(path).name}"),
+    )
+
+    output_path = tmp_path / "window.png"
+    powerpoint_capture.capture_pptx_window(
+        Path("/tmp/sample.pptx"),
+        output_path,
+        delay=1.0,
+        backend="auto",
+        capture_timeout=5.0,
+    )
+
+    assert output_path.exists()
+    assert calls == [
+        "stage:sample.pptx",
+        "front:presentation.pptx:1.0",
+        "capture:123:auto",
+        "exit",
+        "close:presentation.pptx",
+        "discard:presentation.pptx",
     ]
 
 
@@ -664,6 +780,11 @@ def test_capture_live_animation_cleans_up_and_recovers_window_id(
         "_close_matching_presentation",
         lambda path: calls.append(f"close:{Path(path).name}"),
     )
+    monkeypatch.setattr(
+        powerpoint_capture,
+        "_discard_staged_presentation",
+        lambda path: calls.append(f"discard:{Path(path).name}"),
+    )
 
     frames = powerpoint_capture.capture_live_animation(
         Path("/tmp/sample.pptx"),
@@ -680,7 +801,7 @@ def test_capture_live_animation_cleans_up_and_recovers_window_id(
     )
 
     assert calls[:4] == ["prompt", "stage:sample.pptx", "cleanup", "start:presentation.pptx"]
-    assert calls[-2:] == ["exit", "close:presentation.pptx"]
+    assert calls[-3:] == ["exit", "close:presentation.pptx", "discard:presentation.pptx"]
     assert [frame.name for frame in frames] == ["frame_0000.png"]
     assert "capture:456:auto" in calls
 
@@ -724,6 +845,11 @@ def test_capture_pptx_slideshow_writes_diagnostics_on_failure(
         "_close_matching_presentation",
         lambda path: calls.append(f"close:{Path(path).name}"),
     )
+    monkeypatch.setattr(
+        powerpoint_capture,
+        "_discard_staged_presentation",
+        lambda path: calls.append(f"discard:{Path(path).name}"),
+    )
 
     with pytest.raises(RuntimeError, match="powerpoint_diagnostics.json"):
         powerpoint_capture.capture_pptx_slideshow(
@@ -744,7 +870,43 @@ def test_capture_pptx_slideshow_writes_diagnostics_on_failure(
         "slideshow_capture_failed",
         "exit",
         "close:presentation.pptx",
+        "discard:presentation.pptx",
     ]
+
+
+def test_discard_staged_presentation_removes_staged_copy_and_lockfile(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    stage_dir = tmp_path / "stage"
+    staged_path = stage_dir / "presentation.pptx"
+    lockfile_path = stage_dir / "~$presentation.pptx"
+    stage_dir.mkdir(parents=True)
+    staged_path.write_bytes(b"pptx")
+    lockfile_path.write_text("lock", encoding="utf-8")
+
+    monkeypatch.setattr(powerpoint_capture, "_powerpoint_stage_dir", lambda: stage_dir)
+
+    powerpoint_capture._discard_staged_presentation(staged_path)
+
+    assert not staged_path.exists()
+    assert not lockfile_path.exists()
+
+
+def test_discard_staged_presentation_ignores_non_staged_path(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    stage_dir = tmp_path / "stage"
+    external_path = tmp_path / "elsewhere" / "presentation.pptx"
+    external_path.parent.mkdir(parents=True)
+    external_path.write_bytes(b"pptx")
+
+    monkeypatch.setattr(powerpoint_capture, "_powerpoint_stage_dir", lambda: stage_dir)
+
+    powerpoint_capture._discard_staged_presentation(external_path)
+
+    assert external_path.exists()
 
 
 def test_teardown_still_closes_presentation_if_exit_slideshow_fails(

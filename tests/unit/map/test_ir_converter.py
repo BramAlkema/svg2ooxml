@@ -9,8 +9,7 @@ import pytest
 from lxml import etree
 
 from svg2ooxml.core.ir import IRConverter, IRScene
-from svg2ooxml.core.parser import ParseResult
-from svg2ooxml.core.parser import ParserConfig, SVGParser
+from svg2ooxml.core.parser import ParserConfig, ParseResult, SVGParser
 from svg2ooxml.ir.entrypoints import convert_parser_output
 from svg2ooxml.ir.geometry import BezierSegment, LineSegment, Point, Rect
 from svg2ooxml.ir.paint import (
@@ -397,6 +396,7 @@ def test_use_symbol_expands_children() -> None:
     assert rect.bounds.height == pytest.approx(20.0)
     assert rect.fill is not None and rect.fill.rgb == "010203"
     element_ids = set(metadata.get("element_ids", []))
+    assert "icon" in element_ids
     assert "inst1" in element_ids
 
 
@@ -486,6 +486,7 @@ def test_use_element_reuses_existing_geometry() -> None:
     assert second_rect.bounds.height == pytest.approx(9.0)
     assert second_rect.fill is not None and second_rect.fill.rgb == "FF00FF"
     element_ids = set(metadata.get("element_ids", []))
+    assert "baseRect" in element_ids
     assert "copyRect" in element_ids
 
 
@@ -529,7 +530,9 @@ def test_use_image_expands_when_resvg_use_node_is_unsupported() -> None:
     image = scene.elements[0]
     assert isinstance(image, Image)
     assert image.href == "https://example.com/foo.png"
-    assert "imageUse" in set(image.metadata.get("element_ids", []))
+    element_ids = set(image.metadata.get("element_ids", []))
+    assert "baseImage" in element_ids
+    assert "imageUse" in element_ids
 
 
 def test_use_symbol_applies_viewbox_scaling() -> None:

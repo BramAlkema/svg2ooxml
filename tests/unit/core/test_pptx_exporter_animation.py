@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import importlib
+import re
 import sys
+
+import pytest
 
 try:
     advanced_mod = importlib.import_module("svg2ooxml.color.advanced")
@@ -42,6 +45,30 @@ def _render(svg: str):
     return render_result, scene, tracer
 
 
+def _motion_paths(slide_xml: str) -> list[str]:
+    return re.findall(r'<p:animMotion[^>]* path="([^"]+)"', slide_xml)
+
+
+def _shape_offset(slide_xml: str, shape_id: int) -> tuple[int, int]:
+    match = re.search(
+        rf'<p:cNvPr id="{shape_id}"[^>]*>.*?<a:off x="([0-9]+)" y="([0-9]+)"',
+        slide_xml,
+        flags=re.DOTALL,
+    )
+    assert match is not None
+    return (int(match.group(1)), int(match.group(2)))
+
+
+def _shape_extent(slide_xml: str, shape_id: int) -> tuple[int, int]:
+    match = re.search(
+        rf'<p:cNvPr id="{shape_id}"[^>]*>.*?<a:ext cx="([0-9]+)" cy="([0-9]+)"',
+        slide_xml,
+        flags=re.DOTALL,
+    )
+    assert match is not None
+    return (int(match.group(1)), int(match.group(2)))
+
+
 def test_render_svg_emits_animation_metadata() -> None:
     svg = """
     <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">
@@ -68,6 +95,216 @@ def test_render_svg_emits_animation_metadata() -> None:
     assert stage_totals.get("animation:timing_emitted") == 1
     assert "<p:timing" in render_result.slide_xml
     assert '<p:spTgt spid="' in render_result.slide_xml
+
+
+def test_use_inherits_defs_owned_animations() -> None:
+    svg = """
+    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20">
+      <defs>
+        <rect id="base" width="10" height="10" fill="#000">
+          <animateColor attributeName="fill" from="#000000" to="#00ff00" dur="1s" begin="0s"/>
+        </rect>
+      </defs>
+      <use id="inst" href="#base" x="5">
+        <animate attributeName="x" values="5;10" dur="1s" begin="0s"/>
+      </use>
+    </svg>
+    """
+
+    render_result, _, tracer = _render(svg)
+
+    stage_totals = tracer.report().stage_totals
+    assert stage_totals.get("animation:mapped_animation") == 2
+    assert stage_totals.get("animation:unmapped_animation") is None
+    assert "<p:animClr" in render_result.slide_xml
+    assert "<p:animMotion" in render_result.slide_xml
+
+
+def test_use_line_endpoint_animation_composes_into_motion_and_scale() -> None:
+    svg = """
+    <svg xmlns="http://www.w3.org/2000/svg" width="100" height="100">
+      <defs>
+        <line id="base" x1="30" y1="50" x2="10" y2="10" stroke="#000" stroke-width="3">
+          <animate attributeName="x1" from="30" to="50" dur="1s" begin="0s" fill="freeze"/>
+        </line>
+      </defs>
+      <use id="inst" href="#base">
+        <animate attributeName="x" from="10" to="20" dur="1s" begin="0s" fill="freeze"/>
+      </use>
+    </svg>
+    """
+
+    render_result, _, tracer = _render(svg)
+
+    assert render_result.slide_xml.count("<p:animMotion") == 1
+    assert render_result.slide_xml.count("<p:animScale") == 1
+    assert 'path="M 0 0 L 0.2 0 E"' in render_result.slide_xml
+    assert '<p:to x="200000" y="100000"/>' in render_result.slide_xml
+    assert "<p:attrName>stroke.weight</p:attrName>" not in render_result.slide_xml
+    assert "<p:attrName>x1</p:attrName>" not in render_result.slide_xml
+
+    skipped = [
+        event
+        for event in tracer.report().stage_events
+        if event.stage == "animation" and event.action == "fragment_skipped"
+    ]
+    assert not skipped
+
+
+def test_multi_keyframe_line_endpoint_animation_is_not_collapsed_to_linear_scale() -> None:
+    svg = """
+    <svg xmlns="http://www.w3.org/2000/svg" width="100" height="100">
+      <defs>
+        <line id="base" x1="30" y1="50" x2="10" y2="10" stroke="#000" stroke-width="3">
+          <animate attributeName="x1" values="30;40;50" keyTimes="0;0.2;1" dur="1s" begin="0s" fill="freeze"/>
+        </line>
+      </defs>
+      <use id="inst" href="#base">
+        <animate attributeName="x" from="10" to="20" dur="1s" begin="0s" fill="freeze"/>
+      </use>
+    </svg>
+    """
+
+    render_result, _, tracer = _render(svg)
+
+    assert render_result.slide_xml.count("<p:animMotion") == 1
+    assert "<p:animScale" not in render_result.slide_xml
+    assert "<p:attrName>x1</p:attrName>" not in render_result.slide_xml
+
+    skipped = [
+        event
+        for event in tracer.report().stage_events
+        if event.stage == "animation" and event.action == "fragment_skipped"
+    ]
+    assert any(
+        event.metadata.get("attribute") == "x1"
+        and event.metadata.get("reason") == "no_handler_found"
+        for event in skipped
+    )
+
+
+def test_circle_stacked_position_and_scale_uses_sampled_motion_path() -> None:
+    svg = """
+    <svg xmlns="http://www.w3.org/2000/svg" width="480" height="360">
+      <g transform="translate(20 0) scale(1.3 1.3)">
+        <defs>
+          <circle id="base" cx="20" cy="100" r="10" fill="#105D8C" stroke="#000">
+            <animate attributeName="cy" from="100" to="130" dur="3s" begin="0s" fill="freeze"/>
+            <animateTransform attributeName="transform" type="scale" from="1" to="1.5" additive="sum" dur="3s" begin="0s" fill="freeze"/>
+          </circle>
+        </defs>
+        <use href="#base">
+          <animate attributeName="x" from="10" to="70" dur="3s" begin="0s" fill="freeze"/>
+        </use>
+      </g>
+    </svg>
+    """
+
+    render_result, _, _ = _render(svg)
+
+    paths = _motion_paths(render_result.slide_xml)
+    assert len(paths) == 1
+    assert paths[0].count(" L ") > 1
+    assert "0.189583 0.343056 E" in paths[0]
+    assert render_result.slide_xml.count("<p:animScale") == 1
+    assert _shape_offset(render_result.slide_xml, 2) != (0, 0)
+
+
+def test_image_stacked_y_and_scale_uses_sampled_motion_path() -> None:
+    svg = """
+    <svg xmlns="http://www.w3.org/2000/svg" width="480" height="360">
+      <g transform="translate(20 0) scale(1.3 1.3)">
+        <defs>
+          <image id="base" x="230" y="20" width="40" height="80"
+            href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAQAAAADCAYAAAC09K7GAAAAFUlEQVR4nGP8z8DwnwEJMCFzsAoAAGFrAgT6YybLAAAAAElFTkSuQmCC">
+            <animate attributeName="y" from="5" to="145" dur="3s" begin="0s" fill="freeze"/>
+          </image>
+        </defs>
+        <use href="#base">
+          <animateTransform attributeName="transform" type="scale" from="1 .25" to="1 1" additive="sum" dur="3s" begin="0s" fill="freeze"/>
+        </use>
+      </g>
+    </svg>
+    """
+
+    render_result, _, _ = _render(svg)
+
+    paths = _motion_paths(render_result.slide_xml)
+    assert len(paths) == 1
+    assert paths[0].count(" L ") > 1
+    assert "0 0.627431 E" in paths[0]
+    assert render_result.slide_xml.count("<p:animScale") == 1
+    assert _shape_offset(render_result.slide_xml, 2) != (0, 0)
+    assert _shape_extent(render_result.slide_xml, 2) == (495300, 371475)
+
+
+def test_motion_and_origin_rotate_stack_uses_sampled_orbit_path() -> None:
+    svg = """
+    <svg xmlns="http://www.w3.org/2000/svg" width="480" height="360">
+      <g transform="translate(20 0) scale(1.3 1.3)">
+        <defs>
+          <polyline id="base" fill="none" stroke="#105D8C" stroke-width="2"
+            points="200,20 200,40 220,40 220,60">
+            <animateMotion path="M 0 0 l 0 100" begin="0s" dur="3s" fill="freeze"/>
+          </polyline>
+        </defs>
+        <use href="#base">
+          <animateTransform attributeName="transform" type="rotate" from="0" to="15" additive="sum" dur="3s" begin="0s" fill="freeze"/>
+        </use>
+      </g>
+    </svg>
+    """
+
+    render_result, _, _ = _render(svg)
+
+    paths = _motion_paths(render_result.slide_xml)
+    assert len(paths) == 1
+    assert paths[0].count(" L ") > 1
+    assert "-0.117514 0.540155 E" in paths[0] or "-0.117515 0.540156 E" in paths[0]
+    assert render_result.slide_xml.count("<p:animRot") == 1
+    assert _shape_offset(render_result.slide_xml, 2) != (0, 0)
+
+
+def test_polyline_stroke_width_and_opacity_still_materializes_line_segments() -> None:
+    svg = """
+    <svg xmlns="http://www.w3.org/2000/svg" width="100" height="100">
+      <polyline id="base" fill="none" stroke="#105D8C" stroke-width="2"
+        points="10,10 20,20 30,10">
+        <animate attributeName="stroke-width" from="2" to="4" dur="1s" begin="0s" fill="freeze"/>
+        <animate attributeName="opacity" from="1" to="0.5" dur="1s" begin="0s" fill="freeze"/>
+      </polyline>
+    </svg>
+    """
+
+    render_result, _, tracer = _render(svg)
+
+    assert render_result.slide_xml.count("<p:cxnSp>") == 2
+    assert "<a:custGeom" not in render_result.slide_xml
+    assert render_result.slide_xml.count("<p:attrName>stroke.weight</p:attrName>") == 2
+    assert render_result.slide_xml.count("<p:attrName>style.opacity</p:attrName>") == 2
+
+    skipped = [
+        event
+        for event in tracer.report().stage_events
+        if event.stage == "animation" and event.action == "fragment_skipped"
+    ]
+    assert not skipped
+
+
+def test_motion_animation_metadata_infers_triangle_heading() -> None:
+    svg = """
+    <svg xmlns="http://www.w3.org/2000/svg" width="480" height="360">
+      <path id="triangle" d="M-15,0 L0,-30 L15,0 z" fill="blue" stroke="green">
+        <animateMotion path="M25,225 C25,175 125,150 175,200" rotate="auto" dur="6s" begin="0s" fill="freeze"/>
+      </path>
+    </svg>
+    """
+
+    _, scene, _ = _render(svg)
+
+    animation_meta = scene.metadata.get("animation")
+    assert animation_meta is not None
+    assert animation_meta["definitions"][0]["element_heading_deg"] == pytest.approx(-90.0)
 
 
 def test_animation_parse_fallback_reasons_are_traced() -> None:
@@ -111,6 +348,21 @@ def test_scale_animation_emits_animscale() -> None:
     render_result, _, _ = _render(svg)
 
     assert "<p:animScale" in render_result.slide_xml
+
+
+def test_scale_animation_emits_origin_compensation_motion_when_center_known() -> None:
+    svg = """
+    <svg xmlns="http://www.w3.org/2000/svg" width="100" height="100">
+      <rect id="rect1" x="20" y="10" width="10" height="10" fill="#000">
+        <animateTransform attributeName="transform" type="scale" values="1;2" dur="1s" begin="0s"/>
+      </rect>
+    </svg>
+    """
+
+    render_result, _, _ = _render(svg)
+
+    assert "<p:animScale" in render_result.slide_xml
+    assert '<p:animMotion origin="layout" path="M 0 0 L 0.25 0.15 E"' in render_result.slide_xml
 
 
 def test_spline_easing_on_scale_uses_from_to() -> None:
@@ -195,7 +447,8 @@ def test_translate_animation_emits_anim_motion() -> None:
     render_result, _, _ = _render(svg)
 
     assert "<p:animMotion" in render_result.slide_xml
-    assert "<p:by x=" in render_result.slide_xml
+    assert 'path="M 0 0 L 1 0.5 E"' in render_result.slide_xml
+    assert "<p:by x=" not in render_result.slide_xml
 
 
 def test_animate_motion_path_emits_point_list() -> None:
@@ -212,6 +465,21 @@ def test_animate_motion_path_emits_point_list() -> None:
     assert "<p:animMotion" in render_result.slide_xml
     assert 'path="M' in render_result.slide_xml
     assert "pathEditMode=\"relative\"" in render_result.slide_xml
+
+
+def test_animate_motion_projects_path_into_shape_position_space() -> None:
+    svg = """
+    <svg xmlns="http://www.w3.org/2000/svg" width="480" height="360">
+      <path id="ship" d="M-30,0 L0,-60 L30,0 z" fill="#00f" stroke="#080" stroke-width="6">
+        <animateMotion dur="1s" path="M90,258 L390,180" fill="freeze" />
+      </path>
+    </svg>
+    """
+
+    render_result, _, _ = _render(svg)
+
+    assert '<a:off x="571500" y="1885950"/>' in render_result.slide_xml
+    assert '<p:animMotion origin="layout" path="M 0 0 L 0.625 -0.216667 E"' in render_result.slide_xml
 
 
 def test_motion_rotate_auto_emits_fidelity_downgrade_trace() -> None:
@@ -235,6 +503,21 @@ def test_motion_rotate_auto_emits_fidelity_downgrade_trace() -> None:
         and event.metadata.get("rotate_mode") == "auto"
         for event in events
     )
+
+
+def test_motion_rotate_auto_with_turn_emits_stacked_rotation() -> None:
+    svg = """
+    <svg xmlns="http://www.w3.org/2000/svg" width="100" height="100">
+      <path id="ship" d="M-10,0 L0,-20 L10,0 z" fill="#00f">
+        <animateMotion dur="1s" path="M10,10 L90,10 L90,90" rotate="auto" fill="freeze" />
+      </path>
+    </svg>
+    """
+
+    render_result, _, _ = _render(svg)
+
+    assert "<p:animMotion" in render_result.slide_xml
+    assert "<p:animRot" in render_result.slide_xml
 
 
 def test_translate_discrete_calc_mode_expands_path_points() -> None:
@@ -488,7 +771,41 @@ def test_position_animation_uses_relative_delta_from_nonzero_start() -> None:
     render_result, _, _ = _render(svg)
 
     assert '<p:animMotion origin="layout" path="M 0 0 L ' in render_result.slide_xml
-    assert "0.010417" in render_result.slide_xml
+    assert 'path="M 0 0 L 1.000000 0.000000 E"' in render_result.slide_xml
+
+
+def test_position_animation_projects_group_transform_into_motion_delta() -> None:
+    svg = """
+    <svg xmlns="http://www.w3.org/2000/svg" width="100" height="100">
+      <g transform="scale(2 3)">
+        <rect id="rect1" width="10" height="10" fill="#000">
+          <animate attributeName="x" from="0" to="10" dur="1s" begin="0s"/>
+          <animate attributeName="y" from="0" to="10" dur="1s" begin="0s"/>
+        </rect>
+      </g>
+    </svg>
+    """
+
+    render_result, _, _ = _render(svg)
+
+    assert 'path="M 0 0 L 0.2 0.3 E"' in render_result.slide_xml
+
+
+def test_translate_transform_projects_group_transform_into_motion_delta() -> None:
+    svg = """
+    <svg xmlns="http://www.w3.org/2000/svg" width="100" height="100">
+      <g transform="scale(2 3)">
+        <rect id="rect1" width="10" height="10" fill="#000">
+          <animateTransform attributeName="transform" type="translate"
+                            from="0 0" to="10 5" dur="1s" begin="0s"/>
+        </rect>
+      </g>
+    </svg>
+    """
+
+    render_result, _, _ = _render(svg)
+
+    assert 'path="M 0 0 L 0.2 0.15 E"' in render_result.slide_xml
 
 
 def test_rotate_attribute_animation_uses_ppt_angle() -> None:
@@ -617,7 +934,7 @@ def test_timing_tree_uses_powerpoint_autostart_wrapper() -> None:
     assert f'<p:tn val="{main_seq_id}"/>' in render_result.slide_xml
 
 
-def test_stroke_width_animation_maps_to_ln_w() -> None:
+def test_stroke_width_animation_maps_to_stroke_weight() -> None:
     svg = """
     <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">
       <rect id="rect1" width="10" height="10" fill="#000" stroke="#000">
@@ -629,9 +946,32 @@ def test_stroke_width_animation_maps_to_ln_w() -> None:
     render_result, _, _ = _render(svg)
 
     assert "<p:anim>" in render_result.slide_xml
-    assert "<p:attrName>ln_w</p:attrName>" in render_result.slide_xml
+    assert "<p:attrName>stroke.weight</p:attrName>" in render_result.slide_xml
     assert '<p:fltVal val="9525"/>' in render_result.slide_xml
     assert '<p:fltVal val="19050"/>' in render_result.slide_xml
+
+
+def test_use_alias_x_and_y_motion_collapse_into_single_diagonal_path() -> None:
+    svg = """
+    <svg xmlns="http://www.w3.org/2000/svg" width="480" height="360">
+      <defs>
+        <circle id="baseCircle" cx="100" cy="100" r="10" fill="#00f">
+          <animate attributeName="cy" values="100;130" dur="1s" begin="0s"/>
+        </circle>
+      </defs>
+      <use id="useCircle" href="#baseCircle" x="10">
+        <animate attributeName="x" values="10;70" dur="1s" begin="0s"/>
+      </use>
+    </svg>
+    """
+
+    render_result, _, _ = _render(svg)
+
+    assert render_result.slide_xml.count("<p:animMotion") == 1
+    assert (
+        '<p:animMotion origin="layout" path="M 0 0 L 0.125 0.0833333 E"'
+        in render_result.slide_xml
+    )
 
 
 def test_color_animation_emits_animclr() -> None:

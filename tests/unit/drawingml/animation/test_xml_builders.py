@@ -422,6 +422,40 @@ class TestBuildParContainerElem:
         assert len(child_tn_lst) == 1
         assert child_tn_lst[0].tag == f"{{{NS_P}}}set"
 
+    def test_repeat_count_is_mapped_on_outer_container(self):
+        builder = AnimationXMLBuilder()
+        from svg2ooxml.drawingml.xml_builder import p_elem as _p
+
+        par = builder.build_par_container_elem(
+            par_id=4,
+            duration_ms=1000,
+            delay_ms=0,
+            child_element=_p("set"),
+            repeat_count=3,
+        )
+
+        ctn = par.find(f"{{{NS_P}}}cTn")
+        assert ctn.get("repeatCount") == "3000"
+
+    def test_build_delayed_child_par(self):
+        builder = AnimationXMLBuilder()
+        from svg2ooxml.drawingml.xml_builder import p_elem as _p
+
+        par = builder.build_delayed_child_par(
+            par_id=9,
+            delay_ms=250,
+            duration_ms=400,
+            child_element=_p("animRot"),
+        )
+
+        ctn = par.find(f"{{{NS_P}}}cTn")
+        cond = par.find(f".//{{{NS_P}}}cond")
+        child_tn_lst = par.find(f".//{{{NS_P}}}childTnLst")
+        assert ctn.get("id") == "9"
+        assert ctn.get("dur") == "400"
+        assert cond.get("delay") == "250"
+        assert child_tn_lst[0].tag == f"{{{NS_P}}}animRot"
+
 
 class TestBuildBehaviorCoreElem:
     """Test build_behavior_core_elem."""

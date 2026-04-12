@@ -11,15 +11,16 @@ import math
 import re
 from typing import TYPE_CHECKING
 
-_logger = logging.getLogger(__name__)
-
 from lxml import etree
 
 from svg2ooxml.common.conversions.scale import scale_to_ppt
+from svg2ooxml.common.units import emu_to_px
+from svg2ooxml.drawingml.animation.timing_utils import (
+    compute_paced_key_times_2d,
+    compute_segment_durations_ms,
+)
 from svg2ooxml.drawingml.xml_builder import p_elem, p_sub
 from svg2ooxml.ir.animation import CalcMode, TransformType
-
-from ..timing_utils import compute_paced_key_times_2d
 
 from .base import AnimationHandler
 
@@ -28,6 +29,8 @@ if TYPE_CHECKING:
     from svg2ooxml.ir.animation import AnimationDefinition
 
 __all__ = ["TransformAnimationHandler"]
+
+_logger = logging.getLogger(__name__)
 
 
 class TransformAnimationHandler(AnimationHandler):
@@ -64,6 +67,27 @@ class TransformAnimationHandler(AnimationHandler):
                 self._processor.parse_scale_pair(v) for v in animation.values
             ]
             child = self._build_scale_element(animation, behavior_id, scale_pairs)
+            if child is None:
+                return None
+            scale_motion = self._build_scale_origin_motion(
+                animation,
+                behavior_id + 2,
+                scale_pairs,
+            )
+            if scale_motion is not None:
+                return self._xml.build_par_container_with_children_elem(
+                    par_id=par_id,
+                    duration_ms=animation.duration_ms,
+                    delay_ms=animation.begin_ms,
+                    child_elements=[child, scale_motion],
+                    preset_id=6,
+                    preset_class="emph",
+                    preset_subtype=0,
+                    node_type="clickEffect",
+                    begin_triggers=animation.begin_triggers,
+                    default_target_shape=animation.element_id,
+                    effect_group_id=par_id,
+                )
             preset_class = "emph"
             preset_id = 6  # Grow/Shrink
         elif transform_type == TransformType.ROTATE:
@@ -171,6 +195,59 @@ class TransformAnimationHandler(AnimationHandler):
         )
 
         return anim_scale
+
+    def _build_scale_origin_motion(
+        self,
+        animation: AnimationDefinition,
+        behavior_id: int,
+        scale_pairs: list[tuple[float, float]],
+    ) -> etree._Element | None:
+        """Compensate for SVG scaling around the origin.
+
+        PowerPoint animScale grows around the shape center. SVG scale transforms
+        grow around the current user-space origin, so the shape center also
+        moves. Emit a companion motion path when we know the rendered shape
+        center.
+        """
+        if len(scale_pairs) < 2:
+            return None
+        if animation.element_center_px is None:
+            return None
+
+        from_sx, from_sy = scale_pairs[0]
+        to_sx, to_sy = scale_pairs[-1]
+        center_x, center_y = animation.element_center_px
+        delta_x = center_x * (to_sx - from_sx)
+        delta_y = center_y * (to_sy - from_sy)
+        if abs(delta_x) <= 1e-6 and abs(delta_y) <= 1e-6:
+            return None
+
+        viewport_w, viewport_h = self._resolve_motion_viewport_px(animation)
+        path = (
+            f"M 0 0 L {self._format_coord(delta_x / viewport_w)} "
+            f"{self._format_coord(delta_y / viewport_h)} E"
+        )
+
+        anim_motion = p_elem(
+            "animMotion",
+            origin="layout",
+            path=path,
+            pathEditMode="relative",
+            rAng="0",
+            ptsTypes="AA",
+        )
+        cBhvr = self._xml.build_behavior_core_elem(
+            behavior_id=behavior_id,
+            duration_ms=animation.duration_ms,
+            target_shape=animation.element_id,
+            attr_name_list=["ppt_x", "ppt_y"],
+            additive=animation.additive,
+            fill_mode=animation.fill_mode,
+            repeat_count=animation.repeat_count,
+        )
+        anim_motion.append(cBhvr)
+        p_sub(anim_motion, "rCtr", x="0", y="0")
+        return anim_motion
 
     # ------------------------------------------------------------------ #
     # Rotate helpers                                                       #
@@ -283,36 +360,23 @@ class TransformAnimationHandler(AnimationHandler):
             angles,
             orbit_offset,
         )
-
-        outer_par = p_elem("par")
-        outer_ctn = p_sub(
-            outer_par,
-            "cTn",
-            id=str(par_id),
-            dur=str(animation.duration_ms),
-            fill="hold",
-            nodeType="clickEffect",
-            grpId=str(par_id),
-            presetID="8",
-            presetClass="emph",
-            presetSubtype="0",
-        )
-        outer_st = p_sub(outer_ctn, "stCondLst")
-        if animation.begin_triggers:
-            self._xml._append_begin_conditions(
-                st_cond_lst=outer_st,
-                begin_triggers=animation.begin_triggers,
-                fallback_delay_ms=animation.begin_ms,
-                default_target_shape=animation.element_id,
-            )
-        else:
-            p_sub(outer_st, "cond", delay=str(animation.begin_ms))
-        outer_children = p_sub(outer_ctn, "childTnLst")
-        outer_children.append(anim_rot)
+        child_elements = [anim_rot]
         if anim_motion is not None:
-            outer_children.append(anim_motion)
-
-        return outer_par
+            child_elements.append(anim_motion)
+        return self._xml.build_par_container_with_children_elem(
+            par_id=par_id,
+            duration_ms=animation.duration_ms,
+            delay_ms=animation.begin_ms,
+            child_elements=child_elements,
+            preset_id=8,
+            preset_class="emph",
+            preset_subtype=0,
+            node_type="clickEffect",
+            begin_triggers=animation.begin_triggers,
+            default_target_shape=animation.element_id,
+            effect_group_id=par_id,
+            repeat_count=animation.repeat_count,
+        )
 
     def _build_orbital_motion_element(
         self,
@@ -419,44 +483,17 @@ class TransformAnimationHandler(AnimationHandler):
         n_segments = len(angles) - 1
         total_ms = animation.duration_ms
 
-        # Compute per-segment durations from key_times or equal split
-        if animation.key_times and len(animation.key_times) == len(angles):
-            kt = animation.key_times
-            seg_durations = [
-                max(1, int(round((kt[i + 1] - kt[i]) * total_ms)))
-                for i in range(n_segments)
-            ]
-        else:
-            base = total_ms // n_segments
-            seg_durations = [base] * n_segments
-            seg_durations[-1] += total_ms - sum(seg_durations)
-
-        # Outer <p:par> — same structure as build_par_container_elem
-        outer_par = p_elem("par")
-        outer_ctn = p_sub(
-            outer_par,
-            "cTn",
-            id=str(par_id),
-            dur=str(total_ms),
-            fill="hold",
-            nodeType="clickEffect",
-            grpId=str(par_id),
-            presetID="8",
-            presetClass="emph",
-            presetSubtype="0",
+        seg_durations = compute_segment_durations_ms(
+            total_ms=total_ms,
+            n_values=len(angles),
+            key_times=(
+                animation.key_times
+                if animation.key_times and len(animation.key_times) == len(angles)
+                else None
+            ),
         )
-        outer_st = p_sub(outer_ctn, "stCondLst")
-        if animation.begin_triggers:
-            self._xml._append_begin_conditions(
-                st_cond_lst=outer_st,
-                begin_triggers=animation.begin_triggers,
-                fallback_delay_ms=animation.begin_ms,
-                default_target_shape=animation.element_id,
-            )
-        else:
-            p_sub(outer_st, "cond", delay=str(animation.begin_ms))
-        outer_children = p_sub(outer_ctn, "childTnLst")
 
+        child_elements: list[etree._Element] = []
         bid = behavior_id
         delay_acc = 0
 
@@ -478,21 +515,14 @@ class TransformAnimationHandler(AnimationHandler):
             )
             anim_rot.append(cBhvr)
 
-            # Each segment in its own <p:par> with cumulative delay
-            seg_par = p_elem("par")
-            seg_ctn = p_sub(
-                seg_par,
-                "cTn",
-                id=str(bid + 1),
-                dur=str(seg_dur),
-                fill="hold",
+            child_elements.append(
+                self._xml.build_delayed_child_par(
+                    par_id=bid + 1,
+                    delay_ms=delay_acc,
+                    duration_ms=seg_dur,
+                    child_element=anim_rot,
+                )
             )
-            seg_st = p_sub(seg_ctn, "stCondLst")
-            p_sub(seg_st, "cond", delay=str(delay_acc))
-            seg_child_lst = p_sub(seg_ctn, "childTnLst")
-            seg_child_lst.append(anim_rot)
-
-            outer_children.append(seg_par)
             delay_acc += seg_dur
             bid += 2
 
@@ -509,22 +539,29 @@ class TransformAnimationHandler(AnimationHandler):
                 orbit_offset,
             )
             if orbit_motion is not None:
-                # Wrap in par with delay=0 so it plays for the full duration
-                orbit_par = p_elem("par")
-                orbit_ctn = p_sub(
-                    orbit_par,
-                    "cTn",
-                    id=str(bid + 1),
-                    dur=str(total_ms),
-                    fill="hold",
+                child_elements.append(
+                    self._xml.build_delayed_child_par(
+                        par_id=bid + 1,
+                        delay_ms=0,
+                        duration_ms=total_ms,
+                        child_element=orbit_motion,
+                    )
                 )
-                orbit_st = p_sub(orbit_ctn, "stCondLst")
-                p_sub(orbit_st, "cond", delay="0")
-                orbit_child = p_sub(orbit_ctn, "childTnLst")
-                orbit_child.append(orbit_motion)
-                outer_children.append(orbit_par)
 
-        return outer_par
+        return self._xml.build_par_container_with_children_elem(
+            par_id=par_id,
+            duration_ms=total_ms,
+            delay_ms=animation.begin_ms,
+            child_elements=child_elements,
+            preset_id=8,
+            preset_class="emph",
+            preset_subtype=0,
+            node_type="clickEffect",
+            begin_triggers=animation.begin_triggers,
+            default_target_shape=animation.element_id,
+            effect_group_id=par_id,
+            repeat_count=animation.repeat_count,
+        )
 
     # ------------------------------------------------------------------ #
     # Translate                                                            #
@@ -539,6 +576,11 @@ class TransformAnimationHandler(AnimationHandler):
         if len(translation_pairs) < 2:
             return None
 
+        translation_pairs = self._project_translation_pairs(
+            animation,
+            translation_pairs,
+        )
+
         # Multi-keyframe: build a motion path with M/L segments
         if len(translation_pairs) > 2:
             return self._build_translate_path_element(
@@ -547,26 +589,37 @@ class TransformAnimationHandler(AnimationHandler):
                 translation_pairs,
             )
 
-        # Simple 2-value: use <p:by> delta
+        # Simple 2-value: use a relative motion path so PowerPoint interprets
+        # the delta in slide coordinates rather than raw EMUs.
         start_dx, start_dy = translation_pairs[0]
         end_dx, end_dy = translation_pairs[-1]
+        viewport_w, viewport_h = self._resolve_motion_viewport_px(animation)
+        delta_x = (end_dx - start_dx) / viewport_w
+        delta_y = (end_dy - start_dy) / viewport_h
 
-        delta_x = int(round(self._units.to_emu(end_dx - start_dx, axis="x")))
-        delta_y = int(round(self._units.to_emu(end_dy - start_dy, axis="y")))
-
-        anim_motion = p_elem("animMotion")
+        anim_motion = p_elem(
+            "animMotion",
+            origin="layout",
+            path=(
+                f"M 0 0 L {self._format_coord(delta_x)} "
+                f"{self._format_coord(delta_y)} E"
+            ),
+            pathEditMode="relative",
+            rAng="0",
+            ptsTypes="AA",
+        )
 
         cBhvr = self._xml.build_behavior_core_elem(
             behavior_id=behavior_id,
             duration_ms=animation.duration_ms,
             target_shape=animation.element_id,
+            attr_name_list=["ppt_x", "ppt_y"],
             additive=animation.additive,
             fill_mode=animation.fill_mode,
             repeat_count=animation.repeat_count,
         )
         anim_motion.append(cBhvr)
 
-        p_sub(anim_motion, "by", x=str(delta_x), y=str(delta_y))
         # ECMA-376 requires a choice element (by/from/to/rCtr) after cBhvr
         p_sub(anim_motion, "rCtr", x="0", y="0")
 
@@ -579,9 +632,7 @@ class TransformAnimationHandler(AnimationHandler):
         translation_pairs: list[tuple[float, float]],
     ) -> etree._Element:
         """Build ``<p:animMotion>`` with path for multi-keyframe translate."""
-        from svg2ooxml.drawingml.writer import DEFAULT_SLIDE_SIZE
-
-        slide_w, slide_h = DEFAULT_SLIDE_SIZE
+        viewport_w, viewport_h = self._resolve_motion_viewport_px(animation)
         start_x, start_y = translation_pairs[0]
 
         path_pairs = list(translation_pairs)
@@ -608,12 +659,8 @@ class TransformAnimationHandler(AnimationHandler):
         for i, (x_px, y_px) in enumerate(path_pairs):
             dx_px = x_px - start_x
             dy_px = y_px - start_y
-
-            dx_emu = self._units.to_emu(dx_px, axis="x")
-            dy_emu = self._units.to_emu(dy_px, axis="y")
-
-            nx = dx_emu / slide_w
-            ny = dy_emu / slide_h
+            nx = dx_px / viewport_w
+            ny = dy_px / viewport_h
 
             cmd = "M" if i == 0 else "L"
             segments.append(f"{cmd} {self._format_coord(nx)} {self._format_coord(ny)}")
@@ -645,6 +692,36 @@ class TransformAnimationHandler(AnimationHandler):
         p_sub(anim_motion, "rCtr", x="0", y="0")
 
         return anim_motion
+
+    @staticmethod
+    def _project_translation_pairs(
+        animation: AnimationDefinition,
+        pairs: list[tuple[float, float]],
+    ) -> list[tuple[float, float]]:
+        matrix = animation.motion_space_matrix
+        if matrix is None:
+            return list(pairs)
+        a, b, c, d, _e, _f = matrix
+        return [
+            (a * x + c * y, b * x + d * y)
+            for x, y in pairs
+        ]
+
+    def _resolve_motion_viewport_px(
+        self,
+        animation: AnimationDefinition,
+    ) -> tuple[float, float]:
+        if animation.motion_viewport_px is not None:
+            width_px = max(float(animation.motion_viewport_px[0]), 1.0)
+            height_px = max(float(animation.motion_viewport_px[1]), 1.0)
+            return (width_px, height_px)
+
+        from svg2ooxml.drawingml.writer import DEFAULT_SLIDE_SIZE
+
+        return (
+            max(float(emu_to_px(DEFAULT_SLIDE_SIZE[0])), 1.0),
+            max(float(emu_to_px(DEFAULT_SLIDE_SIZE[1])), 1.0),
+        )
 
     @staticmethod
     def _format_coord(value: float) -> str:

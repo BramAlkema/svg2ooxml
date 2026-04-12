@@ -17,8 +17,8 @@ from svg2ooxml.core.styling.style_helpers import parse_style_attr
 from svg2ooxml.core.traversal import clipping
 from svg2ooxml.core.traversal.constants import DEFAULT_TOLERANCE
 from svg2ooxml.core.traversal.coordinate_space import CoordinateSpace
-from svg2ooxml.core.traversal.runtime import local_name
 from svg2ooxml.core.traversal.geometry_utils import is_axis_aligned
+from svg2ooxml.core.traversal.runtime import local_name
 from svg2ooxml.ir.effects import CustomEffect
 from svg2ooxml.ir.geometry import BezierSegment, LineSegment, SegmentType
 from svg2ooxml.ir.geometry import Rect as IRRect
@@ -169,9 +169,18 @@ class TraversalHooksMixin:
             return
         metadata: dict[str, Any] = ir_object.metadata  # type: ignore[attr-defined]
 
-        element_id = element.get("id")
-        if element_id:
-            metadata.setdefault("element_ids", []).append(element_id)
+        def _append_element_id(value: str | None) -> None:
+            if not isinstance(value, str) or not value:
+                return
+            element_ids = metadata.setdefault("element_ids", [])
+            if not isinstance(element_ids, list):
+                element_ids = []
+                metadata["element_ids"] = element_ids
+            if value not in element_ids:
+                element_ids.append(value)
+
+        _append_element_id(element.get("data-svg2ooxml-source-id"))
+        _append_element_id(element.get("id"))
 
         class_attr = element.get("class")
         if class_attr:
@@ -185,7 +194,7 @@ class TraversalHooksMixin:
         desc_parts: list[str] = []
         ns = element.nsmap.get(None, "")
         for tag in ("title", "desc"):
-            qualified = "{%s}%s" % (ns, tag) if ns else tag
+            qualified = f"{{{ns}}}{tag}" if ns else tag
             child = element.find(qualified)
             if child is not None and child.text and child.text.strip():
                 desc_parts.append(child.text.strip())

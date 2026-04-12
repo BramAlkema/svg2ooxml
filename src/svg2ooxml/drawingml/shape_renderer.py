@@ -200,7 +200,7 @@ class DrawingMLShapeRenderer:
             xml = shapes_runtime.render_line(
                 element,
                 shape_id,
-                template=self._path_template,
+                template=self._line_template,
                 path_generator=self._path_generator,
                 stroke_to_xml=paint_runtime.stroke_to_xml,
                 paint_to_fill=paint_runtime.paint_to_fill,

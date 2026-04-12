@@ -11,11 +11,13 @@ from typing import TYPE_CHECKING
 
 from lxml import etree
 
+from svg2ooxml.drawingml.animation.constants import (
+    COLOR_ATTRIBUTE_NAME_MAP,
+    COLOR_ATTRIBUTES,
+)
+from svg2ooxml.drawingml.animation.handlers.base import AnimationHandler
 from svg2ooxml.drawingml.xml_builder import a_sub, p_elem, p_sub
 from svg2ooxml.ir.animation import AnimationType, CalcMode
-
-from ..constants import COLOR_ATTRIBUTE_NAME_MAP, COLOR_ATTRIBUTES
-from .base import AnimationHandler
 
 if TYPE_CHECKING:
     from svg2ooxml.ir.animation import AnimationDefinition
@@ -111,6 +113,7 @@ class ColorAnimationHandler(AnimationHandler):
             additive=additive,
             fill_mode=fill_mode,
             repeat_count=repeat_count,
+            override="childStyle",
         )
         anim_clr.append(cBhvr)
 
@@ -131,16 +134,18 @@ class ColorAnimationHandler(AnimationHandler):
         behavior_id: int,
         ppt_attribute: str,
     ) -> etree._Element:
-        key_times = self._tav.resolve_key_times(animation.values, animation.key_times)
+        values = list(animation.values)
+        key_times = self._tav.resolve_key_times(values, animation.key_times)
         outer_par, outer_children = self._build_outer_container(animation, par_id)
 
-        if animation.calc_mode == CalcMode.DISCRETE and len(animation.values) > 1:
+        if animation.calc_mode == CalcMode.DISCRETE and len(values) > 1:
             self._append_discrete_segments(
                 outer_children=outer_children,
                 animation=animation,
                 behavior_id=behavior_id,
                 ppt_attribute=ppt_attribute,
                 key_times=key_times,
+                values=values,
             )
             return outer_par
 
@@ -150,7 +155,7 @@ class ColorAnimationHandler(AnimationHandler):
         )
         delay_acc = int(round(max(0.0, min(1.0, key_times[0])) * animation.duration_ms))
         bid = behavior_id
-        last_segment_index = len(animation.values) - 2
+        last_segment_index = len(values) - 2
 
         for index in range(last_segment_index + 1):
             seg_anim = self._build_anim_clr_element(
@@ -158,8 +163,8 @@ class ColorAnimationHandler(AnimationHandler):
                 duration_ms=segment_durations[index],
                 target_shape=animation.element_id,
                 ppt_attribute=ppt_attribute,
-                from_color=animation.values[index],
-                to_color=animation.values[index + 1],
+                from_color=values[index],
+                to_color=values[index + 1],
                 additive=animation.additive,
                 fill_mode=(
                     animation.fill_mode if index == last_segment_index else "freeze"
@@ -186,12 +191,13 @@ class ColorAnimationHandler(AnimationHandler):
         behavior_id: int,
         ppt_attribute: str,
         key_times: list[float],
+        values: list[str],
     ) -> None:
         bid = behavior_id
-        last_index = len(animation.values) - 1
+        last_index = len(values) - 1
         total_ms = animation.duration_ms
 
-        for index, raw_color in enumerate(animation.values):
+        for index, raw_color in enumerate(values):
             set_elem = self._xml.build_set_elem(
                 behavior_id=bid,
                 duration_ms=1,
@@ -316,4 +322,4 @@ class ColorAnimationHandler(AnimationHandler):
 
     def _map_color_attribute(self, attribute: str) -> str:
         """Map SVG color attribute to PowerPoint attribute name."""
-        return COLOR_ATTRIBUTE_NAME_MAP.get(attribute, "fillClr")
+        return COLOR_ATTRIBUTE_NAME_MAP.get(attribute, "fill.color")

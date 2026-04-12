@@ -12,8 +12,8 @@ from svg2ooxml.common.geometry import Matrix2D
 from svg2ooxml.core.ir.shape_converters_utils import (
     _uniform_scale,
 )
-from svg2ooxml.core.styling.style_helpers import parse_style_attr
 from svg2ooxml.core.styling.style_extractor import StyleResult
+from svg2ooxml.core.styling.style_helpers import parse_style_attr
 from svg2ooxml.core.traversal.constants import DEFAULT_TOLERANCE
 from svg2ooxml.core.traversal.coordinate_space import CoordinateSpace
 from svg2ooxml.core.traversal.geometry_utils import (
@@ -28,6 +28,20 @@ from svg2ooxml.ir.shapes import Circle, Ellipse, Rectangle
 
 
 class ShapeResvgMixin:
+    @staticmethod
+    def _append_metadata_element_id(
+        metadata: dict[str, Any],
+        element_id: str | None,
+    ) -> None:
+        if not isinstance(element_id, str) or not element_id:
+            return
+        element_ids = metadata.setdefault("element_ids", [])
+        if not isinstance(element_ids, list):
+            element_ids = []
+            metadata["element_ids"] = element_ids
+        if element_id not in element_ids:
+            element_ids.append(element_id)
+
     @staticmethod
     def _source_explicitly_disables_paint(
         source_element: etree._Element | None,
@@ -481,6 +495,7 @@ class ShapeResvgMixin:
             source_element = getattr(resvg_node, "source", None)
         source_style: StyleResult | None = None
         if isinstance(source_element, etree._Element):
+            self._append_metadata_element_id(metadata, source_element.get("id"))
             paint_dict = self._style_resolver.compute_paint_style(
                 source_element, context=self._css_context
             )

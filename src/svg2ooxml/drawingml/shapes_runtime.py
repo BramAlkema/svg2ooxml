@@ -258,25 +258,25 @@ def render_line(
     policy_for,
     hyperlink_xml: str = "",
 ) -> str:
-    shape_name = f"Line {shape_id}"
+    del path_generator, policy_for
 
-    segments = [LineSegment(line.start, line.end)]
-    geometry = path_generator.generate_custom_geometry(
-        segments,
-        fill_mode="none",
-        stroke_mode="true" if line.stroke else "false",
-        closed=False,
-    )
-    bounds = geometry.bounds
+    dx = float(line.end.x - line.start.x)
+    dy = float(line.end.y - line.start.y)
+    bounds = line.bbox
+    width = max(abs(dx), 0.0)
+    height = max(abs(dy), 0.0)
+    xfrm_attrs = ""
+    if dx * dy < 0:
+        xfrm_attrs = ' flipH="1"'
 
     return template.format(
         SHAPE_ID=shape_id,
-        SHAPE_NAME=shape_name,
         X_EMU=px_to_emu(bounds.x),
         Y_EMU=px_to_emu(bounds.y),
-        WIDTH_EMU=geometry.width_emu,
-        HEIGHT_EMU=geometry.height_emu,
-        GEOMETRY_XML=_format_block(geometry.xml, "        "),
+        WIDTH_EMU=px_to_emu(width),
+        HEIGHT_EMU=px_to_emu(height),
+        XFRM_ATTRS=xfrm_attrs,
+        GEOMETRY_XML='        <a:prstGeom prst="line"><a:avLst/></a:prstGeom>\n',
         FILL_XML=_format_block(paint_to_fill(None), "        "),
         STROKE_XML=_format_block(
             stroke_to_xml(line.stroke, metadata=line.metadata), "        "

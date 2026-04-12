@@ -16,9 +16,9 @@ from svg2ooxml.drawingml.animation.xml_builders import AnimationXMLBuilder
 from svg2ooxml.drawingml.xml_builder import NS_P
 from svg2ooxml.ir.animation import (
     AnimationDefinition,
-    CalcMode,
     AnimationTiming,
     AnimationType,
+    CalcMode,
 )
 from svg2ooxml.ir.geometry import Point
 
@@ -126,6 +126,37 @@ class TestBuild:
         anim_motion = par.find(f".//{{{NS_P}}}animMotion")
         assert anim_motion.get("rAng") == "5400000"
 
+    def test_anim_motion_auto_rotate_turn_emits_stacked_anim_rot(
+        self, handler: MotionAnimationHandler
+    ):
+        anim = make_motion_animation(
+            values=["M0,0 L100,0 L100,100"],
+            motion_rotate="auto",
+        )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        anim_motion = par.find(f".//{{{NS_P}}}animMotion")
+        rots = par.findall(f".//{{{NS_P}}}animRot")
+
+        assert anim_motion.get("rAng") is None
+        assert len(rots) == 1
+        assert rots[0].get("by") == "5400000"
+
+    def test_anim_motion_auto_reverse_turn_keeps_initial_flip(
+        self, handler: MotionAnimationHandler
+    ):
+        anim = make_motion_animation(
+            values=["M0,0 L100,0 L100,100"],
+            motion_rotate="auto-reverse",
+        )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        anim_motion = par.find(f".//{{{NS_P}}}animMotion")
+        rots = par.findall(f".//{{{NS_P}}}animRot")
+
+        assert anim_motion.get("rAng") is None
+        assert len(rots) == 2
+        assert rots[0].get("by") == "10800000"
+        assert rots[1].get("by") == "5400000"
+
     def test_behavior_id(self, handler: MotionAnimationHandler):
         anim = make_motion_animation()
         par = handler.build(anim, par_id=4, behavior_id=5)
@@ -200,6 +231,81 @@ class TestBuild:
         path = anim_motion.get("path")
         assert path is not None
         assert path.count("L ") > 2
+
+    def test_projects_motion_path_into_absolute_shape_positions(
+        self, handler: MotionAnimationHandler
+    ):
+        anim = make_motion_animation(
+            motion_space_matrix=(1.0, 0.0, 0.0, 1.0, 50.0, 90.0),
+            element_motion_offset_px=(0.0, -19.2),
+        )
+
+        projected = handler._project_motion_points([(0.0, 0.0), (50.0, 180.0)], anim)
+
+        assert projected == [(50.0, 70.8), (100.0, 250.8)]
+
+    def test_projects_motion_path_with_shape_anchor_offset(
+        self, handler: MotionAnimationHandler
+    ):
+        anim = make_motion_animation(
+            element_motion_offset_px=(-30.0, -60.0),
+        )
+
+        projected = handler._project_motion_points([(90.0, 258.0), (390.0, 180.0)], anim)
+
+        assert projected == [(60.0, 198.0), (360.0, 120.0)]
+
+    def test_resolves_exact_initial_tangent_for_cubic_motion_path(
+        self, handler: MotionAnimationHandler
+    ):
+        anim = make_motion_animation(
+            motion_space_matrix=(1.0, 0.0, 0.0, 1.0, 0.0, 0.0),
+        )
+
+        angle = handler._resolve_exact_initial_tangent_angle(
+            "M25,225 C25,175 125,150 175,200",
+            anim,
+            "auto",
+        )
+
+        assert angle == pytest.approx(-90.0)
+
+    def test_resolves_exact_initial_tangent_relative_to_element_heading(
+        self, handler: MotionAnimationHandler
+    ):
+        anim = make_motion_animation(
+            motion_space_matrix=(1.0, 0.0, 0.0, 1.0, 0.0, 0.0),
+            element_heading_deg=-90.0,
+        )
+
+        angle = handler._resolve_exact_initial_tangent_angle(
+            "M25,225 C25,175 125,150 175,200",
+            anim,
+            "auto",
+        )
+
+        assert angle == pytest.approx(0.0)
+
+    def test_auto_rotate_uses_element_heading_for_dynamic_curve(
+        self, handler: MotionAnimationHandler
+    ):
+        anim = make_motion_animation(
+            values=["M25,225 C25,175 125,150 175,200"],
+            timing=AnimationTiming(begin=0.0, duration=6.0),
+            motion_rotate="auto",
+            motion_viewport_px=(480.0, 360.0),
+            element_heading_deg=-90.0,
+        )
+
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        rots = par.findall(f".//{{{NS_P}}}animRot")
+        first_rot_ctn = par.find(
+            f".//{{{NS_P}}}childTnLst/{{{NS_P}}}par/{{{NS_P}}}cTn"
+        )
+
+        assert rots
+        assert first_rot_ctn is not None
+        assert first_rot_ctn.get("dur") != "1"
 
 
 # ------------------------------------------------------------------ #

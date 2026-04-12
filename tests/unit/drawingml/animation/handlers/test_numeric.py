@@ -67,6 +67,11 @@ class TestCanHandle:
         anim = make_numeric_animation(target_attribute="height")
         assert handler.can_handle(anim) is True
 
+    def test_rejects_line_endpoint_attributes(self, handler: NumericAnimationHandler):
+        for attr in ("x1", "x2", "y1", "y2"):
+            anim = make_numeric_animation(target_attribute=attr)
+            assert handler.can_handle(anim) is False
+
     def test_accepts_stroke_width(self, handler: NumericAnimationHandler):
         anim = make_numeric_animation(target_attribute="stroke-width")
         assert handler.can_handle(anim) is True
@@ -126,7 +131,7 @@ class TestMapAttributeName:
         assert handler._map_attribute_name("rotate") == "ppt_angle"
 
     def test_maps_stroke_width(self, handler: NumericAnimationHandler):
-        assert handler._map_attribute_name("stroke-width") == "ln_w"
+        assert handler._map_attribute_name("stroke-width") == "stroke.weight"
 
     def test_unmapped_passthrough(self, handler: NumericAnimationHandler):
         assert handler._map_attribute_name("custom-attr") == "custom-attr"
@@ -172,7 +177,7 @@ class TestBuild:
         anim = make_numeric_animation(target_attribute="stroke-width")
         par = handler.build(anim, par_id=4, behavior_id=5)
         attr_name = par.find(f".//{{{NS_P}}}attrName")
-        assert attr_name.text == "ln_w"
+        assert attr_name.text == "stroke.weight"
 
     def test_tav_list_present(self, handler: NumericAnimationHandler):
         anim = make_numeric_animation()
@@ -236,6 +241,34 @@ class TestBuild:
         attr_names = par.findall(f".//{{{NS_P}}}attrName")
         assert [node.text for node in attr_names] == ["ScaleX", "ScaleY"]
 
+    def test_position_animation_projects_delta_through_motion_space_matrix(
+        self, handler: NumericAnimationHandler
+    ):
+        anim = make_numeric_animation(
+            target_attribute="x",
+            values=["0", "100"],
+            motion_viewport_px=(1000.0, 1000.0),
+            motion_space_matrix=(2.0, 0.0, 0.0, 3.0, 50.0, 90.0),
+        )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        motion = par.find(f".//{{{NS_P}}}animMotion")
+        assert motion is not None
+        assert motion.get("path") == "M 0 0 L 0.200000 0.000000 E"
+
+    def test_scale_anchor_motion_projects_delta_through_motion_space_matrix(
+        self, handler: NumericAnimationHandler
+    ):
+        anim = make_numeric_animation(
+            target_attribute="height",
+            values=["20", "40"],
+            motion_viewport_px=(1000.0, 1000.0),
+            motion_space_matrix=(2.0, 0.0, 0.0, 3.0, 50.0, 90.0),
+        )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        motions = par.findall(f".//{{{NS_P}}}animMotion")
+        assert len(motions) == 1
+        assert motions[0].get("path") == "M 0 0 L 0.000000 0.030000 E"
+
     def test_symmetric_multi_keyframe_width_animation_uses_autoreverse_scale(
         self, handler: NumericAnimationHandler
     ):
@@ -286,13 +319,30 @@ class TestBuild:
     def test_position_animation_uses_relative_delta_path(
         self, handler: NumericAnimationHandler
     ):
-        anim = make_numeric_animation(target_attribute="x", values=["20", "30"])
+        anim = make_numeric_animation(
+            target_attribute="x",
+            values=["20", "30"],
+            motion_viewport_px=(480.0, 360.0),
+        )
         par = handler.build(anim, par_id=4, behavior_id=5)
         anim_motion = par.find(f".//{{{NS_P}}}animMotion")
         assert anim_motion is not None
         path = anim_motion.get("path")
         assert path.startswith("M 0 0 L ")
-        assert "0.010417" in path
+        assert "0.020833" in path
+
+    def test_height_animation_anchor_motion_uses_scene_viewport(
+        self, handler: NumericAnimationHandler
+    ):
+        anim = make_numeric_animation(
+            target_attribute="height",
+            values=["20", "40"],
+            motion_viewport_px=(480.0, 360.0),
+        )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        motions = par.findall(f".//{{{NS_P}}}animMotion")
+        assert len(motions) == 1
+        assert motions[0].get("path") == "M 0 0 L 0.000000 0.027778 E"
 
     def test_empty_values_rejected_by_ir(self):
         """AnimationDefinition validates values is non-empty at construction."""
@@ -349,3 +399,32 @@ class TestMultiKeyframe:
         tavs = par.findall(f".//{{{NS_P}}}tav")
         # Distances are 10 then 30, so paced midpoint should be 25%.
         assert [tav.get("tm") for tav in tavs] == ["0", "25000", "100000"]
+
+    def test_spline_calc_mode_densifies_generic_numeric_tavs(
+        self, handler: NumericAnimationHandler
+    ):
+        anim = make_numeric_animation(
+            target_attribute="stroke-width",
+            values=["0", "100"],
+            calc_mode=CalcMode.SPLINE,
+            key_splines=[[0.75, 0.0, 0.25, 1.0]],
+        )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        tavs = par.findall(f".//{{{NS_P}}}tav")
+        assert len(tavs) > 2
+        assert tavs[0].get("tm") == "0"
+        assert tavs[-1].get("tm") == "100000"
+
+    def test_spline_width_avoids_simple_anim_scale_path(
+        self, handler: NumericAnimationHandler
+    ):
+        anim = make_numeric_animation(
+            target_attribute="width",
+            values=["10", "110"],
+            calc_mode=CalcMode.SPLINE,
+            key_splines=[[0.75, 0.0, 0.25, 1.0]],
+        )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        assert par.find(f".//{{{NS_P}}}animScale") is None
+        tavs = par.findall(f".//{{{NS_P}}}tav")
+        assert len(tavs) > 2

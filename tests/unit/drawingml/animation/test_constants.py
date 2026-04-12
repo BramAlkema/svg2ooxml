@@ -86,14 +86,18 @@ class TestAttributeNameMap:
         assert isinstance(ATTRIBUTE_NAME_MAP, dict)
 
     def test_x_coordinates_map_to_ppt_x(self):
-        x_attrs = ["x", "x1", "x2", "cx", "dx", "fx", "left", "right"]
+        x_attrs = ["x", "cx", "dx", "fx", "left", "right"]
         for attr in x_attrs:
             assert ATTRIBUTE_NAME_MAP[attr] == "ppt_x", f"{attr} should map to ppt_x"
 
     def test_y_coordinates_map_to_ppt_y(self):
-        y_attrs = ["y", "y1", "y2", "cy", "dy", "fy", "top", "bottom"]
+        y_attrs = ["y", "cy", "dy", "fy", "top", "bottom"]
         for attr in y_attrs:
             assert ATTRIBUTE_NAME_MAP[attr] == "ppt_y", f"{attr} should map to ppt_y"
+
+    def test_line_endpoint_coordinates_do_not_map_to_whole_shape_position(self):
+        for attr in ("x1", "x2", "y1", "y2"):
+            assert attr not in ATTRIBUTE_NAME_MAP
 
     def test_width_attributes_map_to_ppt_w(self):
         w_attrs = ["width", "w", "rx"]
@@ -110,8 +114,8 @@ class TestAttributeNameMap:
         for attr in angle_attrs:
             assert ATTRIBUTE_NAME_MAP[attr] == "ppt_angle", f"{attr} should map to ppt_angle"
 
-    def test_stroke_width_maps_to_ln_w(self):
-        assert ATTRIBUTE_NAME_MAP["stroke-width"] == "ln_w"
+    def test_stroke_width_maps_to_stroke_weight(self):
+        assert ATTRIBUTE_NAME_MAP["stroke-width"] == "stroke.weight"
 
     def test_all_values_are_strings(self):
         for key, value in ATTRIBUTE_NAME_MAP.items():
@@ -125,21 +129,21 @@ class TestColorAttributeNameMap:
     def test_is_dict(self):
         assert isinstance(COLOR_ATTRIBUTE_NAME_MAP, dict)
 
-    def test_fill_maps_to_fillClr(self):
-        assert COLOR_ATTRIBUTE_NAME_MAP["fill"] == "fillClr"
+    def test_fill_maps_to_fill_dot_color(self):
+        assert COLOR_ATTRIBUTE_NAME_MAP["fill"] == "fill.color"
 
-    def test_stroke_maps_to_lnClr(self):
-        assert COLOR_ATTRIBUTE_NAME_MAP["stroke"] == "lnClr"
+    def test_stroke_maps_to_stroke_dot_color(self):
+        assert COLOR_ATTRIBUTE_NAME_MAP["stroke"] == "stroke.color"
 
-    def test_stop_color_maps_to_fillClr(self):
-        assert COLOR_ATTRIBUTE_NAME_MAP["stop-color"] == "fillClr"
-        assert COLOR_ATTRIBUTE_NAME_MAP["stopcolor"] == "fillClr"
+    def test_stop_color_maps_to_fill_dot_color(self):
+        assert COLOR_ATTRIBUTE_NAME_MAP["stop-color"] == "fill.color"
+        assert COLOR_ATTRIBUTE_NAME_MAP["stopcolor"] == "fill.color"
 
-    def test_flood_color_maps_to_fillClr(self):
-        assert COLOR_ATTRIBUTE_NAME_MAP["flood-color"] == "fillClr"
+    def test_flood_color_maps_to_fill_dot_color(self):
+        assert COLOR_ATTRIBUTE_NAME_MAP["flood-color"] == "fill.color"
 
-    def test_lighting_color_maps_to_fillClr(self):
-        assert COLOR_ATTRIBUTE_NAME_MAP["lighting-color"] == "fillClr"
+    def test_lighting_color_maps_to_fill_dot_color(self):
+        assert COLOR_ATTRIBUTE_NAME_MAP["lighting-color"] == "fill.color"
 
     def test_all_values_are_strings(self):
         for key, value in COLOR_ATTRIBUTE_NAME_MAP.items():
@@ -164,6 +168,9 @@ class TestAxisMap:
 
     def test_ppt_h_maps_to_height(self):
         assert AXIS_MAP["ppt_h"] == "height"
+
+    def test_stroke_weight_maps_to_width(self):
+        assert AXIS_MAP["stroke.weight"] == "width"
 
     def test_ln_w_maps_to_width(self):
         assert AXIS_MAP["ln_w"] == "width"

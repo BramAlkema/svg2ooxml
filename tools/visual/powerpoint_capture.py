@@ -85,6 +85,26 @@ def _prepare_staged_presentation(pptx_path: Path) -> Path:
     return staged
 
 
+def _discard_staged_presentation(pptx_path: Path | None) -> None:
+    if pptx_path is None:
+        return
+
+    stage_dir = _powerpoint_stage_dir().resolve(strict=False)
+    staged_path = pptx_path.resolve(strict=False)
+    try:
+        staged_path.relative_to(stage_dir)
+    except ValueError:
+        return
+
+    for path in (staged_path, _powerpoint_lockfile_path(staged_path)):
+        try:
+            path.unlink()
+        except FileNotFoundError:
+            pass
+        except OSError:
+            pass
+
+
 def _powerpoint_lockfile_path(pptx_path: Path) -> Path:
     return pptx_path.resolve().with_name(f"~${pptx_path.name}")
 
@@ -803,8 +823,11 @@ def _start_slideshow(
             time.sleep(0.5)
     if not did_open and not saw_window:
         raise RuntimeError("No PowerPoint presentation after UI open.")
-    if not saw_window and not _wait_for_powerpoint_window(min(open_timeout, 10.0)):
-        raise RuntimeError("No PowerPoint edit window after UI open.")
+    if not saw_window:
+        # Keep probing, but do not fail if the document is already open.
+        # The object-model slideshow path can start from the presentation ref
+        # even when PowerPoint has not materialized an edit window yet.
+        saw_window = _wait_for_powerpoint_window(min(open_timeout, 10.0))
     script = selector_script + f"""
 on slideShowWindowCount()
     tell application "Microsoft PowerPoint"
@@ -1086,6 +1109,7 @@ def capture_pptx_slideshow_all(
     finally:
         if exit_after:
             _teardown_powerpoint_session(staged_pptx)
+            _discard_staged_presentation(staged_pptx)
 
 
 def _exit_slideshow() -> None:
@@ -1140,6 +1164,9 @@ def capture_pptx_window(
             staged_pptx=staged_pptx,
             capture_timeout=capture_timeout,
         )
+    finally:
+        _teardown_powerpoint_session(staged_pptx)
+        _discard_staged_presentation(staged_pptx)
 
 
 def capture_pptx_slideshow(
@@ -1193,6 +1220,7 @@ def capture_pptx_slideshow(
     finally:
         if exit_after:
             _teardown_powerpoint_session(staged_pptx)
+            _discard_staged_presentation(staged_pptx)
 
 
 def capture_live_animation(
@@ -1276,6 +1304,7 @@ def capture_live_animation(
         )
     finally:
         _teardown_powerpoint_session(staged_pptx)
+        _discard_staged_presentation(staged_pptx)
 
     return captured_files
 

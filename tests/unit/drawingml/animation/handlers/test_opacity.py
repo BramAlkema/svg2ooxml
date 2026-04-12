@@ -15,6 +15,7 @@ from svg2ooxml.ir.animation import (
     AnimationDefinition,
     AnimationTiming,
     AnimationType,
+    CalcMode,
 )
 
 
@@ -214,3 +215,18 @@ class TestBuild:
         par = handler.build(anim, par_id=4, behavior_id=5)
         assert par.find(f".//{{{NS_P}}}animEffect") is None
         assert par.find(f".//{{{NS_P}}}anim") is not None
+
+    def test_spline_opacity_uses_property_animation_and_dense_tavs(
+        self, handler: OpacityAnimationHandler
+    ):
+        anim = make_opacity_animation(
+            values=["0", "1"],
+            calc_mode=CalcMode.SPLINE,
+            key_splines=[[0.75, 0.0, 0.25, 1.0]],
+        )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        assert par.find(f".//{{{NS_P}}}animEffect") is None
+        anim_elem = par.find(f".//{{{NS_P}}}anim")
+        assert anim_elem is not None
+        tavs = par.findall(f".//{{{NS_P}}}tav")
+        assert len(tavs) > 2

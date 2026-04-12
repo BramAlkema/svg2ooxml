@@ -10,12 +10,12 @@ from typing import TYPE_CHECKING
 
 from lxml import etree
 
+from svg2ooxml.drawingml.animation.constants import FADE_ATTRIBUTES
+from svg2ooxml.drawingml.animation.handlers.base import AnimationHandler
+from svg2ooxml.drawingml.animation.timing_utils import sample_spline_keyframes
+from svg2ooxml.drawingml.animation.value_formatters import format_numeric_value
 from svg2ooxml.drawingml.xml_builder import p_elem, p_sub
 from svg2ooxml.ir.animation import AnimationType, CalcMode
-
-from ..constants import FADE_ATTRIBUTES
-from ..value_formatters import format_numeric_value
-from .base import AnimationHandler
 
 if TYPE_CHECKING:
     from svg2ooxml.ir.animation import AnimationDefinition
@@ -57,6 +57,10 @@ class OpacityAnimationHandler(AnimationHandler):
         par_id: int,
         behavior_id: int,
     ) -> etree._Element | None:
+        if animation.calc_mode in {CalcMode.DISCRETE, CalcMode.SPLINE}:
+            return None
+        if animation.key_splines:
+            return None
         fade_params = self._resolve_authored_fade(animation)
         if fade_params is None:
             return None
@@ -195,6 +199,20 @@ class OpacityAnimationHandler(AnimationHandler):
                 key_times=key_times,
                 value_formatter=format_numeric_value,
             )
+        elif animation.calc_mode == CalcMode.SPLINE and animation.key_splines:
+            sampled_values, sampled_times = sample_spline_keyframes(
+                values=values,
+                key_times=key_times,
+                key_splines=animation.key_splines,
+                attribute_name=animation.target_attribute,
+            )
+            tav_elements, _ = self._tav.build_tav_list(
+                values=sampled_values,
+                key_times=sampled_times,
+                key_splines=None,
+                duration_ms=animation.duration_ms,
+                value_formatter=format_numeric_value,
+            )
         else:
             tav_elements, _ = self._tav.build_tav_list(
                 values=values,
@@ -249,6 +267,10 @@ class OpacityAnimationHandler(AnimationHandler):
 
     def _should_use_property_animation(self, animation: AnimationDefinition) -> bool:
         if animation.target_attribute != "opacity":
+            return True
+        if animation.calc_mode in {CalcMode.DISCRETE, CalcMode.SPLINE}:
+            return True
+        if animation.key_splines:
             return True
         if len(animation.values) > 2 or animation.key_times:
             return True

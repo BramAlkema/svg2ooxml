@@ -3,7 +3,12 @@ from __future__ import annotations
 from lxml import etree
 
 from svg2ooxml.core.animation import SMILParser
-from svg2ooxml.ir.animation import AnimationType, BeginTriggerType, CalcMode, TransformType
+from svg2ooxml.ir.animation import (
+    AnimationType,
+    BeginTriggerType,
+    CalcMode,
+    TransformType,
+)
 
 
 def _parse(svg: str):
@@ -350,6 +355,23 @@ def test_parse_animate_motion_rotate_mode() -> None:
     assert animation.motion_rotate == "auto-reverse"
 
 
+def test_parse_animate_motion_defaults_calc_mode_to_paced() -> None:
+    parser = SMILParser()
+    svg = _parse(
+        """
+        <svg xmlns="http://www.w3.org/2000/svg">
+          <rect id="shape">
+            <animateMotion values="0,0;100,0;100,100" dur="1s" />
+          </rect>
+        </svg>
+        """
+    )
+
+    animations = parser.parse_svg_animations(svg)
+    assert len(animations) == 1
+    assert animations[0].calc_mode == CalcMode.PACED
+
+
 def test_parse_animate_motion_keeps_key_times_for_path() -> None:
     parser = SMILParser()
     svg = _parse(
@@ -368,6 +390,67 @@ def test_parse_animate_motion_keeps_key_times_for_path() -> None:
     assert animation.animation_type is AnimationType.ANIMATE_MOTION
     assert animation.calc_mode == CalcMode.DISCRETE
     assert animation.key_times == [0.0, 0.5, 1.0]
+
+
+def test_parse_animate_motion_records_target_motion_space_matrix() -> None:
+    parser = SMILParser()
+    svg = _parse(
+        """
+        <svg xmlns="http://www.w3.org/2000/svg">
+          <g transform="matrix(2 0 0 3 50 90)">
+            <rect id="shape" width="10" height="10">
+              <animateMotion dur="1s" path="M0,0 L10,5" />
+            </rect>
+          </g>
+        </svg>
+        """
+    )
+
+    animations = parser.parse_svg_animations(svg)
+
+    assert len(animations) == 1
+    assert animations[0].motion_space_matrix == (2.0, 0.0, 0.0, 3.0, 50.0, 90.0)
+
+
+def test_parse_numeric_position_animation_records_target_motion_space_matrix() -> None:
+    parser = SMILParser()
+    svg = _parse(
+        """
+        <svg xmlns="http://www.w3.org/2000/svg">
+          <g transform="matrix(2 0 0 3 50 90)">
+            <rect id="shape" width="10" height="10">
+              <animate attributeName="x" from="0" to="10" dur="1s" />
+            </rect>
+          </g>
+        </svg>
+        """
+    )
+
+    animations = parser.parse_svg_animations(svg)
+
+    assert len(animations) == 1
+    assert animations[0].motion_space_matrix == (2.0, 0.0, 0.0, 3.0, 50.0, 90.0)
+
+
+def test_parse_translate_transform_records_target_motion_space_matrix() -> None:
+    parser = SMILParser()
+    svg = _parse(
+        """
+        <svg xmlns="http://www.w3.org/2000/svg">
+          <g transform="matrix(2 0 0 3 50 90)">
+            <rect id="shape" width="10" height="10">
+              <animateTransform attributeName="transform" type="translate"
+                                from="0 0" to="10 5" dur="1s" />
+            </rect>
+          </g>
+        </svg>
+        """
+    )
+
+    animations = parser.parse_svg_animations(svg)
+
+    assert len(animations) == 1
+    assert animations[0].motion_space_matrix == (2.0, 0.0, 0.0, 3.0, 50.0, 90.0)
 
 
 def test_parse_animate_motion_unresolved_mpath_adds_warning() -> None:

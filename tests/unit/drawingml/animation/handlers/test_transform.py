@@ -180,6 +180,32 @@ class TestBuildScale:
         # Single value: from and to are the same
         assert from_elem.get("x") == to_elem.get("x")
 
+    def test_scale_with_element_center_adds_origin_compensation_motion(
+        self, handler: TransformAnimationHandler
+    ):
+        anim = make_transform_animation(
+            transform_type=TransformType.SCALE,
+            values=["1", "2"],
+            element_center_px=(100.0, 60.0),
+            motion_viewport_px=(480.0, 360.0),
+        )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        motions = par.findall(f".//{{{NS_P}}}animMotion")
+        assert len(motions) == 1
+        assert motions[0].get("path") == "M 0 0 L 0.208333 0.166667 E"
+
+    def test_scale_without_element_center_skips_origin_compensation_motion(
+        self, handler: TransformAnimationHandler
+    ):
+        anim = make_transform_animation(
+            transform_type=TransformType.SCALE,
+            values=["1", "2"],
+            motion_viewport_px=(480.0, 360.0),
+        )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        motions = par.findall(f".//{{{NS_P}}}animMotion")
+        assert len(motions) == 0
+
     def test_delay_from_begin(self, handler: TransformAnimationHandler):
         anim = make_transform_animation(
             transform_type=TransformType.SCALE,
@@ -472,16 +498,42 @@ class TestBuildTranslate:
         anim_motion = par.find(f".//{{{NS_P}}}animMotion")
         assert anim_motion is not None
 
-    def test_by_element_present(self, handler: TransformAnimationHandler):
+    def test_two_value_translate_uses_relative_path(self, handler: TransformAnimationHandler):
         anim = make_transform_animation(
             transform_type=TransformType.TRANSLATE, values=["0 0", "10 20"]
         )
         par = handler.build(anim, par_id=4, behavior_id=5)
         by_elem = par.find(f".//{{{NS_P}}}by")
-        assert by_elem is not None
-        # Values are EMU-converted: 10px and 20px
-        assert by_elem.get("x") is not None
-        assert by_elem.get("y") is not None
+        assert by_elem is None
+        anim_motion = par.find(f".//{{{NS_P}}}animMotion")
+        assert anim_motion is not None
+        assert anim_motion.get("path") is not None
+        assert anim_motion.get("pathEditMode") == "relative"
+
+    def test_two_value_translate_uses_scene_viewport(self, handler: TransformAnimationHandler):
+        anim = make_transform_animation(
+            transform_type=TransformType.TRANSLATE,
+            values=["0 0", "10 20"],
+            motion_viewport_px=(480.0, 360.0),
+        )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        anim_motion = par.find(f".//{{{NS_P}}}animMotion")
+        assert anim_motion is not None
+        assert anim_motion.get("path") == "M 0 0 L 0.0208333 0.0555556 E"
+
+    def test_two_value_translate_projects_motion_space_matrix(
+        self, handler: TransformAnimationHandler
+    ):
+        anim = make_transform_animation(
+            transform_type=TransformType.TRANSLATE,
+            values=["0 0", "10 20"],
+            motion_viewport_px=(480.0, 360.0),
+            motion_space_matrix=(2.0, 0.0, 0.0, 3.0, 50.0, 90.0),
+        )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        anim_motion = par.find(f".//{{{NS_P}}}animMotion")
+        assert anim_motion is not None
+        assert anim_motion.get("path") == "M 0 0 L 0.0416667 0.166667 E"
 
     def test_preset_class_is_path(self, handler: TransformAnimationHandler):
         anim = make_transform_animation(
@@ -596,17 +648,28 @@ class TestBuildTranslateMultiKeyframe:
         anim_motion = par.find(f".//{{{NS_P}}}animMotion")
         assert anim_motion.get("ptsTypes") == "AAA"
 
-    def test_two_values_still_uses_by(self, handler: TransformAnimationHandler):
-        """Verify 2-value translate still uses the simple by approach."""
+    def test_two_values_emit_path_not_by(self, handler: TransformAnimationHandler):
         anim = make_transform_animation(
             transform_type=TransformType.TRANSLATE, values=["0 0", "10 20"]
         )
         par = handler.build(anim, par_id=4, behavior_id=5)
-        by_elem = par.find(f".//{{{NS_P}}}by")
-        assert by_elem is not None
-        # Should NOT have path attribute
         anim_motion = par.find(f".//{{{NS_P}}}animMotion")
-        assert anim_motion.get("path") is None
+        assert anim_motion is not None
+        assert anim_motion.get("path") is not None
+        assert par.find(f".//{{{NS_P}}}by") is None
+
+    def test_multi_keyframe_translate_uses_scene_viewport(
+        self, handler: TransformAnimationHandler
+    ):
+        anim = make_transform_animation(
+            transform_type=TransformType.TRANSLATE,
+            values=["0 0", "50 0", "50 50"],
+            motion_viewport_px=(480.0, 360.0),
+        )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        anim_motion = par.find(f".//{{{NS_P}}}animMotion")
+        assert anim_motion is not None
+        assert anim_motion.get("path") == "M 0 0 L 0.104167 0 L 0.104167 0.138889 E"
 
     def test_discrete_calc_mode_expands_step_path(
         self, handler: TransformAnimationHandler

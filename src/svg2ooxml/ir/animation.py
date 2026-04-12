@@ -151,6 +151,10 @@ class AnimationDefinition:
     accumulate: str = "none"
     motion_rotate: str | None = None
     element_center_px: tuple[float, float] | None = None
+    element_heading_deg: float | None = None
+    motion_space_matrix: tuple[float, float, float, float, float, float] | None = None
+    element_motion_offset_px: tuple[float, float] | None = None
+    motion_viewport_px: tuple[float, float] | None = None
     restart: str | None = None  # "always", "whenNotActive", "never"
     min_ms: int | None = None
     max_ms: int | None = None

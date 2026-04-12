@@ -22,7 +22,7 @@ from .constants import SVG2_ANIMATION_NS
 etree.register_namespace("svg2", SVG2_ANIMATION_NS)
 
 if TYPE_CHECKING:
-    from .id_allocator import TimingIDs
+    from svg2ooxml.drawingml.animation.id_allocator import TimingIDs
     from svg2ooxml.ir.animation import BeginTrigger
 
 __all__ = ["AnimationXMLBuilder"]
@@ -251,6 +251,7 @@ class AnimationXMLBuilder:
         default_target_shape: str | None = None,
         auto_reverse: bool = False,
         effect_group_id: int | str | None = None,
+        repeat_count: int | str | None = None,
     ) -> etree._Element:
         """Build ``<p:par>`` container accepting a child *element*.
 
@@ -274,6 +275,9 @@ class AnimationXMLBuilder:
             ctn_attrs["presetSubtype"] = str(preset_subtype)
         if auto_reverse:
             ctn_attrs["autoRev"] = "1"
+        ppt_repeat = self._repeat_count_value(repeat_count)
+        if ppt_repeat is not None:
+            ctn_attrs["repeatCount"] = ppt_repeat
 
         ctn = p_sub(par, "cTn", **ctn_attrs)
 
@@ -308,6 +312,7 @@ class AnimationXMLBuilder:
         default_target_shape: str | None = None,
         auto_reverse: bool = False,
         effect_group_id: int | str | None = None,
+        repeat_count: int | str | None = None,
     ) -> etree._Element:
         """Build ``<p:par>`` containing multiple child timing elements."""
         par = p_elem("par")
@@ -327,6 +332,9 @@ class AnimationXMLBuilder:
             ctn_attrs["presetSubtype"] = str(preset_subtype)
         if auto_reverse:
             ctn_attrs["autoRev"] = "1"
+        ppt_repeat = self._repeat_count_value(repeat_count)
+        if ppt_repeat is not None:
+            ctn_attrs["repeatCount"] = ppt_repeat
 
         ctn = p_sub(par, "cTn", **ctn_attrs)
 
@@ -345,6 +353,29 @@ class AnimationXMLBuilder:
         for child_element in child_elements:
             child_tn_lst.append(child_element)
 
+        return par
+
+    def build_delayed_child_par(
+        self,
+        *,
+        par_id: int,
+        delay_ms: int,
+        duration_ms: int,
+        child_element: etree._Element,
+    ) -> etree._Element:
+        """Build a child ``<p:par>`` wrapper with its own start delay."""
+        par = p_elem("par")
+        ctn = p_sub(
+            par,
+            "cTn",
+            id=str(par_id),
+            dur=str(max(1, duration_ms)),
+            fill="hold",
+        )
+        st_cond_lst = p_sub(ctn, "stCondLst")
+        p_sub(st_cond_lst, "cond", delay=str(max(0, delay_ms)))
+        child_tn_lst = p_sub(ctn, "childTnLst")
+        child_tn_lst.append(child_element)
         return par
 
     def _append_begin_conditions(
@@ -412,6 +443,7 @@ class AnimationXMLBuilder:
         decel: int | None = None,
         attr_name_list: list[str] | None = None,
         auto_reverse: bool = False,
+        override: str | None = None,
     ) -> etree._Element:
         """Build ``<p:cBhvr>`` common behavior element.
 
@@ -435,6 +467,8 @@ class AnimationXMLBuilder:
 
         if self._needs_ppt_runtime_context(attr_name_list):
             cBhvr.set("rctx", "PPT")
+        if override:
+            cBhvr.set("override", override)
 
         # Additive attribute on <p:cBhvr> itself (not on cTn)
         if additive == "sum":
@@ -446,16 +480,7 @@ class AnimationXMLBuilder:
             ppt_fill = "remove"
 
         # Map repeat_count — omit for default (play once)
-        ppt_repeat: str | None = None
-        if repeat_count == "indefinite":
-            ppt_repeat = "indefinite"
-        elif repeat_count is not None:
-            try:
-                n = int(repeat_count)
-                if n > 1:
-                    ppt_repeat = str(n * 1000)
-            except (ValueError, TypeError):
-                pass
+        ppt_repeat = self._repeat_count_value(repeat_count)
 
         ctn_attrs: dict[str, str] = {
             "id": str(behavior_id),
@@ -484,6 +509,23 @@ class AnimationXMLBuilder:
             cBhvr.append(self.build_attribute_list(attr_name_list))
 
         return cBhvr
+
+    @staticmethod
+    def _repeat_count_value(repeat_count: str | int | None) -> str | None:
+        if repeat_count == "indefinite":
+            return "indefinite"
+
+        if repeat_count is None:
+            return None
+
+        try:
+            count = int(repeat_count)
+        except (TypeError, ValueError):
+            return None
+
+        if count > 1:
+            return str(count * 1000)
+        return None
 
     @staticmethod
     def _needs_ppt_runtime_context(attr_name_list: list[str] | None) -> bool:

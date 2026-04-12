@@ -198,7 +198,7 @@ options = {
 
 **Key Logic**:
 - Parses colors to hex format (`#RRGGBB`)
-- Maps SVG attributes to PowerPoint: `fill` → `fillClr`, `stroke` → `lnClr`
+- Maps SVG attributes to PowerPoint: `fill` → `fill.color`, `stroke` → `stroke.color`
 - Builds `<a:from>` and `<a:to>` with `<a:srgbClr>` elements
 - Supports TAV keyframes for multi-color animations
 
@@ -285,8 +285,8 @@ ATTRIBUTE_NAME_MAP = {
 }
 
 COLOR_ATTRIBUTE_NAME_MAP = {
-    "fill": "fillClr",
-    "stroke": "lnClr",
+    "fill": "fill.color",
+    "stroke": "stroke.color",
     ...
 }
 ```
