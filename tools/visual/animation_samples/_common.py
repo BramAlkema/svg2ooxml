@@ -141,18 +141,21 @@ def _patch_slide_xml(slide_xml: bytes, timing_xml: str) -> bytes:
 
 
 def _wrap_with_p_namespace(timing_xml: str) -> str:
-    """Inject the ``p:`` namespace declaration onto the root tag.
+    """Inject the standard OOXML namespace declarations onto the root tag.
 
     ``to_string`` in ``drawingml.xml_builder`` strips the standard xmlns
     declarations because it assumes the emitted fragment will be grafted into
     a document that already declares them. For a free-standing parse we need
-    to restore the declaration so lxml can resolve the prefixed tags.
+    to restore them so lxml can resolve both ``p:`` and ``a:`` prefixed tags.
     """
-    prefix = '<p:timing'
+    prefix = "<p:timing"
     if prefix not in timing_xml:
         return timing_xml
-    ns_decl = ' xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"'
-    return timing_xml.replace(prefix, prefix + ns_decl, 1)
+    ns_decls = (
+        ' xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"'
+        ' xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"'
+    )
+    return timing_xml.replace(prefix, prefix + ns_decls, 1)
 
 
 __all__ = [

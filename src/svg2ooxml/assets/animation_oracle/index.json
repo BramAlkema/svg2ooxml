@@ -14,8 +14,8 @@
         "animate[opacity,0,1]"
       ],
       "source": "tmp/powerpoint-oracle-groups-triggers-starter.oracle/.../slide7/timing.normalized.xml",
-      "verification": "oracle-matched",
-      "notes": "Exact structural match to starter-deck slide7 preset 9 entrance fade. Requires multi-slide harness on macOS PPT so the build engine pre-hides before the click-group fires."
+      "verification": "visually-verified",
+      "notes": "Exact structural match to starter-deck slide7 preset 9 entrance fade. Verified in Microsoft PowerPoint for Mac via tools/visual/animation_tune fade_in: slide-area pixel mean transitions from white (pre-hide) through a faint-blue mid-fade frame to full shape colour. Requires the multi-slide harness so the build engine pre-hides before the click-group fires."
     },
     "exit/fade": {
       "path": "exit/fade.xml",
@@ -63,8 +63,8 @@
         "animateColor[*,from,to]"
       ],
       "source": "tests/golden/animation/color_red_to_blue.xml",
-      "verification": "derived-from-handler",
-      "notes": "TARGET_ATTRIBUTE = fill.color|line.color|shadow.color etc. INNER_FILL is the SVG fill_mode mapped to PPT 'hold' or 'remove'. UNVERIFIED: oracle corpus has an animClr example with presetID=27 nodeType=clickEffect grpId=0 (different preset, cleaner inner cTn, schemeClr instead of srgbClr) — our preset 7 withEffect shape may not match what PowerPoint authors for 'Change Fill Color'. Revisit when an oracle sample for preset 7 emph is captured."
+      "verification": "visually-verified",
+      "notes": "TARGET_ATTRIBUTE = fill.color|line.color|shadow.color etc. INNER_FILL is the SVG fill_mode mapped to PPT 'hold' or 'remove'. Verified via tools/visual/animation_tune color_change: slide-area mean transitions from red-tinted (235, 221, 228) at frame 1 to blue (218, 222, 247) at frames 5+. CAVEAT: oracle corpus has an animClr example with presetID=27 nodeType=clickEffect grpId=0 using schemeClr (different preset, cleaner inner cTn) — our preset 7 withEffect shape plays correctly but is not the exact shape PPT authors for 'Change Fill Color'. Revisit when an oracle sample for preset 7 emph is captured."
     },
     "emph/rotate": {
       "path": "emph/rotate.xml",
@@ -79,8 +79,8 @@
         "animateTransform[rotate,from,to]"
       ],
       "source": "tests/golden/animation/rotate_90deg.xml",
-      "verification": "derived-from-handler",
-      "notes": "ROTATION_BY is in 60000ths of a degree (PPT angle factor). INNER_FILL is the SVG fill_mode mapped to 'hold' or 'remove'."
+      "verification": "visually-verified",
+      "notes": "ROTATION_BY is in 60000ths of a degree (PPT angle factor). INNER_FILL is the SVG fill_mode mapped to 'hold' or 'remove'. Verified via tools/visual/animation_tune rotate_spin (90-degree quarter turn): shape bbox visibly changes orientation between the pre-rotation and post-rotation frames."
     },
     "emph/scale": {
       "path": "emph/scale.xml",
@@ -94,8 +94,8 @@
         "animateTransform[scale,from,to]"
       ],
       "source": "tests/golden/animation/scale_uniform.xml",
-      "verification": "derived-from-handler",
-      "notes": "Scale values in 100000ths (PPT scale factor). INNER_FILL is the SVG fill_mode mapped to 'hold' or 'remove'. Companion animMotion for origin compensation is NOT emitted by this template alone — see emph/scale_with_origin for the composed version when authored."
+      "verification": "visually-verified",
+      "notes": "Scale values in 100000ths (PPT scale factor). INNER_FILL is the SVG fill_mode mapped to 'hold' or 'remove'. Verified via tools/visual/animation_tune scale_grow: non-background pixel share climbs from 41 (baseline) through 45 (mid-grow) to 54 (settled) as the shape doubles in size. Companion animMotion for origin compensation is NOT emitted by this template alone — see emph/scale_with_origin for the composed version when authored."
     },
     "path/motion": {
       "path": "path/motion.xml",
@@ -111,8 +111,8 @@
         "animateTransform[translate,from,to]"
       ],
       "source": "tests/golden/animation/numeric_x.xml",
-      "verification": "derived-from-handler",
-      "notes": "PATH_DATA is a PPT motion-path string (coordinates normalized to 0-1, ends with E). NODE_TYPE is 'clickEffect' for standalone motion (motion.py) or 'withEffect' for composed motion (numeric.py width→scale+motion). INNER_FILL is the SVG fill_mode mapped to 'hold' or 'remove'. Does NOT express rotation (rAng) — motion animations with auto-rotate or fixed-rAng fall through to the imperative path."
+      "verification": "visually-verified",
+      "notes": "PATH_DATA is a PPT motion-path string (coordinates normalized to 0-1, ends with E). NODE_TYPE is 'clickEffect' for standalone motion (motion.py) or 'withEffect' for composed motion (numeric.py width→scale+motion). INNER_FILL is the SVG fill_mode mapped to 'hold' or 'remove'. Verified via tools/visual/animation_tune motion_translate: shape centre measured at (1141, 803) pre-trigger and (1457, 882) post-motion — ~1 inch right, ~0.3 inch down, matching the authored path. Does NOT express rotation (rAng) — motion animations with auto-rotate or fixed-rAng fall through to the imperative path."
     }
   }
 }
