@@ -10,6 +10,7 @@ from lxml import etree
 
 from svg2ooxml.drawingml.animation.oracle import (
     AnimationOracle,
+    BehaviorFragment,
     OracleSlotError,
     default_oracle,
 )
@@ -186,3 +187,122 @@ def test_fresh_oracle_instance_reads_same_data(tmp_path) -> None:
     assert {s.name for s in oracle_explicit.slots()} == {
         s.name for s in oracle_default.slots()
     }
+
+
+# ---------------------------------------------------------- compound slot
+
+
+def test_compound_slot_is_registered() -> None:
+    oracle = default_oracle()
+    compound = oracle.slot("emph/compound")
+    assert compound.preset_class == "emph"
+    assert compound.preset_id is None
+    assert compound.verification == "visually-verified"
+
+
+def test_instantiate_compound_with_empty_behaviors() -> None:
+    oracle = default_oracle()
+    par = oracle.instantiate_compound(
+        shape_id="2",
+        par_id=5,
+        duration_ms=3000,
+        delay_ms=0,
+        behaviors=[],
+    )
+    assert par.tag == f"{{{NS_P}}}par"
+    ctn = par.find(f"{{{NS_P}}}cTn")
+    assert ctn is not None
+    assert ctn.get("nodeType") == "clickEffect"
+    assert ctn.get("dur") == "3000"
+    assert ctn.get("grpId") == "5"
+    child_tn_lst = ctn.find(f"{{{NS_P}}}childTnLst")
+    assert child_tn_lst is not None
+    assert len(child_tn_lst) == 0
+
+
+def test_instantiate_compound_stacks_heterogeneous_behaviors() -> None:
+    oracle = default_oracle()
+    par = oracle.instantiate_compound(
+        shape_id="2",
+        par_id=5,
+        duration_ms=3000,
+        delay_ms=0,
+        behaviors=[
+            BehaviorFragment("transparency", {
+                "SET_BEHAVIOR_ID": 10,
+                "EFFECT_BEHAVIOR_ID": 11,
+                "TARGET_OPACITY": "0.5",
+            }),
+            BehaviorFragment("rotate", {
+                "BEHAVIOR_ID": 20,
+                "ROTATION_BY": "21600000",
+            }),
+            BehaviorFragment("scale", {
+                "BEHAVIOR_ID": 30,
+                "BY_X": "150000",
+                "BY_Y": "150000",
+            }),
+            BehaviorFragment("motion", {
+                "BEHAVIOR_ID": 40,
+                "PATH_DATA": "M 0 0 L 0.1 0.1 E",
+            }),
+        ],
+    )
+    child_tn_lst = par.find(f"{{{NS_P}}}cTn/{{{NS_P}}}childTnLst")
+    assert child_tn_lst is not None
+    # transparency = 2 children, rotate = 1, scale = 1, motion = 1 → 5
+    assert len(child_tn_lst) == 5
+    tags = [etree.QName(c).localname for c in child_tn_lst]
+    assert tags == ["set", "animEffect", "animRot", "animScale", "animMotion"]
+
+
+def test_compound_fragment_token_substitution() -> None:
+    oracle = default_oracle()
+    par = oracle.instantiate_compound(
+        shape_id="99",
+        par_id=5,
+        duration_ms=2500,
+        behaviors=[
+            BehaviorFragment("rotate", {
+                "BEHAVIOR_ID": 60,
+                "ROTATION_BY": "43200000",
+            }),
+        ],
+    )
+    anim_rot = par.find(f".//{{{NS_P}}}animRot")
+    assert anim_rot is not None
+    assert anim_rot.get("by") == "43200000"
+    inner_ctn = anim_rot.find(f"{{{NS_P}}}cBhvr/{{{NS_P}}}cTn")
+    assert inner_ctn is not None
+    assert inner_ctn.get("id") == "60"
+    assert inner_ctn.get("dur") == "2500"
+    spt = anim_rot.find(f".//{{{NS_P}}}spTgt")
+    assert spt is not None
+    assert spt.get("spid") == "99"
+
+
+def test_compound_accepts_plain_tuple_behaviors() -> None:
+    oracle = default_oracle()
+    par = oracle.instantiate_compound(
+        shape_id="2",
+        par_id=5,
+        duration_ms=1000,
+        behaviors=[
+            ("bold", {"BEHAVIOR_ID": 10}),
+            ("underline", {"BEHAVIOR_ID": 20}),
+        ],
+    )
+    child_tn_lst = par.find(f"{{{NS_P}}}cTn/{{{NS_P}}}childTnLst")
+    assert child_tn_lst is not None
+    assert len(child_tn_lst) == 2
+
+
+def test_compound_unknown_fragment_raises() -> None:
+    oracle = default_oracle()
+    with pytest.raises(OracleSlotError):
+        oracle.instantiate_compound(
+            shape_id="2",
+            par_id=5,
+            duration_ms=1000,
+            behaviors=[BehaviorFragment("does_not_exist", {})],
+        )

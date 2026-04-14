@@ -29,14 +29,17 @@ import json
 from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Iterable, Mapping, Sequence
 
 from lxml import etree
 
 from svg2ooxml.drawingml.xml_builder import NS_P
 
+NS_A = "http://schemas.openxmlformats.org/drawingml/2006/main"
+
 __all__ = [
     "AnimationOracle",
+    "BehaviorFragment",
     "OracleSlotError",
     "PresetSlot",
     "default_oracle",
@@ -63,6 +66,22 @@ class PresetSlot:
     source: str
     verification: str
     notes: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class BehaviorFragment:
+    """A single behavior fragment to inject into a compound slot.
+
+    ``name`` identifies an XML file under ``emph/behaviors/<name>.xml``.
+    ``tokens`` carries the substitution map that satisfies the fragment's
+    template placeholders. Every fragment implicitly receives ``SHAPE_ID``
+    and ``DURATION_MS`` from the compound's call; other tokens
+    (``BEHAVIOR_ID``, ``TO_COLOR``, ``ROTATION_BY`` etc.) must be supplied
+    here per-fragment.
+    """
+
+    name: str
+    tokens: Mapping[str, Any] = field(default_factory=dict)
 
 
 def _default_root() -> Path:
@@ -179,7 +198,7 @@ class AnimationOracle:
 
         wrapped = (
             f'<root xmlns:p="{NS_P}" '
-            f'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">'
+            f'xmlns:a="{NS_A}">'
             f"{rendered}</root>"
         )
         parser = etree.XMLParser(remove_blank_text=True)
@@ -188,6 +207,100 @@ class AnimationOracle:
         # Detach from the synthetic root so the caller owns the element.
         root.remove(par)
         return par
+
+    # --------------------------------------------------------- compound slot
+
+    def instantiate_compound(
+        self,
+        *,
+        shape_id: str | int,
+        par_id: int,
+        duration_ms: int,
+        delay_ms: int = 0,
+        behaviors: Sequence[BehaviorFragment | tuple[str, Mapping[str, Any]]],
+    ) -> etree._Element:
+        """Assemble a compound ``<p:par>`` with arbitrary behavior children.
+
+        This is the primary path for emitting multi-effect animations. Each
+        item in *behaviors* is a :class:`BehaviorFragment` (or a
+        ``(name, tokens)`` 2-tuple) naming a file under
+        ``emph/behaviors/<name>.xml``. Fragments are rendered with their
+        own tokens plus implicit ``SHAPE_ID`` / ``DURATION_MS`` (from the
+        outer compound call), then appended as direct children of the
+        compound's single ``<p:cTn>``.
+
+        The compound slot itself is preset-free — PPT's rendering engine
+        walks the ``<p:cTn>``'s ``childTnLst`` and fires every behavior
+        element directly. All fragments fire simultaneously on one click.
+        """
+        base = self.instantiate(
+            "emph/compound",
+            shape_id=shape_id,
+            par_id=par_id,
+            duration_ms=duration_ms,
+            delay_ms=delay_ms,
+        )
+        child_tn_lst = base.find(
+            f".//{{{NS_P}}}cTn/{{{NS_P}}}childTnLst"
+        )
+        if child_tn_lst is None:  # pragma: no cover - template guarantees presence
+            raise OracleSlotError("emph/compound template is missing <p:childTnLst>")
+
+        for item in behaviors:
+            if isinstance(item, BehaviorFragment):
+                fragment = item
+            else:
+                name, tokens = item
+                fragment = BehaviorFragment(name=name, tokens=tokens)
+            for child in self._render_behavior_fragment(
+                fragment,
+                shape_id=shape_id,
+                duration_ms=duration_ms,
+            ):
+                child_tn_lst.append(child)
+
+        return base
+
+    def _render_behavior_fragment(
+        self,
+        fragment: BehaviorFragment,
+        *,
+        shape_id: str | int,
+        duration_ms: int,
+    ) -> list[etree._Element]:
+        """Load a behavior fragment file and return its substituted children."""
+        fragment_path = self._root / "emph" / "behaviors" / f"{fragment.name}.xml"
+        if not fragment_path.is_file():
+            raise OracleSlotError(
+                f"Behavior fragment '{fragment.name}' not found at {fragment_path}"
+            )
+        text = fragment_path.read_text(encoding="utf-8")
+
+        substitutions: dict[str, str] = {
+            "SHAPE_ID": str(shape_id),
+            "DURATION_MS": str(duration_ms),
+            "INNER_FILL": "hold",
+        }
+        for key, value in fragment.tokens.items():
+            substitutions[str(key)] = str(value)
+        rendered = _render_template(text, substitutions)
+
+        wrapped = (
+            f'<root xmlns:p="{NS_P}" xmlns:a="{NS_A}">{rendered}</root>'
+        )
+        parser = etree.XMLParser(remove_blank_text=True)
+        root = etree.fromstring(wrapped.encode("utf-8"), parser)
+        fragment_elem = root.find("fragment")
+        if fragment_elem is None:
+            raise OracleSlotError(
+                f"Behavior fragment '{fragment.name}' is missing <fragment> root"
+            )
+        # Return a list of child elements (the fragment's children become the
+        # compound cTn's children). Detach to give ownership to the caller.
+        children = list(fragment_elem)
+        for child in children:
+            fragment_elem.remove(child)
+        return children
 
 
 def _render_template(text: str, substitutions: Mapping[str, str]) -> str:

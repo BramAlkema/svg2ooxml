@@ -97,6 +97,22 @@
       "verification": "visually-verified",
       "notes": "Scale values in 100000ths (PPT scale factor). INNER_FILL is the SVG fill_mode mapped to 'hold' or 'remove'. Verified via tools/visual/animation_tune scale_grow: non-background pixel share climbs from 41 (baseline) through 45 (mid-grow) to 54 (settled) as the shape doubles in size. Companion animMotion for origin compensation is NOT emitted by this template alone — see emph/scale_with_origin for the composed version when authored."
     },
+    "emph/compound": {
+      "path": "emph/compound.xml",
+      "preset_class": "emph",
+      "preset_id": null,
+      "preset_subtype": null,
+      "family_signature": "clickEffect|emph|-|compound|-",
+      "content_tokens": [],
+      "behavior_tokens": [],
+      "bld_mode": "paragraph",
+      "smil_patterns": [
+        "any stacked combination of animate/animateColor/animateMotion/animateTransform/set on one element"
+      ],
+      "source": "empirically verified via .visual_tmp/xmas_tree_v2.py — 11 heterogeneous child behaviors under ONE cTn fire simultaneously on a single click",
+      "verification": "visually-verified",
+      "notes": "Universal compound slot. The template is a bare <p:par>/<p:cTn>/<p:childTnLst> scaffold with no preset ID and an empty childTnLst — callers use AnimationOracle.instantiate_compound(behaviors=[...]) instead of instantiate(...) to inject behavior fragment children from src/svg2ooxml/assets/animation_oracle/emph/behaviors/*.xml. Each fragment is one or more raw <p:set>/<p:animEffect>/<p:animClr>/<p:animRot>/<p:animScale>/<p:animMotion>/<p:anim> elements that are substituted with their own tokens and appended as direct children of this cTn. PPT's rendering engine does NOT require preset IDs to fire the child behaviors — presetID/presetSubtype are cosmetic UI metadata only. This slot subsumes every single-preset slot because any combination of behaviors can be composed inside one cTn. Build mode is 'paragraph' (build=\"p\" rev=\"1\") so text-paragraph fragments (bold, underline, text_color, text_scale) fire correctly alongside shape fragments. Verified end-to-end via the xmas tree v2 experiment: 8 effects (transparency + shape_fill_color + text_color + bold + underline + rotate + scale + motion) stacked in one cTn, all played simultaneously on one Next keypress with delta_max 7.51 (same as the nested-par v1 with 27 XML elements vs this v2's 11)."
+    },
     "emph/transparency": {
       "path": "emph/transparency.xml",
       "preset_class": "emph",
