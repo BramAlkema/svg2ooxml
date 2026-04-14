@@ -25,6 +25,8 @@ class SampleModule(Protocol):
 
 _REGISTRY: dict[str, str] = {
     "fade_in": "tools.visual.animation_samples.fade_in",
+    "exit_fade": "tools.visual.animation_samples.exit_fade",
+    "appear_visible": "tools.visual.animation_samples.appear_visible",
     "color_change": "tools.visual.animation_samples.color_change",
     "rotate_spin": "tools.visual.animation_samples.rotate_spin",
     "scale_grow": "tools.visual.animation_samples.scale_grow",

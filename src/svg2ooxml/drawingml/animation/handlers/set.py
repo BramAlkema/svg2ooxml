@@ -138,19 +138,20 @@ class SetAnimationHandler(AnimationHandler):
         effect_ctn_id = par_id * 10
 
         if transition == "in" and self._visibility_uses_oracle(animation):
-            effect_par = default_oracle().instantiate(
+            # Return the oracle effect par directly. The preset 1 Appear
+            # template has no ``dur`` on its outer cTn, so the fill="hold"
+            # visibility set persists for the rest of the slideshow. Wrapping
+            # in ``build_delayed_child_par`` would re-introduce a bounded
+            # outer ``dur`` and cause PowerPoint to revert the visibility
+            # once the wrapper expires. The template's own ``<p:cond>``
+            # carries the start delay instead.
+            return default_oracle().instantiate(
                 "entr/appear",
                 shape_id=animation.element_id,
-                par_id=effect_ctn_id,
-                duration_ms=duration_ms,
-                delay_ms=0,
-                BEHAVIOR_ID=behavior_id,
-            )
-            return self._xml.build_delayed_child_par(
                 par_id=par_id,
-                delay_ms=animation.begin_ms,
                 duration_ms=duration_ms,
-                child_element=effect_par,
+                delay_ms=animation.begin_ms,
+                BEHAVIOR_ID=behavior_id,
             )
 
         anim_effect = p_elem("animEffect")

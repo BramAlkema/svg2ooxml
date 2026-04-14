@@ -22,16 +22,16 @@
       "preset_class": "exit",
       "preset_id": 9,
       "preset_subtype": 0,
-      "family_signature": "clickEffect|exit|9|set+animEffect|style.visibility",
-      "content_tokens": [],
+      "family_signature": "clickEffect|exit|9|animEffect+set|style.visibility",
+      "content_tokens": ["SET_DELAY_MS"],
       "behavior_tokens": ["SET_BEHAVIOR_ID", "EFFECT_BEHAVIOR_ID"],
       "smil_patterns": [
         "animate[opacity,1,0,linear]",
         "animate[opacity,1,0]"
       ],
-      "source": "tests/golden/animation/opacity_fade_out.xml",
-      "verification": "derived-from-handler",
-      "notes": "Mirrors entr/fade with transition=out and visibility=hidden. UNVERIFIED: oracle corpus has no preset 9 exit fade — all observed exit fades use preset 31/37/47/53 with extra anim children. Preset ID may be wrong; visually verify before promoting."
+      "source": "docs/research/powerpoint_oracle/selected/examples-pptx-slide12/slide12 (preset 47 exit fade shape)",
+      "verification": "visually-verified",
+      "notes": "Child order is animEffect then set (opposite of entr/fade). The visibility set fires at SET_DELAY_MS (typically duration_ms - 1) so the shape stays visible until the fade-out completes. Verified via tools/visual/animation_tune exit_fade: frame 1 shows shape visible on slide 2 pre-trigger, frame 2+ shows shape gone after the fade-out. Preset ID 9 is carried over from entr/fade; the oracle corpus has no preset 9 exit fade sample, only 31/37/47/53 with richer children (motion + fade + set). Revisit preset ID when a matching sample is captured."
     },
     "entr/appear": {
       "path": "entr/appear.xml",
@@ -46,8 +46,8 @@
         "set[display,inline]"
       ],
       "source": "docs/research/powerpoint_oracle/selected/cloudpresentationpack-azurefunc-animation/slide1",
-      "verification": "oracle-matched",
-      "notes": "Authored from oracle; diverges from current set.py handler which emits a nested fade effect. Migration to this template will require updating set.py."
+      "verification": "visually-verified",
+      "notes": "Outer cTn carries NO dur attribute — fill='hold' alone makes the visibility set persist. Adding dur (or wrapping in build_delayed_child_par which supplies its own dur) causes PowerPoint to expire the container and revert the set, making the shape disappear after the animation completes. Verified via tools/visual/animation_tune appear_visible: frame 0 blank slide 1, frame 1 transitions to slide 2 with the set already fired, frames 2+ hold at the visible state."
     },
     "emph/color": {
       "path": "emph/color.xml",

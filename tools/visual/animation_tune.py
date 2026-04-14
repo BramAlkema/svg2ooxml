@@ -208,6 +208,7 @@ def run_round(
     duration: float,
     fps: float,
     pre_advances: int = 0,
+    trigger_advance: bool = True,
 ) -> tuple[Path, list[FrameMetrics]]:
     round_dir = _next_round_dir(sample_name)
     frames_dir = round_dir / "frames"
@@ -216,6 +217,7 @@ def run_round(
         duration=duration,
         fps=fps,
         pre_advances=pre_advances,
+        trigger_advance=trigger_advance,
     )
     metrics = compute_metrics(frames)
     _write_metrics(round_dir, sample_name, metrics)
@@ -284,6 +286,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     module = load_sample(args.sample)
     duration = float(args.duration if args.duration is not None else module.DURATION_S)
     pre_advances = int(getattr(module, "PRE_ADVANCES", 0))
+    trigger_advance = bool(getattr(module, "TRIGGER_ADVANCE", True))
     output_path = (args.output or SAMPLES_ROOT / f"{args.sample}.pptx").resolve()
 
     _rebuild(args.sample, output_path)
@@ -296,7 +299,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 1
 
     try:
-        round_dir, metrics = run_round(session, args.sample, duration=duration, fps=args.fps, pre_advances=pre_advances)
+        round_dir, metrics = run_round(session, args.sample, duration=duration, fps=args.fps, pre_advances=pre_advances, trigger_advance=trigger_advance)
         print_summary(args.sample, round_dir, metrics)
 
         if args.once:
@@ -312,7 +315,12 @@ def main(argv: Sequence[str] | None = None) -> int:
                 break
             if choice in ("c", "capture"):
                 round_dir, metrics = run_round(
-                    session, args.sample, duration=duration, fps=args.fps
+                    session,
+                    args.sample,
+                    duration=duration,
+                    fps=args.fps,
+                    pre_advances=pre_advances,
+                    trigger_advance=trigger_advance,
                 )
                 print_summary(args.sample, round_dir, metrics)
                 continue
@@ -321,7 +329,12 @@ def main(argv: Sequence[str] | None = None) -> int:
                 _rebuild(args.sample, output_path)
                 session.reload()
                 round_dir, metrics = run_round(
-                    session, args.sample, duration=duration, fps=args.fps
+                    session,
+                    args.sample,
+                    duration=duration,
+                    fps=args.fps,
+                    pre_advances=pre_advances,
+                    trigger_advance=trigger_advance,
                 )
                 elapsed = time.time() - start
                 print(f"(round cycle: {elapsed:.1f}s)")

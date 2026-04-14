@@ -4,11 +4,19 @@
             <p:cond delay="{DELAY_MS}"/>
         </p:stCondLst>
         <p:childTnLst>
+            <p:animEffect transition="out" filter="fade">
+                <p:cBhvr>
+                    <p:cTn id="{EFFECT_BEHAVIOR_ID}" dur="{DURATION_MS}"/>
+                    <p:tgtEl>
+                        <p:spTgt spid="{SHAPE_ID}"/>
+                    </p:tgtEl>
+                </p:cBhvr>
+            </p:animEffect>
             <p:set>
                 <p:cBhvr>
                     <p:cTn id="{SET_BEHAVIOR_ID}" dur="1" fill="hold">
                         <p:stCondLst>
-                            <p:cond delay="0"/>
+                            <p:cond delay="{SET_DELAY_MS}"/>
                         </p:stCondLst>
                     </p:cTn>
                     <p:tgtEl>
@@ -22,14 +30,6 @@
                     <p:strVal val="hidden"/>
                 </p:to>
             </p:set>
-            <p:animEffect transition="out" filter="fade">
-                <p:cBhvr>
-                    <p:cTn id="{EFFECT_BEHAVIOR_ID}" dur="{DURATION_MS}"/>
-                    <p:tgtEl>
-                        <p:spTgt spid="{SHAPE_ID}"/>
-                    </p:tgtEl>
-                </p:cBhvr>
-            </p:animEffect>
         </p:childTnLst>
     </p:cTn>
 </p:par>

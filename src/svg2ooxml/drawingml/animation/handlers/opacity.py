@@ -69,15 +69,25 @@ class OpacityAnimationHandler(AnimationHandler):
             return None
 
         transition, preset_class = fade_params
-        slot_name = "entr/fade" if transition == "in" else "exit/fade"
+        if transition == "in":
+            return default_oracle().instantiate(
+                "entr/fade",
+                shape_id=animation.element_id,
+                par_id=par_id,
+                duration_ms=animation.duration_ms,
+                delay_ms=animation.begin_ms,
+                SET_BEHAVIOR_ID=behavior_id,
+                EFFECT_BEHAVIOR_ID=behavior_id * 10 + 1,
+            )
         return default_oracle().instantiate(
-            slot_name,
+            "exit/fade",
             shape_id=animation.element_id,
             par_id=par_id,
             duration_ms=animation.duration_ms,
             delay_ms=animation.begin_ms,
             SET_BEHAVIOR_ID=behavior_id,
             EFFECT_BEHAVIOR_ID=behavior_id * 10 + 1,
+            SET_DELAY_MS=max(1, animation.duration_ms - 1),
         )
 
     @staticmethod
