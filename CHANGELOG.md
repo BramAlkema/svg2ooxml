@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+- expanded the animation oracle from 7 to 18 slots covering every PowerPoint emphasis, entrance, exit, and motion-path primitive, all empirically verified to play in Microsoft PowerPoint via the tune-loop harness
+- introduced the universal `emph/compound` slot plus a 10-item behavior fragment library (`transparency`, `fill_color`, `text_color`, `stroke_color`, `bold`, `underline`, `blink`, `rotate`, `scale`, `motion`) — one `<p:cTn>` holds any combination of behaviors that fire simultaneously, replacing the preset-per-slot model for stacked effects
+- added `AnimationOracle.instantiate_compound(behaviors=...)` and `BehaviorFragment` dataclass as the primary multi-effect authoring API, plus `AnimationXMLBuilder.build_compound_par()` as the writer-level entry point for handlers
+- collapsed 40+ entrance/exit presets into two universal filter-parameterised slots (`entr/filter_effect`, `exit/filter_effect`) covering 16 empirically verified `<p:animEffect filter>` values (fade, dissolve, wipe, wedge, wheel, circle, strips, blinds, checkerboard, barn, randombar) plus direction subparameters
+- promoted the animation vocabulary to three structured XML SSOT files: `filter_vocabulary.xml` (29 filter entries), `attrname_vocabulary.xml` (17 valid `<p:attrName>` values confirmed complete), and `dead_paths.xml` (7 empirically falsified shapes with replacement guidance)
+- added typed loaders for the SSOT files: `AnimationOracle.filter_vocabulary()`, `attrname_vocabulary()`, `dead_paths()` with by-value and by-id lookups, plus negative-test invariants that assert dead-path attrNames never appear in the valid vocabulary
+- documented empirically falsified paths: `<p:anim>` on `fill.opacity`, `stroke.opacity`, `stroke.weight`, `line.weight`, and isolated `style.fontSize` all parse as valid OOXML but are silently dropped by PowerPoint's playback engine; `<p:animEffect filter="image">` only fires when paired with a `<p:set>` on `style.opacity` inside a preset 9 wrapper
+- added the **pptx-animation Claude skill** at `.claude/skills/pptx-animation/` — CLI scripts for entrance/exit/compound/motion emission plus a validator that walks XML and flags dead-path matches against the `dead_paths.xml` SSOT; fully self-contained with vendored oracle SSOT files and auto-generated markdown references
+- added `tools/build_skill.py` with `--check` drift detection for CI so the in-tree skill cannot diverge from the oracle SSOT
+- expanded the oracle README from 68 to 330+ lines covering both layer-1 (preset-specific) and layer-2 (compound + fragments) APIs, build-mode matrix, targeting wrapper semantics, and empirical methodology
+- session totals: 10 new commits, ~8,500+ lines added, 693 unit tests passing (up from 663), including the universal compound slot, three vocabulary SSOTs, the Claude skill package, and the writer-level compound helper
+
 ## 0.6.7 - 2026-04-14
 
 - expanded SVG animation plumbing for SMIL timing, from/to/by values, repeat/end/restart handling, keyPoints, native-match metadata, and unsupported-trigger policy decisions
