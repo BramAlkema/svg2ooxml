@@ -97,6 +97,143 @@
       "verification": "visually-verified",
       "notes": "Scale values in 100000ths (PPT scale factor). INNER_FILL is the SVG fill_mode mapped to 'hold' or 'remove'. Verified via tools/visual/animation_tune scale_grow: non-background pixel share climbs from 41 (baseline) through 45 (mid-grow) to 54 (settled) as the shape doubles in size. Companion animMotion for origin compensation is NOT emitted by this template alone — see emph/scale_with_origin for the composed version when authored."
     },
+    "emph/transparency": {
+      "path": "emph/transparency.xml",
+      "preset_class": "emph",
+      "preset_id": 9,
+      "preset_subtype": 0,
+      "family_signature": "clickEffect|emph|9|set+animEffect|style.opacity",
+      "content_tokens": ["TARGET_OPACITY", "INNER_FILL"],
+      "behavior_tokens": ["SET_BEHAVIOR_ID", "EFFECT_BEHAVIOR_ID"],
+      "bld_mode": "animBg",
+      "smil_patterns": [
+        "animate[opacity,from,to_partial]",
+        "set[opacity,partial]"
+      ],
+      "source": "tmp/example5.pptx (preset 9 Transparency) and user-authored .visual_tmp/samples/attrsearch example.pptx",
+      "verification": "visually-verified",
+      "notes": "PPT's 'Transparency' emphasis — fades the WHOLE SHAPE (fill + stroke + text together) to a partial opacity and holds there. Uses the legacy <p:animEffect filter=\"image\" prLst=\"opacity: X\"> with a paired <p:set> on style.opacity. TARGET_OPACITY is a decimal string like '0.3' (NOT a PPT fltVal). The outer <p:iterate type=\"lt\"><p:tmAbs val=\"0\"/></p:iterate> is boilerplate PPT emits but does not restrict the effect to text. Verified visually via .visual_tmp/transparency_experiment.py: frame 0 shows opaque rectangle, frame 5 shows ~30% transparent rectangle with faded text."
+    },
+    "emph/text_color": {
+      "path": "emph/text_color.xml",
+      "preset_class": "emph",
+      "preset_id": 3,
+      "preset_subtype": 2,
+      "family_signature": "clickEffect|emph|3|animClr|style.color",
+      "content_tokens": ["TO_COLOR", "INNER_FILL"],
+      "behavior_tokens": ["BEHAVIOR_ID"],
+      "bld_mode": "animBg",
+      "smil_patterns": [
+        "animate[fill,from,to] on <text>",
+        "animate[color,from,to] on <text>",
+        "animateColor[fill,from,to] on <text>"
+      ],
+      "source": "user-authored .visual_tmp/samples/attrsearch example.pptx (preset 3 subtype 2)",
+      "verification": "visually-verified",
+      "notes": "PPT's 'Change Font Color' emphasis. Distinct from emph/color which targets shape fill via 'fillcolor' attrName — this targets 'style.color' (the text color inside the shape). Uses per-letter iterate (tmPct=0, simultaneous) and <p:cBhvr override=\"childStyle\">. TO_COLOR is the 6-hex srgbClr value (e.g. 'E81E1E'). Verified visually via .visual_tmp/transparency_experiment.py: frame 5 shows text tinted to target color while rectangle fill unchanged."
+    },
+    "emph/stroke_color": {
+      "path": "emph/stroke_color.xml",
+      "preset_class": "emph",
+      "preset_id": 7,
+      "preset_subtype": 2,
+      "family_signature": "clickEffect|emph|7|animClr+set|stroke.color+stroke.on",
+      "content_tokens": ["TO_COLOR", "INNER_FILL"],
+      "behavior_tokens": ["CLR_BEHAVIOR_ID", "SET_BEHAVIOR_ID"],
+      "bld_mode": "animBg",
+      "smil_patterns": [
+        "animate[stroke,from,to]",
+        "animateColor[stroke,from,to]"
+      ],
+      "source": "tmp/example4.pptx and tmp/example5.pptx (preset 7 subtype 2)",
+      "verification": "visually-verified",
+      "notes": "PPT's 'Change Line Color' emphasis. Pairs <p:animClr> on 'stroke.color' with a companion <p:set> on 'stroke.on'→'true' as a primer to ensure the stroke is visible (mirrors the fillcolor + fill.on + fill.type triple pattern). No iterate — per-shape effect, not per-letter. TO_COLOR is the 6-hex srgbClr value. Verified visually via .visual_tmp/transparency_experiment.py: frame 15 shows a clear red border around the rectangle that was borderless at frame 0."
+    },
+    "emph/bold": {
+      "path": "emph/bold.xml",
+      "preset_class": "emph",
+      "preset_id": 15,
+      "preset_subtype": 0,
+      "family_signature": "clickEffect|emph|15|set|style.fontWeight",
+      "content_tokens": [],
+      "behavior_tokens": ["BEHAVIOR_ID"],
+      "bld_mode": "paragraph",
+      "smil_patterns": [
+        "set[font-weight,bold] on <text>",
+        "animate[font-weight,normal,bold] on <text>"
+      ],
+      "source": "tmp/example5.pptx (preset 15 Bold)",
+      "verification": "visually-verified",
+      "notes": "PPT's 'Bold' emphasis. Applies <p:set> on 'style.fontWeight' to 'bold' via childStyle override, targeting <p:txEl><p:pRg st=\"0\" end=\"0\"/></p:txEl> for the first paragraph. Uses per-letter iterate with tmAbs=25 (25ms stagger between letters) for a typewriter-like cascade. REQUIRES bldP with build=\"p\" rev=\"1\" — build_timing_tree must emit paragraph-mode bldP entries for the animated group. Verified visually: text goes from non-bold to bold letter-by-letter."
+    },
+    "emph/underline": {
+      "path": "emph/underline.xml",
+      "preset_class": "emph",
+      "preset_id": 18,
+      "preset_subtype": 0,
+      "family_signature": "clickEffect|emph|18|set|style.textDecorationUnderline",
+      "content_tokens": [],
+      "behavior_tokens": ["BEHAVIOR_ID"],
+      "bld_mode": "paragraph",
+      "smil_patterns": [
+        "set[text-decoration,underline] on <text>",
+        "animate[text-decoration,none,underline] on <text>"
+      ],
+      "source": "tmp/example4.pptx and tmp/example5.pptx (preset 18 Underline)",
+      "verification": "visually-verified",
+      "notes": "PPT's 'Underline' emphasis. <p:set> on 'style.textDecorationUnderline' to 'true' via childStyle override, targeting first paragraph. Uses tmPct=4000 (40% stagger) so each letter's underline appears with a staggered cascade. REQUIRES bldP with build=\"p\" rev=\"1\". Verified visually: underline appears under each letter sequentially."
+    },
+    "emph/shape_fill_color": {
+      "path": "emph/shape_fill_color.xml",
+      "preset_class": "emph",
+      "preset_id": 19,
+      "preset_subtype": 0,
+      "family_signature": "clickEffect|emph|19|animClr+animClr+set+set|bg|style.color+fillcolor+fill.type+fill.on",
+      "content_tokens": ["TO_COLOR", "INNER_FILL"],
+      "behavior_tokens": ["STYLE_CLR_BEHAVIOR_ID", "FILL_CLR_BEHAVIOR_ID", "FILL_TYPE_BEHAVIOR_ID", "FILL_ON_BEHAVIOR_ID"],
+      "bld_mode": "allAtOnce",
+      "smil_patterns": [
+        "animate[fill,from,to] on <rect>/<circle>/<path>",
+        "animateColor[fill,from,to] on shape"
+      ],
+      "source": "user-authored .visual_tmp/samples/experiment 6.pptx preset 19 clickEffect half (cTn id=31)",
+      "verification": "visually-verified",
+      "notes": "PPT's 'Change Fill Color' emphasis scoped to the shape background (NOT text). This is the native PPT path for animating the shape's fill color — distinct from the legacy emph/color slot which targets fillcolor without <p:bg/>. Uses the quadruple primer pattern: <p:animClr> style.color + <p:animClr> fillcolor + <p:set> fill.type→solid + <p:set> fill.on→true, all targeting <p:spTgt spid=X><p:bg/></p:spTgt>. The quadruple ensures the fill is visible (fill.on=true), solid (fill.type=solid), and tweened on both style.color and fillcolor simultaneously (schemeClr-compatible dual path). TO_COLOR is a 6-hex srgbClr value. Verified visually via .visual_tmp/transparency_experiment.py: rectangle fill tweens blue → red at frame 15, text stays white (not part of target). In example5.pptx/experiment 6.pptx this preset also has a withEffect sibling with same grpId targeting <p:txEl><p:pRg> for combined fill+text color change — that full compound should use this slot PLUS emph/text_color in parallel."
+    },
+    "emph/color_pulse": {
+      "path": "emph/color_pulse.xml",
+      "preset_class": "emph",
+      "preset_id": 27,
+      "preset_subtype": 0,
+      "family_signature": "clickEffect|emph|27|animClr+animClr+set+set-autoRev|text|style.color+fillcolor+fill.type+fill.on",
+      "content_tokens": ["TO_COLOR", "INNER_FILL"],
+      "behavior_tokens": ["STYLE_CLR_BEHAVIOR_ID", "FILL_CLR_BEHAVIOR_ID", "FILL_TYPE_BEHAVIOR_ID", "FILL_ON_BEHAVIOR_ID"],
+      "bld_mode": "paragraph",
+      "smil_patterns": [
+        "animate[fill,orig,pulse,orig] on <text>",
+        "animate[color,orig,pulse,orig] on <text> with autoRev"
+      ],
+      "source": "user-authored .visual_tmp/samples/experiment 6.pptx preset 27 (cTn id=5)",
+      "verification": "visually-verified",
+      "notes": "PPT's 'Color Pulse' emphasis on text. Same quadruple structure as emph/shape_fill_color but with: (1) <p:txEl><p:pRg st=\"0\" end=\"0\"/> target for text instead of <p:bg/>, (2) autoRev=\"1\" fill=\"remove\" on inner cTns so the color flashes forward then reverses to original, (3) outer cTn fill=\"remove\", (4) <p:iterate type=\"lt\"><p:tmPct val=\"0\"/></p:iterate> for per-letter simultaneous firing. Duration governs the single-direction flash (total effect = 2×DURATION_MS due to autoRev). Verified visually: text Experiment flashes to red at frame 5, returns to white after capture window. Requires bldP build=\"p\" rev=\"1\" for paragraph-level firing."
+    },
+    "emph/blink": {
+      "path": "emph/blink.xml",
+      "preset_class": "emph",
+      "preset_id": 35,
+      "preset_subtype": 0,
+      "family_signature": "clickEffect|emph|35|anim-discrete|style.visibility",
+      "content_tokens": [],
+      "behavior_tokens": ["BEHAVIOR_ID"],
+      "bld_mode": "animBg",
+      "smil_patterns": [
+        "animate[visibility,hidden,visible,hidden,visible] discrete",
+        "set[visibility,hidden]+set[visibility,visible] sequence"
+      ],
+      "source": "tmp/example4.pptx (preset 35 Blink)",
+      "verification": "visually-verified",
+      "notes": "PPT's 'Blink' emphasis. <p:anim calcmode=\"discrete\"> with two tav keyframes on style.visibility: hidden at tm=0, visible at tm=50000 (midpoint). No iterate — whole-shape effect. For repeat/multi-blink patterns the handler should add repeatCount to the outer cTn. Verified visually: rectangle disappears for half the duration then reappears."
+    },
     "path/motion": {
       "path": "path/motion.xml",
       "preset_class": "path",
