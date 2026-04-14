@@ -49,24 +49,23 @@ In other words:
 
 ## Canonical Artifact Layout
 
-Oracle material should live under `docs/research/powerpoint_oracle/`.
+Curated oracle material should live under `docs/research/powerpoint_oracle/`.
+Full extraction dumps should live outside git, such as in local scratch storage,
+CI artifacts, or release assets. The repository should carry only representative
+fixtures that are small enough to review.
 
 Recommended structure:
 
 ```text
 docs/research/powerpoint_oracle/
-  <source-name>/
+  README.md
+  selected/
     manifest.json
-    README.md
-    <deck-name>/
-      deck.meta.json
+    <case-name>/
       slide1/
-        slide.raw.xml
         timing.raw.xml
         timing.normalized.xml
         summary.json
-      slide2/
-        ...
 ```
 
 Rules:
@@ -78,6 +77,8 @@ Rules:
 - `timing.normalized.xml` exists only to make diffs and pattern families
   readable.
 - `manifest.json` indexes provenance and signatures across the source.
+- Bulk `manifest.json` files from exploratory extraction runs should not be
+  committed unless they have been reduced to selected fixtures.
 
 ## Temporary Deck Policy
 

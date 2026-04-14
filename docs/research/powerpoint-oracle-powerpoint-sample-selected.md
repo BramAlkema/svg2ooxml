@@ -11,10 +11,10 @@ The selected decks are:
 - `MakeAnimated PowerPoint Slide by PowerPoint School.pptx`
 - `Attractive Presentation Slide with animation by PowerPoint School.pptx`
 
-Artifacts live in:
+The full extracted artifacts were generated during research but are not kept in
+git. The committed representative fixture from this source is:
 
-- `docs/research/powerpoint_oracle/powerpoint-sample-selected/manifest.json`
-- `docs/research/powerpoint_oracle/powerpoint-sample-selected/README.md`
+- `docs/research/powerpoint_oracle/selected/powerpoint-school-slide4/slide4/`
 
 ## Why This Subset Matters
 

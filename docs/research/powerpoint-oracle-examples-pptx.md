@@ -4,12 +4,10 @@ This note records the oracle extracted from:
 
 - `/Users/ynse/projects/svg2ooxml/tmp/examples.pptx`
 
-The extracted artifacts live in:
+The full extracted artifacts were generated during research but are not kept in
+git. The committed representative fixture from this source is:
 
-- `docs/research/powerpoint_oracle/examples-pptx/manifest.json`
-- `docs/research/powerpoint_oracle/examples-pptx/README.md`
-- `docs/research/powerpoint_oracle/examples-pptx/*/timing.raw.xml`
-- `docs/research/powerpoint_oracle/examples-pptx/*/timing.normalized.xml`
+- `docs/research/powerpoint_oracle/selected/examples-pptx-slide12/slide12/`
 
 This deck is much denser than the first CloudPresentationPack oracle and is
 therefore more useful for preset-family mining.

@@ -3,12 +3,10 @@
 This note records the first extracted PowerPoint timing oracle built from the
 public `giuleon/CloudPresentationPack` sample decks.
 
-The raw oracle artifacts live in:
+The full raw oracle artifacts were generated during research but are not kept
+in git. The committed representative fixture from this source is:
 
-- `docs/research/powerpoint_oracle/cloudpresentationpack/manifest.json`
-- `docs/research/powerpoint_oracle/cloudpresentationpack/README.md`
-- `docs/research/powerpoint_oracle/cloudpresentationpack/*/slide1/timing.raw.xml`
-- `docs/research/powerpoint_oracle/cloudpresentationpack/*/slide1/timing.normalized.xml`
+- `docs/research/powerpoint_oracle/selected/cloudpresentationpack-azurefunc-animation/slide1/`
 
 The extractor is:
 
@@ -19,7 +17,7 @@ The extraction command used for this first oracle was:
 ```bash
 .venv/bin/python tools/visual/powerpoint_oracle.py \
   --source-name cloudpresentationpack \
-  --output docs/research/powerpoint_oracle/cloudpresentationpack \
+  --output tmp/powerpoint_oracle/cloudpresentationpack \
   /tmp/svg2ooxml-external/CloudPresentationPack/*.pptx
 ```
 
