@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.6.8 - 2026-04-15
 
 - expanded the animation oracle from 7 to 18 slots covering every PowerPoint emphasis, entrance, exit, and motion-path primitive, all empirically verified to play in Microsoft PowerPoint via the tune-loop harness
 - introduced the universal `emph/compound` slot plus a 10-item behavior fragment library (`transparency`, `fill_color`, `text_color`, `stroke_color`, `bold`, `underline`, `blink`, `rotate`, `scale`, `motion`) — one `<p:cTn>` holds any combination of behaviors that fire simultaneously, replacing the preset-per-slot model for stacked effects
