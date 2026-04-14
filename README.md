@@ -52,6 +52,7 @@ svg2ooxml parses SVG markup, builds a typed intermediate representation, renders
 
 - **Native DrawingML output** — shapes, text, and paths render as editable PowerPoint objects
 - **SMIL animation support** — entrance, emphasis, exit, motion paths, rotate, scale, opacity, color
+- **Empirical animation oracle** — structured SSOT of PowerPoint animation shapes that actually play at slideshow time, plus a [negative catalog](src/svg2ooxml/assets/animation_oracle/dead_paths.xml) of XML that parses but is silently dropped. Includes a companion [Claude skill](.claude/skills/pptx-animation/) for LLMs to emit working animation XML
 - **Text rendering** — three-tier pipeline: native text with font embedding → WordArt for curves → Skia glyph outlines as last resort
 - **SVG filter effects** — blur, drop shadow, color matrix, lighting, with EMF and raster fallbacks
 - **Gradients & patterns** — linear, radial, pattern fills with userSpaceOnUse, focal point, transforms

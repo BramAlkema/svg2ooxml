@@ -1,0 +1,256 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Animation Oracle — Filter Vocabulary SSOT
+
+  The complete set of <p:animEffect filter="..."> values that PowerPoint
+  recognises for entrance and exit effects. Each <filter> element records
+  the exact filter string (including any sub-parameter), its canonical
+  entrance / exit preset ID mapping, a human description, its current
+  verification state, and the provenance of the empirical evidence.
+
+  Consumed by AnimationOracle.filter_vocabulary() for handler-level
+  enum validation, by the entr/filter_effect and exit/filter_effect
+  slots for token enumeration, and by the README as the source of truth
+  for the filter table.
+
+  To add a new filter:
+    1. Verify it plays in PowerPoint via .visual_tmp/filter_sweep.py
+    2. Add a new <filter> element below with the full filter string,
+       preset mappings, description, and verification=visually-verified
+    3. Cite the reference file in <source>.
+-->
+<filter-vocabulary>
+
+  <filter value="fade">
+    <description>opacity fade in/out</description>
+    <entrance preset-id="9" preset-subtype="0"/>
+    <exit preset-id="9" preset-subtype="0"/>
+    <verification>visually-verified</verification>
+    <source>entr/fade legacy slot + .visual_tmp/filter_sweep.py entrance sweep</source>
+  </filter>
+
+  <filter value="dissolve">
+    <description>pixel-noise dissolve reveal</description>
+    <entrance preset-id="10" preset-subtype="0"/>
+    <exit preset-id="10" preset-subtype="0"/>
+    <verification>visually-verified</verification>
+    <source>.visual_tmp/filter_sweep.py entrance sweep; experiment 7.pptx exit preset 9</source>
+  </filter>
+
+  <filter value="wipe(down)">
+    <description>top-to-bottom directional reveal</description>
+    <entrance preset-id="22" preset-subtype="4"/>
+    <exit preset-id="22" preset-subtype="4"/>
+    <verification>visually-verified</verification>
+    <source>.visual_tmp/filter_sweep.py frame_0001.png visibly shows top-down wipe with text partially visible at top edge</source>
+  </filter>
+
+  <filter value="wipe(up)">
+    <description>bottom-to-top directional reveal</description>
+    <entrance preset-id="22" preset-subtype="1"/>
+    <exit preset-id="22" preset-subtype="1"/>
+    <verification>visually-verified</verification>
+    <source>.visual_tmp/filter_sweep.py entrance sweep</source>
+  </filter>
+
+  <filter value="wipe(left)">
+    <description>right-to-left directional reveal</description>
+    <entrance preset-id="22" preset-subtype="8"/>
+    <exit preset-id="22" preset-subtype="8"/>
+    <verification>visually-verified</verification>
+    <source>.visual_tmp/filter_sweep.py entrance sweep</source>
+  </filter>
+
+  <filter value="wipe(right)">
+    <description>left-to-right directional reveal</description>
+    <entrance preset-id="22" preset-subtype="2"/>
+    <exit preset-id="22" preset-subtype="2"/>
+    <verification>visually-verified</verification>
+    <source>.visual_tmp/filter_sweep.py entrance sweep</source>
+  </filter>
+
+  <filter value="wedge">
+    <description>wedge-slice reveal (pie-chart-like sweep)</description>
+    <entrance preset-id="37" preset-subtype="0"/>
+    <exit preset-id="37" preset-subtype="0"/>
+    <verification>visually-verified</verification>
+    <source>.visual_tmp/filter_sweep.py entrance sweep</source>
+  </filter>
+
+  <filter value="wheel(1)">
+    <description>1-spoke clock-wipe</description>
+    <entrance preset-id="21" preset-subtype="1"/>
+    <exit preset-id="21" preset-subtype="1"/>
+    <verification>visually-verified</verification>
+    <source>.visual_tmp/filter_sweep.py entrance sweep</source>
+  </filter>
+
+  <filter value="wheel(2)">
+    <description>2-spoke clock-wipe</description>
+    <entrance preset-id="21" preset-subtype="2"/>
+    <exit preset-id="21" preset-subtype="2"/>
+    <verification>visually-verified</verification>
+    <source>.visual_tmp/filter_sweep.py entrance sweep</source>
+  </filter>
+
+  <filter value="wheel(3)">
+    <description>3-spoke clock-wipe</description>
+    <entrance preset-id="21" preset-subtype="3"/>
+    <exit preset-id="21" preset-subtype="3"/>
+    <verification>derived-from-handler</verification>
+    <source>ECMA-376 preset 21 subtype 3; shares structure with wheel(1)/wheel(2) which are verified</source>
+  </filter>
+
+  <filter value="wheel(4)">
+    <description>4-spoke clock-wipe</description>
+    <entrance preset-id="21" preset-subtype="4"/>
+    <exit preset-id="21" preset-subtype="4"/>
+    <verification>derived-from-handler</verification>
+    <source>ECMA-376 preset 21 subtype 4; shares structure with wheel(1)/wheel(2) which are verified</source>
+  </filter>
+
+  <filter value="wheel(8)">
+    <description>8-spoke clock-wipe</description>
+    <entrance preset-id="21" preset-subtype="8"/>
+    <exit preset-id="21" preset-subtype="8"/>
+    <verification>derived-from-handler</verification>
+    <source>ECMA-376 preset 21 subtype 8; shares structure with wheel(1)/wheel(2) which are verified</source>
+  </filter>
+
+  <filter value="circle(in)">
+    <description>elliptical reveal from center outward</description>
+    <entrance preset-id="18" preset-subtype="12"/>
+    <exit preset-id="18" preset-subtype="12"/>
+    <verification>visually-verified</verification>
+    <source>.visual_tmp/filter_sweep.py frame_0001.png visibly shows elliptical reveal with white center and blue edges</source>
+  </filter>
+
+  <filter value="circle(out)">
+    <description>elliptical reveal from edges inward</description>
+    <entrance preset-id="19" preset-subtype="12"/>
+    <exit preset-id="19" preset-subtype="12"/>
+    <verification>visually-verified</verification>
+    <source>.visual_tmp/filter_sweep.py entrance sweep</source>
+  </filter>
+
+  <filter value="strips(downLeft)">
+    <description>diagonal strip reveal from upper-right to lower-left</description>
+    <entrance preset-id="25" preset-subtype="0"/>
+    <exit preset-id="25" preset-subtype="0"/>
+    <verification>visually-verified</verification>
+    <source>.visual_tmp/filter_sweep.py entrance sweep</source>
+  </filter>
+
+  <filter value="strips(downRight)">
+    <description>diagonal strip reveal from upper-left to lower-right</description>
+    <entrance preset-id="25" preset-subtype="1"/>
+    <exit preset-id="25" preset-subtype="1"/>
+    <verification>derived-from-handler</verification>
+    <source>ECMA-376 preset 25 subtype 1; mirrors strips(downLeft) structure</source>
+  </filter>
+
+  <filter value="strips(upLeft)">
+    <description>diagonal strip reveal from lower-right to upper-left</description>
+    <entrance preset-id="25" preset-subtype="2"/>
+    <exit preset-id="25" preset-subtype="2"/>
+    <verification>derived-from-handler</verification>
+    <source>ECMA-376 preset 25 subtype 2</source>
+  </filter>
+
+  <filter value="strips(upRight)">
+    <description>diagonal strip reveal from lower-left to upper-right</description>
+    <entrance preset-id="25" preset-subtype="3"/>
+    <exit preset-id="25" preset-subtype="3"/>
+    <verification>derived-from-handler</verification>
+    <source>ECMA-376 preset 25 subtype 3</source>
+  </filter>
+
+  <filter value="blinds(horizontal)">
+    <description>horizontal blinds reveal</description>
+    <entrance preset-id="42" preset-subtype="10"/>
+    <exit preset-id="42" preset-subtype="10"/>
+    <verification>visually-verified</verification>
+    <source>.visual_tmp/filter_sweep.py entrance sweep</source>
+  </filter>
+
+  <filter value="blinds(vertical)">
+    <description>vertical blinds reveal</description>
+    <entrance preset-id="42" preset-subtype="5"/>
+    <exit preset-id="42" preset-subtype="5"/>
+    <verification>derived-from-handler</verification>
+    <source>ECMA-376 preset 42 subtype 5; mirrors blinds(horizontal) structure</source>
+  </filter>
+
+  <filter value="checkerboard(across)">
+    <description>checkerboard pattern reveal left-to-right</description>
+    <entrance preset-id="43" preset-subtype="0"/>
+    <exit preset-id="43" preset-subtype="0"/>
+    <verification>visually-verified</verification>
+    <source>.visual_tmp/filter_sweep.py frame_0001.png visibly shows checker pattern with text partially visible through squares</source>
+  </filter>
+
+  <filter value="checkerboard(down)">
+    <description>checkerboard pattern reveal top-to-bottom</description>
+    <entrance preset-id="43" preset-subtype="1"/>
+    <exit preset-id="43" preset-subtype="1"/>
+    <verification>derived-from-handler</verification>
+    <source>ECMA-376 preset 43 subtype 1</source>
+  </filter>
+
+  <filter value="barn(inVertical)">
+    <description>vertical barn-door reveal collapsing inward</description>
+    <entrance preset-id="45" preset-subtype="0"/>
+    <exit preset-id="45" preset-subtype="0"/>
+    <verification>visually-verified</verification>
+    <source>.visual_tmp/filter_sweep.py entrance sweep</source>
+  </filter>
+
+  <filter value="barn(inHorizontal)">
+    <description>horizontal barn-door reveal collapsing inward</description>
+    <entrance preset-id="45" preset-subtype="1"/>
+    <exit preset-id="45" preset-subtype="1"/>
+    <verification>derived-from-handler</verification>
+    <source>ECMA-376 preset 45 subtype 1</source>
+  </filter>
+
+  <filter value="barn(outVertical)">
+    <description>vertical barn-door reveal opening outward</description>
+    <entrance preset-id="45" preset-subtype="2"/>
+    <exit preset-id="45" preset-subtype="2"/>
+    <verification>derived-from-handler</verification>
+    <source>ECMA-376 preset 45 subtype 2</source>
+  </filter>
+
+  <filter value="barn(outHorizontal)">
+    <description>horizontal barn-door reveal opening outward</description>
+    <entrance preset-id="45" preset-subtype="3"/>
+    <exit preset-id="45" preset-subtype="3"/>
+    <verification>derived-from-handler</verification>
+    <source>ECMA-376 preset 45 subtype 3</source>
+  </filter>
+
+  <filter value="randombar(horizontal)">
+    <description>horizontal random-bar reveal</description>
+    <entrance preset-id="52" preset-subtype="0"/>
+    <exit preset-id="52" preset-subtype="0"/>
+    <verification>visually-verified</verification>
+    <source>.visual_tmp/filter_sweep.py entrance sweep</source>
+  </filter>
+
+  <filter value="randombar(vertical)">
+    <description>vertical random-bar reveal</description>
+    <entrance preset-id="52" preset-subtype="1"/>
+    <exit preset-id="52" preset-subtype="1"/>
+    <verification>derived-from-handler</verification>
+    <source>ECMA-376 preset 52 subtype 1</source>
+  </filter>
+
+  <filter value="image">
+    <description>opacity holder used by emphasis effects (preset 9 transparency, preset 27 color pulse); takes an opacity value in the enclosing animEffect prLst="opacity: X"; NOT an entrance/exit filter on its own</description>
+    <entrance preset-id="-1" preset-subtype="-1"/>
+    <exit preset-id="-1" preset-subtype="-1"/>
+    <verification>visually-verified</verification>
+    <source>emph/transparency slot + .visual_tmp/xmas_tree_v3_compound.py</source>
+  </filter>
+
+</filter-vocabulary>

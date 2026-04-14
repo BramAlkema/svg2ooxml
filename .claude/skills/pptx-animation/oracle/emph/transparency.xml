@@ -1,0 +1,34 @@
+<p:par>
+    <p:cTn id="{PAR_ID}" dur="{DURATION_MS}" fill="hold" nodeType="clickEffect" grpId="{PAR_ID}" presetID="9" presetClass="emph" presetSubtype="0">
+        <p:stCondLst>
+            <p:cond delay="{DELAY_MS}"/>
+        </p:stCondLst>
+        <p:iterate type="lt">
+            <p:tmAbs val="0"/>
+        </p:iterate>
+        <p:childTnLst>
+            <p:set>
+                <p:cBhvr>
+                    <p:cTn id="{SET_BEHAVIOR_ID}" dur="{DURATION_MS}" fill="{INNER_FILL}"/>
+                    <p:tgtEl>
+                        <p:spTgt spid="{SHAPE_ID}"/>
+                    </p:tgtEl>
+                    <p:attrNameLst>
+                        <p:attrName>style.opacity</p:attrName>
+                    </p:attrNameLst>
+                </p:cBhvr>
+                <p:to>
+                    <p:strVal val="{TARGET_OPACITY}"/>
+                </p:to>
+            </p:set>
+            <p:animEffect filter="image" prLst="opacity: {TARGET_OPACITY}">
+                <p:cBhvr rctx="IE">
+                    <p:cTn id="{EFFECT_BEHAVIOR_ID}" dur="{DURATION_MS}" fill="{INNER_FILL}"/>
+                    <p:tgtEl>
+                        <p:spTgt spid="{SHAPE_ID}"/>
+                    </p:tgtEl>
+                </p:cBhvr>
+            </p:animEffect>
+        </p:childTnLst>
+    </p:cTn>
+</p:par>

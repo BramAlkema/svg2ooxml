@@ -1,0 +1,30 @@
+<fragment>
+    <p:animClr clrSpc="rgb" dir="cw">
+        <p:cBhvr>
+            <p:cTn id="{CLR_BEHAVIOR_ID}" dur="{DURATION_MS}" fill="{INNER_FILL}"/>
+            <p:tgtEl>
+                <p:spTgt spid="{SHAPE_ID}"/>
+            </p:tgtEl>
+            <p:attrNameLst>
+                <p:attrName>stroke.color</p:attrName>
+            </p:attrNameLst>
+        </p:cBhvr>
+        <p:to>
+            <a:srgbClr val="{TO_COLOR}"/>
+        </p:to>
+    </p:animClr>
+    <p:set>
+        <p:cBhvr>
+            <p:cTn id="{SET_BEHAVIOR_ID}" dur="{DURATION_MS}" fill="{INNER_FILL}"/>
+            <p:tgtEl>
+                <p:spTgt spid="{SHAPE_ID}"/>
+            </p:tgtEl>
+            <p:attrNameLst>
+                <p:attrName>stroke.on</p:attrName>
+            </p:attrNameLst>
+        </p:cBhvr>
+        <p:to>
+            <p:strVal val="true"/>
+        </p:to>
+    </p:set>
+</fragment>

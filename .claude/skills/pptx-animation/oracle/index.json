@@ -1,0 +1,303 @@
+{
+  "schema_version": 1,
+  "slots": {
+    "entr/filter_effect": {
+      "path": "entr/filter_effect.xml",
+      "preset_class": "entr",
+      "preset_id": null,
+      "preset_subtype": null,
+      "family_signature": "clickEffect|entr|*|set+animEffect|{filter}",
+      "content_tokens": ["FILTER", "PRESET_ID", "PRESET_SUBTYPE"],
+      "behavior_tokens": ["SET_BEHAVIOR_ID", "EFFECT_BEHAVIOR_ID"],
+      "bld_mode": "animBg",
+      "smil_patterns": [
+        "any SMIL entrance effect mapped to a PPT animEffect filter"
+      ],
+      "source": "generalisation of .visual_tmp/samples/experiment 7.pptx entrance presets — single template parameterised by FILTER string",
+      "verification": "visually-verified",
+      "notes": "Universal entrance effect template. Parameterised by FILTER (one of the PowerPoint-recognised filter strings: fade, dissolve, wipe(down|up|left|right), wedge, wheel(1|2|3|4|8), circle(in|out), strips(downLeft|downRight|upLeft|upRight), blinds(horizontal|vertical), checkerboard(across|down), barn(inVertical|inHorizontal|outVertical|outHorizontal), randombar(horizontal|vertical)) plus PRESET_ID/PRESET_SUBTYPE for Animation Pane round-trip fidelity. Structure identical to entr/fade — the only dynamic piece is the <p:animEffect filter=\"{FILTER}\"> attribute. The <p:set> style.visibility→visible primer fires for 1ms at the start so PPT's build engine knows to reveal the pre-hidden shape. Requires the multi-slide harness (blank slide 1 → animated slide 2) so PPT pre-hides before the click-group triggers. Verified via .visual_tmp/filter_sweep.py: all 16 tested filter values (fade, dissolve, wipe(down|up|left|right), wedge, wheel(1|2), circle(in|out), strips(downLeft), blinds(horizontal), checkerboard(across), barn(inVertical), randombar(horizontal)) animate correctly. wipe(down) shows top-down directional reveal, circle(in) shows elliptical reveal, checkerboard(across) shows checker pattern reveal — each filter renders its signature animation through this single template."
+    },
+    "exit/filter_effect": {
+      "path": "exit/filter_effect.xml",
+      "preset_class": "exit",
+      "preset_id": null,
+      "preset_subtype": null,
+      "family_signature": "clickEffect|exit|*|animEffect+set|{filter}",
+      "content_tokens": ["FILTER", "PRESET_ID", "PRESET_SUBTYPE", "SET_DELAY_MS"],
+      "behavior_tokens": ["SET_BEHAVIOR_ID", "EFFECT_BEHAVIOR_ID"],
+      "bld_mode": "animBg",
+      "smil_patterns": [
+        "any SMIL exit effect mapped to a PPT animEffect filter"
+      ],
+      "source": "generalisation of .visual_tmp/samples/experiment 7.pptx exit presets — single template parameterised by FILTER string",
+      "verification": "visually-verified",
+      "notes": "Universal exit effect template. Same filter vocabulary as entr/filter_effect but with transition=\"out\". Child order is animEffect FIRST then set (opposite of entrance), with the set firing at SET_DELAY_MS (typically duration-1) so the shape stays visible for the full animation and only disappears at the last moment. PRESET_ID/PRESET_SUBTYPE carry the exit preset identity for Animation Pane round-trip fidelity. Exit filters share the entrance filter vocabulary — the same fade/dissolve/wipe/wedge/wheel/circle/strips/blinds/checkerboard/barn/randombar values work with transition=\"out\". Structural equivalence to entr/filter_effect (same child primitives in mirrored order) carries the verification from the entrance sweep; individual exit filter values were not swept but the existing exit/fade slot which uses an identical shape is separately visually-verified."
+    },
+    "entr/fade": {
+      "path": "entr/fade.xml",
+      "preset_class": "entr",
+      "preset_id": 9,
+      "preset_subtype": 0,
+      "family_signature": "clickEffect|entr|9|set+animEffect|style.visibility",
+      "content_tokens": [],
+      "behavior_tokens": ["SET_BEHAVIOR_ID", "EFFECT_BEHAVIOR_ID"],
+      "smil_patterns": [
+        "animate[opacity,0,1,linear]",
+        "animate[opacity,0,1]"
+      ],
+      "source": "tmp/powerpoint-oracle-groups-triggers-starter.oracle/.../slide7/timing.normalized.xml",
+      "verification": "visually-verified",
+      "notes": "Exact structural match to starter-deck slide7 preset 9 entrance fade. Verified in Microsoft PowerPoint for Mac via tools/visual/animation_tune fade_in: slide-area pixel mean transitions from white (pre-hide) through a faint-blue mid-fade frame to full shape colour. Requires the multi-slide harness so the build engine pre-hides before the click-group fires."
+    },
+    "exit/fade": {
+      "path": "exit/fade.xml",
+      "preset_class": "exit",
+      "preset_id": 9,
+      "preset_subtype": 0,
+      "family_signature": "clickEffect|exit|9|animEffect+set|style.visibility",
+      "content_tokens": ["SET_DELAY_MS"],
+      "behavior_tokens": ["SET_BEHAVIOR_ID", "EFFECT_BEHAVIOR_ID"],
+      "smil_patterns": [
+        "animate[opacity,1,0,linear]",
+        "animate[opacity,1,0]"
+      ],
+      "source": "docs/research/powerpoint_oracle/selected/examples-pptx-slide12/slide12 (preset 47 exit fade shape)",
+      "verification": "visually-verified",
+      "notes": "Child order is animEffect then set (opposite of entr/fade). The visibility set fires at SET_DELAY_MS (typically duration_ms - 1) so the shape stays visible until the fade-out completes. Verified via tools/visual/animation_tune exit_fade: frame 1 shows shape visible on slide 2 pre-trigger, frame 2+ shows shape gone after the fade-out. Preset ID 9 is carried over from entr/fade; the oracle corpus has no preset 9 exit fade sample, only 31/37/47/53 with richer children (motion + fade + set). Revisit preset ID when a matching sample is captured."
+    },
+    "entr/appear": {
+      "path": "entr/appear.xml",
+      "preset_class": "entr",
+      "preset_id": 1,
+      "preset_subtype": 0,
+      "family_signature": "clickEffect|entr|1|set|style.visibility",
+      "content_tokens": [],
+      "behavior_tokens": ["BEHAVIOR_ID"],
+      "smil_patterns": [
+        "set[visibility,visible]",
+        "set[display,inline]"
+      ],
+      "source": "docs/research/powerpoint_oracle/selected/cloudpresentationpack-azurefunc-animation/slide1",
+      "verification": "visually-verified",
+      "notes": "Outer cTn carries NO dur attribute — fill='hold' alone makes the visibility set persist. Adding dur (or wrapping in build_delayed_child_par which supplies its own dur) causes PowerPoint to expire the container and revert the set, making the shape disappear after the animation completes. Verified via tools/visual/animation_tune appear_visible: frame 0 blank slide 1, frame 1 transitions to slide 2 with the set already fired, frames 2+ hold at the visible state."
+    },
+    "emph/color": {
+      "path": "emph/color.xml",
+      "preset_class": "emph",
+      "preset_id": 7,
+      "preset_subtype": null,
+      "family_signature": "withEffect|emph|7|animClr|fill.color",
+      "content_tokens": ["FROM_COLOR", "TO_COLOR", "TARGET_ATTRIBUTE", "INNER_FILL"],
+      "behavior_tokens": ["BEHAVIOR_ID"],
+      "smil_patterns": [
+        "animate[fill,from,to]",
+        "animate[stroke,from,to]",
+        "animateColor[*,from,to]"
+      ],
+      "source": "tests/golden/animation/color_red_to_blue.xml",
+      "verification": "visually-verified",
+      "notes": "TARGET_ATTRIBUTE = fill.color|line.color|shadow.color etc. INNER_FILL is the SVG fill_mode mapped to PPT 'hold' or 'remove'. Verified via tools/visual/animation_tune color_change: slide-area mean transitions from red-tinted (235, 221, 228) at frame 1 to blue (218, 222, 247) at frames 5+. CAVEAT: oracle corpus has an animClr example with presetID=27 nodeType=clickEffect grpId=0 using schemeClr (different preset, cleaner inner cTn) — our preset 7 withEffect shape plays correctly but is not the exact shape PPT authors for 'Change Fill Color'. Revisit when an oracle sample for preset 7 emph is captured."
+    },
+    "emph/rotate": {
+      "path": "emph/rotate.xml",
+      "preset_class": "emph",
+      "preset_id": 8,
+      "preset_subtype": 0,
+      "family_signature": "clickEffect|emph|8|animRot|r",
+      "content_tokens": ["ROTATION_BY", "INNER_FILL"],
+      "behavior_tokens": ["BEHAVIOR_ID"],
+      "smil_patterns": [
+        "animateTransform[rotate,by]",
+        "animateTransform[rotate,from,to]"
+      ],
+      "source": "tests/golden/animation/rotate_90deg.xml",
+      "verification": "visually-verified",
+      "notes": "ROTATION_BY is in 60000ths of a degree (PPT angle factor). INNER_FILL is the SVG fill_mode mapped to 'hold' or 'remove'. Verified via tools/visual/animation_tune rotate_spin (90-degree quarter turn): shape bbox visibly changes orientation between the pre-rotation and post-rotation frames."
+    },
+    "emph/scale": {
+      "path": "emph/scale.xml",
+      "preset_class": "emph",
+      "preset_id": 6,
+      "preset_subtype": 0,
+      "family_signature": "clickEffect|emph|6|animScale|-",
+      "content_tokens": ["FROM_X", "FROM_Y", "TO_X", "TO_Y", "INNER_FILL"],
+      "behavior_tokens": ["BEHAVIOR_ID"],
+      "smil_patterns": [
+        "animateTransform[scale,from,to]"
+      ],
+      "source": "tests/golden/animation/scale_uniform.xml",
+      "verification": "visually-verified",
+      "notes": "Scale values in 100000ths (PPT scale factor). INNER_FILL is the SVG fill_mode mapped to 'hold' or 'remove'. Verified via tools/visual/animation_tune scale_grow: non-background pixel share climbs from 41 (baseline) through 45 (mid-grow) to 54 (settled) as the shape doubles in size. Companion animMotion for origin compensation is NOT emitted by this template alone — see emph/scale_with_origin for the composed version when authored."
+    },
+    "emph/compound": {
+      "path": "emph/compound.xml",
+      "preset_class": "emph",
+      "preset_id": null,
+      "preset_subtype": null,
+      "family_signature": "clickEffect|emph|-|compound|-",
+      "content_tokens": [],
+      "behavior_tokens": [],
+      "bld_mode": "paragraph",
+      "smil_patterns": [
+        "any stacked combination of animate/animateColor/animateMotion/animateTransform/set on one element"
+      ],
+      "source": "empirically verified via .visual_tmp/xmas_tree_v2.py — 11 heterogeneous child behaviors under ONE cTn fire simultaneously on a single click",
+      "verification": "visually-verified",
+      "notes": "Universal compound slot. The template is a bare <p:par>/<p:cTn>/<p:childTnLst> scaffold with no preset ID and an empty childTnLst — callers use AnimationOracle.instantiate_compound(behaviors=[...]) instead of instantiate(...) to inject behavior fragment children from src/svg2ooxml/assets/animation_oracle/emph/behaviors/*.xml. Each fragment is one or more raw <p:set>/<p:animEffect>/<p:animClr>/<p:animRot>/<p:animScale>/<p:animMotion>/<p:anim> elements that are substituted with their own tokens and appended as direct children of this cTn. PPT's rendering engine does NOT require preset IDs to fire the child behaviors — presetID/presetSubtype are cosmetic UI metadata only. This slot subsumes every single-preset slot because any combination of behaviors can be composed inside one cTn. Build mode is 'paragraph' (build=\"p\" rev=\"1\") so text-paragraph fragments (bold, underline, text_color, text_scale) fire correctly alongside shape fragments. Verified end-to-end via the xmas tree v2 experiment: 8 effects (transparency + shape_fill_color + text_color + bold + underline + rotate + scale + motion) stacked in one cTn, all played simultaneously on one Next keypress with delta_max 7.51 (same as the nested-par v1 with 27 XML elements vs this v2's 11)."
+    },
+    "emph/transparency": {
+      "path": "emph/transparency.xml",
+      "preset_class": "emph",
+      "preset_id": 9,
+      "preset_subtype": 0,
+      "family_signature": "clickEffect|emph|9|set+animEffect|style.opacity",
+      "content_tokens": ["TARGET_OPACITY", "INNER_FILL"],
+      "behavior_tokens": ["SET_BEHAVIOR_ID", "EFFECT_BEHAVIOR_ID"],
+      "bld_mode": "animBg",
+      "smil_patterns": [
+        "animate[opacity,from,to_partial]",
+        "set[opacity,partial]"
+      ],
+      "source": "tmp/example5.pptx (preset 9 Transparency) and user-authored .visual_tmp/samples/attrsearch example.pptx",
+      "verification": "visually-verified",
+      "notes": "PPT's 'Transparency' emphasis — fades the WHOLE SHAPE (fill + stroke + text together) to a partial opacity and holds there. Uses the legacy <p:animEffect filter=\"image\" prLst=\"opacity: X\"> with a paired <p:set> on style.opacity. TARGET_OPACITY is a decimal string like '0.3' (NOT a PPT fltVal). The outer <p:iterate type=\"lt\"><p:tmAbs val=\"0\"/></p:iterate> is boilerplate PPT emits but does not restrict the effect to text. Verified visually via .visual_tmp/transparency_experiment.py: frame 0 shows opaque rectangle, frame 5 shows ~30% transparent rectangle with faded text."
+    },
+    "emph/text_color": {
+      "path": "emph/text_color.xml",
+      "preset_class": "emph",
+      "preset_id": 3,
+      "preset_subtype": 2,
+      "family_signature": "clickEffect|emph|3|animClr|style.color",
+      "content_tokens": ["TO_COLOR", "INNER_FILL"],
+      "behavior_tokens": ["BEHAVIOR_ID"],
+      "bld_mode": "animBg",
+      "smil_patterns": [
+        "animate[fill,from,to] on <text>",
+        "animate[color,from,to] on <text>",
+        "animateColor[fill,from,to] on <text>"
+      ],
+      "source": "user-authored .visual_tmp/samples/attrsearch example.pptx (preset 3 subtype 2)",
+      "verification": "visually-verified",
+      "notes": "PPT's 'Change Font Color' emphasis. Distinct from emph/color which targets shape fill via 'fillcolor' attrName — this targets 'style.color' (the text color inside the shape). Uses per-letter iterate (tmPct=0, simultaneous) and <p:cBhvr override=\"childStyle\">. TO_COLOR is the 6-hex srgbClr value (e.g. 'E81E1E'). Verified visually via .visual_tmp/transparency_experiment.py: frame 5 shows text tinted to target color while rectangle fill unchanged."
+    },
+    "emph/stroke_color": {
+      "path": "emph/stroke_color.xml",
+      "preset_class": "emph",
+      "preset_id": 7,
+      "preset_subtype": 2,
+      "family_signature": "clickEffect|emph|7|animClr+set|stroke.color+stroke.on",
+      "content_tokens": ["TO_COLOR", "INNER_FILL"],
+      "behavior_tokens": ["CLR_BEHAVIOR_ID", "SET_BEHAVIOR_ID"],
+      "bld_mode": "animBg",
+      "smil_patterns": [
+        "animate[stroke,from,to]",
+        "animateColor[stroke,from,to]"
+      ],
+      "source": "tmp/example4.pptx and tmp/example5.pptx (preset 7 subtype 2)",
+      "verification": "visually-verified",
+      "notes": "PPT's 'Change Line Color' emphasis. Pairs <p:animClr> on 'stroke.color' with a companion <p:set> on 'stroke.on'→'true' as a primer to ensure the stroke is visible (mirrors the fillcolor + fill.on + fill.type triple pattern). No iterate — per-shape effect, not per-letter. TO_COLOR is the 6-hex srgbClr value. Verified visually via .visual_tmp/transparency_experiment.py: frame 15 shows a clear red border around the rectangle that was borderless at frame 0."
+    },
+    "emph/bold": {
+      "path": "emph/bold.xml",
+      "preset_class": "emph",
+      "preset_id": 15,
+      "preset_subtype": 0,
+      "family_signature": "clickEffect|emph|15|set|style.fontWeight",
+      "content_tokens": [],
+      "behavior_tokens": ["BEHAVIOR_ID"],
+      "bld_mode": "paragraph",
+      "smil_patterns": [
+        "set[font-weight,bold] on <text>",
+        "animate[font-weight,normal,bold] on <text>"
+      ],
+      "source": "tmp/example5.pptx (preset 15 Bold)",
+      "verification": "visually-verified",
+      "notes": "PPT's 'Bold' emphasis. Applies <p:set> on 'style.fontWeight' to 'bold' via childStyle override, targeting <p:txEl><p:pRg st=\"0\" end=\"0\"/></p:txEl> for the first paragraph. Uses per-letter iterate with tmAbs=25 (25ms stagger between letters) for a typewriter-like cascade. REQUIRES bldP with build=\"p\" rev=\"1\" — build_timing_tree must emit paragraph-mode bldP entries for the animated group. Verified visually: text goes from non-bold to bold letter-by-letter."
+    },
+    "emph/underline": {
+      "path": "emph/underline.xml",
+      "preset_class": "emph",
+      "preset_id": 18,
+      "preset_subtype": 0,
+      "family_signature": "clickEffect|emph|18|set|style.textDecorationUnderline",
+      "content_tokens": [],
+      "behavior_tokens": ["BEHAVIOR_ID"],
+      "bld_mode": "paragraph",
+      "smil_patterns": [
+        "set[text-decoration,underline] on <text>",
+        "animate[text-decoration,none,underline] on <text>"
+      ],
+      "source": "tmp/example4.pptx and tmp/example5.pptx (preset 18 Underline)",
+      "verification": "visually-verified",
+      "notes": "PPT's 'Underline' emphasis. <p:set> on 'style.textDecorationUnderline' to 'true' via childStyle override, targeting first paragraph. Uses tmPct=4000 (40% stagger) so each letter's underline appears with a staggered cascade. REQUIRES bldP with build=\"p\" rev=\"1\". Verified visually: underline appears under each letter sequentially."
+    },
+    "emph/shape_fill_color": {
+      "path": "emph/shape_fill_color.xml",
+      "preset_class": "emph",
+      "preset_id": 19,
+      "preset_subtype": 0,
+      "family_signature": "clickEffect|emph|19|animClr+animClr+set+set|bg|style.color+fillcolor+fill.type+fill.on",
+      "content_tokens": ["TO_COLOR", "INNER_FILL"],
+      "behavior_tokens": ["STYLE_CLR_BEHAVIOR_ID", "FILL_CLR_BEHAVIOR_ID", "FILL_TYPE_BEHAVIOR_ID", "FILL_ON_BEHAVIOR_ID"],
+      "bld_mode": "allAtOnce",
+      "smil_patterns": [
+        "animate[fill,from,to] on <rect>/<circle>/<path>",
+        "animateColor[fill,from,to] on shape"
+      ],
+      "source": "user-authored .visual_tmp/samples/experiment 6.pptx preset 19 clickEffect half (cTn id=31)",
+      "verification": "visually-verified",
+      "notes": "PPT's 'Change Fill Color' emphasis scoped to the shape background (NOT text). This is the native PPT path for animating the shape's fill color — distinct from the legacy emph/color slot which targets fillcolor without <p:bg/>. Uses the quadruple primer pattern: <p:animClr> style.color + <p:animClr> fillcolor + <p:set> fill.type→solid + <p:set> fill.on→true, all targeting <p:spTgt spid=X><p:bg/></p:spTgt>. The quadruple ensures the fill is visible (fill.on=true), solid (fill.type=solid), and tweened on both style.color and fillcolor simultaneously (schemeClr-compatible dual path). TO_COLOR is a 6-hex srgbClr value. Verified visually via .visual_tmp/transparency_experiment.py: rectangle fill tweens blue → red at frame 15, text stays white (not part of target). In example5.pptx/experiment 6.pptx this preset also has a withEffect sibling with same grpId targeting <p:txEl><p:pRg> for combined fill+text color change — that full compound should use this slot PLUS emph/text_color in parallel."
+    },
+    "emph/color_pulse": {
+      "path": "emph/color_pulse.xml",
+      "preset_class": "emph",
+      "preset_id": 27,
+      "preset_subtype": 0,
+      "family_signature": "clickEffect|emph|27|animClr+animClr+set+set-autoRev|text|style.color+fillcolor+fill.type+fill.on",
+      "content_tokens": ["TO_COLOR", "INNER_FILL"],
+      "behavior_tokens": ["STYLE_CLR_BEHAVIOR_ID", "FILL_CLR_BEHAVIOR_ID", "FILL_TYPE_BEHAVIOR_ID", "FILL_ON_BEHAVIOR_ID"],
+      "bld_mode": "paragraph",
+      "smil_patterns": [
+        "animate[fill,orig,pulse,orig] on <text>",
+        "animate[color,orig,pulse,orig] on <text> with autoRev"
+      ],
+      "source": "user-authored .visual_tmp/samples/experiment 6.pptx preset 27 (cTn id=5)",
+      "verification": "visually-verified",
+      "notes": "PPT's 'Color Pulse' emphasis on text. Same quadruple structure as emph/shape_fill_color but with: (1) <p:txEl><p:pRg st=\"0\" end=\"0\"/> target for text instead of <p:bg/>, (2) autoRev=\"1\" fill=\"remove\" on inner cTns so the color flashes forward then reverses to original, (3) outer cTn fill=\"remove\", (4) <p:iterate type=\"lt\"><p:tmPct val=\"0\"/></p:iterate> for per-letter simultaneous firing. Duration governs the single-direction flash (total effect = 2×DURATION_MS due to autoRev). Verified visually: text Experiment flashes to red at frame 5, returns to white after capture window. Requires bldP build=\"p\" rev=\"1\" for paragraph-level firing."
+    },
+    "emph/blink": {
+      "path": "emph/blink.xml",
+      "preset_class": "emph",
+      "preset_id": 35,
+      "preset_subtype": 0,
+      "family_signature": "clickEffect|emph|35|anim-discrete|style.visibility",
+      "content_tokens": [],
+      "behavior_tokens": ["BEHAVIOR_ID"],
+      "bld_mode": "animBg",
+      "smil_patterns": [
+        "animate[visibility,hidden,visible,hidden,visible] discrete",
+        "set[visibility,hidden]+set[visibility,visible] sequence"
+      ],
+      "source": "tmp/example4.pptx (preset 35 Blink)",
+      "verification": "visually-verified",
+      "notes": "PPT's 'Blink' emphasis. <p:anim calcmode=\"discrete\"> with two tav keyframes on style.visibility: hidden at tm=0, visible at tm=50000 (midpoint). No iterate — whole-shape effect. For repeat/multi-blink patterns the handler should add repeatCount to the outer cTn. Verified visually: rectangle disappears for half the duration then reappears."
+    },
+    "path/motion": {
+      "path": "path/motion.xml",
+      "preset_class": "path",
+      "preset_id": null,
+      "preset_subtype": null,
+      "family_signature": "{NODE_TYPE}|path|-|animMotion|-",
+      "content_tokens": ["PATH_DATA", "NODE_TYPE", "INNER_FILL"],
+      "behavior_tokens": ["BEHAVIOR_ID"],
+      "smil_patterns": [
+        "animateMotion[path]",
+        "animate[ppt_x,ppt_y]",
+        "animateTransform[translate,from,to]"
+      ],
+      "source": "tests/golden/animation/numeric_x.xml",
+      "verification": "visually-verified",
+      "notes": "PATH_DATA is a PPT motion-path string (coordinates normalized to 0-1, ends with E). NODE_TYPE is 'clickEffect' for standalone motion (motion.py) or 'withEffect' for composed motion (numeric.py width→scale+motion). INNER_FILL is the SVG fill_mode mapped to 'hold' or 'remove'. Verified via tools/visual/animation_tune motion_translate: shape centre measured at (1141, 803) pre-trigger and (1457, 882) post-motion — ~1 inch right, ~0.3 inch down, matching the authored path. Does NOT express rotation (rAng) — motion animations with auto-rotate or fixed-rAng fall through to the imperative path."
+    }
+  }
+}
