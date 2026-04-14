@@ -189,6 +189,89 @@ These propagate implicitly into every fragment as `{SHAPE_ID}`,
 Per-slot tokens are declared in `index.json` as `behavior_tokens` and
 `content_tokens`. See each slot's `notes` field for semantics.
 
+## Entrance and exit filter vocabulary
+
+PowerPoint's entrance and exit presets are all expressed as a single
+`<p:animEffect transition="in|out" filter="X">` element with a filter
+string picked from a fixed vocabulary. The `entr/filter_effect` and
+`exit/filter_effect` oracle slots parameterise this completely — one
+template per direction, with `FILTER` + `PRESET_ID` + `PRESET_SUBTYPE`
+tokens substituting into the same structure.
+
+### Verified filter strings
+
+Extracted from `.visual_tmp/samples/experiment 7.pptx` and empirically
+swept via `.visual_tmp/filter_sweep.py`:
+
+| Filter                          | Preset (example) | Visible effect                         |
+| ------------------------------- | ---------------- | -------------------------------------- |
+| `fade`                          | entr 9 / exit 9  | opacity fade in/out                    |
+| `dissolve`                      | entr 10 / exit 10 | pixel-noise dissolve                   |
+| `wipe(down)`                    | entr 22/4        | top-to-bottom directional reveal       |
+| `wipe(up)`                      | entr 22/1        | bottom-to-top directional reveal       |
+| `wipe(left)`                    | entr 22/8        | right-to-left directional reveal       |
+| `wipe(right)`                   | entr 22/2        | left-to-right directional reveal       |
+| `wedge`                         | entr 37          | wedge-slice reveal                     |
+| `wheel(1)`                      | entr 21/1        | 1-spoke clock-wipe                     |
+| `wheel(2)`                      | entr 21/2        | 2-spoke clock-wipe                     |
+| `circle(in)`                    | entr 18/12       | elliptical reveal from center          |
+| `circle(out)`                   | entr 19/12       | elliptical reveal to edges             |
+| `strips(downLeft)`              | entr 25          | diagonal strip reveal                  |
+| `blinds(horizontal)`            | entr 42/10       | horizontal blinds                      |
+| `checkerboard(across)`          | entr 43          | checkerboard pattern reveal            |
+| `barn(inVertical)`              | entr 45          | vertical barn-door reveal              |
+| `randombar(horizontal)`         | entr 52          | horizontal random bar reveal           |
+
+All 16 were verified to animate as entrance effects via the oracle
+template. Each filter's sub-parameter (e.g. the direction in
+`wipe(down)`, the spoke count in `wheel(1)`) is part of the string literal
+— change the subparameter to get directional variants without modifying
+the template.
+
+### Usage
+
+```python
+par = oracle.instantiate(
+    "entr/filter_effect",
+    shape_id="2",
+    par_id=6,
+    duration_ms=1500,
+    delay_ms=0,
+    SET_BEHAVIOR_ID=7,
+    EFFECT_BEHAVIOR_ID=71,
+    FILTER="circle(in)",
+    PRESET_ID=18,
+    PRESET_SUBTYPE=12,
+)
+```
+
+Pass `PRESET_ID` / `PRESET_SUBTYPE` matching PowerPoint's preset catalog
+so the effect round-trips through the Animation Pane with the right
+name. For pure playback without Pane fidelity, any non-conflicting preset
+IDs work.
+
+### Exit template
+
+`exit/filter_effect` uses the same filter vocabulary with an extra
+`SET_DELAY_MS` token controlling when the shape becomes hidden (typically
+`duration_ms - 1` so the effect fully plays before the shape disappears).
+
+```python
+par = oracle.instantiate(
+    "exit/filter_effect",
+    shape_id="2",
+    par_id=6,
+    duration_ms=500,
+    delay_ms=0,
+    SET_BEHAVIOR_ID=7,
+    EFFECT_BEHAVIOR_ID=71,
+    FILTER="wipe(up)",
+    PRESET_ID=22,
+    PRESET_SUBTYPE=1,
+    SET_DELAY_MS=499,
+)
+```
+
 ## `bldP` build modes
 
 PowerPoint's `<p:bldLst>` needs an entry per animation group. The required

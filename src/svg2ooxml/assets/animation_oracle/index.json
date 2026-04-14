@@ -1,6 +1,38 @@
 {
   "schema_version": 1,
   "slots": {
+    "entr/filter_effect": {
+      "path": "entr/filter_effect.xml",
+      "preset_class": "entr",
+      "preset_id": null,
+      "preset_subtype": null,
+      "family_signature": "clickEffect|entr|*|set+animEffect|{filter}",
+      "content_tokens": ["FILTER", "PRESET_ID", "PRESET_SUBTYPE"],
+      "behavior_tokens": ["SET_BEHAVIOR_ID", "EFFECT_BEHAVIOR_ID"],
+      "bld_mode": "animBg",
+      "smil_patterns": [
+        "any SMIL entrance effect mapped to a PPT animEffect filter"
+      ],
+      "source": "generalisation of .visual_tmp/samples/experiment 7.pptx entrance presets — single template parameterised by FILTER string",
+      "verification": "visually-verified",
+      "notes": "Universal entrance effect template. Parameterised by FILTER (one of the PowerPoint-recognised filter strings: fade, dissolve, wipe(down|up|left|right), wedge, wheel(1|2|3|4|8), circle(in|out), strips(downLeft|downRight|upLeft|upRight), blinds(horizontal|vertical), checkerboard(across|down), barn(inVertical|inHorizontal|outVertical|outHorizontal), randombar(horizontal|vertical)) plus PRESET_ID/PRESET_SUBTYPE for Animation Pane round-trip fidelity. Structure identical to entr/fade — the only dynamic piece is the <p:animEffect filter=\"{FILTER}\"> attribute. The <p:set> style.visibility→visible primer fires for 1ms at the start so PPT's build engine knows to reveal the pre-hidden shape. Requires the multi-slide harness (blank slide 1 → animated slide 2) so PPT pre-hides before the click-group triggers. Verified via .visual_tmp/filter_sweep.py: all 16 tested filter values (fade, dissolve, wipe(down|up|left|right), wedge, wheel(1|2), circle(in|out), strips(downLeft), blinds(horizontal), checkerboard(across), barn(inVertical), randombar(horizontal)) animate correctly. wipe(down) shows top-down directional reveal, circle(in) shows elliptical reveal, checkerboard(across) shows checker pattern reveal — each filter renders its signature animation through this single template."
+    },
+    "exit/filter_effect": {
+      "path": "exit/filter_effect.xml",
+      "preset_class": "exit",
+      "preset_id": null,
+      "preset_subtype": null,
+      "family_signature": "clickEffect|exit|*|animEffect+set|{filter}",
+      "content_tokens": ["FILTER", "PRESET_ID", "PRESET_SUBTYPE", "SET_DELAY_MS"],
+      "behavior_tokens": ["SET_BEHAVIOR_ID", "EFFECT_BEHAVIOR_ID"],
+      "bld_mode": "animBg",
+      "smil_patterns": [
+        "any SMIL exit effect mapped to a PPT animEffect filter"
+      ],
+      "source": "generalisation of .visual_tmp/samples/experiment 7.pptx exit presets — single template parameterised by FILTER string",
+      "verification": "visually-verified",
+      "notes": "Universal exit effect template. Same filter vocabulary as entr/filter_effect but with transition=\"out\". Child order is animEffect FIRST then set (opposite of entrance), with the set firing at SET_DELAY_MS (typically duration-1) so the shape stays visible for the full animation and only disappears at the last moment. PRESET_ID/PRESET_SUBTYPE carry the exit preset identity for Animation Pane round-trip fidelity. Exit filters share the entrance filter vocabulary — the same fade/dissolve/wipe/wedge/wheel/circle/strips/blinds/checkerboard/barn/randombar values work with transition=\"out\". Structural equivalence to entr/filter_effect (same child primitives in mirrored order) carries the verification from the entrance sweep; individual exit filter values were not swept but the existing exit/fade slot which uses an identical shape is separately visually-verified."
+    },
     "entr/fade": {
       "path": "entr/fade.xml",
       "preset_class": "entr",
