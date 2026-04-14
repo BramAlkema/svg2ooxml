@@ -311,32 +311,68 @@ Promote templates up this ladder by:
 
 ## Empirically falsified paths (DO NOT USE)
 
-These XML shapes are documented or implied by ECMA-376 and legacy Microsoft
-sources, but Microsoft PowerPoint does NOT play them. Adding them to the
-oracle without empirical verification leads to silently broken output.
+The authoritative catalog of XML shapes that PPT's parser accepts but its
+playback engine silently drops lives in `dead_paths.xml` as a structured
+SSOT. Each entry names the element + attributes of the dead shape, the
+empirical source, and a pointer to the verified replacement slot.
 
-| Shape                                                 | Status                                 |
-| ----------------------------------------------------- | -------------------------------------- |
-| `<p:anim>` on `fill.opacity`                          | **Silently dropped** at playback       |
-| `<p:anim>` on `stroke.opacity`                        | **Silently dropped**                   |
-| `<p:anim>` on `style.opacity` (partial range)         | **Silently dropped**                   |
-| `<p:anim>` on `stroke.weight`                         | **Silently dropped**                   |
-| `<p:anim>` on `line.weight`                           | **Silently dropped**                   |
-| `<p:animEffect filter="image" prLst="opacity:X">` outside preset 9 | **Silently dropped** |
-| `<p:anim>` on `style.fontSize` in isolation           | **Silently dropped** — requires full preset 28 compound (animClr + animClr + set + anim) as siblings in one cTn |
+```python
+oracle = default_oracle()
+for dp in oracle.dead_paths():
+    print(f"{dp.id}: {dp.element} — verdict={dp.verdict}")
+    print(f"  replacement: {dp.replacement_slot}")
 
-For opacity tweens, use:
-- `entr/fade` (0→1) or `exit/fade` (1→0) for full fade transitions
-- `emph/transparency` or the `transparency` behavior fragment for partial
-  fade-and-hold (via `<p:set>` style.opacity + `<p:animEffect filter="image">`)
+dp = oracle.dead_path("anim-fill-opacity")
+dp.replacement_slot  # "emph/transparency"
+```
 
-For stroke weight: no native path exists. SVG line-width tweens must be
-rendered to EMF via the rasterizer fallback.
+Current dead-path entries:
 
-For text font size: use the `fill_color` fragment's compound form (preset
-28 equivalent) with the full quadruple plus a `<p:anim to="N">` on
-`style.fontSize` — the `to` attribute carries a scalar multiplier, not a
-`<p:tavLst>` percent value. Isolated font-size anims do not fire.
+- `anim-fill-opacity` → use `emph/transparency`
+- `anim-stroke-opacity` → no native path, EMF fallback only
+- `anim-stroke-weight` / `anim-line-weight` → no native path, EMF fallback only
+- `anim-style-fontsize-isolated` → requires full preset 28 compound
+- `animeffect-image-isolated` → use `emph/transparency` (pair with `<p:set>`)
+- `anim-style-opacity-tavlst` → use `emph/transparency` or `entr/fade`/`exit/fade`
+
+Negative-test invariants consume this SSOT: `test_dead_paths_*` tests
+assert that every dead-path `attrName` value is NOT in the valid
+`attrname_vocabulary.xml` (or, for context-dependent entries like
+`style.fontSize`, that the verdict marks it as `requires-compound`).
+
+## attrName vocabulary
+
+The complete set of `<p:attrName>` values that PowerPoint emits natively
+lives in `attrname_vocabulary.xml` as a structured SSOT. PowerPoint's
+parser accepts additional values (see `dead_paths.xml`) but its playback
+engine only honors the 17 listed here.
+
+```python
+oracle = default_oracle()
+vocab = oracle.attrname_vocabulary()       # tuple[AttrNameEntry, ...]
+entry = oracle.attrname_entry("fillcolor") # by-value lookup
+oracle.is_valid_attrname("fill.opacity")   # False — see dead_paths.xml
+```
+
+The 17-item set, by category:
+
+- **geometry**: `ppt_x`, `ppt_y`, `ppt_w`, `ppt_h`
+- **rotation**: `r`, `style.rotation`
+- **visibility**: `style.visibility`
+- **color**: `fillcolor`, `stroke.color`, `style.color`
+- **fill-primer**: `fill.type`, `fill.on`
+- **stroke-primer**: `stroke.on`
+- **text-formatting**: `style.fontWeight`, `style.textDecorationUnderline`, `style.fontSize`
+- **opacity**: `style.opacity`
+
+Each entry's `used_by` field lists which oracle fragments or slots
+reference it. To add a new attrName, first verify empirically via the
+tune loop that PPT actually animates it (not just that the parser
+accepts it), then add a `<attrname>` element to the SSOT.
+
+Negative tests enforce the vocabulary: `test_attrname_vocabulary_complete_17`
+will fail if anyone adds, drops, or renames an entry without updating
+both the SSOT and the test.
 
 ## Runtime targeting wrappers
 

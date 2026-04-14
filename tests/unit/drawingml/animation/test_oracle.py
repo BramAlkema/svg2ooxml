@@ -10,7 +10,9 @@ from lxml import etree
 
 from svg2ooxml.drawingml.animation.oracle import (
     AnimationOracle,
+    AttrNameEntry,
     BehaviorFragment,
+    DeadPath,
     FilterEntry,
     OracleSlotError,
     default_oracle,
@@ -382,3 +384,133 @@ def test_filter_vocabulary_preset_subtype_mappings_consistent() -> None:
     # Both are preset 22, different subtypes
     assert wipe_down.entrance_preset_id == wipe_up.entrance_preset_id == 22
     assert wipe_down.entrance_preset_subtype != wipe_up.entrance_preset_subtype
+
+
+# -------------------------------------------------------- attrName vocabulary
+
+
+def test_attrname_vocabulary_loads_and_is_cached() -> None:
+    oracle = default_oracle()
+    vocab1 = oracle.attrname_vocabulary()
+    vocab2 = oracle.attrname_vocabulary()
+    assert vocab1 is vocab2
+    assert len(vocab1) == 17
+    assert all(isinstance(e, AttrNameEntry) for e in vocab1)
+
+
+def test_attrname_vocabulary_complete_17() -> None:
+    """The 17-item attrName set confirmed complete by scanning
+    tmp/example4.pptx, tmp/example5.pptx, experiment 6/7.pptx.
+    Any change to this set requires new empirical evidence."""
+    oracle = default_oracle()
+    values = {e.value for e in oracle.attrname_vocabulary()}
+    expected = {
+        "ppt_x", "ppt_y", "ppt_w", "ppt_h",
+        "r", "style.rotation",
+        "style.visibility",
+        "fillcolor", "fill.type", "fill.on",
+        "stroke.color", "stroke.on",
+        "style.color",
+        "style.fontWeight", "style.textDecorationUnderline", "style.fontSize",
+        "style.opacity",
+    }
+    assert values == expected, f"drift from 17-item SSOT: {values ^ expected}"
+
+
+def test_attrname_lookup_and_validation() -> None:
+    oracle = default_oracle()
+    assert oracle.is_valid_attrname("fillcolor") is True
+    assert oracle.is_valid_attrname("fill.opacity") is False
+
+    entry = oracle.attrname_entry("style.visibility")
+    assert entry.category == "visibility"
+    assert entry.scope == "whole-shape"
+    assert entry.verification == "visually-verified"
+
+    with pytest.raises(OracleSlotError):
+        oracle.attrname_entry("not_a_real_attrname")
+
+
+def test_attrname_visibility_most_used() -> None:
+    """Sanity check: style.visibility is referenced by the most oracle slots,
+    matching its role as the primer/toggle for every entrance/exit/appear/blink
+    effect."""
+    oracle = default_oracle()
+    entry = oracle.attrname_entry("style.visibility")
+    # Reference set includes: entr/appear, entr/fade, exit/fade, entr/filter_effect,
+    # exit/filter_effect, emph/blink, blink behavior fragment
+    assert "entr/appear" in entry.used_by
+    assert "blink" in entry.used_by
+
+
+# -------------------------------------------------------------- dead paths
+
+
+def test_dead_paths_loads_and_is_cached() -> None:
+    oracle = default_oracle()
+    dp1 = oracle.dead_paths()
+    dp2 = oracle.dead_paths()
+    assert dp1 is dp2
+    assert len(dp1) > 0
+    assert all(isinstance(e, DeadPath) for e in dp1)
+
+
+def test_dead_paths_falsified_attrnames_not_in_valid_vocabulary() -> None:
+    """Every dead-path entry targeting an attrName must reference a value
+    that is NOT in the valid attrName vocabulary — except for the
+    style.fontSize / style.opacity entries which ARE valid attrNames but
+    only usable in specific wrapper structures."""
+    oracle = default_oracle()
+    valid_attrs = {e.value for e in oracle.attrname_vocabulary()}
+    context_dependent = {"style.fontSize", "style.opacity"}
+    for dp in oracle.dead_paths():
+        if "attrName" not in dp.attribute_names:
+            continue
+        idx = dp.attribute_names.index("attrName")
+        value = dp.attribute_values[idx]
+        if value in context_dependent:
+            # These are valid attrNames but only in specific contexts;
+            # the dead-path entries document the isolated-use failures.
+            assert dp.verdict in {"requires-compound", "silently-dropped"}, (
+                f"context-dependent attr {value} has unexpected verdict {dp.verdict}"
+            )
+        else:
+            assert value not in valid_attrs, (
+                f"Dead-path attrName '{value}' appears in the valid vocabulary — "
+                f"remove one of them"
+            )
+
+
+def test_dead_path_core_entries_present() -> None:
+    """The empirically-falsified entries discovered in this session must
+    stay in the SSOT so we don't silently re-introduce them."""
+    oracle = default_oracle()
+    ids = {dp.id for dp in oracle.dead_paths()}
+    assert "anim-fill-opacity" in ids
+    assert "anim-stroke-weight" in ids
+    assert "animeffect-image-isolated" in ids
+    assert "anim-style-fontsize-isolated" in ids
+
+
+def test_dead_path_lookup_by_id() -> None:
+    oracle = default_oracle()
+    dp = oracle.dead_path("anim-fill-opacity")
+    assert dp.element == "p:anim"
+    assert "fill.opacity" in dp.attribute_values
+    assert dp.verdict == "silently-dropped"
+    assert dp.replacement_slot == "emph/transparency"
+
+
+def test_dead_path_unknown_raises() -> None:
+    oracle = default_oracle()
+    with pytest.raises(OracleSlotError):
+        oracle.dead_path("definitely_not_a_real_dead_path_id")
+
+
+def test_dead_paths_all_have_replacement_guidance() -> None:
+    """Every dead path must either point at a replacement slot or explicitly
+    say 'none' — we never leave a dead path without a migration story."""
+    oracle = default_oracle()
+    for dp in oracle.dead_paths():
+        assert dp.replacement_slot, f"Dead path {dp.id} missing replacement_slot"
+        assert dp.replacement_note, f"Dead path {dp.id} missing replacement_note"

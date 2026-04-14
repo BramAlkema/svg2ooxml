@@ -1,0 +1,193 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Animation Oracle — <p:attrName> Vocabulary SSOT
+
+  The complete set of <p:attrName> values that Microsoft PowerPoint emits
+  natively when authoring animations in its UI. Confirmed exhaustive by
+  scanning tmp/example4.pptx, tmp/example5.pptx, .visual_tmp/samples/
+  experiment{6,7}.pptx and docs/research/powerpoint_oracle/: 17 distinct
+  strings across 400+ authored animations.
+
+  PowerPoint's parser accepts additional attrName values (see dead_paths.xml
+  for the falsified ones like fill.opacity / stroke.weight) but its playback
+  engine only animates the 17 listed here. Handlers MUST route every animated
+  SVG attribute through one of these values or through EMF rasterization
+  fallback — no other native animation path exists.
+
+  Consumed by AnimationOracle.attrname_vocabulary() for handler validation,
+  by the compound oracle behavior fragments (emph/behaviors/*.xml) as the
+  enum of valid targets, and by tests that assert generated timing XML
+  never emits an attrName outside this set.
+-->
+<attrname-vocabulary>
+
+  <!-- Geometry — position and size -->
+
+  <attrname value="ppt_x">
+    <category>geometry</category>
+    <scope>whole-shape</scope>
+    <description>Shape left edge, in EMUs. Animated via p:anim with numeric tavLst for arbitrary paths; preferred over animMotion for simple single-axis position tweens.</description>
+    <used-by>legacy imperative position handler</used-by>
+    <verification>visually-verified</verification>
+    <source>corpus-wide; tmp/example3.pptx path/motion reference</source>
+  </attrname>
+
+  <attrname value="ppt_y">
+    <category>geometry</category>
+    <scope>whole-shape</scope>
+    <description>Shape top edge, in EMUs. Animated via p:anim with numeric tavLst.</description>
+    <used-by>legacy imperative position handler</used-by>
+    <verification>visually-verified</verification>
+    <source>corpus-wide</source>
+  </attrname>
+
+  <attrname value="ppt_w">
+    <category>geometry</category>
+    <scope>whole-shape</scope>
+    <description>Shape width, in EMUs. Animated via p:anim or p:animScale. animScale is the preset-preserving path (preset 6 Grow/Shrink); direct p:anim is used when width/height must be decoupled from the shape's center point.</description>
+    <used-by>legacy imperative size handler; emph/behaviors/scale.xml</used-by>
+    <verification>visually-verified</verification>
+    <source>corpus-wide; experiment 7.pptx preset 6 Grow/Shrink</source>
+  </attrname>
+
+  <attrname value="ppt_h">
+    <category>geometry</category>
+    <scope>whole-shape</scope>
+    <description>Shape height, in EMUs. Paired with ppt_w for size animations.</description>
+    <used-by>legacy imperative size handler; emph/behaviors/scale.xml</used-by>
+    <verification>visually-verified</verification>
+    <source>corpus-wide</source>
+  </attrname>
+
+  <!-- Rotation -->
+
+  <attrname value="r">
+    <category>rotation</category>
+    <scope>whole-shape</scope>
+    <description>Shape rotation in PPT angle units (60000 per degree). Animated via p:animRot by="N" with cBhvr targeting. 720° = 43200000.</description>
+    <used-by>emph/behaviors/rotate.xml; path/motion (via rAng auto-rotate)</used-by>
+    <verification>visually-verified</verification>
+    <source>experiment 7.pptx preset 8 Spin; .visual_tmp/xmas_tree_v*.py</source>
+  </attrname>
+
+  <attrname value="style.rotation">
+    <category>rotation</category>
+    <scope>text</scope>
+    <description>Text rotation independent of the containing shape's rotation. Used by a small number of text-specific rotate emphasis presets. Rarely needed; the shape-level 'r' attribute is the primary rotation path.</description>
+    <used-by>not yet wired into any oracle fragment</used-by>
+    <verification>derived-from-handler</verification>
+    <source>experiment 7.pptx (appears alongside other text effects); ECMA-376</source>
+  </attrname>
+
+  <!-- Visibility -->
+
+  <attrname value="style.visibility">
+    <category>visibility</category>
+    <scope>whole-shape</scope>
+    <description>Shape visibility toggle, set to "visible" or "hidden". Fired as an instantaneous p:set for appear/disappear transitions, or as a discrete p:anim with two tavLst keyframes for blink effects (hidden → visible at tm=50000).</description>
+    <used-by>entr/appear.xml, entr/fade.xml (primer), exit/fade.xml (tail), entr/filter_effect.xml (primer), exit/filter_effect.xml (tail), emph/behaviors/blink.xml</used-by>
+    <verification>visually-verified</verification>
+    <source>corpus-wide; most-used attrName overall (91 occurrences in experiment 7)</source>
+  </attrname>
+
+  <!-- Fill color family -->
+
+  <attrname value="fillcolor">
+    <category>color</category>
+    <scope>shape-background</scope>
+    <description>Shape fill color. Animated via p:animClr with srgbClr or schemeClr targets. Typically paired with fill.on and fill.type primers to ensure a solid enabled fill before the color tween runs. When targeting shape background only, wrap the spTgt with &lt;p:bg/&gt;.</description>
+    <used-by>emph/color.xml (legacy), emph/shape_fill_color.xml, emph/color_pulse.xml, emph/behaviors/fill_color.xml</used-by>
+    <verification>visually-verified</verification>
+    <source>experiment 5/6/7.pptx presets 16, 19, 27; emph/shape_fill_color slot verification</source>
+  </attrname>
+
+  <attrname value="fill.type">
+    <category>fill-primer</category>
+    <scope>shape-background</scope>
+    <description>Primer set value "solid" that ensures the fill is a solid color before fillcolor tweens. Fires as p:set with duration matching the outer effect. Never animated on its own.</description>
+    <used-by>emph/shape_fill_color.xml, emph/color_pulse.xml, emph/behaviors/fill_color.xml</used-by>
+    <verification>visually-verified</verification>
+    <source>experiment 5/6/7.pptx fill color presets</source>
+  </attrname>
+
+  <attrname value="fill.on">
+    <category>fill-primer</category>
+    <scope>shape-background</scope>
+    <description>Primer set value "true" that ensures the fill is enabled before fillcolor tweens. Fires as p:set with duration matching the outer effect.</description>
+    <used-by>emph/shape_fill_color.xml, emph/color_pulse.xml, emph/behaviors/fill_color.xml</used-by>
+    <verification>visually-verified</verification>
+    <source>experiment 5/6/7.pptx fill color presets</source>
+  </attrname>
+
+  <!-- Stroke family -->
+
+  <attrname value="stroke.color">
+    <category>color</category>
+    <scope>whole-shape</scope>
+    <description>Shape line color. Animated via p:animClr with srgbClr or schemeClr targets. Paired with a stroke.on primer to ensure the stroke is visible before the color tween runs.</description>
+    <used-by>emph/stroke_color.xml, emph/behaviors/stroke_color.xml</used-by>
+    <verification>visually-verified</verification>
+    <source>experiment 4/5/7.pptx preset 7 subtype 2 Change Line Color</source>
+  </attrname>
+
+  <attrname value="stroke.on">
+    <category>stroke-primer</category>
+    <scope>whole-shape</scope>
+    <description>Primer set value "true" that ensures the stroke is enabled before stroke.color tweens. Fires as p:set with duration matching the outer effect.</description>
+    <used-by>emph/stroke_color.xml, emph/behaviors/stroke_color.xml</used-by>
+    <verification>visually-verified</verification>
+    <source>experiment 4/5/7.pptx preset 7 subtype 2</source>
+  </attrname>
+
+  <!-- Text color -->
+
+  <attrname value="style.color">
+    <category>color</category>
+    <scope>text-or-shape</scope>
+    <description>Text run color OR shape text color, depending on target wrapper. When spTgt has &lt;p:txEl&gt;&lt;p:pRg/&gt;&lt;/p:txEl&gt; the target is a text paragraph (preset 3 Change Font Color); when spTgt has &lt;p:bg/&gt; it is part of the preset 19 shape fill compound. Requires &lt;p:cBhvr override="childStyle"&gt; when animating text.</description>
+    <used-by>emph/text_color.xml, emph/shape_fill_color.xml, emph/color_pulse.xml, emph/behaviors/text_color.xml, emph/behaviors/fill_color.xml</used-by>
+    <verification>visually-verified</verification>
+    <source>attrsearch example.pptx preset 3/2; experiment 6/7.pptx compound presets</source>
+  </attrname>
+
+  <!-- Text formatting -->
+
+  <attrname value="style.fontWeight">
+    <category>text-formatting</category>
+    <scope>text</scope>
+    <description>Text weight, set to "bold" for the preset 15 Bold emphasis. Fires as p:set with dur="indefinite". Requires &lt;p:cBhvr override="childStyle"&gt; and text paragraph target (p:txEl/p:pRg) plus bldP build="p" rev="1".</description>
+    <used-by>emph/bold.xml, emph/behaviors/bold.xml</used-by>
+    <verification>visually-verified</verification>
+    <source>experiment 5/7.pptx preset 15</source>
+  </attrname>
+
+  <attrname value="style.textDecorationUnderline">
+    <category>text-formatting</category>
+    <scope>text</scope>
+    <description>Text underline toggle, set to "true" for the preset 18 Underline emphasis. Fires as p:set with dur="500" fill="hold". Per-letter stagger via p:iterate tmPct="4000" (40% between letters) for a typewriter effect.</description>
+    <used-by>emph/underline.xml, emph/behaviors/underline.xml</used-by>
+    <verification>visually-verified</verification>
+    <source>experiment 4/5/7.pptx preset 18</source>
+  </attrname>
+
+  <attrname value="style.fontSize">
+    <category>text-formatting</category>
+    <scope>text</scope>
+    <description>Text font size scale, animated via p:anim to="N" with a scalar multiplier (e.g. "4" for 4x). ONLY works as a child of the preset 28 compound emphasis alongside other child behaviors (animClr + animClr + set + anim). In isolation under any other preset the animation is silently dropped. Requires override="childStyle" and bldP build="p" rev="1".</description>
+    <used-by>not yet wired into a standalone oracle fragment — see dead_paths.xml for isolation caveat</used-by>
+    <verification>visually-verified</verification>
+    <source>experiment 5/7.pptx preset 28; .visual_tmp/xmas_tree font_size retest</source>
+  </attrname>
+
+  <!-- Opacity -->
+
+  <attrname value="style.opacity">
+    <category>opacity</category>
+    <scope>whole-shape</scope>
+    <description>Shape opacity set value (e.g. "0.5"). Used as a primer for preset 9 Transparency emphasis, paired with p:animEffect filter="image" prLst="opacity: X" which is the actual opacity carrier. Standalone p:anim on style.opacity with a tavLst does NOT fire — see dead_paths.xml.</description>
+    <used-by>emph/transparency.xml, emph/behaviors/transparency.xml</used-by>
+    <verification>visually-verified</verification>
+    <source>experiment 5/6/7.pptx preset 9 Transparency</source>
+  </attrname>
+
+</attrname-vocabulary>

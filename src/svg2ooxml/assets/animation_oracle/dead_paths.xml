@@ -1,0 +1,169 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Animation Oracle — Dead Paths SSOT
+
+  Structured catalog of PowerPoint animation XML shapes that are DOCUMENTED
+  by ECMA-376 or legacy Microsoft sources, ACCEPTED by PowerPoint's parser
+  at open time, but SILENTLY DROPPED by PowerPoint's playback engine when
+  the slideshow runs. These are the empirical false-positives we spent
+  hours discovering and want to never re-introduce.
+
+  Each <dead-path> element records:
+    - The shape signature (element type + key attributes)
+    - A human description of what we tried
+    - The verdict (silently-dropped, partial, requires-compound, etc.)
+    - The empirical source that proves the failure
+    - A pointer to the verified replacement path (oracle slot or fallback)
+
+  Consumed by AnimationOracle.dead_paths() for negative-test invariants —
+  tests can assert that generated timing XML never contains any of these
+  shape signatures, ensuring we don't silently regress back into emitting
+  broken paths. Also consumed by the README dead-path catalog section.
+
+  Adding a new entry: only after empirical verification via the tune loop
+  that the path truly does nothing (not just that one capture missed it).
+  Add the specific shape signature, not the general category.
+-->
+<dead-paths>
+
+  <dead-path id="anim-fill-opacity">
+    <shape>
+      <element>p:anim</element>
+      <attribute name="attrName">fill.opacity</attribute>
+    </shape>
+    <description>
+      Attempted to animate shape fill opacity via p:anim on fill.opacity
+      attrName with a fltVal tavLst. PPT parses the XML as valid OOXML but
+      the playback engine drops the animation entirely — the shape renders
+      at its authored opacity with zero transition.
+    </description>
+    <verdict>silently-dropped</verdict>
+    <source>.visual_tmp/transparency_experiment.py; legacy VML attrName from binary PPT spec</source>
+    <replacement>
+      <slot>emph/transparency</slot>
+      <note>Use preset 9 Transparency — p:set style.opacity + p:animEffect filter="image" prLst="opacity: X" in one cTn. This is the native shape fill opacity path PPT actually honors.</note>
+    </replacement>
+  </dead-path>
+
+  <dead-path id="anim-stroke-opacity">
+    <shape>
+      <element>p:anim</element>
+      <attribute name="attrName">stroke.opacity</attribute>
+    </shape>
+    <description>
+      Attempted to animate shape stroke opacity via p:anim on stroke.opacity.
+      Legacy VML attrName; no modern PPT animation primitive exists for
+      partial-range stroke opacity.
+    </description>
+    <verdict>silently-dropped</verdict>
+    <source>.visual_tmp/transparency_experiment.py; legacy VML attrName</source>
+    <replacement>
+      <slot>none</slot>
+      <note>No native path. For SVG animate[stroke-opacity] fall back to EMF rasterization. Binary 0-or-1 stroke opacity can be approximated by toggling stroke.on via p:set.</note>
+    </replacement>
+  </dead-path>
+
+  <dead-path id="anim-stroke-weight">
+    <shape>
+      <element>p:anim</element>
+      <attribute name="attrName">stroke.weight</attribute>
+    </shape>
+    <description>
+      Attempted to animate shape stroke (line) width via p:anim on
+      stroke.weight. ECMA-376 documents stroke.weight as an animatable
+      attribute but PowerPoint's modern playback engine silently drops it.
+      The LineFormat.Weight VBA property exists for static formatting only.
+    </description>
+    <verdict>silently-dropped</verdict>
+    <source>.visual_tmp/transparency_experiment.py stroke_weight candidate; research notes on VML legacy</source>
+    <replacement>
+      <slot>none</slot>
+      <note>No native path. For SVG animate[stroke-width] fall back to EMF rasterization or discrete set steps via static LineFormat.Weight. Fundamentally impossible as an interpolated animation in current PPT.</note>
+    </replacement>
+  </dead-path>
+
+  <dead-path id="anim-line-weight">
+    <shape>
+      <element>p:anim</element>
+      <attribute name="attrName">line.weight</attribute>
+    </shape>
+    <description>
+      Alternate spelling of stroke.weight. Also silently dropped — PPT's
+      attrName resolver accepts either but neither fires at playback.
+    </description>
+    <verdict>silently-dropped</verdict>
+    <source>.visual_tmp/transparency_experiment.py</source>
+    <replacement>
+      <slot>none</slot>
+      <note>Same as stroke.weight — no native path, EMF fallback only.</note>
+    </replacement>
+  </dead-path>
+
+  <dead-path id="anim-style-fontsize-isolated">
+    <shape>
+      <element>p:anim</element>
+      <attribute name="attrName">style.fontSize</attribute>
+      <context>without sibling animClr/animClr/set children in the same cTn</context>
+    </shape>
+    <description>
+      Attempted to animate text font size via a lone p:anim to="1.5" on
+      style.fontSize inside a standalone clickEffect wrapper. Does NOT fire
+      in isolation. PPT only honors style.fontSize when it appears alongside
+      the full preset 28 compound (animClr on style.color + animClr on
+      fillcolor + set on fill.type + anim on style.fontSize) as sibling
+      children of ONE cTn. Remove any of the siblings and the font size
+      animation silently stops working.
+    </description>
+    <verdict>requires-compound</verdict>
+    <source>.visual_tmp/transparency_experiment.py font_size retest — 3 iterations across simple, full-compound, and final working (to="4" for visibility) configurations</source>
+    <replacement>
+      <slot>emph/compound with fill_color + custom anim-style.fontSize child</slot>
+      <note>When SVG requires text font-size animation, emit the full preset 28 compound: use emph/compound + fill_color fragment + a raw style.fontSize anim child. Size-only animations (no color change) are NOT supported natively.</note>
+    </replacement>
+  </dead-path>
+
+  <dead-path id="animeffect-image-isolated">
+    <shape>
+      <element>p:animEffect</element>
+      <attribute name="filter">image</attribute>
+      <attribute name="prLst">opacity: X</attribute>
+      <context>outside preset 9 Transparency wrapper (no paired p:set style.opacity)</context>
+    </shape>
+    <description>
+      The animEffect filter="image" element with prLst="opacity: X" is
+      NOT a standalone entrance/exit effect. It only fires when paired with
+      a p:set on style.opacity (to the same target value) inside a preset 9
+      Transparency cTn. Using the filter in any other preset wrapper or
+      without the paired set results in the shape rendering at its current
+      opacity with no transition.
+    </description>
+    <verdict>silently-dropped</verdict>
+    <source>.visual_tmp/transparency_experiment.py transparency_pulse with autoRev — emitted the animEffect but not the paired set; animation did not fire</source>
+    <replacement>
+      <slot>emph/transparency</slot>
+      <note>Always pair p:animEffect filter="image" prLst="opacity: X" with a p:set on style.opacity → "X" in the same cTn. The emph/transparency oracle slot bakes this pairing in.</note>
+    </replacement>
+  </dead-path>
+
+  <dead-path id="anim-style-opacity-tavlst">
+    <shape>
+      <element>p:anim</element>
+      <attribute name="attrName">style.opacity</attribute>
+      <context>with p:tavLst keyframes (interpolated partial-range tween)</context>
+    </shape>
+    <description>
+      Attempted to animate shape opacity by emitting p:anim on style.opacity
+      with a p:tavLst containing fltVal keyframes (e.g. from 0.2 to 1.0).
+      style.opacity accepts p:set for instantaneous values (used as the
+      preset 9 Transparency primer) but rejects p:anim-with-tavLst at
+      playback. Legacy attrName from binary PPT spec.
+    </description>
+    <verdict>silently-dropped</verdict>
+    <source>.visual_tmp/transparency_experiment.py opacity_property candidate</source>
+    <replacement>
+      <slot>emph/transparency (partial range) or entr/fade / exit/fade (0↔1 range)</slot>
+      <note>For partial-range opacity holds use emph/transparency. For full 0→1 or 1→0 fade use entr/filter_effect FILTER=fade or exit/filter_effect FILTER=fade.</note>
+    </replacement>
+  </dead-path>
+
+</dead-paths>
