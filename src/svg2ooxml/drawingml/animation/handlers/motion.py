@@ -537,8 +537,7 @@ class MotionAnimationHandler(AnimationHandler):
         segment_budget: int = 96,
     ) -> list[tuple[float, float]]:
         """Approximate keyTimes/calcMode timing by expanding path vertices."""
-        key_times = animation.key_times
-        if len(points) < 2 or key_times is None or len(key_times) < 2:
+        if len(points) < 2:
             return points
 
         calc_mode_value = (
@@ -546,14 +545,40 @@ class MotionAnimationHandler(AnimationHandler):
             if isinstance(animation.calc_mode, CalcMode)
             else str(animation.calc_mode).lower()
         )
-        key_points = self._sample_points_at_progress(points, key_times)
-        if len(key_points) < 2:
+
+        if animation.key_points is not None and len(animation.key_points) >= 2:
+            key_points = self._sample_points_at_progress(points, animation.key_points)
+            if (
+                animation.key_times is not None
+                and len(animation.key_times) == len(animation.key_points)
+            ):
+                key_times = list(animation.key_times)
+            else:
+                key_times = self._uniform_key_times(len(key_points))
+        elif calc_mode_value == CalcMode.PACED.value:
+            if len(points) < 3 and not animation.key_times:
+                return points
+            key_points = list(points)
+            paced_times = compute_paced_key_times_2d(key_points)
+            key_times = paced_times or self._uniform_key_times(len(key_points))
+        elif animation.key_times is not None and len(animation.key_times) >= 2:
+            key_times = list(animation.key_times)
+            key_points = (
+                list(points)
+                if len(key_times) == len(points)
+                else self._sample_points_at_progress(points, key_times)
+            )
+        elif calc_mode_value in {
+            CalcMode.LINEAR.value,
+            CalcMode.DISCRETE.value,
+        } and len(points) > 2:
+            key_points = list(points)
+            key_times = self._uniform_key_times(len(key_points))
+        else:
             return points
 
-        if calc_mode_value == CalcMode.PACED.value:
-            paced_times = compute_paced_key_times_2d(key_points)
-            if paced_times is not None:
-                key_times = paced_times
+        if len(key_points) < 2 or len(key_times) != len(key_points):
+            return points
 
         if calc_mode_value == CalcMode.DISCRETE.value:
             return self._expand_discrete_points(
@@ -567,6 +592,12 @@ class MotionAnimationHandler(AnimationHandler):
             key_times=key_times,
             segment_budget=segment_budget,
         )
+
+    @staticmethod
+    def _uniform_key_times(count: int) -> list[float]:
+        if count <= 1:
+            return [0.0]
+        return [index / (count - 1) for index in range(count)]
 
     @staticmethod
     def _sample_points_at_progress(

@@ -1,0 +1,47 @@
+{
+  "effect_patterns": [
+    {
+      "attr_names": [
+        "style.visibility",
+        "ppt_w",
+        "ppt_h"
+      ],
+      "behavior_durations": [
+        "1",
+        "500"
+      ],
+      "child_tags": [
+        "set",
+        "anim",
+        "anim"
+      ],
+      "container_id": "5",
+      "family_signature": "clickEffect|entr|set+anim+anim|style.visibility,ppt_w,ppt_h",
+      "grp_id": "0",
+      "node_type": "clickEffect",
+      "preset_class": "entr",
+      "preset_id": "17",
+      "preset_subtype": "10",
+      "signature": "clickEffect|entr|17|set+anim+anim|style.visibility,ppt_w,ppt_h",
+      "slide_file": "slide4.xml",
+      "start_delays": [
+        "0"
+      ],
+      "target_shapes": [
+        "4"
+      ]
+    }
+  ],
+  "has_build_list": true,
+  "has_timing": true,
+  "slide_file": "slide4.xml",
+  "tag_counts": {
+    "anim": 2,
+    "animClr": 0,
+    "animEffect": 0,
+    "animMotion": 0,
+    "animRot": 0,
+    "animScale": 0,
+    "set": 1
+  }
+}

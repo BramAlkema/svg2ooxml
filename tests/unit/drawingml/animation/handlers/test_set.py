@@ -74,8 +74,11 @@ class TestMapAttributeName:
     def test_maps_stroke_color(self, handler: SetAnimationHandler):
         assert handler._map_attribute_name("stroke") == "stroke.color"
 
+    def test_maps_visibility(self, handler: SetAnimationHandler):
+        assert handler._map_attribute_name("visibility") == "style.visibility"
+
     def test_unmapped_passthrough(self, handler: SetAnimationHandler):
-        assert handler._map_attribute_name("visibility") == "visibility"
+        assert handler._map_attribute_name("custom-attr") == "custom-attr"
 
 
 # ------------------------------------------------------------------ #
@@ -110,9 +113,11 @@ class TestBuild:
     def test_behavior_id(self, handler: SetAnimationHandler):
         anim = make_set_animation()
         par = handler.build(anim, par_id=4, behavior_id=5)
-        # The behavior cTn is inside cBhvr, nested under set
-        bhvr_ctn = par.find(f".//{{{NS_P}}}cBhvr/{{{NS_P}}}cTn")
-        assert bhvr_ctn.get("id") == "5"
+        behavior_ids = {
+            node.get("id")
+            for node in par.findall(f".//{{{NS_P}}}cBhvr/{{{NS_P}}}cTn")
+        }
+        assert {"5", "6"} <= behavior_ids
 
     def test_target_shape(self, handler: SetAnimationHandler):
         anim = make_set_animation(element_id="shape42")
@@ -161,16 +166,16 @@ class TestBuild:
 
     def test_attribute_name_mapped(self, handler: SetAnimationHandler):
         anim = make_set_animation(
-            target_attribute="x",
-            values=["100"],
+            target_attribute="visibility",
+            values=["hidden"],
         )
         par = handler.build(anim, par_id=4, behavior_id=5)
         attr_name = par.find(f".//{{{NS_P}}}attrName")
-        assert attr_name.text == "ppt_x"
+        assert attr_name.text == "style.visibility"
 
     def test_preset_class(self, handler: SetAnimationHandler):
         anim = make_set_animation()
         par = handler.build(anim, par_id=4, behavior_id=5)
-        ctn = par.find(f"{{{NS_P}}}cTn")
+        ctn = par.find(f".//{{{NS_P}}}cTn[@presetClass='entr']")
         assert ctn.get("presetClass") == "entr"
         assert ctn.get("presetID") == "1"

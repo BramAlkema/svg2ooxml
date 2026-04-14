@@ -3,16 +3,15 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-from PIL import Image, ImageDraw
 import pytest
-
+from PIL import Image, ImageDraw
 from tools.visual.renderer import (
     LibreOfficeRenderer,
     PowerPointRenderer,
     VisualRendererError,
-    resolve_renderer,
     _detect_slide_crop_box,
     _normalize_pngs,
+    resolve_renderer,
 )
 from tools.visual.stack import default_visual_stack
 
@@ -236,6 +235,16 @@ def test_detect_slide_crop_box_finds_widescreenish_slide_inside_window() -> None
     crop_box = _detect_slide_crop_box(image, target_size=(480, 360))
 
     assert crop_box == (388, 133, 2774, 1922)
+
+
+def test_detect_slide_crop_box_ignores_center_content_shape() -> None:
+    image = Image.new("RGB", (480, 360), "white")
+    draw = ImageDraw.Draw(image)
+    draw.rectangle((150, 140, 449, 219), fill="#44AAFF")
+
+    crop_box = _detect_slide_crop_box(image, target_size=(480, 360))
+
+    assert crop_box is None
 
 
 def test_normalize_pngs_crops_before_resizing(

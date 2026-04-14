@@ -99,12 +99,8 @@ class OpacityAnimationHandler(AnimationHandler):
         behavior_id: int,
     ) -> etree._Element:
         half_duration_ms = max(1, int(round(animation.duration_ms / 2.0)))
-        base_opacity = self._format_effect_opacity(
-            min(animation.values, key=self._opacity_float)
-        )
-        peak_opacity = self._format_effect_opacity(
-            max(animation.values, key=self._opacity_float)
-        )
+        base_opacity = self._format_effect_opacity(animation.values[0])
+        peak_opacity = self._format_effect_opacity(animation.values[1])
         effect_behavior_id = behavior_id * 10 + 1
 
         outer_par = p_elem("par")
@@ -263,7 +259,10 @@ class OpacityAnimationHandler(AnimationHandler):
 
     @staticmethod
     def _map_opacity_attribute(attribute: str) -> str:
-        return "style.opacity"
+        return {
+            "fill-opacity": "fill.opacity",
+            "stroke-opacity": "stroke.opacity",
+        }.get(attribute, "style.opacity")
 
     def _should_use_property_animation(self, animation: AnimationDefinition) -> bool:
         if animation.target_attribute != "opacity":

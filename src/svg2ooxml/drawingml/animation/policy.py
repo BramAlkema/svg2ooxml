@@ -143,8 +143,20 @@ class AnimationPolicy:
             trigger_type = getattr(getattr(trigger, "trigger_type", None), "value", None)
             if trigger_type == "indefinite":
                 return "unsupported_begin_indefinite"
+            if trigger_type in {"access_key", "wallclock", "event", "element_repeat"}:
+                return f"unsupported_begin_{trigger_type}"
             if trigger_type in {"element_begin", "element_end"} and not getattr(trigger, "target_element_id", None):
                 return "unsupported_begin_target_missing"
+
+        end_triggers = getattr(getattr(animation, "timing", None), "end_triggers", None)
+        if not isinstance(end_triggers, list):
+            end_triggers = []
+        for trigger in end_triggers:
+            trigger_type = getattr(getattr(trigger, "trigger_type", None), "value", None)
+            if trigger_type in {"access_key", "wallclock", "event", "element_repeat", "indefinite"}:
+                return f"unsupported_end_{trigger_type}"
+            if trigger_type in {"element_begin", "element_end"} and not getattr(trigger, "target_element_id", None):
+                return "unsupported_end_target_missing"
 
         allow_native_flag = self._coerce_bool_option(
             self._options.get("allow_native_splines"),

@@ -282,6 +282,22 @@ class TestBuild:
         found_ids = re.findall(r'id="(\d+)"', result)
         assert len(found_ids) == len(set(found_ids))
 
+    def test_generated_companion_motion_ids_do_not_collide(self, writer):
+        result = writer.build(
+            [
+                _transform_anim(
+                    values=["1 1", "2 2"],
+                    element_center_px=(100.0, 100.0),
+                    motion_viewport_px=(960.0, 720.0),
+                ),
+                _opacity_anim(),
+            ],
+            [],
+        )
+
+        found_ids = re.findall(r'<p:cTn id="(\d+)"', result)
+        assert len(found_ids) == len(set(found_ids))
+
     def test_ids_start_at_one(self, writer):
         result = writer.build([_opacity_anim()], [])
         # tmRoot should have id="1"
@@ -409,6 +425,22 @@ class TestBuild:
         )
 
         assert result.count("<p:animMotion") == 2
+
+    def test_does_not_drop_explicit_motion_rotation_when_merging(self, writer):
+        result = writer.build(
+            [
+                _motion_anim(values=["M0,0 L100,0"], motion_rotate="45"),
+                _numeric_anim(
+                    target_attribute="x",
+                    values=["0", "100"],
+                    motion_viewport_px=(1000.0, 1000.0),
+                ),
+            ],
+            [],
+        )
+
+        assert result.count("<p:animMotion") == 2
+        assert 'rAng="2700000"' in result
 
 
 # ------------------------------------------------------------------ #

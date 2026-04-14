@@ -1,0 +1,95 @@
+{
+  "effect_patterns": [
+    {
+      "attr_names": [
+        "style.visibility"
+      ],
+      "behavior_durations": [
+        "1",
+        "500"
+      ],
+      "child_tags": [
+        "set",
+        "animEffect"
+      ],
+      "container_id": "5",
+      "family_signature": "clickEffect|entr|set+animEffect|style.visibility",
+      "grp_id": "1",
+      "node_type": "clickEffect",
+      "preset_class": "entr",
+      "preset_id": "9",
+      "preset_subtype": "0",
+      "signature": "clickEffect|entr|9|set+animEffect|style.visibility",
+      "slide_file": "slide5.xml",
+      "start_delays": [
+        "0"
+      ],
+      "target_shapes": [
+        "4"
+      ]
+    },
+    {
+      "attr_names": [],
+      "behavior_durations": [
+        "2000"
+      ],
+      "child_tags": [
+        "animScale"
+      ],
+      "container_id": "11",
+      "family_signature": "clickEffect|emph|animScale|-",
+      "grp_id": "0",
+      "node_type": "clickEffect",
+      "preset_class": "emph",
+      "preset_id": "6",
+      "preset_subtype": "0",
+      "signature": "clickEffect|emph|6|animScale|-",
+      "slide_file": "slide5.xml",
+      "start_delays": [
+        "0"
+      ],
+      "target_shapes": [
+        "4"
+      ]
+    },
+    {
+      "attr_names": [
+        "ppt_x",
+        "ppt_y"
+      ],
+      "behavior_durations": [
+        "2000"
+      ],
+      "child_tags": [
+        "animMotion"
+      ],
+      "container_id": "16",
+      "family_signature": "clickEffect|path|animMotion|ppt_x,ppt_y",
+      "grp_id": "0",
+      "node_type": "clickEffect",
+      "preset_class": "path",
+      "preset_id": "31",
+      "preset_subtype": "0",
+      "signature": "clickEffect|path|31|animMotion|ppt_x,ppt_y",
+      "slide_file": "slide5.xml",
+      "start_delays": [
+        "0"
+      ],
+      "target_shapes": [
+        "5"
+      ]
+    }
+  ],
+  "has_build_list": true,
+  "has_timing": true,
+  "slide_file": "slide5.xml",
+  "tag_counts": {
+    "anim": 0,
+    "animClr": 0,
+    "animEffect": 1,
+    "animMotion": 1,
+    "animRot": 0,
+    "animScale": 1,
+    "set": 1
+  }
+}

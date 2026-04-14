@@ -410,6 +410,60 @@ class DrawingMLWriter:
         )
 
     @staticmethod
+    def _can_remove_group_wrapper(group: Group) -> bool:
+        if abs(group.opacity - 1.0) > 1e-9:
+            return False
+        if group.clip is not None or group.mask is not None or group.mask_instance is not None:
+            return False
+        metadata = group.metadata if isinstance(group.metadata, dict) else {}
+        if metadata.get("filters") or metadata.get("filter_metadata"):
+            return False
+        return True
+
+    def _should_flatten_group_for_native_animation(self, group: Group) -> bool:
+        if not self._can_remove_group_wrapper(group):
+            return False
+        return self._group_contains_bookmark_navigation(
+            group
+        ) or self._group_contains_animation_target(group)
+
+    def _group_contains_animation_target(self, group: Group) -> bool:
+        if self._animation_pipeline.metadata_targets_animation(group.metadata):
+            return True
+        for child in group.children:
+            metadata = getattr(child, "metadata", None)
+            if self._animation_pipeline.metadata_targets_animation(metadata):
+                return True
+            if isinstance(child, Group) and self._group_contains_animation_target(child):
+                return True
+        return False
+
+    @staticmethod
+    def _group_contains_bookmark_navigation(group: Group) -> bool:
+        if DrawingMLWriter._metadata_has_bookmark_navigation(group.metadata):
+            return True
+        for child in group.children:
+            metadata = getattr(child, "metadata", None)
+            if DrawingMLWriter._metadata_has_bookmark_navigation(metadata):
+                return True
+            if isinstance(child, Group) and DrawingMLWriter._group_contains_bookmark_navigation(child):
+                return True
+        return False
+
+    @staticmethod
+    def _metadata_has_bookmark_navigation(metadata: object) -> bool:
+        if not isinstance(metadata, dict):
+            return False
+        navigation = metadata.get("navigation")
+        if navigation is None:
+            return False
+        entries = navigation if isinstance(navigation, list) else [navigation]
+        for entry in entries:
+            if isinstance(entry, dict) and entry.get("kind") == "bookmark":
+                return True
+        return False
+
+    @staticmethod
     def _policy_for(metadata: dict[str, object] | None, target: str) -> dict[str, object]:
         if not metadata:
             return {}
@@ -888,6 +942,22 @@ class DrawingMLWriter:
                             },
                         )
                         return [fragment], shape_id + 1
+
+            if self._should_flatten_group_for_native_animation(element):
+                self._trace_writer(
+                    "group_flattened",
+                    stage="writer",
+                    metadata={
+                        "shape_id": shape_id,
+                        "reason": "native_animation_target",
+                    },
+                )
+                fragments, next_id = self._render_elements(
+                    element.children, shape_id,
+                )
+                if not fragments:
+                    return None
+                return fragments, next_id
 
             # Emit <p:grpSp> when the group has nested groups (preserves
             # z-order across sibling sub-trees). Flatten leaf groups that

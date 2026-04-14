@@ -29,6 +29,7 @@ class AnimationPipeline:
         self._shape_map: dict[str, str] = {}
         self._animation_target_map: dict[str, str] = {}
         self._bookmark_trigger_map: dict[str, str] = {}
+        self._animation_element_ids: set[str] = set()
         self._policy: dict[str, object] = {}
         self._tracer: ConversionTracer | None = None
 
@@ -37,12 +38,18 @@ class AnimationPipeline:
         self._shape_map = {}
         self._animation_target_map = {}
         self._bookmark_trigger_map = {}
+        self._animation_element_ids = set()
         self._policy = {}
         self._tracer = tracer
         if isinstance(payload, dict):
             payload_policy = payload.get("policy")
             if isinstance(payload_policy, dict):
                 self._policy = dict(payload_policy)
+            definitions = payload.get("definitions") or []
+            for definition in definitions:
+                element_id = getattr(definition, "element_id", None)
+                if isinstance(element_id, str):
+                    self._animation_element_ids.add(element_id)
 
     def register_mapping(self, metadata: dict[str, object] | None, shape_id: int) -> None:
         if not isinstance(metadata, dict):
@@ -59,6 +66,17 @@ class AnimationPipeline:
         for element_id in element_ids:
             if isinstance(element_id, str):
                 self._shape_map.setdefault(element_id, str(shape_id))
+
+    def metadata_targets_animation(self, metadata: dict[str, object] | None) -> bool:
+        if not isinstance(metadata, dict) or not self._animation_element_ids:
+            return False
+        element_ids = metadata.get("element_ids")
+        if not isinstance(element_ids, list):
+            return False
+        return any(
+            isinstance(element_id, str) and element_id in self._animation_element_ids
+            for element_id in element_ids
+        )
 
     def _register_navigation_trigger(self, metadata: dict[str, object], shape_id: int) -> None:
         navigation = metadata.get("navigation")

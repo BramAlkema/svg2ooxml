@@ -47,6 +47,7 @@ __all__ = ["DrawingMLAnimationWriter"]
 _logger = logging.getLogger(__name__)
 _PRESENTATION_NS = {"p": NS_P}
 _ANIM_MOTION_TAG = f"{{{NS_P}}}animMotion"
+_CTN_TAG = f"{{{NS_P}}}cTn"
 _CBHVR_TAG = f"{{{NS_P}}}cBhvr"
 _SP_TGT_TAG = f"{{{NS_P}}}spTgt"
 _RCTR_TAG = f"{{{NS_P}}}rCtr"
@@ -213,7 +214,7 @@ def _motion_records_compatible(
         return False
     if left.path_edit_mode != right.path_edit_mode:
         return False
-    if not _optional_values_compatible(left.r_ang, right.r_ang):
+    if _normalized_rotation_angle(left.r_ang) != _normalized_rotation_angle(right.r_ang):
         return False
     if not _optional_values_compatible(left.pts_types, right.pts_types):
         return False
@@ -226,10 +227,14 @@ def _merge_motion_group(records: list[_MotionFragmentRecord]) -> None:
     anchor = _choose_motion_anchor(records)
     merged_dx = sum(record.dx for record in records)
     merged_dy = sum(record.dy for record in records)
+    merged_rotation = _merged_rotation_angle(records)
     anchor.motion.set("path", _format_motion_path(merged_dx, merged_dy))
     anchor.motion.set("origin", anchor.origin)
     anchor.motion.set("pathEditMode", anchor.path_edit_mode)
-    anchor.motion.attrib.pop("rAng", None)
+    if merged_rotation is None:
+        anchor.motion.attrib.pop("rAng", None)
+    else:
+        anchor.motion.set("rAng", merged_rotation)
     anchor.motion.attrib.pop("ptsTypes", None)
     _sync_r_ctr(anchor.motion, None)
     _sync_attr_name_list(anchor.behavior, [])
@@ -314,6 +319,87 @@ def _read_r_ctr(motion: etree._Element) -> tuple[str, str] | None:
 
 def _optional_values_compatible(left: Any, right: Any) -> bool:
     return left is None or right is None or left == right
+
+
+def _normalized_rotation_angle(value: str | None) -> str | None:
+    if value is None:
+        return None
+    try:
+        if abs(float(value)) <= 1e-9:
+            return None
+    except (TypeError, ValueError):
+        pass
+    return value
+
+
+def _merged_rotation_angle(records: list[_MotionFragmentRecord]) -> str | None:
+    angles = {
+        normalized
+        for record in records
+        if (normalized := _normalized_rotation_angle(record.r_ang)) is not None
+    }
+    if len(angles) == 1:
+        return next(iter(angles))
+    return None
+
+
+def _renumber_generated_timing_ids(
+    records: list[tuple[etree._Element, Any]],
+    *,
+    reserved_ids: set[int],
+) -> None:
+    existing_ids = set(reserved_ids)
+    for par, _anim_ids in records:
+        for ctn in par.iter(_CTN_TAG):
+            parsed = _parse_timing_id(ctn.get("id"))
+            if parsed is not None:
+                existing_ids.add(parsed)
+
+    next_id = (max(existing_ids) + 1) if existing_ids else 1
+    used_ids: set[int] = set()
+
+    def _next_available_id() -> int:
+        nonlocal next_id
+        while next_id in used_ids or next_id in reserved_ids:
+            next_id += 1
+        value = next_id
+        used_ids.add(value)
+        next_id += 1
+        return value
+
+    for par, anim_ids in records:
+        expected_ids = {int(anim_ids.par), int(anim_ids.behavior)}
+        preserved_expected: set[int] = set()
+        for ctn in par.iter(_CTN_TAG):
+            current = _parse_timing_id(ctn.get("id"))
+            should_preserve_expected = (
+                current in expected_ids
+                and current not in preserved_expected
+                and current not in used_ids
+            )
+            if should_preserve_expected:
+                used_ids.add(current)
+                preserved_expected.add(current)
+                continue
+
+            if (
+                current is None
+                or current in used_ids
+                or current in reserved_ids
+            ):
+                ctn.set("id", str(_next_available_id()))
+                continue
+
+            used_ids.add(current)
+
+
+def _parse_timing_id(value: str | None) -> int | None:
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def _attrs_signature(
@@ -420,6 +506,7 @@ class DrawingMLAnimationWriter:
         ids = self._id_allocator.allocate(n_animations=len(animations), start_id=start_id)
 
         animation_elements: list[etree._Element] = []
+        animation_element_records: list[tuple[etree._Element, Any]] = []
         id_index = 0
 
         for animation in animations:
@@ -439,6 +526,7 @@ class DrawingMLAnimationWriter:
 
             if elem is not None:
                 animation_elements.append(elem)
+                animation_element_records.append((elem, anim_ids))
                 if tracer is not None:
                     emitted_metadata: dict[str, Any] = {
                         "element_id": animation.element_id,
@@ -497,6 +585,21 @@ class DrawingMLAnimationWriter:
         if should_suppress:
             return ""
 
+        reserved_ids = {
+            ids.root,
+            ids.main_seq,
+            ids.click_group,
+            *(
+                timing_id
+                for anim_ids in ids.animations
+                for timing_id in (anim_ids.par, anim_ids.behavior)
+            ),
+        }
+        _renumber_generated_timing_ids(
+            animation_element_records,
+            reserved_ids=reserved_ids,
+        )
+
         animation_elements = _merge_concurrent_simple_motion_fragments(
             animation_elements
         )
@@ -536,6 +639,13 @@ class DrawingMLAnimationWriter:
             result = handler.build(animation, par_id, behavior_id)
             if result is None:
                 return None, {"reason": "handler_returned_empty"}
+            self._xml_builder.apply_native_timing_overrides(
+                par=result,
+                repeat_duration_ms=animation.repeat_duration_ms,
+                restart=animation.restart,
+                end_triggers=animation.end_triggers,
+                default_target_shape=animation.element_id,
+            )
             return result, None
         except Exception as e:
             return None, {"reason": f"handler_error: {str(e)}"}

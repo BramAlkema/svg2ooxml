@@ -154,6 +154,33 @@ Dependency tiers: resvg + skia-python required, FontForge optional, LibreOffice
 + OpenXML audit test-only. Python 3.13 single runtime. Orbstack container for
 full-stack development.
 
+### PresentationML-First PowerPoint Oracle Strategy (ADR-029)
+The product target is PresentationML, not a version-matrix of PowerPoint
+behaviors. Primary correctness comes from spec-valid, semantically coherent
+PresentationML plus validator coverage (`openxml-audit` and repo semantic
+checks). PowerPoint remains an important runtime and oracle, but only for
+high-risk constructs where ECMA and Microsoft docs do not fully determine
+working emitted structures in practice: triggers, `interactiveSeq`, build-list
+coupling, pane-sensitive effect wrappers, and other obscure animation cases.
+
+For those cases, the durable research source of truth is XML-first:
+
+1. saved PowerPoint-authored raw slide XML
+2. extracted raw `p:timing` / `p:bldLst`
+3. normalized XML and signatures for mining
+4. human notes
+
+Working `.pptx` decks are temporary authoring inputs, not the long-term oracle.
+Compatibility policy stays intentionally small:
+
+- keep one latest-PowerPoint smoke lane for slideshow/open/roundtrip checks
+- avoid per-version support matrices unless a concrete regression demands it
+- collapse proven oracle findings into emitter templates and validator rules
+
+This keeps the architecture centered on `svg -> PresentationML` while still
+using PowerPoint where it is the only practical oracle for emitted animation
+structures.
+
 ---
 
 ## Infrastructure (archived)

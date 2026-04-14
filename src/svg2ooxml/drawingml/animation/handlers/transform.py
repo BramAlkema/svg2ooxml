@@ -174,7 +174,6 @@ class TransformAnimationHandler(AnimationHandler):
             behavior_id=behavior_id,
             duration_ms=animation.duration_ms,
             target_shape=animation.element_id,
-            attr_name_list=["r"],
             additive=animation.additive,
             fill_mode=animation.fill_mode,
             repeat_count=animation.repeat_count,
@@ -205,20 +204,19 @@ class TransformAnimationHandler(AnimationHandler):
         """Compensate for SVG scaling around the origin.
 
         PowerPoint animScale grows around the shape center. SVG scale transforms
-        grow around the current user-space origin, so the shape center also
-        moves. Emit a companion motion path when we know the rendered shape
-        center.
+        grow around the current user-space origin, so the final SVG center is
+        offset by ``center * (scale - 1)`` from the unanimated rendered center.
+        Emit a companion motion path when we know that center.
         """
         if len(scale_pairs) < 2:
             return None
         if animation.element_center_px is None:
             return None
 
-        from_sx, from_sy = scale_pairs[0]
         to_sx, to_sy = scale_pairs[-1]
         center_x, center_y = animation.element_center_px
-        delta_x = center_x * (to_sx - from_sx)
-        delta_y = center_y * (to_sy - from_sy)
+        delta_x = center_x * (to_sx - 1.0)
+        delta_y = center_y * (to_sy - 1.0)
         if abs(delta_x) <= 1e-6 and abs(delta_y) <= 1e-6:
             return None
 

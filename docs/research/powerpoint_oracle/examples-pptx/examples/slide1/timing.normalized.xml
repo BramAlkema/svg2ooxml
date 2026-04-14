@@ -1,0 +1,81 @@
+<p:timing xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
+  <p:tnLst>
+    <p:par>
+      <p:cTn id="id1" dur="indefinite" restart="never" nodeType="tmRoot">
+        <p:childTnLst>
+          <p:seq concurrent="1" nextAc="seek">
+            <p:cTn id="id2" restart="whenNotActive" fill="hold" evtFilter="cancelBubble" nodeType="interactiveSeq">
+              <p:stCondLst>
+                <p:cond evt="onClick" delay="0">
+                  <p:tgtEl>
+                    <p:spTgt spid="shape1"/>
+                  </p:tgtEl>
+                </p:cond>
+              </p:stCondLst>
+              <p:endSync evt="end" delay="0">
+                <p:rtn val="all"/>
+              </p:endSync>
+              <p:childTnLst>
+                <p:par>
+                  <p:cTn id="id3" fill="hold">
+                    <p:stCondLst>
+                      <p:cond delay="0"/>
+                    </p:stCondLst>
+                    <p:childTnLst>
+                      <p:par>
+                        <p:cTn id="id4" fill="hold">
+                          <p:stCondLst>
+                            <p:cond delay="0"/>
+                          </p:stCondLst>
+                          <p:childTnLst>
+                            <p:par>
+                              <p:cTn id="id5" presetID="1" presetClass="entr" presetSubtype="0" fill="hold" grpId="0" nodeType="clickEffect">
+                                <p:stCondLst>
+                                  <p:cond delay="0"/>
+                                </p:stCondLst>
+                                <p:childTnLst>
+                                  <p:set>
+                                    <p:cBhvr>
+                                      <p:cTn id="id6" dur="1" fill="hold">
+                                        <p:stCondLst>
+                                          <p:cond delay="0"/>
+                                        </p:stCondLst>
+                                      </p:cTn>
+                                      <p:tgtEl>
+                                        <p:spTgt spid="shape1"/>
+                                      </p:tgtEl>
+                                      <p:attrNameLst>
+                                        <p:attrName>style.visibility</p:attrName>
+                                      </p:attrNameLst>
+                                    </p:cBhvr>
+                                    <p:to>
+                                      <p:strVal val="visible"/>
+                                    </p:to>
+                                  </p:set>
+                                </p:childTnLst>
+                              </p:cTn>
+                            </p:par>
+                          </p:childTnLst>
+                        </p:cTn>
+                      </p:par>
+                    </p:childTnLst>
+                  </p:cTn>
+                </p:par>
+              </p:childTnLst>
+            </p:cTn>
+            <p:nextCondLst>
+              <p:cond evt="onClick" delay="0">
+                <p:tgtEl>
+                  <p:spTgt spid="shape1"/>
+                </p:tgtEl>
+              </p:cond>
+            </p:nextCondLst>
+          </p:seq>
+        </p:childTnLst>
+      </p:cTn>
+    </p:par>
+  </p:tnLst>
+  <p:bldLst>
+    <p:bldP spid="shape1" grpId="0" animBg="1"/>
+  </p:bldLst>
+</p:timing>

@@ -1,0 +1,456 @@
+<p:timing xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <p:tnLst>
+    <p:par>
+      <p:cTn id="1" dur="indefinite" restart="never" nodeType="tmRoot">
+        <p:childTnLst>
+          <p:seq concurrent="1" nextAc="seek">
+            <p:cTn id="2" dur="indefinite" nodeType="mainSeq">
+              <p:childTnLst>
+                <p:par>
+                  <p:cTn id="3" fill="hold">
+                    <p:stCondLst>
+                      <p:cond delay="indefinite"/>
+                      <p:cond evt="onBegin" delay="0">
+                        <p:tn val="2"/>
+                      </p:cond>
+                    </p:stCondLst>
+                    <p:childTnLst>
+                      <p:par>
+                        <p:cTn id="4" fill="hold">
+                          <p:stCondLst>
+                            <p:cond delay="0"/>
+                          </p:stCondLst>
+                          <p:childTnLst>
+                            <p:par>
+                              <p:cTn id="5" presetID="31" presetClass="entr" presetSubtype="0" fill="hold" grpId="0" nodeType="withEffect">
+                                <p:stCondLst>
+                                  <p:cond delay="0"/>
+                                </p:stCondLst>
+                                <p:childTnLst>
+                                  <p:set>
+                                    <p:cBhvr>
+                                      <p:cTn id="6" dur="1" fill="hold">
+                                        <p:stCondLst>
+                                          <p:cond delay="0"/>
+                                        </p:stCondLst>
+                                      </p:cTn>
+                                      <p:tgtEl>
+                                        <p:spTgt spid="8"/>
+                                      </p:tgtEl>
+                                      <p:attrNameLst>
+                                        <p:attrName>style.visibility</p:attrName>
+                                      </p:attrNameLst>
+                                    </p:cBhvr>
+                                    <p:to>
+                                      <p:strVal val="visible"/>
+                                    </p:to>
+                                  </p:set>
+                                  <p:anim calcmode="lin" valueType="num">
+                                    <p:cBhvr>
+                                      <p:cTn id="7" dur="1000" fill="hold"/>
+                                      <p:tgtEl>
+                                        <p:spTgt spid="8"/>
+                                      </p:tgtEl>
+                                      <p:attrNameLst>
+                                        <p:attrName>ppt_w</p:attrName>
+                                      </p:attrNameLst>
+                                    </p:cBhvr>
+                                    <p:tavLst>
+                                      <p:tav tm="0">
+                                        <p:val>
+                                          <p:fltVal val="0"/>
+                                        </p:val>
+                                      </p:tav>
+                                      <p:tav tm="100000">
+                                        <p:val>
+                                          <p:strVal val="#ppt_w"/>
+                                        </p:val>
+                                      </p:tav>
+                                    </p:tavLst>
+                                  </p:anim>
+                                  <p:anim calcmode="lin" valueType="num">
+                                    <p:cBhvr>
+                                      <p:cTn id="8" dur="1000" fill="hold"/>
+                                      <p:tgtEl>
+                                        <p:spTgt spid="8"/>
+                                      </p:tgtEl>
+                                      <p:attrNameLst>
+                                        <p:attrName>ppt_h</p:attrName>
+                                      </p:attrNameLst>
+                                    </p:cBhvr>
+                                    <p:tavLst>
+                                      <p:tav tm="0">
+                                        <p:val>
+                                          <p:fltVal val="0"/>
+                                        </p:val>
+                                      </p:tav>
+                                      <p:tav tm="100000">
+                                        <p:val>
+                                          <p:strVal val="#ppt_h"/>
+                                        </p:val>
+                                      </p:tav>
+                                    </p:tavLst>
+                                  </p:anim>
+                                  <p:anim calcmode="lin" valueType="num">
+                                    <p:cBhvr>
+                                      <p:cTn id="9" dur="1000" fill="hold"/>
+                                      <p:tgtEl>
+                                        <p:spTgt spid="8"/>
+                                      </p:tgtEl>
+                                      <p:attrNameLst>
+                                        <p:attrName>style.rotation</p:attrName>
+                                      </p:attrNameLst>
+                                    </p:cBhvr>
+                                    <p:tavLst>
+                                      <p:tav tm="0">
+                                        <p:val>
+                                          <p:fltVal val="90"/>
+                                        </p:val>
+                                      </p:tav>
+                                      <p:tav tm="100000">
+                                        <p:val>
+                                          <p:fltVal val="0"/>
+                                        </p:val>
+                                      </p:tav>
+                                    </p:tavLst>
+                                  </p:anim>
+                                  <p:animEffect transition="in" filter="fade">
+                                    <p:cBhvr>
+                                      <p:cTn id="10" dur="1000"/>
+                                      <p:tgtEl>
+                                        <p:spTgt spid="8"/>
+                                      </p:tgtEl>
+                                    </p:cBhvr>
+                                  </p:animEffect>
+                                </p:childTnLst>
+                              </p:cTn>
+                            </p:par>
+                            <p:par>
+                              <p:cTn id="11" presetID="31" presetClass="entr" presetSubtype="0" fill="hold" grpId="0" nodeType="withEffect">
+                                <p:stCondLst>
+                                  <p:cond delay="0"/>
+                                </p:stCondLst>
+                                <p:childTnLst>
+                                  <p:set>
+                                    <p:cBhvr>
+                                      <p:cTn id="12" dur="1" fill="hold">
+                                        <p:stCondLst>
+                                          <p:cond delay="0"/>
+                                        </p:stCondLst>
+                                      </p:cTn>
+                                      <p:tgtEl>
+                                        <p:spTgt spid="9"/>
+                                      </p:tgtEl>
+                                      <p:attrNameLst>
+                                        <p:attrName>style.visibility</p:attrName>
+                                      </p:attrNameLst>
+                                    </p:cBhvr>
+                                    <p:to>
+                                      <p:strVal val="visible"/>
+                                    </p:to>
+                                  </p:set>
+                                  <p:anim calcmode="lin" valueType="num">
+                                    <p:cBhvr>
+                                      <p:cTn id="13" dur="1000" fill="hold"/>
+                                      <p:tgtEl>
+                                        <p:spTgt spid="9"/>
+                                      </p:tgtEl>
+                                      <p:attrNameLst>
+                                        <p:attrName>ppt_w</p:attrName>
+                                      </p:attrNameLst>
+                                    </p:cBhvr>
+                                    <p:tavLst>
+                                      <p:tav tm="0">
+                                        <p:val>
+                                          <p:fltVal val="0"/>
+                                        </p:val>
+                                      </p:tav>
+                                      <p:tav tm="100000">
+                                        <p:val>
+                                          <p:strVal val="#ppt_w"/>
+                                        </p:val>
+                                      </p:tav>
+                                    </p:tavLst>
+                                  </p:anim>
+                                  <p:anim calcmode="lin" valueType="num">
+                                    <p:cBhvr>
+                                      <p:cTn id="14" dur="1000" fill="hold"/>
+                                      <p:tgtEl>
+                                        <p:spTgt spid="9"/>
+                                      </p:tgtEl>
+                                      <p:attrNameLst>
+                                        <p:attrName>ppt_h</p:attrName>
+                                      </p:attrNameLst>
+                                    </p:cBhvr>
+                                    <p:tavLst>
+                                      <p:tav tm="0">
+                                        <p:val>
+                                          <p:fltVal val="0"/>
+                                        </p:val>
+                                      </p:tav>
+                                      <p:tav tm="100000">
+                                        <p:val>
+                                          <p:strVal val="#ppt_h"/>
+                                        </p:val>
+                                      </p:tav>
+                                    </p:tavLst>
+                                  </p:anim>
+                                  <p:anim calcmode="lin" valueType="num">
+                                    <p:cBhvr>
+                                      <p:cTn id="15" dur="1000" fill="hold"/>
+                                      <p:tgtEl>
+                                        <p:spTgt spid="9"/>
+                                      </p:tgtEl>
+                                      <p:attrNameLst>
+                                        <p:attrName>style.rotation</p:attrName>
+                                      </p:attrNameLst>
+                                    </p:cBhvr>
+                                    <p:tavLst>
+                                      <p:tav tm="0">
+                                        <p:val>
+                                          <p:fltVal val="90"/>
+                                        </p:val>
+                                      </p:tav>
+                                      <p:tav tm="100000">
+                                        <p:val>
+                                          <p:fltVal val="0"/>
+                                        </p:val>
+                                      </p:tav>
+                                    </p:tavLst>
+                                  </p:anim>
+                                  <p:animEffect transition="in" filter="fade">
+                                    <p:cBhvr>
+                                      <p:cTn id="16" dur="1000"/>
+                                      <p:tgtEl>
+                                        <p:spTgt spid="9"/>
+                                      </p:tgtEl>
+                                    </p:cBhvr>
+                                  </p:animEffect>
+                                </p:childTnLst>
+                              </p:cTn>
+                            </p:par>
+                            <p:par>
+                              <p:cTn id="17" presetID="31" presetClass="entr" presetSubtype="0" fill="hold" grpId="0" nodeType="withEffect">
+                                <p:stCondLst>
+                                  <p:cond delay="0"/>
+                                </p:stCondLst>
+                                <p:childTnLst>
+                                  <p:set>
+                                    <p:cBhvr>
+                                      <p:cTn id="18" dur="1" fill="hold">
+                                        <p:stCondLst>
+                                          <p:cond delay="0"/>
+                                        </p:stCondLst>
+                                      </p:cTn>
+                                      <p:tgtEl>
+                                        <p:spTgt spid="10"/>
+                                      </p:tgtEl>
+                                      <p:attrNameLst>
+                                        <p:attrName>style.visibility</p:attrName>
+                                      </p:attrNameLst>
+                                    </p:cBhvr>
+                                    <p:to>
+                                      <p:strVal val="visible"/>
+                                    </p:to>
+                                  </p:set>
+                                  <p:anim calcmode="lin" valueType="num">
+                                    <p:cBhvr>
+                                      <p:cTn id="19" dur="1000" fill="hold"/>
+                                      <p:tgtEl>
+                                        <p:spTgt spid="10"/>
+                                      </p:tgtEl>
+                                      <p:attrNameLst>
+                                        <p:attrName>ppt_w</p:attrName>
+                                      </p:attrNameLst>
+                                    </p:cBhvr>
+                                    <p:tavLst>
+                                      <p:tav tm="0">
+                                        <p:val>
+                                          <p:fltVal val="0"/>
+                                        </p:val>
+                                      </p:tav>
+                                      <p:tav tm="100000">
+                                        <p:val>
+                                          <p:strVal val="#ppt_w"/>
+                                        </p:val>
+                                      </p:tav>
+                                    </p:tavLst>
+                                  </p:anim>
+                                  <p:anim calcmode="lin" valueType="num">
+                                    <p:cBhvr>
+                                      <p:cTn id="20" dur="1000" fill="hold"/>
+                                      <p:tgtEl>
+                                        <p:spTgt spid="10"/>
+                                      </p:tgtEl>
+                                      <p:attrNameLst>
+                                        <p:attrName>ppt_h</p:attrName>
+                                      </p:attrNameLst>
+                                    </p:cBhvr>
+                                    <p:tavLst>
+                                      <p:tav tm="0">
+                                        <p:val>
+                                          <p:fltVal val="0"/>
+                                        </p:val>
+                                      </p:tav>
+                                      <p:tav tm="100000">
+                                        <p:val>
+                                          <p:strVal val="#ppt_h"/>
+                                        </p:val>
+                                      </p:tav>
+                                    </p:tavLst>
+                                  </p:anim>
+                                  <p:anim calcmode="lin" valueType="num">
+                                    <p:cBhvr>
+                                      <p:cTn id="21" dur="1000" fill="hold"/>
+                                      <p:tgtEl>
+                                        <p:spTgt spid="10"/>
+                                      </p:tgtEl>
+                                      <p:attrNameLst>
+                                        <p:attrName>style.rotation</p:attrName>
+                                      </p:attrNameLst>
+                                    </p:cBhvr>
+                                    <p:tavLst>
+                                      <p:tav tm="0">
+                                        <p:val>
+                                          <p:fltVal val="90"/>
+                                        </p:val>
+                                      </p:tav>
+                                      <p:tav tm="100000">
+                                        <p:val>
+                                          <p:fltVal val="0"/>
+                                        </p:val>
+                                      </p:tav>
+                                    </p:tavLst>
+                                  </p:anim>
+                                  <p:animEffect transition="in" filter="fade">
+                                    <p:cBhvr>
+                                      <p:cTn id="22" dur="1000"/>
+                                      <p:tgtEl>
+                                        <p:spTgt spid="10"/>
+                                      </p:tgtEl>
+                                    </p:cBhvr>
+                                  </p:animEffect>
+                                </p:childTnLst>
+                              </p:cTn>
+                            </p:par>
+                          </p:childTnLst>
+                        </p:cTn>
+                      </p:par>
+                      <p:par>
+                        <p:cTn id="23" fill="hold">
+                          <p:stCondLst>
+                            <p:cond delay="1000"/>
+                          </p:stCondLst>
+                          <p:childTnLst>
+                            <p:par>
+                              <p:cTn id="24" presetID="1" presetClass="entr" presetSubtype="0" fill="hold" grpId="1" nodeType="afterEffect">
+                                <p:stCondLst>
+                                  <p:cond delay="0"/>
+                                </p:stCondLst>
+                                <p:childTnLst>
+                                  <p:set>
+                                    <p:cBhvr>
+                                      <p:cTn id="25" dur="1" fill="hold">
+                                        <p:stCondLst>
+                                          <p:cond delay="0"/>
+                                        </p:stCondLst>
+                                      </p:cTn>
+                                      <p:tgtEl>
+                                        <p:spTgt spid="11"/>
+                                      </p:tgtEl>
+                                      <p:attrNameLst>
+                                        <p:attrName>style.visibility</p:attrName>
+                                      </p:attrNameLst>
+                                    </p:cBhvr>
+                                    <p:to>
+                                      <p:strVal val="visible"/>
+                                    </p:to>
+                                  </p:set>
+                                </p:childTnLst>
+                              </p:cTn>
+                            </p:par>
+                          </p:childTnLst>
+                        </p:cTn>
+                      </p:par>
+                      <p:par>
+                        <p:cTn id="26" fill="hold">
+                          <p:stCondLst>
+                            <p:cond delay="1000"/>
+                          </p:stCondLst>
+                          <p:childTnLst>
+                            <p:par>
+                              <p:cTn id="27" presetID="6" presetClass="emph" presetSubtype="0" fill="hold" grpId="0" nodeType="afterEffect">
+                                <p:stCondLst>
+                                  <p:cond delay="0"/>
+                                </p:stCondLst>
+                                <p:childTnLst>
+                                  <p:animScale>
+                                    <p:cBhvr>
+                                      <p:cTn id="28" dur="2000" fill="hold"/>
+                                      <p:tgtEl>
+                                        <p:spTgt spid="11"/>
+                                      </p:tgtEl>
+                                    </p:cBhvr>
+                                    <p:by x="70000" y="70000"/>
+                                  </p:animScale>
+                                </p:childTnLst>
+                              </p:cTn>
+                            </p:par>
+                            <p:par>
+                              <p:cTn id="29" presetID="50" presetClass="path" presetSubtype="0" accel="50000" decel="50000" fill="hold" grpId="2" nodeType="withEffect">
+                                <p:stCondLst>
+                                  <p:cond delay="0"/>
+                                </p:stCondLst>
+                                <p:childTnLst>
+                                  <p:animMotion origin="layout" path="M 1.66667E-6 1.11111E-6 L -0.04544 1.11111E-6 C -0.06563 1.11111E-6 -0.09063 0.00463 -0.09063 0.00856 L -0.09063 0.01759 " pathEditMode="relative" rAng="0" ptsTypes="AAAA">
+                                    <p:cBhvr>
+                                      <p:cTn id="30" dur="2000" fill="hold"/>
+                                      <p:tgtEl>
+                                        <p:spTgt spid="11"/>
+                                      </p:tgtEl>
+                                      <p:attrNameLst>
+                                        <p:attrName>ppt_x</p:attrName>
+                                        <p:attrName>ppt_y</p:attrName>
+                                      </p:attrNameLst>
+                                    </p:cBhvr>
+                                    <p:rCtr x="-4531" y="880"/>
+                                  </p:animMotion>
+                                </p:childTnLst>
+                              </p:cTn>
+                            </p:par>
+                          </p:childTnLst>
+                        </p:cTn>
+                      </p:par>
+                    </p:childTnLst>
+                  </p:cTn>
+                </p:par>
+              </p:childTnLst>
+            </p:cTn>
+            <p:prevCondLst>
+              <p:cond evt="onPrev" delay="0">
+                <p:tgtEl>
+                  <p:sldTgt/>
+                </p:tgtEl>
+              </p:cond>
+            </p:prevCondLst>
+            <p:nextCondLst>
+              <p:cond evt="onNext" delay="0">
+                <p:tgtEl>
+                  <p:sldTgt/>
+                </p:tgtEl>
+              </p:cond>
+            </p:nextCondLst>
+          </p:seq>
+        </p:childTnLst>
+      </p:cTn>
+    </p:par>
+  </p:tnLst>
+  <p:bldLst>
+    <p:bldP spid="8" grpId="0"/>
+    <p:bldP spid="9" grpId="0"/>
+    <p:bldP spid="10" grpId="0"/>
+    <p:bldP spid="11" grpId="0"/>
+    <p:bldP spid="11" grpId="1"/>
+    <p:bldP spid="11" grpId="2"/>
+  </p:bldLst>
+</p:timing>

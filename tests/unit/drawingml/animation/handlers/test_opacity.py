@@ -128,6 +128,24 @@ class TestBuild:
         assert attr_name is not None
         assert attr_name.text == "style.opacity"
 
+    def test_fill_opacity_maps_to_fill_opacity_property(
+        self, handler: OpacityAnimationHandler
+    ):
+        anim = make_opacity_animation(target_attribute="fill-opacity")
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        attr_name = par.find(f".//{{{NS_P}}}attrName")
+        assert attr_name is not None
+        assert attr_name.text == "fill.opacity"
+
+    def test_stroke_opacity_maps_to_stroke_opacity_property(
+        self, handler: OpacityAnimationHandler
+    ):
+        anim = make_opacity_animation(target_attribute="stroke-opacity")
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        attr_name = par.find(f".//{{{NS_P}}}attrName")
+        assert attr_name is not None
+        assert attr_name.text == "stroke.opacity"
+
     def test_fade_in(self, handler: OpacityAnimationHandler):
         anim = make_opacity_animation(values=["0", "1"])
         par = handler.build(anim, par_id=4, behavior_id=5)
@@ -204,6 +222,20 @@ class TestBuild:
         effect_ctn = effect_cbhvr.find(f"{{{NS_P}}}cTn")
         assert effect_ctn is not None
         assert effect_ctn.get("autoRev") == "1"
+
+    def test_opacity_pulse_preserves_authored_direction(
+        self, handler: OpacityAnimationHandler
+    ):
+        anim = make_opacity_animation(values=["1", "0", "1"])
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        anim_effect = par.find(f".//{{{NS_P}}}animEffect")
+        assert anim_effect is not None
+        assert anim_effect.get("prLst") == "opacity: 0"
+        set_elem = par.find(f".//{{{NS_P}}}set")
+        assert set_elem is not None
+        str_val = set_elem.find(f".//{{{NS_P}}}strVal")
+        assert str_val is not None
+        assert str_val.get("val") == "1"
 
     def test_repeat_opacity_uses_property_animation(
         self, handler: OpacityAnimationHandler

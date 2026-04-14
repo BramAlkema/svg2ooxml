@@ -10,6 +10,9 @@ __all__ = [
     "FADE_ATTRIBUTES",
     "COLOR_ATTRIBUTES",
     "ANGLE_ATTRIBUTES",
+    "DISPLAY_ATTRIBUTES",
+    "VISIBILITY_ATTRIBUTES",
+    "DISCRETE_VISIBILITY_ATTRIBUTES",
     "ATTRIBUTE_NAME_MAP",
     "COLOR_ATTRIBUTE_NAME_MAP",
     "AXIS_MAP",
@@ -44,6 +47,22 @@ ANGLE_ATTRIBUTES: frozenset[str] = frozenset({
     "ppt_angle",
 })
 """Attributes that represent angles (need conversion to PPT 60000ths)."""
+
+DISPLAY_ATTRIBUTES: frozenset[str] = frozenset({
+    "display",
+})
+"""Attributes that gate SVG render-tree participation."""
+
+VISIBILITY_ATTRIBUTES: frozenset[str] = frozenset({
+    "visibility",
+    "style.visibility",
+})
+"""Attributes that map to PowerPoint-native visibility state."""
+
+DISCRETE_VISIBILITY_ATTRIBUTES: frozenset[str] = (
+    DISPLAY_ATTRIBUTES | VISIBILITY_ATTRIBUTES
+)
+"""Discrete show/hide attributes handled by the visibility compiler."""
 
 # ------------------------------------------------------------------ #
 # Attribute Name Mappings                                            #
@@ -84,6 +103,9 @@ ATTRIBUTE_NAME_MAP: dict[str, str] = {
 
     # Dash offset animation → Wipe entrance (line drawing effect)
     "stroke-dashoffset": "style.visibility",
+
+    # Visibility → PowerPoint visibility property
+    "visibility": "style.visibility",
 }
 
 # Attributes that should use Wipe entrance animation instead of <p:anim>

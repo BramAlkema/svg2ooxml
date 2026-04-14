@@ -49,8 +49,12 @@ class BeginTriggerType(Enum):
 
     TIME_OFFSET = "time_offset"
     CLICK = "click"
+    EVENT = "event"
     ELEMENT_BEGIN = "element_begin"
     ELEMENT_END = "element_end"
+    ELEMENT_REPEAT = "element_repeat"
+    ACCESS_KEY = "access_key"
+    WALLCLOCK = "wallclock"
     INDEFINITE = "indefinite"
 
 
@@ -61,6 +65,10 @@ class BeginTrigger:
     trigger_type: BeginTriggerType
     delay_seconds: float = 0.0
     target_element_id: str | None = None
+    event_name: str | None = None
+    repeat_iteration: int | str | None = None
+    access_key: str | None = None
+    wallclock_value: str | None = None
 
 
 @dataclass(slots=True)
@@ -70,19 +78,26 @@ class AnimationTiming:
     begin: float = 0.0
     duration: float = 1.0
     repeat_count: int | str = 1
+    repeat_duration: float | None = None
     fill_mode: FillMode = FillMode.REMOVE
     begin_triggers: list[BeginTrigger] | None = None
+    end_triggers: list[BeginTrigger] | None = None
 
     def get_end_time(self) -> float:
         """Return the absolute end time for an animation."""
         if self.repeat_count == "indefinite":
-            return float("inf")
+            repeated_end = float("inf")
+        else:
+            try:
+                count = int(self.repeat_count)
+                repeated_end = self.begin + (self.duration * count)
+            except (ValueError, TypeError):
+                repeated_end = self.begin + self.duration
 
-        try:
-            count = int(self.repeat_count)
-            return self.begin + (self.duration * count)
-        except (ValueError, TypeError):
-            return self.begin + self.duration
+        if self.repeat_duration is None:
+            return repeated_end
+
+        return min(repeated_end, self.begin + self.repeat_duration)
 
     def is_active_at_time(self, time: float) -> bool:
         """Return True when the animation is active at the supplied time."""
@@ -143,7 +158,12 @@ class AnimationDefinition:
     values: list[str]
     timing: AnimationTiming
     animation_id: str | None = None
+    attribute_type: str | None = None
+    from_value: str | None = None
+    to_value: str | None = None
+    by_value: str | None = None
     key_times: list[float] | None = None
+    key_points: list[float] | None = None
     key_splines: list[list[float]] | None = None
     calc_mode: CalcMode = CalcMode.LINEAR
     transform_type: TransformType | None = None
@@ -158,6 +178,7 @@ class AnimationDefinition:
     restart: str | None = None  # "always", "whenNotActive", "never"
     min_ms: int | None = None
     max_ms: int | None = None
+    raw_attributes: dict[str, str] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if not self.element_id:
@@ -179,11 +200,24 @@ class AnimationDefinition:
             if self.key_times != sorted(self.key_times):
                 raise ValueError("key_times must be in ascending order")
 
+        if self.key_points:
+            if self.animation_type != AnimationType.ANIMATE_MOTION:
+                raise ValueError("key_points only valid with animateMotion")
+            if not all(0.0 <= value <= 1.0 for value in self.key_points):
+                raise ValueError("All key_points must be between 0 and 1")
+
         if self.key_splines:
             calc_mode_value = self.calc_mode.value if isinstance(self.calc_mode, CalcMode) else self.calc_mode
             if calc_mode_value != "spline":
                 raise ValueError("key_splines only valid with spline calc_mode")
-            expected_count = len(self.values) - 1
+            is_motion_with_path = (
+                self.animation_type == AnimationType.ANIMATE_MOTION
+                and len(self.values) == 1
+            )
+            if is_motion_with_path and self.key_times:
+                expected_count = len(self.key_times) - 1
+            else:
+                expected_count = len(self.values) - 1
             if len(self.key_splines) != expected_count:
                 raise ValueError(f"Expected {expected_count} key_splines, got {len(self.key_splines)}")
             for spline in self.key_splines:
@@ -256,13 +290,19 @@ class AnimationDefinition:
     @property
     def repeat_duration_ms(self) -> int | None:
         """Return repeat_duration in milliseconds (for compatibility with handlers)."""
-        # This is optional - return None by default
-        return None
+        if self.timing.repeat_duration is None:
+            return None
+        return int(self.timing.repeat_duration * 1000)
 
     @property
     def begin_triggers(self) -> list[BeginTrigger] | None:
         """Return parsed begin triggers (for compatibility with handlers)."""
         return self.timing.begin_triggers
+
+    @property
+    def end_triggers(self) -> list[BeginTrigger] | None:
+        """Return parsed end triggers (for compatibility with handlers)."""
+        return self.timing.end_triggers
 
     @property
     def is_motion(self) -> bool:

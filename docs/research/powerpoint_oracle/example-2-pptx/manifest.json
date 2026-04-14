@@ -1,0 +1,443 @@
+{
+  "decks": [
+    {
+      "build_list_slide_count": 3,
+      "deck_name": "example 2.pptx",
+      "slide_count": 3,
+      "slides": [
+        {
+          "effect_patterns": [
+            {
+              "attr_names": [
+                "style.visibility"
+              ],
+              "behavior_durations": [
+                "1000"
+              ],
+              "child_tags": [
+                "anim"
+              ],
+              "container_id": "5",
+              "family_signature": "clickEffect|emph|anim|style.visibility",
+              "grp_id": "0",
+              "node_type": "clickEffect",
+              "preset_class": "emph",
+              "preset_id": "35",
+              "preset_subtype": "0",
+              "signature": "clickEffect|emph|35|anim|style.visibility",
+              "slide_file": "slide1.xml",
+              "start_delays": [
+                "0"
+              ],
+              "target_shapes": [
+                "4"
+              ]
+            }
+          ],
+          "has_build_list": true,
+          "has_timing": true,
+          "slide_file": "slide1.xml",
+          "tag_counts": {
+            "anim": 1,
+            "animClr": 0,
+            "animEffect": 0,
+            "animMotion": 0,
+            "animRot": 0,
+            "animScale": 0,
+            "set": 0
+          }
+        },
+        {
+          "effect_patterns": [
+            {
+              "attr_names": [
+                "style.visibility"
+              ],
+              "behavior_durations": [
+                "1"
+              ],
+              "child_tags": [
+                "set"
+              ],
+              "container_id": "5",
+              "family_signature": "clickEffect|entr|set|style.visibility",
+              "grp_id": "2",
+              "node_type": "clickEffect",
+              "preset_class": "entr",
+              "preset_id": "1",
+              "preset_subtype": "0",
+              "signature": "clickEffect|entr|1|set|style.visibility",
+              "slide_file": "slide2.xml",
+              "start_delays": [
+                "0"
+              ],
+              "target_shapes": [
+                "4"
+              ]
+            },
+            {
+              "attr_names": [
+                "style.visibility"
+              ],
+              "behavior_durations": [
+                "1"
+              ],
+              "child_tags": [
+                "set"
+              ],
+              "container_id": "7",
+              "family_signature": "withEffect|exit|set|style.visibility",
+              "grp_id": "1",
+              "node_type": "withEffect",
+              "preset_class": "exit",
+              "preset_id": "1",
+              "preset_subtype": "0",
+              "signature": "withEffect|exit|1|set|style.visibility",
+              "slide_file": "slide2.xml",
+              "start_delays": [
+                "500"
+              ],
+              "target_shapes": [
+                "4"
+              ]
+            },
+            {
+              "attr_names": [
+                "style.visibility"
+              ],
+              "behavior_durations": [
+                "1"
+              ],
+              "child_tags": [
+                "set"
+              ],
+              "container_id": "9",
+              "family_signature": "withEffect|entr|set|style.visibility",
+              "grp_id": "3",
+              "node_type": "withEffect",
+              "preset_class": "entr",
+              "preset_id": "1",
+              "preset_subtype": "0",
+              "signature": "withEffect|entr|1|set|style.visibility",
+              "slide_file": "slide2.xml",
+              "start_delays": [
+                "500"
+              ],
+              "target_shapes": [
+                "4"
+              ]
+            }
+          ],
+          "has_build_list": true,
+          "has_timing": true,
+          "slide_file": "slide2.xml",
+          "tag_counts": {
+            "anim": 0,
+            "animClr": 0,
+            "animEffect": 0,
+            "animMotion": 0,
+            "animRot": 0,
+            "animScale": 0,
+            "set": 3
+          }
+        },
+        {
+          "effect_patterns": [
+            {
+              "attr_names": [
+                "style.color",
+                "fillcolor",
+                "fill.type",
+                "fill.on"
+              ],
+              "behavior_durations": [
+                "500"
+              ],
+              "child_tags": [
+                "animClr",
+                "animClr",
+                "set",
+                "set"
+              ],
+              "container_id": "5",
+              "family_signature": "clickEffect|emph|animClr+animClr+set+set|style.color,fillcolor,fill.type,fill.on",
+              "grp_id": "0",
+              "node_type": "clickEffect",
+              "preset_class": "emph",
+              "preset_id": "19",
+              "preset_subtype": "0",
+              "signature": "clickEffect|emph|19|animClr+animClr+set+set|style.color,fillcolor,fill.type,fill.on",
+              "slide_file": "slide3.xml",
+              "start_delays": [
+                "0"
+              ],
+              "target_shapes": [
+                "4"
+              ]
+            },
+            {
+              "attr_names": [
+                "style.opacity"
+              ],
+              "behavior_durations": [
+                "indefinite"
+              ],
+              "child_tags": [
+                "set",
+                "animEffect"
+              ],
+              "container_id": "12",
+              "family_signature": "clickEffect|emph|set+animEffect|style.opacity",
+              "grp_id": "1",
+              "node_type": "clickEffect",
+              "preset_class": "emph",
+              "preset_id": "9",
+              "preset_subtype": "0",
+              "signature": "clickEffect|emph|9|set+animEffect|style.opacity",
+              "slide_file": "slide3.xml",
+              "start_delays": [
+                "0"
+              ],
+              "target_shapes": [
+                "4"
+              ]
+            },
+            {
+              "attr_names": [
+                "fillcolor",
+                "fill.type",
+                "fill.on"
+              ],
+              "behavior_durations": [
+                "2000"
+              ],
+              "child_tags": [
+                "animClr",
+                "set",
+                "set"
+              ],
+              "container_id": "17",
+              "family_signature": "clickEffect|emph|animClr+set+set|fillcolor,fill.type,fill.on",
+              "grp_id": null,
+              "node_type": "clickEffect",
+              "preset_class": "emph",
+              "preset_id": "1",
+              "preset_subtype": "2",
+              "signature": "clickEffect|emph|1|animClr+set+set|fillcolor,fill.type,fill.on",
+              "slide_file": "slide3.xml",
+              "start_delays": [
+                "0"
+              ],
+              "target_shapes": [
+                "4"
+              ]
+            }
+          ],
+          "has_build_list": true,
+          "has_timing": true,
+          "slide_file": "slide3.xml",
+          "tag_counts": {
+            "anim": 0,
+            "animClr": 3,
+            "animEffect": 1,
+            "animMotion": 0,
+            "animRot": 0,
+            "animScale": 0,
+            "set": 5
+          }
+        }
+      ],
+      "slug": "example-2",
+      "source_path": "/Users/ynse/projects/svg2ooxml/tmp/example 2.pptx",
+      "timing_slide_count": 3
+    }
+  ],
+  "generated_at": "2026-04-12T22:59:10.507336+00:00",
+  "pattern_family_index": [
+    {
+      "count": 1,
+      "occurrences": [
+        {
+          "deck": "example 2.pptx",
+          "node_type": "clickEffect",
+          "preset_class": "emph",
+          "preset_id": "19",
+          "slide": "slide3.xml"
+        }
+      ],
+      "signature": "clickEffect|emph|animClr+animClr+set+set|style.color,fillcolor,fill.type,fill.on"
+    },
+    {
+      "count": 1,
+      "occurrences": [
+        {
+          "deck": "example 2.pptx",
+          "node_type": "clickEffect",
+          "preset_class": "emph",
+          "preset_id": "1",
+          "slide": "slide3.xml"
+        }
+      ],
+      "signature": "clickEffect|emph|animClr+set+set|fillcolor,fill.type,fill.on"
+    },
+    {
+      "count": 1,
+      "occurrences": [
+        {
+          "deck": "example 2.pptx",
+          "node_type": "clickEffect",
+          "preset_class": "emph",
+          "preset_id": "35",
+          "slide": "slide1.xml"
+        }
+      ],
+      "signature": "clickEffect|emph|anim|style.visibility"
+    },
+    {
+      "count": 1,
+      "occurrences": [
+        {
+          "deck": "example 2.pptx",
+          "node_type": "clickEffect",
+          "preset_class": "emph",
+          "preset_id": "9",
+          "slide": "slide3.xml"
+        }
+      ],
+      "signature": "clickEffect|emph|set+animEffect|style.opacity"
+    },
+    {
+      "count": 1,
+      "occurrences": [
+        {
+          "deck": "example 2.pptx",
+          "node_type": "clickEffect",
+          "preset_class": "entr",
+          "preset_id": "1",
+          "slide": "slide2.xml"
+        }
+      ],
+      "signature": "clickEffect|entr|set|style.visibility"
+    },
+    {
+      "count": 1,
+      "occurrences": [
+        {
+          "deck": "example 2.pptx",
+          "node_type": "withEffect",
+          "preset_class": "entr",
+          "preset_id": "1",
+          "slide": "slide2.xml"
+        }
+      ],
+      "signature": "withEffect|entr|set|style.visibility"
+    },
+    {
+      "count": 1,
+      "occurrences": [
+        {
+          "deck": "example 2.pptx",
+          "node_type": "withEffect",
+          "preset_class": "exit",
+          "preset_id": "1",
+          "slide": "slide2.xml"
+        }
+      ],
+      "signature": "withEffect|exit|set|style.visibility"
+    }
+  ],
+  "pattern_index": [
+    {
+      "count": 1,
+      "occurrences": [
+        {
+          "deck": "example 2.pptx",
+          "node_type": "clickEffect",
+          "preset_class": "emph",
+          "preset_id": "19",
+          "slide": "slide3.xml"
+        }
+      ],
+      "signature": "clickEffect|emph|19|animClr+animClr+set+set|style.color,fillcolor,fill.type,fill.on"
+    },
+    {
+      "count": 1,
+      "occurrences": [
+        {
+          "deck": "example 2.pptx",
+          "node_type": "clickEffect",
+          "preset_class": "emph",
+          "preset_id": "1",
+          "slide": "slide3.xml"
+        }
+      ],
+      "signature": "clickEffect|emph|1|animClr+set+set|fillcolor,fill.type,fill.on"
+    },
+    {
+      "count": 1,
+      "occurrences": [
+        {
+          "deck": "example 2.pptx",
+          "node_type": "clickEffect",
+          "preset_class": "emph",
+          "preset_id": "35",
+          "slide": "slide1.xml"
+        }
+      ],
+      "signature": "clickEffect|emph|35|anim|style.visibility"
+    },
+    {
+      "count": 1,
+      "occurrences": [
+        {
+          "deck": "example 2.pptx",
+          "node_type": "clickEffect",
+          "preset_class": "emph",
+          "preset_id": "9",
+          "slide": "slide3.xml"
+        }
+      ],
+      "signature": "clickEffect|emph|9|set+animEffect|style.opacity"
+    },
+    {
+      "count": 1,
+      "occurrences": [
+        {
+          "deck": "example 2.pptx",
+          "node_type": "clickEffect",
+          "preset_class": "entr",
+          "preset_id": "1",
+          "slide": "slide2.xml"
+        }
+      ],
+      "signature": "clickEffect|entr|1|set|style.visibility"
+    },
+    {
+      "count": 1,
+      "occurrences": [
+        {
+          "deck": "example 2.pptx",
+          "node_type": "withEffect",
+          "preset_class": "entr",
+          "preset_id": "1",
+          "slide": "slide2.xml"
+        }
+      ],
+      "signature": "withEffect|entr|1|set|style.visibility"
+    },
+    {
+      "count": 1,
+      "occurrences": [
+        {
+          "deck": "example 2.pptx",
+          "node_type": "withEffect",
+          "preset_class": "exit",
+          "preset_id": "1",
+          "slide": "slide2.xml"
+        }
+      ],
+      "signature": "withEffect|exit|1|set|style.visibility"
+    }
+  ],
+  "source_name": "example-2-pptx"
+}

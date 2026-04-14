@@ -10,12 +10,12 @@ import shutil
 import subprocess
 import sys
 import zipfile
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Sequence
 
-from lxml import etree as ET
 import numpy as np
+from lxml import etree as ET
 from PIL import Image
 
 logger = logging.getLogger(__name__)
@@ -146,8 +146,7 @@ class LibreOfficeRenderer:
             try:
                 return subprocess.run(
                     cmd,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
+                    capture_output=True,
                     check=False,
                     timeout=self._timeout,
                     text=True,
@@ -389,8 +388,7 @@ class PowerPointRenderer:
         try:
             completed = subprocess.run(
                 cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
+                capture_output=True,
                 text=True,
                 check=False,
                 timeout=timeout,
@@ -511,6 +509,9 @@ def _detect_slide_crop_box(
             top = max(0, bottom - adjusted_height)
 
     if left <= 0 and top <= 0 and right >= width and bottom >= height:
+        return None
+    crop_area_fraction = ((right - left) * (bottom - top)) / float(width * height)
+    if crop_area_fraction < 0.45:
         return None
     return (left, top, right, bottom)
 

@@ -1,0 +1,42 @@
+{
+  "effect_patterns": [
+    {
+      "attr_names": [
+        "style.visibility"
+      ],
+      "behavior_durations": [
+        "1"
+      ],
+      "child_tags": [
+        "set"
+      ],
+      "container_id": "5",
+      "family_signature": "clickEffect|entr|set|style.visibility",
+      "grp_id": "0",
+      "node_type": "clickEffect",
+      "preset_class": "entr",
+      "preset_id": "1",
+      "preset_subtype": "0",
+      "signature": "clickEffect|entr|1|set|style.visibility",
+      "slide_file": "slide1.xml",
+      "start_delays": [
+        "0"
+      ],
+      "target_shapes": [
+        "4"
+      ]
+    }
+  ],
+  "has_build_list": true,
+  "has_timing": true,
+  "slide_file": "slide1.xml",
+  "tag_counts": {
+    "anim": 0,
+    "animClr": 0,
+    "animEffect": 0,
+    "animMotion": 0,
+    "animRot": 0,
+    "animScale": 0,
+    "set": 1
+  }
+}

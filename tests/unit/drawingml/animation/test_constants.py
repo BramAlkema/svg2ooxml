@@ -7,8 +7,11 @@ from svg2ooxml.drawingml.animation.constants import (
     AXIS_MAP,
     COLOR_ATTRIBUTE_NAME_MAP,
     COLOR_ATTRIBUTES,
+    DISCRETE_VISIBILITY_ATTRIBUTES,
+    DISPLAY_ATTRIBUTES,
     FADE_ATTRIBUTES,
     SVG2_ANIMATION_NS,
+    VISIBILITY_ATTRIBUTES,
 )
 
 
@@ -79,6 +82,21 @@ class TestAngleAttributes:
         assert len(ANGLE_ATTRIBUTES) == 4
 
 
+class TestDisplayAttributes:
+    def test_contains_display(self):
+        assert DISPLAY_ATTRIBUTES == frozenset({"display"})
+
+
+class TestVisibilityAttributes:
+    def test_contains_visibility_aliases(self):
+        assert VISIBILITY_ATTRIBUTES == frozenset({"visibility", "style.visibility"})
+
+    def test_combined_discrete_visibility_group(self):
+        assert DISCRETE_VISIBILITY_ATTRIBUTES == frozenset(
+            {"display", "visibility", "style.visibility"}
+        )
+
+
 class TestAttributeNameMap:
     """Test ATTRIBUTE_NAME_MAP constant."""
 
@@ -116,6 +134,9 @@ class TestAttributeNameMap:
 
     def test_stroke_width_maps_to_stroke_weight(self):
         assert ATTRIBUTE_NAME_MAP["stroke-width"] == "stroke.weight"
+
+    def test_visibility_maps_to_style_visibility(self):
+        assert ATTRIBUTE_NAME_MAP["visibility"] == "style.visibility"
 
     def test_all_values_are_strings(self):
         for key, value in ATTRIBUTE_NAME_MAP.items():

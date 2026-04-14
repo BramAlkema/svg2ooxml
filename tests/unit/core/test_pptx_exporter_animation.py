@@ -3,8 +3,10 @@ from __future__ import annotations
 import importlib
 import re
 import sys
+from pathlib import Path
 
 import pytest
+from lxml import etree as ET
 
 try:
     advanced_mod = importlib.import_module("svg2ooxml.color.advanced")
@@ -36,6 +38,10 @@ if not getattr(advanced_mod, "COLOR_ENGINE_AVAILABLE", False):
 
 from svg2ooxml.core.pptx_exporter import SvgToPptxExporter
 from svg2ooxml.core.tracing import ConversionTracer
+
+_NS = {
+    "p": "http://schemas.openxmlformats.org/presentationml/2006/main",
+}
 
 
 def _render(svg: str):
@@ -69,6 +75,36 @@ def _shape_extent(slide_xml: str, shape_id: int) -> tuple[int, int]:
     return (int(match.group(1)), int(match.group(2)))
 
 
+def _onclick_shape_ids_inside_groups(slide_xml: str) -> set[str]:
+    root = ET.fromstring(slide_xml.encode("utf-8"))
+    click_shape_ids = {
+        sp_tgt.get("spid")
+        for sp_tgt in root.xpath(".//p:cond[@evt='onClick']//p:spTgt", namespaces=_NS)
+        if sp_tgt.get("spid")
+    }
+    grouped_shape_ids = {
+        c_nv_pr.get("id")
+        for c_nv_pr in root.xpath(".//p:grpSp//p:sp/p:nvSpPr/p:cNvPr", namespaces=_NS)
+        if c_nv_pr.get("id")
+    }
+    return click_shape_ids & grouped_shape_ids
+
+
+def _timing_shape_ids_inside_groups(slide_xml: str) -> set[str]:
+    root = ET.fromstring(slide_xml.encode("utf-8"))
+    timing_shape_ids = {
+        sp_tgt.get("spid")
+        for sp_tgt in root.xpath(".//p:timing//p:spTgt", namespaces=_NS)
+        if sp_tgt.get("spid")
+    }
+    grouped_shape_ids = {
+        c_nv_pr.get("id")
+        for c_nv_pr in root.xpath(".//p:grpSp//p:sp/p:nvSpPr/p:cNvPr", namespaces=_NS)
+        if c_nv_pr.get("id")
+    }
+    return timing_shape_ids & grouped_shape_ids
+
+
 def test_render_svg_emits_animation_metadata() -> None:
     svg = """
     <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">
@@ -85,6 +121,10 @@ def test_render_svg_emits_animation_metadata() -> None:
     assert animation_meta is not None
     assert animation_meta["definition_count"] == 1
     assert animation_meta["definitions"][0]["element_id"] == "rect1"
+    assert animation_meta["definitions"][0]["native_match"]["level"] == "exact-native"
+    assert animation_meta["definitions"][0]["native_match"]["reason"] == "opacity-authored-fade"
+    assert animation_meta["native_match_summary"]["total"] == 1
+    assert animation_meta["native_match_summary"]["by_level"]["exact-native"] == 1
     assert animation_meta["summary"]["total_animations"] == 1
     assert animation_meta["timeline"]
 
@@ -95,6 +135,64 @@ def test_render_svg_emits_animation_metadata() -> None:
     assert stage_totals.get("animation:timing_emitted") == 1
     assert "<p:timing" in render_result.slide_xml
     assert '<p:spTgt spid="' in render_result.slide_xml
+
+
+def test_render_svg_animation_metadata_serializes_timing_plumbing() -> None:
+    svg = """
+    <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">
+      <rect id="rect1" width="10" height="10" fill="#000">
+        <animate attributeName="opacity" values="0;1"
+                 begin="rect1.repeat(3)+2s;accessKey(a)"
+                 end="wallclock(2000-01-01T00:00:00Z)"
+                 repeatDur="5s" dur="2s"/>
+      </rect>
+    </svg>
+    """
+
+    _, scene, _ = _render(svg)
+
+    animation_meta = scene.metadata["animation"]
+    timing = animation_meta["definitions"][0]["timing"]
+    assert timing["repeat_duration"] == 5.0
+    assert timing["begin_triggers"][0]["trigger_type"] == "element_repeat"
+    assert timing["begin_triggers"][0]["target_element_id"] == "rect1"
+    assert timing["begin_triggers"][0]["repeat_iteration"] == 3
+    assert timing["begin_triggers"][1]["trigger_type"] == "access_key"
+    assert timing["begin_triggers"][1]["access_key"] == "a"
+    assert timing["end_triggers"][0]["trigger_type"] == "wallclock"
+    assert timing["end_triggers"][0]["wallclock_value"] == "2000-01-01T00:00:00Z"
+
+
+def test_render_svg_emits_native_repeat_restart_and_end_conditions() -> None:
+    svg = """
+    <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">
+      <rect id="rect1" width="10" height="10" fill="#000">
+        <animate attributeName="opacity" values="0;1"
+                 begin="0s"
+                 end="1s;rect1.click+250ms"
+                 repeatCount="indefinite"
+                 repeatDur="5s"
+                 restart="whenNotActive"
+                 dur="2s"/>
+      </rect>
+    </svg>
+    """
+
+    render_result, scene, _ = _render(svg)
+
+    assert 'repeatCount="indefinite"' in render_result.slide_xml
+    assert 'repeatDur="5000"' in render_result.slide_xml
+    assert 'restart="whenNotActive"' in render_result.slide_xml
+    assert "<p:endCondLst>" in render_result.slide_xml
+    assert '<p:cond delay="1000"/>' in render_result.slide_xml
+    assert 'evt="onClick"' in render_result.slide_xml
+    assert 'delay="250"' in render_result.slide_xml
+
+    native_match = scene.metadata["animation"]["definitions"][0]["native_match"]
+    assert native_match["level"] == "exact-native"
+    assert "end-condition-native" in native_match["limitations"]
+    assert "repeat-duration-native" in native_match["limitations"]
+    assert "restart-native" in native_match["limitations"]
 
 
 def test_use_inherits_defs_owned_animations() -> None:
@@ -667,6 +765,28 @@ def test_begin_indefinite_remaps_to_bookmark_button_click_trigger() -> None:
     )
 
 
+def test_bookmark_click_triggers_are_not_nested_inside_groups() -> None:
+    svg = """
+    <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="100" height="100">
+      <g id="outer">
+        <rect id="target" x="0" y="0" width="40" height="40" fill="#fff">
+          <animate id="fadein" attributeName="fill" from="#fff" to="blue" begin="indefinite" dur="3s" fill="freeze"/>
+        </rect>
+        <g id="buttons">
+          <a xlink:href="#fadein">
+            <rect id="button" x="60" y="0" width="30" height="30" fill="green"/>
+          </a>
+        </g>
+      </g>
+    </svg>
+    """
+
+    render_result, _, _ = _render(svg)
+
+    assert 'evt="onClick"' in render_result.slide_xml
+    assert not _onclick_shape_ids_inside_groups(render_result.slide_xml)
+
+
 def test_begin_indefinite_bookmark_trigger_preserves_chained_begin() -> None:
     svg = """
     <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="100" height="100">
@@ -852,14 +972,13 @@ def test_symmetric_multi_keyframe_width_animation_uses_autoreverse_scale() -> No
     render_result, _, _ = _render(svg)
 
     assert "<p:animScale" in render_result.slide_xml
-    assert '<p:attrName>ScaleX</p:attrName>' in render_result.slide_xml
-    assert '<p:attrName>ScaleY</p:attrName>' in render_result.slide_xml
-    assert '<p:from x="100000" y="100000"/>' in render_result.slide_xml
-    assert '<p:to x="400000" y="100000"/>' in render_result.slide_xml
+    assert '<p:by x="400000" y="100000"/>' in render_result.slide_xml
+    assert '<p:attrName>ScaleX</p:attrName>' not in render_result.slide_xml
+    assert '<p:attrName>ScaleY</p:attrName>' not in render_result.slide_xml
     assert 'autoRev="1"' in render_result.slide_xml
 
 
-def test_multi_keyframe_width_animation_with_custom_key_times_uses_tav_width_animation() -> (
+def test_multi_keyframe_width_animation_with_custom_key_times_uses_segmented_scale() -> (
     None
 ):
     svg = """
@@ -872,10 +991,50 @@ def test_multi_keyframe_width_animation_with_custom_key_times_uses_tav_width_ani
 
     render_result, _, _ = _render(svg)
 
-    assert "<p:animScale" not in render_result.slide_xml
-    assert "<p:anim>" in render_result.slide_xml
-    assert "<p:attrName>ppt_w</p:attrName>" in render_result.slide_xml
-    assert render_result.slide_xml.count("<p:tav ") == 3
+    assert render_result.slide_xml.count("<p:animScale") == 2
+    assert "<p:attrName>ppt_w</p:attrName>" not in render_result.slide_xml
+    assert "<p:tav " not in render_result.slide_xml
+    assert render_result.slide_xml.count('animBg="1"') == 2
+
+
+def test_animate_elem_10_linear_calc_mode_uses_playable_scale_and_retimed_motion() -> None:
+    svg = Path("tests/svg/animate-elem-10-t.svg").read_text(encoding="utf-8")
+
+    render_result, _, _ = _render(svg)
+
+    assert "<p:attrName>ppt_h</p:attrName>" not in render_result.slide_xml
+    assert render_result.slide_xml.count("<p:animScale") == 3
+    assert render_result.slide_xml.count(" L ") > 3
+
+
+def test_animate_elem_11_paced_calc_mode_uses_playable_scale_and_retimed_motion() -> None:
+    svg = Path("tests/svg/animate-elem-11-t.svg").read_text(encoding="utf-8")
+
+    render_result, _, _ = _render(svg)
+
+    assert "<p:attrName>ppt_h</p:attrName>" not in render_result.slide_xml
+    assert render_result.slide_xml.count("<p:animScale") == 3
+    assert render_result.slide_xml.count(" L ") > 3
+
+
+def test_animate_elem_29_b_bookmark_buttons_are_top_level_shapes() -> None:
+    svg = Path("tests/svg/animate-elem-29-b.svg").read_text(encoding="utf-8")
+
+    render_result, _, _ = _render(svg)
+
+    assert "<p:grpSp>" not in render_result.slide_xml
+    assert not _onclick_shape_ids_inside_groups(render_result.slide_xml)
+    assert render_result.slide_xml.count("<p:attrName>fill.opacity</p:attrName>") == 2
+
+
+def test_animate_elem_19_linear_calc_mode_targets_top_level_shape() -> None:
+    svg = Path("tests/svg/animate-elem-19-t.svg").read_text(encoding="utf-8")
+
+    render_result, _, _ = _render(svg)
+
+    assert not _timing_shape_ids_inside_groups(render_result.slide_xml)
+    assert "<p:attrName>ppt_w</p:attrName>" not in render_result.slide_xml
+    assert render_result.slide_xml.count("<p:animScale") == 3
 
 
 def test_multi_keyframe_opacity_animation_uses_transparency_effect() -> None:
@@ -1002,8 +1161,48 @@ def test_set_animation_emits_set_element() -> None:
     render_result, _, _ = _render(svg)
 
     assert "<p:set>" in render_result.slide_xml
-    assert "<p:attrName>visibility</p:attrName>" in render_result.slide_xml
+    assert "<p:attrName>style.visibility</p:attrName>" in render_result.slide_xml
     assert '<p:strVal val="hidden"/>' in render_result.slide_xml
+
+
+def test_display_animations_compile_to_native_visibility_sets() -> None:
+    svg = """
+    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20">
+      <g id="gate" display="none">
+        <circle cx="10" cy="10" r="5" fill="#ff0000"/>
+        <animate attributeName="display" from="none" to="inline" begin="0s" dur="2s" fill="freeze"/>
+      </g>
+    </svg>
+    """
+
+    render_result, scene, _ = _render(svg)
+
+    assert "<p:attrName>display</p:attrName>" not in render_result.slide_xml
+    assert "<p:attrName>visibility</p:attrName>" not in render_result.slide_xml
+    assert "<p:attrName>style.visibility</p:attrName>" in render_result.slide_xml
+    assert '<p:strVal val="visible"/>' in render_result.slide_xml
+    assert scene.metadata is not None
+    animation_definitions = scene.metadata["animation"]["definitions"]
+    assert all(defn["target_attribute"] != "display" for defn in animation_definitions)
+
+
+def test_animate_elem_31_t_rewrites_display_to_native_visibility() -> None:
+    svg = Path("tests/svg/animate-elem-31-t.svg").read_text(encoding="utf-8")
+
+    render_result, scene, _ = _render(svg)
+
+    assert "<p:attrName>display</p:attrName>" not in render_result.slide_xml
+    assert "<p:attrName>visibility</p:attrName>" not in render_result.slide_xml
+    assert render_result.slide_xml.count("<p:attrName>style.visibility</p:attrName>") >= 8
+    assert '<p:strVal val="hidden"/>' in render_result.slide_xml
+    assert '<p:strVal val="visible"/>' in render_result.slide_xml
+    assert scene.metadata is not None
+    targets = {
+        definition["target_attribute"]
+        for definition in scene.metadata["animation"]["definitions"]
+    }
+    assert "display" not in targets
+    assert "visibility" not in targets
 
 
 def test_set_animation_normalizes_numeric_value() -> None:

@@ -1,0 +1,1281 @@
+{
+  "effect_patterns": [
+    {
+      "attr_names": [
+        "style.visibility",
+        "ppt_x",
+        "ppt_y"
+      ],
+      "behavior_durations": [
+        "1",
+        "1250"
+      ],
+      "child_tags": [
+        "set",
+        "anim",
+        "anim"
+      ],
+      "container_id": "5",
+      "family_signature": "withEffect|entr|set+anim+anim|style.visibility,ppt_x,ppt_y",
+      "grp_id": "0",
+      "node_type": "withEffect",
+      "preset_class": "entr",
+      "preset_id": "2",
+      "preset_subtype": "9",
+      "signature": "withEffect|entr|2|set+anim+anim|style.visibility,ppt_x,ppt_y",
+      "slide_file": "slide6.xml",
+      "start_delays": [
+        "500"
+      ],
+      "target_shapes": [
+        "2"
+      ]
+    },
+    {
+      "attr_names": [
+        "style.visibility",
+        "ppt_x",
+        "ppt_y"
+      ],
+      "behavior_durations": [
+        "1",
+        "1250"
+      ],
+      "child_tags": [
+        "set",
+        "anim",
+        "anim"
+      ],
+      "container_id": "9",
+      "family_signature": "withEffect|entr|set+anim+anim|style.visibility,ppt_x,ppt_y",
+      "grp_id": "0",
+      "node_type": "withEffect",
+      "preset_class": "entr",
+      "preset_id": "2",
+      "preset_subtype": "1",
+      "signature": "withEffect|entr|2|set+anim+anim|style.visibility,ppt_x,ppt_y",
+      "slide_file": "slide6.xml",
+      "start_delays": [
+        "750"
+      ],
+      "target_shapes": [
+        "3"
+      ]
+    },
+    {
+      "attr_names": [
+        "style.visibility",
+        "ppt_x",
+        "ppt_y"
+      ],
+      "behavior_durations": [
+        "1",
+        "1250"
+      ],
+      "child_tags": [
+        "set",
+        "anim",
+        "anim"
+      ],
+      "container_id": "13",
+      "family_signature": "withEffect|entr|set+anim+anim|style.visibility,ppt_x,ppt_y",
+      "grp_id": "0",
+      "node_type": "withEffect",
+      "preset_class": "entr",
+      "preset_id": "2",
+      "preset_subtype": "3",
+      "signature": "withEffect|entr|2|set+anim+anim|style.visibility,ppt_x,ppt_y",
+      "slide_file": "slide6.xml",
+      "start_delays": [
+        "1000"
+      ],
+      "target_shapes": [
+        "4"
+      ]
+    },
+    {
+      "attr_names": [
+        "style.visibility",
+        "ppt_x",
+        "ppt_y"
+      ],
+      "behavior_durations": [
+        "1",
+        "1250"
+      ],
+      "child_tags": [
+        "set",
+        "anim",
+        "anim"
+      ],
+      "container_id": "17",
+      "family_signature": "withEffect|entr|set+anim+anim|style.visibility,ppt_x,ppt_y",
+      "grp_id": "0",
+      "node_type": "withEffect",
+      "preset_class": "entr",
+      "preset_id": "2",
+      "preset_subtype": "8",
+      "signature": "withEffect|entr|2|set+anim+anim|style.visibility,ppt_x,ppt_y",
+      "slide_file": "slide6.xml",
+      "start_delays": [
+        "1250"
+      ],
+      "target_shapes": [
+        "5"
+      ]
+    },
+    {
+      "attr_names": [
+        "style.visibility",
+        "ppt_x",
+        "ppt_y"
+      ],
+      "behavior_durations": [
+        "1",
+        "1250"
+      ],
+      "child_tags": [
+        "set",
+        "anim",
+        "anim"
+      ],
+      "container_id": "21",
+      "family_signature": "withEffect|entr|set+anim+anim|style.visibility,ppt_x,ppt_y",
+      "grp_id": "0",
+      "node_type": "withEffect",
+      "preset_class": "entr",
+      "preset_id": "2",
+      "preset_subtype": "2",
+      "signature": "withEffect|entr|2|set+anim+anim|style.visibility,ppt_x,ppt_y",
+      "slide_file": "slide6.xml",
+      "start_delays": [
+        "1500"
+      ],
+      "target_shapes": [
+        "7"
+      ]
+    },
+    {
+      "attr_names": [
+        "style.visibility",
+        "ppt_x",
+        "ppt_y"
+      ],
+      "behavior_durations": [
+        "1",
+        "1250"
+      ],
+      "child_tags": [
+        "set",
+        "anim",
+        "anim"
+      ],
+      "container_id": "25",
+      "family_signature": "withEffect|entr|set+anim+anim|style.visibility,ppt_x,ppt_y",
+      "grp_id": "0",
+      "node_type": "withEffect",
+      "preset_class": "entr",
+      "preset_id": "2",
+      "preset_subtype": "12",
+      "signature": "withEffect|entr|2|set+anim+anim|style.visibility,ppt_x,ppt_y",
+      "slide_file": "slide6.xml",
+      "start_delays": [
+        "1750"
+      ],
+      "target_shapes": [
+        "8"
+      ]
+    },
+    {
+      "attr_names": [
+        "style.visibility",
+        "ppt_x",
+        "ppt_y"
+      ],
+      "behavior_durations": [
+        "1",
+        "1250"
+      ],
+      "child_tags": [
+        "set",
+        "anim",
+        "anim"
+      ],
+      "container_id": "29",
+      "family_signature": "withEffect|entr|set+anim+anim|style.visibility,ppt_x,ppt_y",
+      "grp_id": "0",
+      "node_type": "withEffect",
+      "preset_class": "entr",
+      "preset_id": "2",
+      "preset_subtype": "4",
+      "signature": "withEffect|entr|2|set+anim+anim|style.visibility,ppt_x,ppt_y",
+      "slide_file": "slide6.xml",
+      "start_delays": [
+        "2000"
+      ],
+      "target_shapes": [
+        "9"
+      ]
+    },
+    {
+      "attr_names": [
+        "style.visibility",
+        "ppt_x",
+        "ppt_y"
+      ],
+      "behavior_durations": [
+        "1",
+        "1250"
+      ],
+      "child_tags": [
+        "set",
+        "anim",
+        "anim"
+      ],
+      "container_id": "33",
+      "family_signature": "withEffect|entr|set+anim+anim|style.visibility,ppt_x,ppt_y",
+      "grp_id": "0",
+      "node_type": "withEffect",
+      "preset_class": "entr",
+      "preset_id": "2",
+      "preset_subtype": "6",
+      "signature": "withEffect|entr|2|set+anim+anim|style.visibility,ppt_x,ppt_y",
+      "slide_file": "slide6.xml",
+      "start_delays": [
+        "2250"
+      ],
+      "target_shapes": [
+        "10"
+      ]
+    },
+    {
+      "attr_names": [
+        "style.visibility",
+        "ppt_w",
+        "ppt_h"
+      ],
+      "behavior_durations": [
+        "1",
+        "1250"
+      ],
+      "child_tags": [
+        "set",
+        "anim",
+        "anim",
+        "animEffect"
+      ],
+      "container_id": "37",
+      "family_signature": "withEffect|entr|set+anim+anim+animEffect|style.visibility,ppt_w,ppt_h",
+      "grp_id": "0",
+      "node_type": "withEffect",
+      "preset_class": "entr",
+      "preset_id": "53",
+      "preset_subtype": "16",
+      "signature": "withEffect|entr|53|set+anim+anim+animEffect|style.visibility,ppt_w,ppt_h",
+      "slide_file": "slide6.xml",
+      "start_delays": [
+        "2500"
+      ],
+      "target_shapes": [
+        "6"
+      ]
+    },
+    {
+      "attr_names": [
+        "style.visibility",
+        "ppt_x",
+        "ppt_y"
+      ],
+      "behavior_durations": [
+        "1",
+        "1000"
+      ],
+      "child_tags": [
+        "set",
+        "animEffect",
+        "anim",
+        "anim"
+      ],
+      "container_id": "42",
+      "family_signature": "withEffect|entr|set+animEffect+anim+anim|style.visibility,ppt_x,ppt_y",
+      "grp_id": "0",
+      "node_type": "withEffect",
+      "preset_class": "entr",
+      "preset_id": "42",
+      "preset_subtype": "0",
+      "signature": "withEffect|entr|42|set+animEffect+anim+anim|style.visibility,ppt_x,ppt_y",
+      "slide_file": "slide6.xml",
+      "start_delays": [
+        "2750"
+      ],
+      "target_shapes": [
+        "28"
+      ]
+    },
+    {
+      "attr_names": [
+        "style.visibility",
+        "ppt_x",
+        "ppt_y"
+      ],
+      "behavior_durations": [
+        "1",
+        "1000"
+      ],
+      "child_tags": [
+        "set",
+        "animEffect",
+        "anim",
+        "anim"
+      ],
+      "container_id": "47",
+      "family_signature": "withEffect|entr|set+animEffect+anim+anim|style.visibility,ppt_x,ppt_y",
+      "grp_id": "0",
+      "node_type": "withEffect",
+      "preset_class": "entr",
+      "preset_id": "42",
+      "preset_subtype": "0",
+      "signature": "withEffect|entr|42|set+animEffect+anim+anim|style.visibility,ppt_x,ppt_y",
+      "slide_file": "slide6.xml",
+      "start_delays": [
+        "3000"
+      ],
+      "target_shapes": [
+        "29"
+      ]
+    },
+    {
+      "attr_names": [
+        "style.visibility",
+        "ppt_x",
+        "ppt_y"
+      ],
+      "behavior_durations": [
+        "1",
+        "1000"
+      ],
+      "child_tags": [
+        "set",
+        "animEffect",
+        "anim",
+        "anim"
+      ],
+      "container_id": "52",
+      "family_signature": "withEffect|entr|set+animEffect+anim+anim|style.visibility,ppt_x,ppt_y",
+      "grp_id": "0",
+      "node_type": "withEffect",
+      "preset_class": "entr",
+      "preset_id": "42",
+      "preset_subtype": "0",
+      "signature": "withEffect|entr|42|set+animEffect+anim+anim|style.visibility,ppt_x,ppt_y",
+      "slide_file": "slide6.xml",
+      "start_delays": [
+        "4250"
+      ],
+      "target_shapes": [
+        "43"
+      ]
+    },
+    {
+      "attr_names": [
+        "style.visibility",
+        "ppt_x",
+        "ppt_y"
+      ],
+      "behavior_durations": [
+        "1",
+        "1000"
+      ],
+      "child_tags": [
+        "set",
+        "animEffect",
+        "anim",
+        "anim"
+      ],
+      "container_id": "57",
+      "family_signature": "withEffect|entr|set+animEffect+anim+anim|style.visibility,ppt_x,ppt_y",
+      "grp_id": "0",
+      "node_type": "withEffect",
+      "preset_class": "entr",
+      "preset_id": "42",
+      "preset_subtype": "0",
+      "signature": "withEffect|entr|42|set+animEffect+anim+anim|style.visibility,ppt_x,ppt_y",
+      "slide_file": "slide6.xml",
+      "start_delays": [
+        "4500"
+      ],
+      "target_shapes": [
+        "44"
+      ]
+    },
+    {
+      "attr_names": [
+        "style.visibility",
+        "ppt_x",
+        "ppt_y"
+      ],
+      "behavior_durations": [
+        "1",
+        "1000"
+      ],
+      "child_tags": [
+        "set",
+        "animEffect",
+        "anim",
+        "anim"
+      ],
+      "container_id": "62",
+      "family_signature": "withEffect|entr|set+animEffect+anim+anim|style.visibility,ppt_x,ppt_y",
+      "grp_id": "0",
+      "node_type": "withEffect",
+      "preset_class": "entr",
+      "preset_id": "42",
+      "preset_subtype": "0",
+      "signature": "withEffect|entr|42|set+animEffect+anim+anim|style.visibility,ppt_x,ppt_y",
+      "slide_file": "slide6.xml",
+      "start_delays": [
+        "4750"
+      ],
+      "target_shapes": [
+        "40"
+      ]
+    },
+    {
+      "attr_names": [
+        "style.visibility",
+        "ppt_x",
+        "ppt_y"
+      ],
+      "behavior_durations": [
+        "1",
+        "1000"
+      ],
+      "child_tags": [
+        "set",
+        "animEffect",
+        "anim",
+        "anim"
+      ],
+      "container_id": "67",
+      "family_signature": "withEffect|entr|set+animEffect+anim+anim|style.visibility,ppt_x,ppt_y",
+      "grp_id": "0",
+      "node_type": "withEffect",
+      "preset_class": "entr",
+      "preset_id": "42",
+      "preset_subtype": "0",
+      "signature": "withEffect|entr|42|set+animEffect+anim+anim|style.visibility,ppt_x,ppt_y",
+      "slide_file": "slide6.xml",
+      "start_delays": [
+        "5000"
+      ],
+      "target_shapes": [
+        "41"
+      ]
+    },
+    {
+      "attr_names": [
+        "style.visibility",
+        "ppt_x",
+        "ppt_y"
+      ],
+      "behavior_durations": [
+        "1",
+        "1000"
+      ],
+      "child_tags": [
+        "set",
+        "animEffect",
+        "anim",
+        "anim"
+      ],
+      "container_id": "72",
+      "family_signature": "withEffect|entr|set+animEffect+anim+anim|style.visibility,ppt_x,ppt_y",
+      "grp_id": "0",
+      "node_type": "withEffect",
+      "preset_class": "entr",
+      "preset_id": "42",
+      "preset_subtype": "0",
+      "signature": "withEffect|entr|42|set+animEffect+anim+anim|style.visibility,ppt_x,ppt_y",
+      "slide_file": "slide6.xml",
+      "start_delays": [
+        "5750"
+      ],
+      "target_shapes": [
+        "55"
+      ]
+    },
+    {
+      "attr_names": [
+        "style.visibility",
+        "ppt_x",
+        "ppt_y"
+      ],
+      "behavior_durations": [
+        "1",
+        "1000"
+      ],
+      "child_tags": [
+        "set",
+        "animEffect",
+        "anim",
+        "anim"
+      ],
+      "container_id": "77",
+      "family_signature": "withEffect|entr|set+animEffect+anim+anim|style.visibility,ppt_x,ppt_y",
+      "grp_id": "0",
+      "node_type": "withEffect",
+      "preset_class": "entr",
+      "preset_id": "42",
+      "preset_subtype": "0",
+      "signature": "withEffect|entr|42|set+animEffect+anim+anim|style.visibility,ppt_x,ppt_y",
+      "slide_file": "slide6.xml",
+      "start_delays": [
+        "6000"
+      ],
+      "target_shapes": [
+        "56"
+      ]
+    },
+    {
+      "attr_names": [
+        "style.visibility",
+        "ppt_x",
+        "ppt_y"
+      ],
+      "behavior_durations": [
+        "1",
+        "1000"
+      ],
+      "child_tags": [
+        "set",
+        "animEffect",
+        "anim",
+        "anim"
+      ],
+      "container_id": "82",
+      "family_signature": "withEffect|entr|set+animEffect+anim+anim|style.visibility,ppt_x,ppt_y",
+      "grp_id": "0",
+      "node_type": "withEffect",
+      "preset_class": "entr",
+      "preset_id": "42",
+      "preset_subtype": "0",
+      "signature": "withEffect|entr|42|set+animEffect+anim+anim|style.visibility,ppt_x,ppt_y",
+      "slide_file": "slide6.xml",
+      "start_delays": [
+        "6250"
+      ],
+      "target_shapes": [
+        "52"
+      ]
+    },
+    {
+      "attr_names": [
+        "style.visibility",
+        "ppt_x",
+        "ppt_y"
+      ],
+      "behavior_durations": [
+        "1",
+        "1000"
+      ],
+      "child_tags": [
+        "set",
+        "animEffect",
+        "anim",
+        "anim"
+      ],
+      "container_id": "87",
+      "family_signature": "withEffect|entr|set+animEffect+anim+anim|style.visibility,ppt_x,ppt_y",
+      "grp_id": "0",
+      "node_type": "withEffect",
+      "preset_class": "entr",
+      "preset_id": "42",
+      "preset_subtype": "0",
+      "signature": "withEffect|entr|42|set+animEffect+anim+anim|style.visibility,ppt_x,ppt_y",
+      "slide_file": "slide6.xml",
+      "start_delays": [
+        "6500"
+      ],
+      "target_shapes": [
+        "53"
+      ]
+    },
+    {
+      "attr_names": [
+        "style.visibility",
+        "ppt_x",
+        "ppt_y"
+      ],
+      "behavior_durations": [
+        "1",
+        "1000"
+      ],
+      "child_tags": [
+        "set",
+        "animEffect",
+        "anim",
+        "anim"
+      ],
+      "container_id": "92",
+      "family_signature": "withEffect|entr|set+animEffect+anim+anim|style.visibility,ppt_x,ppt_y",
+      "grp_id": "0",
+      "node_type": "withEffect",
+      "preset_class": "entr",
+      "preset_id": "42",
+      "preset_subtype": "0",
+      "signature": "withEffect|entr|42|set+animEffect+anim+anim|style.visibility,ppt_x,ppt_y",
+      "slide_file": "slide6.xml",
+      "start_delays": [
+        "6750"
+      ],
+      "target_shapes": [
+        "49"
+      ]
+    },
+    {
+      "attr_names": [
+        "style.visibility",
+        "ppt_x",
+        "ppt_y"
+      ],
+      "behavior_durations": [
+        "1",
+        "1000"
+      ],
+      "child_tags": [
+        "set",
+        "animEffect",
+        "anim",
+        "anim"
+      ],
+      "container_id": "97",
+      "family_signature": "withEffect|entr|set+animEffect+anim+anim|style.visibility,ppt_x,ppt_y",
+      "grp_id": "0",
+      "node_type": "withEffect",
+      "preset_class": "entr",
+      "preset_id": "42",
+      "preset_subtype": "0",
+      "signature": "withEffect|entr|42|set+animEffect+anim+anim|style.visibility,ppt_x,ppt_y",
+      "slide_file": "slide6.xml",
+      "start_delays": [
+        "7000"
+      ],
+      "target_shapes": [
+        "50"
+      ]
+    },
+    {
+      "attr_names": [
+        "style.visibility"
+      ],
+      "behavior_durations": [
+        "1",
+        "750"
+      ],
+      "child_tags": [
+        "set",
+        "animEffect"
+      ],
+      "container_id": "102",
+      "family_signature": "withEffect|entr|set+animEffect|style.visibility",
+      "grp_id": "0",
+      "node_type": "withEffect",
+      "preset_class": "entr",
+      "preset_id": "10",
+      "preset_subtype": "0",
+      "signature": "withEffect|entr|10|set+animEffect|style.visibility",
+      "slide_file": "slide6.xml",
+      "start_delays": [
+        "7000"
+      ],
+      "target_shapes": [
+        "12"
+      ]
+    },
+    {
+      "attr_names": [
+        "style.visibility"
+      ],
+      "behavior_durations": [
+        "1",
+        "750"
+      ],
+      "child_tags": [
+        "set",
+        "animEffect"
+      ],
+      "container_id": "105",
+      "family_signature": "withEffect|entr|set+animEffect|style.visibility",
+      "grp_id": "0",
+      "node_type": "withEffect",
+      "preset_class": "entr",
+      "preset_id": "10",
+      "preset_subtype": "0",
+      "signature": "withEffect|entr|10|set+animEffect|style.visibility",
+      "slide_file": "slide6.xml",
+      "start_delays": [
+        "7000"
+      ],
+      "target_shapes": [
+        "15"
+      ]
+    },
+    {
+      "attr_names": [
+        "style.visibility"
+      ],
+      "behavior_durations": [
+        "1",
+        "750"
+      ],
+      "child_tags": [
+        "set",
+        "animEffect"
+      ],
+      "container_id": "108",
+      "family_signature": "withEffect|entr|set+animEffect|style.visibility",
+      "grp_id": "0",
+      "node_type": "withEffect",
+      "preset_class": "entr",
+      "preset_id": "10",
+      "preset_subtype": "0",
+      "signature": "withEffect|entr|10|set+animEffect|style.visibility",
+      "slide_file": "slide6.xml",
+      "start_delays": [
+        "7000"
+      ],
+      "target_shapes": [
+        "18"
+      ]
+    },
+    {
+      "attr_names": [
+        "style.visibility"
+      ],
+      "behavior_durations": [
+        "1",
+        "750"
+      ],
+      "child_tags": [
+        "set",
+        "animEffect"
+      ],
+      "container_id": "111",
+      "family_signature": "withEffect|entr|set+animEffect|style.visibility",
+      "grp_id": "0",
+      "node_type": "withEffect",
+      "preset_class": "entr",
+      "preset_id": "10",
+      "preset_subtype": "0",
+      "signature": "withEffect|entr|10|set+animEffect|style.visibility",
+      "slide_file": "slide6.xml",
+      "start_delays": [
+        "7000"
+      ],
+      "target_shapes": [
+        "13"
+      ]
+    },
+    {
+      "attr_names": [
+        "style.visibility"
+      ],
+      "behavior_durations": [
+        "1",
+        "750"
+      ],
+      "child_tags": [
+        "set",
+        "animEffect"
+      ],
+      "container_id": "114",
+      "family_signature": "withEffect|entr|set+animEffect|style.visibility",
+      "grp_id": "0",
+      "node_type": "withEffect",
+      "preset_class": "entr",
+      "preset_id": "10",
+      "preset_subtype": "0",
+      "signature": "withEffect|entr|10|set+animEffect|style.visibility",
+      "slide_file": "slide6.xml",
+      "start_delays": [
+        "7000"
+      ],
+      "target_shapes": [
+        "16"
+      ]
+    },
+    {
+      "attr_names": [
+        "style.visibility"
+      ],
+      "behavior_durations": [
+        "1",
+        "750"
+      ],
+      "child_tags": [
+        "set",
+        "animEffect"
+      ],
+      "container_id": "117",
+      "family_signature": "withEffect|entr|set+animEffect|style.visibility",
+      "grp_id": "0",
+      "node_type": "withEffect",
+      "preset_class": "entr",
+      "preset_id": "10",
+      "preset_subtype": "0",
+      "signature": "withEffect|entr|10|set+animEffect|style.visibility",
+      "slide_file": "slide6.xml",
+      "start_delays": [
+        "7000"
+      ],
+      "target_shapes": [
+        "19"
+      ]
+    },
+    {
+      "attr_names": [
+        "style.visibility"
+      ],
+      "behavior_durations": [
+        "1",
+        "750"
+      ],
+      "child_tags": [
+        "set",
+        "animEffect"
+      ],
+      "container_id": "120",
+      "family_signature": "withEffect|entr|set+animEffect|style.visibility",
+      "grp_id": "0",
+      "node_type": "withEffect",
+      "preset_class": "entr",
+      "preset_id": "10",
+      "preset_subtype": "0",
+      "signature": "withEffect|entr|10|set+animEffect|style.visibility",
+      "slide_file": "slide6.xml",
+      "start_delays": [
+        "7000"
+      ],
+      "target_shapes": [
+        "14"
+      ]
+    },
+    {
+      "attr_names": [
+        "style.visibility"
+      ],
+      "behavior_durations": [
+        "1",
+        "750"
+      ],
+      "child_tags": [
+        "set",
+        "animEffect"
+      ],
+      "container_id": "123",
+      "family_signature": "withEffect|entr|set+animEffect|style.visibility",
+      "grp_id": "0",
+      "node_type": "withEffect",
+      "preset_class": "entr",
+      "preset_id": "10",
+      "preset_subtype": "0",
+      "signature": "withEffect|entr|10|set+animEffect|style.visibility",
+      "slide_file": "slide6.xml",
+      "start_delays": [
+        "7000"
+      ],
+      "target_shapes": [
+        "17"
+      ]
+    },
+    {
+      "attr_names": [
+        "style.visibility"
+      ],
+      "behavior_durations": [
+        "1",
+        "750"
+      ],
+      "child_tags": [
+        "set",
+        "animEffect"
+      ],
+      "container_id": "126",
+      "family_signature": "withEffect|entr|set+animEffect|style.visibility",
+      "grp_id": "0",
+      "node_type": "withEffect",
+      "preset_class": "entr",
+      "preset_id": "10",
+      "preset_subtype": "0",
+      "signature": "withEffect|entr|10|set+animEffect|style.visibility",
+      "slide_file": "slide6.xml",
+      "start_delays": [
+        "7000"
+      ],
+      "target_shapes": [
+        "20"
+      ]
+    },
+    {
+      "attr_names": [
+        "style.visibility",
+        "ppt_x",
+        "ppt_y"
+      ],
+      "behavior_durations": [
+        "1",
+        "1000"
+      ],
+      "child_tags": [
+        "set",
+        "anim",
+        "anim"
+      ],
+      "container_id": "129",
+      "family_signature": "withEffect|entr|set+anim+anim|style.visibility,ppt_x,ppt_y",
+      "grp_id": "0",
+      "node_type": "withEffect",
+      "preset_class": "entr",
+      "preset_id": "2",
+      "preset_subtype": "1",
+      "signature": "withEffect|entr|2|set+anim+anim|style.visibility,ppt_x,ppt_y",
+      "slide_file": "slide6.xml",
+      "start_delays": [
+        "500"
+      ],
+      "target_shapes": [
+        "11"
+      ]
+    },
+    {
+      "attr_names": [
+        "style.visibility",
+        "ppt_x",
+        "ppt_y"
+      ],
+      "behavior_durations": [
+        "1",
+        "1000"
+      ],
+      "child_tags": [
+        "set",
+        "animEffect",
+        "anim",
+        "anim"
+      ],
+      "container_id": "133",
+      "family_signature": "withEffect|entr|set+animEffect+anim+anim|style.visibility,ppt_x,ppt_y",
+      "grp_id": "0",
+      "node_type": "withEffect",
+      "preset_class": "entr",
+      "preset_id": "42",
+      "preset_subtype": "0",
+      "signature": "withEffect|entr|42|set+animEffect+anim+anim|style.visibility,ppt_x,ppt_y",
+      "slide_file": "slide6.xml",
+      "start_delays": [
+        "1000"
+      ],
+      "target_shapes": [
+        "57"
+      ]
+    },
+    {
+      "attr_names": [
+        "style.visibility",
+        "ppt_x",
+        "ppt_y"
+      ],
+      "behavior_durations": [
+        "1",
+        "1000"
+      ],
+      "child_tags": [
+        "set",
+        "animEffect",
+        "anim",
+        "anim"
+      ],
+      "container_id": "138",
+      "family_signature": "withEffect|entr|set+animEffect+anim+anim|style.visibility,ppt_x,ppt_y",
+      "grp_id": "0",
+      "node_type": "withEffect",
+      "preset_class": "entr",
+      "preset_id": "42",
+      "preset_subtype": "0",
+      "signature": "withEffect|entr|42|set+animEffect+anim+anim|style.visibility,ppt_x,ppt_y",
+      "slide_file": "slide6.xml",
+      "start_delays": [
+        "1250"
+      ],
+      "target_shapes": [
+        "58"
+      ]
+    },
+    {
+      "attr_names": [
+        "style.visibility",
+        "ppt_x",
+        "ppt_y"
+      ],
+      "behavior_durations": [
+        "1",
+        "2000"
+      ],
+      "child_tags": [
+        "set",
+        "anim",
+        "anim"
+      ],
+      "container_id": "143",
+      "family_signature": "withEffect|entr|set+anim+anim|style.visibility,ppt_x,ppt_y",
+      "grp_id": "0",
+      "node_type": "withEffect",
+      "preset_class": "entr",
+      "preset_id": "2",
+      "preset_subtype": "8",
+      "signature": "withEffect|entr|2|set+anim+anim|style.visibility,ppt_x,ppt_y",
+      "slide_file": "slide6.xml",
+      "start_delays": [
+        "3250"
+      ],
+      "target_shapes": [
+        "33"
+      ]
+    },
+    {
+      "attr_names": [
+        "style.visibility",
+        "ppt_x",
+        "ppt_y"
+      ],
+      "behavior_durations": [
+        "1",
+        "2000"
+      ],
+      "child_tags": [
+        "set",
+        "anim",
+        "anim"
+      ],
+      "container_id": "147",
+      "family_signature": "withEffect|entr|set+anim+anim|style.visibility,ppt_x,ppt_y",
+      "grp_id": "0",
+      "node_type": "withEffect",
+      "preset_class": "entr",
+      "preset_id": "2",
+      "preset_subtype": "2",
+      "signature": "withEffect|entr|2|set+anim+anim|style.visibility,ppt_x,ppt_y",
+      "slide_file": "slide6.xml",
+      "start_delays": [
+        "3250"
+      ],
+      "target_shapes": [
+        "59"
+      ]
+    },
+    {
+      "attr_names": [
+        "style.visibility",
+        "ppt_x",
+        "ppt_y"
+      ],
+      "behavior_durations": [
+        "1",
+        "1000"
+      ],
+      "child_tags": [
+        "set",
+        "animEffect",
+        "anim",
+        "anim"
+      ],
+      "container_id": "151",
+      "family_signature": "withEffect|entr|set+animEffect+anim+anim|style.visibility,ppt_x,ppt_y",
+      "grp_id": "0",
+      "node_type": "withEffect",
+      "preset_class": "entr",
+      "preset_id": "42",
+      "preset_subtype": "0",
+      "signature": "withEffect|entr|42|set+animEffect+anim+anim|style.visibility,ppt_x,ppt_y",
+      "slide_file": "slide6.xml",
+      "start_delays": [
+        "2750"
+      ],
+      "target_shapes": [
+        "48"
+      ]
+    },
+    {
+      "attr_names": [
+        "style.visibility",
+        "ppt_x",
+        "ppt_y"
+      ],
+      "behavior_durations": [
+        "1",
+        "1000"
+      ],
+      "child_tags": [
+        "set",
+        "animEffect",
+        "anim",
+        "anim"
+      ],
+      "container_id": "156",
+      "family_signature": "withEffect|entr|set+animEffect+anim+anim|style.visibility,ppt_x,ppt_y",
+      "grp_id": "0",
+      "node_type": "withEffect",
+      "preset_class": "entr",
+      "preset_id": "42",
+      "preset_subtype": "0",
+      "signature": "withEffect|entr|42|set+animEffect+anim+anim|style.visibility,ppt_x,ppt_y",
+      "slide_file": "slide6.xml",
+      "start_delays": [
+        "3000"
+      ],
+      "target_shapes": [
+        "51"
+      ]
+    },
+    {
+      "attr_names": [
+        "style.visibility",
+        "ppt_x",
+        "ppt_y"
+      ],
+      "behavior_durations": [
+        "1",
+        "1000"
+      ],
+      "child_tags": [
+        "set",
+        "animEffect",
+        "anim",
+        "anim"
+      ],
+      "container_id": "161",
+      "family_signature": "withEffect|entr|set+animEffect+anim+anim|style.visibility,ppt_x,ppt_y",
+      "grp_id": "0",
+      "node_type": "withEffect",
+      "preset_class": "entr",
+      "preset_id": "42",
+      "preset_subtype": "0",
+      "signature": "withEffect|entr|42|set+animEffect+anim+anim|style.visibility,ppt_x,ppt_y",
+      "slide_file": "slide6.xml",
+      "start_delays": [
+        "2750"
+      ],
+      "target_shapes": [
+        "54"
+      ]
+    },
+    {
+      "attr_names": [
+        "style.visibility",
+        "ppt_x",
+        "ppt_y"
+      ],
+      "behavior_durations": [
+        "1",
+        "1000"
+      ],
+      "child_tags": [
+        "set",
+        "animEffect",
+        "anim",
+        "anim"
+      ],
+      "container_id": "166",
+      "family_signature": "withEffect|entr|set+animEffect+anim+anim|style.visibility,ppt_x,ppt_y",
+      "grp_id": "0",
+      "node_type": "withEffect",
+      "preset_class": "entr",
+      "preset_id": "42",
+      "preset_subtype": "0",
+      "signature": "withEffect|entr|42|set+animEffect+anim+anim|style.visibility,ppt_x,ppt_y",
+      "slide_file": "slide6.xml",
+      "start_delays": [
+        "3000"
+      ],
+      "target_shapes": [
+        "60"
+      ]
+    },
+    {
+      "attr_names": [
+        "style.visibility",
+        "ppt_x",
+        "ppt_y"
+      ],
+      "behavior_durations": [
+        "1",
+        "1000"
+      ],
+      "child_tags": [
+        "set",
+        "animEffect",
+        "anim",
+        "anim"
+      ],
+      "container_id": "171",
+      "family_signature": "withEffect|entr|set+animEffect+anim+anim|style.visibility,ppt_x,ppt_y",
+      "grp_id": "0",
+      "node_type": "withEffect",
+      "preset_class": "entr",
+      "preset_id": "42",
+      "preset_subtype": "0",
+      "signature": "withEffect|entr|42|set+animEffect+anim+anim|style.visibility,ppt_x,ppt_y",
+      "slide_file": "slide6.xml",
+      "start_delays": [
+        "2750"
+      ],
+      "target_shapes": [
+        "61"
+      ]
+    },
+    {
+      "attr_names": [
+        "style.visibility",
+        "ppt_x",
+        "ppt_y"
+      ],
+      "behavior_durations": [
+        "1",
+        "1000"
+      ],
+      "child_tags": [
+        "set",
+        "animEffect",
+        "anim",
+        "anim"
+      ],
+      "container_id": "176",
+      "family_signature": "withEffect|entr|set+animEffect+anim+anim|style.visibility,ppt_x,ppt_y",
+      "grp_id": "0",
+      "node_type": "withEffect",
+      "preset_class": "entr",
+      "preset_id": "42",
+      "preset_subtype": "0",
+      "signature": "withEffect|entr|42|set+animEffect+anim+anim|style.visibility,ppt_x,ppt_y",
+      "slide_file": "slide6.xml",
+      "start_delays": [
+        "3000"
+      ],
+      "target_shapes": [
+        "62"
+      ]
+    }
+  ],
+  "has_build_list": true,
+  "has_timing": true,
+  "slide_file": "slide6.xml",
+  "tag_counts": {
+    "anim": 64,
+    "animClr": 0,
+    "animEffect": 30,
+    "animMotion": 0,
+    "animRot": 0,
+    "animScale": 0,
+    "set": 41
+  }
+}

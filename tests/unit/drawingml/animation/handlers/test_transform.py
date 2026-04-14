@@ -109,6 +109,15 @@ class TestBuildScale:
         anim_scale = par.find(f".//{{{NS_P}}}animScale")
         assert anim_scale is not None
 
+    def test_scale_does_not_target_rotation(self, handler: TransformAnimationHandler):
+        anim = make_transform_animation(
+            transform_type=TransformType.SCALE, values=["1", "2"]
+        )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        anim_scale = par.find(f".//{{{NS_P}}}animScale")
+        attr_names = anim_scale.findall(f".//{{{NS_P}}}attrName")
+        assert [node.text for node in attr_names] == []
+
     def test_behavior_id(self, handler: TransformAnimationHandler):
         anim = make_transform_animation(
             transform_type=TransformType.SCALE, values=["1", "2"]
@@ -193,6 +202,19 @@ class TestBuildScale:
         motions = par.findall(f".//{{{NS_P}}}animMotion")
         assert len(motions) == 1
         assert motions[0].get("path") == "M 0 0 L 0.208333 0.166667 E"
+
+    def test_scale_from_zero_to_one_does_not_overshoot_origin_compensation(
+        self, handler: TransformAnimationHandler
+    ):
+        anim = make_transform_animation(
+            transform_type=TransformType.SCALE,
+            values=["0", "1"],
+            element_center_px=(100.0, 60.0),
+            motion_viewport_px=(480.0, 360.0),
+        )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        motions = par.findall(f".//{{{NS_P}}}animMotion")
+        assert len(motions) == 0
 
     def test_scale_without_element_center_skips_origin_compensation_motion(
         self, handler: TransformAnimationHandler

@@ -260,9 +260,9 @@ def test_render_scene_renders_line() -> None:
     result = writer.render_scene([line])
     xml = result.slide_xml
 
-    assert "<p:sp>" in xml
+    assert "<p:cxnSp>" in xml
     assert "Line 2" in xml
-    assert "<a:custGeom>" in xml
+    assert 'prst="line"' in xml
     assert 'val="336699"' in xml
 
 

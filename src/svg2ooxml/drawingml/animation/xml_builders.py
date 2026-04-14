@@ -219,8 +219,10 @@ class AnimationXMLBuilder:
             for elem in par.iter():
                 if elem.tag != f"{{{NS_P}}}cTn":
                     continue
-                grp_id = elem.get("grpId")
-                if not grp_id or grp_id == "0":
+                if not elem.get("presetClass") and not elem.get("presetID"):
+                    continue
+                entry_id = elem.get("id")
+                if not entry_id:
                     continue
                 sp_tgt = elem.find(f".//{{{NS_P}}}spTgt")
                 if sp_tgt is None:
@@ -228,7 +230,7 @@ class AnimationXMLBuilder:
                 shape_id = sp_tgt.get("spid")
                 if not shape_id:
                     continue
-                key = (shape_id, grp_id)
+                key = (shape_id, entry_id)
                 if key in seen:
                     continue
                 seen.add(key)
@@ -429,6 +431,106 @@ class AnimationXMLBuilder:
 
         if created == 0:
             p_sub(st_cond_lst, "cond", delay=str(fallback_delay_ms))
+
+    def apply_native_timing_overrides(
+        self,
+        *,
+        par: etree._Element,
+        repeat_duration_ms: int | None = None,
+        restart: str | None = None,
+        end_triggers: list[BeginTrigger] | None = None,
+        default_target_shape: str | None = None,
+    ) -> None:
+        """Apply optional SMIL timing fields to a generated animation fragment.
+
+        Handlers build different native structures. This post-pass keeps common
+        timing semantics centralized and avoids threading rarely used timing
+        fields through every handler path.
+        """
+        ctn = par.find(f"{{{NS_P}}}cTn")
+        if ctn is None:
+            return
+
+        if restart in {"always", "whenNotActive", "never"}:
+            ctn.set("restart", restart)
+
+        if repeat_duration_ms is not None:
+            repeat_duration = str(max(1, repeat_duration_ms))
+            targets = self._repeat_duration_targets(par, fallback=ctn)
+            for target in targets:
+                target.set("repeatDur", repeat_duration)
+
+        if end_triggers:
+            end_cond_lst = ctn.find(f"{{{NS_P}}}endCondLst")
+            if end_cond_lst is None:
+                end_cond_lst = p_sub(ctn, "endCondLst")
+            self._append_end_conditions(
+                end_cond_lst=end_cond_lst,
+                end_triggers=end_triggers,
+                default_target_shape=default_target_shape,
+            )
+
+    @staticmethod
+    def _repeat_duration_targets(
+        par: etree._Element,
+        *,
+        fallback: etree._Element,
+    ) -> list[etree._Element]:
+        targets = [
+            ctn
+            for ctn in par.iter(f"{{{NS_P}}}cTn")
+            if ctn.get("repeatCount") is not None
+        ]
+        return targets or [fallback]
+
+    def _append_end_conditions(
+        self,
+        *,
+        end_cond_lst: etree._Element,
+        end_triggers: list[BeginTrigger],
+        default_target_shape: str | None,
+    ) -> None:
+        """Append native-compatible end conditions from parsed SMIL end tokens."""
+        from svg2ooxml.ir.animation import BeginTriggerType
+
+        created = 0
+        for trigger in end_triggers:
+            delay_ms = max(0, int(round(trigger.delay_seconds * 1000)))
+            trigger_type = trigger.trigger_type
+
+            if trigger_type == BeginTriggerType.TIME_OFFSET:
+                p_sub(end_cond_lst, "cond", delay=str(delay_ms))
+                created += 1
+                continue
+
+            if trigger_type == BeginTriggerType.CLICK:
+                cond = p_sub(end_cond_lst, "cond", evt="onClick", delay=str(delay_ms))
+                target_shape = trigger.target_element_id or default_target_shape
+                if target_shape:
+                    tgt_el = p_sub(cond, "tgtEl")
+                    p_sub(tgt_el, "spTgt", spid=target_shape)
+                created += 1
+                continue
+
+            if trigger_type in (
+                BeginTriggerType.ELEMENT_BEGIN,
+                BeginTriggerType.ELEMENT_END,
+            ):
+                evt = (
+                    "onBegin"
+                    if trigger_type == BeginTriggerType.ELEMENT_BEGIN
+                    else "onEnd"
+                )
+                cond = p_sub(end_cond_lst, "cond", evt=evt, delay=str(delay_ms))
+                if trigger.target_element_id:
+                    tgt_el = p_sub(cond, "tgtEl")
+                    p_sub(tgt_el, "spTgt", spid=trigger.target_element_id)
+                created += 1
+
+        if created == 0:
+            parent = end_cond_lst.getparent()
+            if parent is not None:
+                parent.remove(end_cond_lst)
 
     def build_behavior_core_elem(
         self,

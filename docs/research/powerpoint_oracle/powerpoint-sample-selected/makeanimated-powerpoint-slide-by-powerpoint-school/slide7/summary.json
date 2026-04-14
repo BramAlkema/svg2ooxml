@@ -1,0 +1,208 @@
+{
+  "effect_patterns": [
+    {
+      "attr_names": [
+        "style.visibility",
+        "ppt_w",
+        "ppt_h"
+      ],
+      "behavior_durations": [
+        "1",
+        "500"
+      ],
+      "child_tags": [
+        "set",
+        "anim",
+        "anim",
+        "animEffect"
+      ],
+      "container_id": "5",
+      "family_signature": "clickEffect|entr|set+anim+anim+animEffect|style.visibility,ppt_w,ppt_h",
+      "grp_id": null,
+      "node_type": "clickEffect",
+      "preset_class": "entr",
+      "preset_id": "53",
+      "preset_subtype": "16",
+      "signature": "clickEffect|entr|53|set+anim+anim+animEffect|style.visibility,ppt_w,ppt_h",
+      "slide_file": "slide7.xml",
+      "start_delays": [
+        "0"
+      ],
+      "target_shapes": [
+        "48"
+      ]
+    },
+    {
+      "attr_names": [
+        "style.visibility",
+        "ppt_x",
+        "ppt_y"
+      ],
+      "behavior_durations": [
+        "1",
+        "500"
+      ],
+      "child_tags": [
+        "set",
+        "animEffect",
+        "anim",
+        "anim"
+      ],
+      "container_id": "11",
+      "family_signature": "afterEffect|entr|set+animEffect+anim+anim|style.visibility,ppt_x,ppt_y",
+      "grp_id": null,
+      "node_type": "afterEffect",
+      "preset_class": "entr",
+      "preset_id": "42",
+      "preset_subtype": "0",
+      "signature": "afterEffect|entr|42|set+animEffect+anim+anim|style.visibility,ppt_x,ppt_y",
+      "slide_file": "slide7.xml",
+      "start_delays": [
+        "0"
+      ],
+      "target_shapes": [
+        "33"
+      ]
+    },
+    {
+      "attr_names": [
+        "style.visibility",
+        "ppt_w",
+        "ppt_h"
+      ],
+      "behavior_durations": [
+        "1",
+        "500"
+      ],
+      "child_tags": [
+        "set",
+        "anim",
+        "anim",
+        "animEffect"
+      ],
+      "container_id": "17",
+      "family_signature": "afterEffect|entr|set+anim+anim+animEffect|style.visibility,ppt_w,ppt_h",
+      "grp_id": null,
+      "node_type": "afterEffect",
+      "preset_class": "entr",
+      "preset_id": "53",
+      "preset_subtype": "16",
+      "signature": "afterEffect|entr|53|set+anim+anim+animEffect|style.visibility,ppt_w,ppt_h",
+      "slide_file": "slide7.xml",
+      "start_delays": [
+        "0"
+      ],
+      "target_shapes": [
+        "42"
+      ]
+    },
+    {
+      "attr_names": [
+        "style.visibility",
+        "ppt_x",
+        "ppt_y"
+      ],
+      "behavior_durations": [
+        "1",
+        "500"
+      ],
+      "child_tags": [
+        "set",
+        "animEffect",
+        "anim",
+        "anim"
+      ],
+      "container_id": "23",
+      "family_signature": "afterEffect|entr|set+animEffect+anim+anim|style.visibility,ppt_x,ppt_y",
+      "grp_id": null,
+      "node_type": "afterEffect",
+      "preset_class": "entr",
+      "preset_id": "42",
+      "preset_subtype": "0",
+      "signature": "afterEffect|entr|42|set+animEffect+anim+anim|style.visibility,ppt_x,ppt_y",
+      "slide_file": "slide7.xml",
+      "start_delays": [
+        "0"
+      ],
+      "target_shapes": [
+        "36"
+      ]
+    },
+    {
+      "attr_names": [
+        "style.visibility",
+        "ppt_w",
+        "ppt_h"
+      ],
+      "behavior_durations": [
+        "1",
+        "500"
+      ],
+      "child_tags": [
+        "set",
+        "anim",
+        "anim",
+        "animEffect"
+      ],
+      "container_id": "29",
+      "family_signature": "afterEffect|entr|set+anim+anim+animEffect|style.visibility,ppt_w,ppt_h",
+      "grp_id": null,
+      "node_type": "afterEffect",
+      "preset_class": "entr",
+      "preset_id": "53",
+      "preset_subtype": "16",
+      "signature": "afterEffect|entr|53|set+anim+anim+animEffect|style.visibility,ppt_w,ppt_h",
+      "slide_file": "slide7.xml",
+      "start_delays": [
+        "0"
+      ],
+      "target_shapes": [
+        "45"
+      ]
+    },
+    {
+      "attr_names": [
+        "style.visibility",
+        "ppt_x",
+        "ppt_y"
+      ],
+      "behavior_durations": [
+        "1",
+        "500"
+      ],
+      "child_tags": [
+        "set",
+        "animEffect",
+        "anim",
+        "anim"
+      ],
+      "container_id": "35",
+      "family_signature": "afterEffect|entr|set+animEffect+anim+anim|style.visibility,ppt_x,ppt_y",
+      "grp_id": null,
+      "node_type": "afterEffect",
+      "preset_class": "entr",
+      "preset_id": "42",
+      "preset_subtype": "0",
+      "signature": "afterEffect|entr|42|set+animEffect+anim+anim|style.visibility,ppt_x,ppt_y",
+      "slide_file": "slide7.xml",
+      "start_delays": [
+        "0"
+      ],
+      "target_shapes": [
+        "39"
+      ]
+    }
+  ],
+  "has_build_list": false,
+  "has_timing": true,
+  "slide_file": "slide7.xml",
+  "tag_counts": {
+    "anim": 12,
+    "animClr": 0,
+    "animEffect": 6,
+    "animMotion": 0,
+    "animRot": 0,
+    "animScale": 0,
+    "set": 6
+  }
+}

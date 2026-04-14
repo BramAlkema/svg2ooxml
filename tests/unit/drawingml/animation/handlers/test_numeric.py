@@ -96,6 +96,18 @@ class TestCanHandle:
         anim = make_numeric_animation(target_attribute="stroke")
         assert handler.can_handle(anim) is False
 
+    def test_rejects_display(self, handler: NumericAnimationHandler):
+        anim = make_numeric_animation(target_attribute="display")
+        assert handler.can_handle(anim) is False
+
+    def test_rejects_visibility(self, handler: NumericAnimationHandler):
+        anim = make_numeric_animation(target_attribute="visibility")
+        assert handler.can_handle(anim) is False
+
+    def test_rejects_style_visibility(self, handler: NumericAnimationHandler):
+        anim = make_numeric_animation(target_attribute="style.visibility")
+        assert handler.can_handle(anim) is False
+
     def test_rejects_set_type(self, handler: NumericAnimationHandler):
         anim = make_numeric_animation(animation_type=AnimationType.SET)
         assert handler.can_handle(anim) is False
@@ -197,7 +209,7 @@ class TestBuild:
         self, handler: NumericAnimationHandler
     ):
         anim = make_numeric_animation(
-            target_attribute="visibility", values=["visible", "hidden"]
+            target_attribute="custom-state", values=["visible", "hidden"]
         )
         par = handler.build(anim, par_id=4, behavior_id=5)
         flt_vals = par.findall(f".//{{{NS_P}}}fltVal")
@@ -229,17 +241,18 @@ class TestBuild:
         assert ctn.get("presetClass") == "emph"
         assert ctn.get("presetID") == "32"
 
-    def test_simple_width_animation_uses_from_to_scale(
+    def test_simple_width_animation_uses_authored_by_scale(
         self, handler: NumericAnimationHandler
     ):
         anim = make_numeric_animation(target_attribute="width", values=["10", "20"])
         par = handler.build(anim, par_id=4, behavior_id=5)
         anim_scale = par.find(f".//{{{NS_P}}}animScale")
         assert anim_scale is not None
-        assert anim_scale.find(f"{{{NS_P}}}from").get("x") == "100000"
-        assert anim_scale.find(f"{{{NS_P}}}to").get("x") == "200000"
-        attr_names = par.findall(f".//{{{NS_P}}}attrName")
-        assert [node.text for node in attr_names] == ["ScaleX", "ScaleY"]
+        by_elem = anim_scale.find(f"{{{NS_P}}}by")
+        assert by_elem is not None
+        assert by_elem.get("x") == "200000"
+        assert by_elem.get("y") == "100000"
+        assert not par.findall(f".//{{{NS_P}}}attrName")
 
     def test_position_animation_projects_delta_through_motion_space_matrix(
         self, handler: NumericAnimationHandler
@@ -288,18 +301,13 @@ class TestBuild:
         assert bhvr_ctn.get("dur") == "500"
         assert bhvr_ctn.get("autoRev") == "1"
         assert bhvr_ctn.get("repeatCount") is None
-        attr_names = par.findall(f".//{{{NS_P}}}attrName")
-        assert [node.text for node in attr_names] == ["ScaleX", "ScaleY"]
-        from_elem = anim_scale.find(f"{{{NS_P}}}from")
-        to_elem = anim_scale.find(f"{{{NS_P}}}to")
-        assert from_elem is not None
-        assert to_elem is not None
-        assert from_elem.get("x") == "100000"
-        assert from_elem.get("y") == "100000"
-        assert to_elem.get("x") == "400000"
-        assert to_elem.get("y") == "100000"
+        assert not par.findall(f".//{{{NS_P}}}attrName")
+        by_elem = anim_scale.find(f"{{{NS_P}}}by")
+        assert by_elem is not None
+        assert by_elem.get("x") == "400000"
+        assert by_elem.get("y") == "100000"
 
-    def test_multi_keyframe_width_animation_with_custom_key_times_uses_generic_anim(
+    def test_multi_keyframe_width_animation_with_custom_key_times_uses_segmented_anim_scale(
         self, handler: NumericAnimationHandler
     ):
         anim = make_numeric_animation(
@@ -308,13 +316,18 @@ class TestBuild:
             key_times=[0.0, 0.3, 1.0],
         )
         par = handler.build(anim, par_id=4, behavior_id=5)
-        assert par.find(f".//{{{NS_P}}}animScale") is None
-        anim_elem = par.find(f".//{{{NS_P}}}anim")
-        assert anim_elem is not None
-        attr_name = par.find(f".//{{{NS_P}}}attrName")
-        assert attr_name.text == "ppt_w"
-        tavs = par.findall(f".//{{{NS_P}}}tav")
-        assert [tav.get("tm") for tav in tavs] == ["0", "30000", "100000"]
+        anim_scales = par.findall(f".//{{{NS_P}}}animScale")
+        assert len(anim_scales) == 2
+        assert par.find(f".//{{{NS_P}}}anim") is None
+        assert not par.findall(f".//{{{NS_P}}}tav")
+        attr_names = [node.text for node in par.findall(f".//{{{NS_P}}}attrName")]
+        assert "ppt_w" not in attr_names
+        assert "ScaleX" not in attr_names
+        assert "ScaleY" not in attr_names
+        assert anim_scales[0].find(f"{{{NS_P}}}by").get("x") == "400000"
+        assert anim_scales[0].find(f"{{{NS_P}}}by").get("y") == "100000"
+        assert anim_scales[1].find(f"{{{NS_P}}}by").get("x") == "25000"
+        assert anim_scales[1].find(f"{{{NS_P}}}by").get("y") == "100000"
 
     def test_position_animation_uses_relative_delta_path(
         self, handler: NumericAnimationHandler

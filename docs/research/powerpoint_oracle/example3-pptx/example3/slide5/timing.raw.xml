@@ -1,0 +1,209 @@
+<p:timing xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <p:tnLst>
+    <p:par>
+      <p:cTn id="1" dur="indefinite" restart="never" nodeType="tmRoot">
+        <p:childTnLst>
+          <p:seq concurrent="1" nextAc="seek">
+            <p:cTn id="2" dur="indefinite" nodeType="mainSeq">
+              <p:childTnLst>
+                <p:par>
+                  <p:cTn id="3" fill="hold">
+                    <p:stCondLst>
+                      <p:cond delay="indefinite"/>
+                    </p:stCondLst>
+                    <p:childTnLst>
+                      <p:par>
+                        <p:cTn id="4" fill="hold">
+                          <p:stCondLst>
+                            <p:cond delay="0"/>
+                          </p:stCondLst>
+                          <p:childTnLst>
+                            <p:par>
+                              <p:cTn id="5" presetID="9" presetClass="entr" presetSubtype="0" fill="hold" grpId="1" nodeType="clickEffect">
+                                <p:stCondLst>
+                                  <p:cond delay="0"/>
+                                </p:stCondLst>
+                                <p:childTnLst>
+                                  <p:set>
+                                    <p:cBhvr>
+                                      <p:cTn id="6" dur="1" fill="hold">
+                                        <p:stCondLst>
+                                          <p:cond delay="0"/>
+                                        </p:stCondLst>
+                                      </p:cTn>
+                                      <p:tgtEl>
+                                        <p:spTgt spid="4"/>
+                                      </p:tgtEl>
+                                      <p:attrNameLst>
+                                        <p:attrName>style.visibility</p:attrName>
+                                      </p:attrNameLst>
+                                    </p:cBhvr>
+                                    <p:to>
+                                      <p:strVal val="visible"/>
+                                    </p:to>
+                                  </p:set>
+                                  <p:animEffect transition="in" filter="dissolve">
+                                    <p:cBhvr>
+                                      <p:cTn id="7" dur="500"/>
+                                      <p:tgtEl>
+                                        <p:spTgt spid="4"/>
+                                      </p:tgtEl>
+                                    </p:cBhvr>
+                                  </p:animEffect>
+                                </p:childTnLst>
+                              </p:cTn>
+                            </p:par>
+                          </p:childTnLst>
+                        </p:cTn>
+                      </p:par>
+                    </p:childTnLst>
+                  </p:cTn>
+                </p:par>
+              </p:childTnLst>
+            </p:cTn>
+            <p:prevCondLst>
+              <p:cond evt="onPrev" delay="0">
+                <p:tgtEl>
+                  <p:sldTgt/>
+                </p:tgtEl>
+              </p:cond>
+            </p:prevCondLst>
+            <p:nextCondLst>
+              <p:cond evt="onNext" delay="0">
+                <p:tgtEl>
+                  <p:sldTgt/>
+                </p:tgtEl>
+              </p:cond>
+            </p:nextCondLst>
+          </p:seq>
+          <p:seq concurrent="1" nextAc="seek">
+            <p:cTn id="8" restart="whenNotActive" fill="hold" evtFilter="cancelBubble" nodeType="interactiveSeq">
+              <p:stCondLst>
+                <p:cond evt="onClick" delay="0">
+                  <p:tgtEl>
+                    <p:spTgt spid="4"/>
+                  </p:tgtEl>
+                </p:cond>
+              </p:stCondLst>
+              <p:endSync evt="end" delay="0">
+                <p:rtn val="all"/>
+              </p:endSync>
+              <p:childTnLst>
+                <p:par>
+                  <p:cTn id="9" fill="hold">
+                    <p:stCondLst>
+                      <p:cond delay="0"/>
+                    </p:stCondLst>
+                    <p:childTnLst>
+                      <p:par>
+                        <p:cTn id="10" fill="hold">
+                          <p:stCondLst>
+                            <p:cond delay="0"/>
+                          </p:stCondLst>
+                          <p:childTnLst>
+                            <p:par>
+                              <p:cTn id="11" presetID="6" presetClass="emph" presetSubtype="0" fill="hold" grpId="0" nodeType="clickEffect">
+                                <p:stCondLst>
+                                  <p:cond delay="0"/>
+                                </p:stCondLst>
+                                <p:childTnLst>
+                                  <p:animScale>
+                                    <p:cBhvr>
+                                      <p:cTn id="12" dur="2000" fill="hold"/>
+                                      <p:tgtEl>
+                                        <p:spTgt spid="4"/>
+                                      </p:tgtEl>
+                                    </p:cBhvr>
+                                    <p:by x="400000" y="100000"/>
+                                  </p:animScale>
+                                </p:childTnLst>
+                              </p:cTn>
+                            </p:par>
+                          </p:childTnLst>
+                        </p:cTn>
+                      </p:par>
+                    </p:childTnLst>
+                  </p:cTn>
+                </p:par>
+              </p:childTnLst>
+            </p:cTn>
+            <p:nextCondLst>
+              <p:cond evt="onClick" delay="0">
+                <p:tgtEl>
+                  <p:spTgt spid="4"/>
+                </p:tgtEl>
+              </p:cond>
+            </p:nextCondLst>
+          </p:seq>
+          <p:seq concurrent="1" nextAc="seek">
+            <p:cTn id="13" restart="whenNotActive" fill="hold" evtFilter="cancelBubble" nodeType="interactiveSeq">
+              <p:stCondLst>
+                <p:cond evt="onClick" delay="0">
+                  <p:tgtEl>
+                    <p:spTgt spid="5"/>
+                  </p:tgtEl>
+                </p:cond>
+              </p:stCondLst>
+              <p:endSync evt="end" delay="0">
+                <p:rtn val="all"/>
+              </p:endSync>
+              <p:childTnLst>
+                <p:par>
+                  <p:cTn id="14" fill="hold">
+                    <p:stCondLst>
+                      <p:cond delay="0"/>
+                    </p:stCondLst>
+                    <p:childTnLst>
+                      <p:par>
+                        <p:cTn id="15" fill="hold">
+                          <p:stCondLst>
+                            <p:cond delay="0"/>
+                          </p:stCondLst>
+                          <p:childTnLst>
+                            <p:par>
+                              <p:cTn id="16" presetID="31" presetClass="path" presetSubtype="0" accel="50000" decel="50000" fill="hold" grpId="0" nodeType="clickEffect">
+                                <p:stCondLst>
+                                  <p:cond delay="0"/>
+                                </p:stCondLst>
+                                <p:childTnLst>
+                                  <p:animMotion origin="layout" path="M 0 0 C 0.002 -0.003 0.012 -0.034 0.037 -0.032 C 0.075 -0.029 0.09 -0.007 0.125 -0.029 C 0.147 -0.042 0.173 -0.075 0.192 -0.074 C 0.235 -0.073 0.244 -0.039 0.244 -0.008 C 0.245 0.036 0.189 0.073 0.121 0.077 C 0.052 0.08 -0.005 0.033 0 0 Z" pathEditMode="relative" ptsTypes="">
+                                    <p:cBhvr>
+                                      <p:cTn id="17" dur="2000" fill="hold"/>
+                                      <p:tgtEl>
+                                        <p:spTgt spid="5"/>
+                                      </p:tgtEl>
+                                      <p:attrNameLst>
+                                        <p:attrName>ppt_x</p:attrName>
+                                        <p:attrName>ppt_y</p:attrName>
+                                      </p:attrNameLst>
+                                    </p:cBhvr>
+                                  </p:animMotion>
+                                </p:childTnLst>
+                              </p:cTn>
+                            </p:par>
+                          </p:childTnLst>
+                        </p:cTn>
+                      </p:par>
+                    </p:childTnLst>
+                  </p:cTn>
+                </p:par>
+              </p:childTnLst>
+            </p:cTn>
+            <p:nextCondLst>
+              <p:cond evt="onClick" delay="0">
+                <p:tgtEl>
+                  <p:spTgt spid="5"/>
+                </p:tgtEl>
+              </p:cond>
+            </p:nextCondLst>
+          </p:seq>
+        </p:childTnLst>
+      </p:cTn>
+    </p:par>
+  </p:tnLst>
+  <p:bldLst>
+    <p:bldP spid="4" grpId="0" animBg="1"/>
+    <p:bldP spid="4" grpId="1" animBg="1"/>
+    <p:bldP spid="5" grpId="0" animBg="1"/>
+  </p:bldLst>
+</p:timing>

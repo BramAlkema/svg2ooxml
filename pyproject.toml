@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "svg2ooxml"
-version = "0.6.6"
+version = "0.6.7"
 description = "SVG to Office Open XML conversion toolkit."
 readme = "README.pypi.md"
 requires-python = ">=3.13"

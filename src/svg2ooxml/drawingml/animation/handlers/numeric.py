@@ -13,12 +13,14 @@ from lxml import etree
 from svg2ooxml.drawingml.animation.constants import (
     ATTRIBUTE_NAME_MAP,
     COLOR_ATTRIBUTES,
+    DISCRETE_VISIBILITY_ATTRIBUTES,
     FADE_ATTRIBUTES,
     WIPE_ATTRIBUTES,
 )
 from svg2ooxml.drawingml.animation.handlers.base import AnimationHandler
 from svg2ooxml.drawingml.animation.timing_utils import (
     compute_paced_key_times,
+    compute_segment_durations_ms,
     sample_spline_keyframes,
 )
 from svg2ooxml.drawingml.animation.value_formatters import format_numeric_value
@@ -47,6 +49,8 @@ class NumericAnimationHandler(AnimationHandler):
         if attr in FADE_ATTRIBUTES:
             return False
         if attr in COLOR_ATTRIBUTES:
+            return False
+        if attr in DISCRETE_VISIBILITY_ATTRIBUTES:
             return False
         return True
 
@@ -83,6 +87,13 @@ class NumericAnimationHandler(AnimationHandler):
                     animation, par_id, behavior_id, ppt_attribute
                 )
             if len(animation.values) > 2 or animation.key_times or has_non_linear_timing:
+                if self._can_build_segmented_scale_animation(animation):
+                    return self._build_segmented_scale_animation(
+                        animation,
+                        par_id,
+                        behavior_id,
+                        ppt_attribute,
+                    )
                 return self._build_generic_anim(
                     animation,
                     par_id,
@@ -118,10 +129,6 @@ class NumericAnimationHandler(AnimationHandler):
         from_val = float(self._normalize_value(ppt_attribute, values[0]))
         to_val = float(self._normalize_value(ppt_attribute, values[-1]))
 
-        baseline = self._scale_baseline(from_val, to_val)
-        from_x, from_y = self._scale_pair(ppt_attribute, from_val, baseline)
-        to_x, to_y = self._scale_pair(ppt_attribute, to_val, baseline)
-
         animScale = p_elem("animScale")
         cBhvr = self._xml.build_behavior_core_elem(
             behavior_id=behavior_id,
@@ -129,11 +136,10 @@ class NumericAnimationHandler(AnimationHandler):
             target_shape=animation.element_id,
             fill_mode=animation.fill_mode,
             repeat_count=animation.repeat_count,
-            attr_name_list=["ScaleX", "ScaleY"],
         )
         animScale.append(cBhvr)
-        p_sub(animScale, "from", x=str(from_x), y=str(from_y))
-        p_sub(animScale, "to", x=str(to_x), y=str(to_y))
+        by_x, by_y = self._scale_by_pair(ppt_attribute, from_val, to_val)
+        p_sub(animScale, "by", x=str(by_x), y=str(by_y))
         child_elements = [animScale]
         anchor_motion = self._build_scale_anchor_motion(
             animation=animation,
@@ -157,7 +163,7 @@ class NumericAnimationHandler(AnimationHandler):
             preset_id=6,  # Grow emphasis
             preset_class="emph",
             preset_subtype=0,
-            node_type="clickEffect",
+            node_type="withEffect",
             begin_triggers=animation.begin_triggers,
             default_target_shape=animation.element_id,
             effect_group_id=par_id,
@@ -176,10 +182,6 @@ class NumericAnimationHandler(AnimationHandler):
         peak_val = float(self._normalize_value(ppt_attribute, values[1]))
 
         half_duration_ms = max(1, int(round(animation.duration_ms / 2.0)))
-        baseline = self._scale_baseline(start_val, peak_val)
-        from_x, from_y = self._scale_pair(ppt_attribute, start_val, baseline)
-        to_x, to_y = self._scale_pair(ppt_attribute, peak_val, baseline)
-
         anim_scale = p_elem("animScale")
         c_bhvr = self._xml.build_behavior_core_elem(
             behavior_id=behavior_id,
@@ -187,12 +189,11 @@ class NumericAnimationHandler(AnimationHandler):
             target_shape=animation.element_id,
             repeat_count=animation.repeat_count,
             fill_mode="remove",
-            attr_name_list=["ScaleX", "ScaleY"],
             auto_reverse=True,
         )
         anim_scale.append(c_bhvr)
-        p_sub(anim_scale, "from", x=str(from_x), y=str(from_y))
-        p_sub(anim_scale, "to", x=str(to_x), y=str(to_y))
+        by_x, by_y = self._scale_by_pair(ppt_attribute, start_val, peak_val)
+        p_sub(anim_scale, "by", x=str(by_x), y=str(by_y))
         child_elements = [anim_scale]
         anchor_motion = self._build_scale_anchor_motion(
             animation=animation,
@@ -217,7 +218,7 @@ class NumericAnimationHandler(AnimationHandler):
             preset_id=6,
             preset_class="emph",
             preset_subtype=0,
-            node_type="clickEffect",
+            node_type="withEffect",
             begin_triggers=animation.begin_triggers,
             default_target_shape=animation.element_id,
             effect_group_id=par_id,
@@ -316,6 +317,152 @@ class NumericAnimationHandler(AnimationHandler):
         )
 
     @staticmethod
+    def _can_build_segmented_scale_animation(
+        animation: AnimationDefinition,
+    ) -> bool:
+        if len(animation.values) < 2:
+            return False
+        if animation.key_splines:
+            return False
+        calc_mode = (
+            animation.calc_mode.value
+            if isinstance(animation.calc_mode, CalcMode)
+            else str(animation.calc_mode).lower()
+        )
+        return calc_mode in {CalcMode.LINEAR.value, CalcMode.PACED.value}
+
+    def _build_segmented_scale_animation(
+        self,
+        animation: AnimationDefinition,
+        par_id: int,
+        behavior_id: int,
+        ppt_attribute: str,
+    ) -> etree._Element:
+        values = [
+            float(self._normalize_value(ppt_attribute, raw_value))
+            for raw_value in animation.values
+        ]
+        key_times = self._resolve_scale_key_times(values, animation)
+        segment_durations = compute_segment_durations_ms(
+            total_ms=animation.duration_ms,
+            n_values=len(values),
+            key_times=key_times,
+        )
+
+        delay_acc = int(round(max(0.0, min(1.0, key_times[0])) * animation.duration_ms))
+        last_segment_index = len(values) - 2
+        child_elements: list[etree._Element] = []
+        bid = behavior_id
+
+        for index in range(last_segment_index + 1):
+            segment_duration = segment_durations[index]
+            fill_mode = animation.fill_mode if index == last_segment_index else "hold"
+            segment_children = [
+                self._build_scale_element_from_values(
+                    animation=animation,
+                    behavior_id=bid,
+                    ppt_attribute=ppt_attribute,
+                    start_value=values[index],
+                    end_value=values[index + 1],
+                    duration_ms=segment_duration,
+                    fill_mode=fill_mode,
+                    repeat_count=None,
+                )
+            ]
+
+            anchor_motion = self._build_scale_anchor_motion(
+                animation=animation,
+                ppt_attribute=ppt_attribute,
+                start_value=values[index],
+                end_value=values[index + 1],
+                behavior_id=bid + 1,
+                target_shape=animation.element_id,
+                duration_ms=segment_duration,
+                fill_mode=fill_mode,
+                repeat_count=None,
+            )
+            if anchor_motion is not None:
+                segment_children.append(anchor_motion)
+
+            child_elements.append(
+                self._xml.build_par_container_with_children_elem(
+                    par_id=bid + 2,
+                    duration_ms=segment_duration,
+                    delay_ms=delay_acc,
+                    child_elements=segment_children,
+                    preset_id=6,
+                    preset_class="emph",
+                    preset_subtype=0,
+                    node_type="withEffect",
+                    effect_group_id=bid + 2,
+                )
+            )
+            delay_acc += segment_duration
+            bid += 3
+
+        return self._xml.build_par_container_with_children_elem(
+            par_id=par_id,
+            duration_ms=animation.duration_ms,
+            delay_ms=animation.begin_ms,
+            child_elements=child_elements,
+            preset_id=None,
+            preset_class=None,
+            node_type="withEffect",
+            begin_triggers=animation.begin_triggers,
+            default_target_shape=animation.element_id,
+            effect_group_id=par_id,
+            repeat_count=animation.repeat_count,
+        )
+
+    def _build_scale_element_from_values(
+        self,
+        *,
+        animation: AnimationDefinition,
+        behavior_id: int,
+        ppt_attribute: str,
+        start_value: float,
+        end_value: float,
+        duration_ms: int,
+        fill_mode: str | None,
+        repeat_count: int | str | None,
+    ) -> etree._Element:
+        anim_scale = p_elem("animScale")
+        c_bhvr = self._xml.build_behavior_core_elem(
+            behavior_id=behavior_id,
+            duration_ms=duration_ms,
+            target_shape=animation.element_id,
+            fill_mode=fill_mode,
+            repeat_count=repeat_count,
+        )
+        anim_scale.append(c_bhvr)
+        by_x, by_y = self._scale_by_pair(ppt_attribute, start_value, end_value)
+        p_sub(anim_scale, "by", x=str(by_x), y=str(by_y))
+        return anim_scale
+
+    @staticmethod
+    def _resolve_scale_key_times(
+        values: list[float],
+        animation: AnimationDefinition,
+    ) -> list[float]:
+        if len(values) <= 1:
+            return [0.0]
+
+        calc_mode = (
+            animation.calc_mode.value
+            if isinstance(animation.calc_mode, CalcMode)
+            else str(animation.calc_mode).lower()
+        )
+        if calc_mode == CalcMode.PACED.value and len(values) > 2:
+            paced_times = compute_paced_key_times(values)
+            if paced_times is not None:
+                return paced_times
+
+        if animation.key_times is not None and len(animation.key_times) == len(values):
+            return list(animation.key_times)
+
+        return [index / (len(values) - 1) for index in range(len(values))]
+
+    @staticmethod
     def _scale_baseline(*values: float) -> float:
         for value in values:
             if abs(value) > 1e-6:
@@ -366,6 +513,27 @@ class NumericAnimationHandler(AnimationHandler):
         scale_pct = (
             int(round((absolute_value / baseline) * 100000)) if baseline else 100000
         )
+        is_height = ppt_attribute in ("ppt_h", "height", "h", "ry")
+        x_pct = 100000 if is_height else scale_pct
+        y_pct = scale_pct if is_height else 100000
+        return (x_pct, y_pct)
+
+    @classmethod
+    def _scale_by_pair(
+        cls,
+        ppt_attribute: str,
+        start_value: float,
+        end_value: float,
+    ) -> tuple[int, int]:
+        """Return PowerPoint's native animScale by percentages.
+
+        In authored PowerPoint XML, ``<p:by>`` is the scale amount applied to the
+        current shape, not a delta from 100%. Keep the untouched axis at 100%.
+        """
+        denominator = abs(start_value)
+        if denominator <= 1e-6:
+            denominator = cls._scale_baseline(start_value, end_value)
+        scale_pct = int(round((end_value / denominator) * 100000))
         is_height = ppt_attribute in ("ppt_h", "height", "h", "ry")
         x_pct = 100000 if is_height else scale_pct
         y_pct = scale_pct if is_height else 100000

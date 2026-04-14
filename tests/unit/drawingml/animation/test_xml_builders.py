@@ -5,6 +5,7 @@ from lxml import etree
 from svg2ooxml.drawingml.animation.id_allocator import TimingIDAllocator
 from svg2ooxml.drawingml.animation.xml_builders import AnimationXMLBuilder
 from svg2ooxml.drawingml.xml_builder import NS_P, p_elem, p_sub
+from svg2ooxml.ir.animation import BeginTrigger, BeginTriggerType
 
 
 class TestAttributeList:
@@ -328,7 +329,7 @@ class TestBuildTimingTree:
         assert bld_ps[0].get("grpId") == "0"
         assert bld_ps[0].get("animBg") is None
         assert bld_ps[1].get("spid") == "42"
-        assert bld_ps[1].get("grpId") == "7"
+        assert bld_ps[1].get("grpId") == "4"
         assert bld_ps[1].get("animBg") == "1"
 
     def test_no_bld_lst_when_empty(self):
@@ -436,6 +437,53 @@ class TestBuildParContainerElem:
 
         ctn = par.find(f"{{{NS_P}}}cTn")
         assert ctn.get("repeatCount") == "3000"
+
+    def test_apply_native_timing_overrides_adds_restart_repeat_dur_and_end_conditions(self):
+        builder = AnimationXMLBuilder()
+        child = p_elem("anim")
+        c_bhvr = p_sub(child, "cBhvr")
+        p_sub(c_bhvr, "cTn", id="5", dur="1000", repeatCount="indefinite")
+
+        par = builder.build_par_container_elem(
+            par_id=4,
+            duration_ms=1000,
+            delay_ms=0,
+            child_element=child,
+        )
+
+        builder.apply_native_timing_overrides(
+            par=par,
+            repeat_duration_ms=2500,
+            restart="whenNotActive",
+            end_triggers=[
+                BeginTrigger(
+                    trigger_type=BeginTriggerType.TIME_OFFSET,
+                    delay_seconds=1.0,
+                ),
+                BeginTrigger(
+                    trigger_type=BeginTriggerType.CLICK,
+                    target_element_id="button",
+                    delay_seconds=0.25,
+                ),
+            ],
+            default_target_shape="shape1",
+        )
+
+        outer_ctn = par.find(f"{{{NS_P}}}cTn")
+        repeat_ctn = par.find(f".//{{{NS_P}}}cTn[@repeatCount='indefinite']")
+        assert outer_ctn.get("restart") == "whenNotActive"
+        assert outer_ctn.get("repeatDur") is None
+        assert repeat_ctn.get("repeatDur") == "2500"
+        end_cond_lst = outer_ctn.find(f"{{{NS_P}}}endCondLst")
+        assert end_cond_lst is not None
+        conds = end_cond_lst.findall(f"{{{NS_P}}}cond")
+        assert len(conds) == 2
+        assert conds[0].get("delay") == "1000"
+        assert conds[1].get("evt") == "onClick"
+        assert conds[1].get("delay") == "250"
+        sp_tgt = conds[1].find(f".//{{{NS_P}}}spTgt")
+        assert sp_tgt is not None
+        assert sp_tgt.get("spid") == "button"
 
     def test_build_delayed_child_par(self):
         builder = AnimationXMLBuilder()

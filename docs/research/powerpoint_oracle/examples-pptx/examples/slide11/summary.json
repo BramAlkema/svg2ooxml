@@ -1,0 +1,48 @@
+{
+  "effect_patterns": [
+    {
+      "attr_names": [
+        "style.color",
+        "fillcolor",
+        "fill.type",
+        "fill.on"
+      ],
+      "behavior_durations": [
+        "250"
+      ],
+      "child_tags": [
+        "animClr",
+        "animClr",
+        "set",
+        "set"
+      ],
+      "container_id": "5",
+      "family_signature": "clickEffect|emph|animClr+animClr+set+set|style.color,fillcolor,fill.type,fill.on",
+      "grp_id": "0",
+      "node_type": "clickEffect",
+      "preset_class": "emph",
+      "preset_id": "27",
+      "preset_subtype": "0",
+      "signature": "clickEffect|emph|27|animClr+animClr+set+set|style.color,fillcolor,fill.type,fill.on",
+      "slide_file": "slide11.xml",
+      "start_delays": [
+        "0"
+      ],
+      "target_shapes": [
+        "4"
+      ]
+    }
+  ],
+  "has_build_list": true,
+  "has_timing": true,
+  "slide_file": "slide11.xml",
+  "tag_counts": {
+    "anim": 0,
+    "animClr": 2,
+    "animEffect": 0,
+    "animMotion": 0,
+    "animRot": 0,
+    "animScale": 0,
+    "set": 2
+  }
+}

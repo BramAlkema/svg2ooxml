@@ -48,12 +48,14 @@ logger = logging.getLogger(__name__)
 SLIDE_WIDTH_IN = 13.333
 SLIDE_HEIGHT_IN = 7.5
 MAX_MONTAGE_FRAMES = 6
-VARIANT_SPECS = (
-    ("browser", "Browser SVG", None),
-    ("native", "Native", "direct"),
-    ("mimic", "Mimic", "mimic"),
-    ("rasterised", "Rasterised", "bitmap"),
-)
+VARIANT_SPECS = {
+    "browser": ("Browser SVG", None),
+    "native": ("Native", "direct"),
+    "mimic": ("Mimic", "mimic"),
+    "rasterised": ("Rasterised", "bitmap"),
+}
+DEFAULT_VARIANTS = ("native",)
+ALL_VARIANTS = ("browser", "native", "mimic", "rasterised")
 
 
 @dataclass(frozen=True)
@@ -150,6 +152,21 @@ def _parse_args() -> argparse.Namespace:
         type=int,
         default=MAX_MONTAGE_FRAMES,
         help="Maximum frames to show in each animation montage.",
+    )
+    parser.add_argument(
+        "--variants",
+        nargs="+",
+        choices=tuple(VARIANT_SPECS),
+        default=list(DEFAULT_VARIANTS),
+        help=(
+            "Capture variants to include. Defaults to native only. "
+            "Use --all-variants for browser/native/mimic/rasterised."
+        ),
+    )
+    parser.add_argument(
+        "--all-variants",
+        action="store_true",
+        help="Capture browser, native, mimic, and rasterised variants.",
     )
     parser.add_argument(
         "--deck-name",
@@ -533,8 +550,9 @@ def _build_scenario_artifacts(
     scenario: ScenarioSpec,
     *,
     output_dir: Path,
-    browser_renderer: BrowserSvgRenderer,
+    browser_renderer: BrowserSvgRenderer | None,
     powerpoint_renderer: PowerPointRenderer,
+    variant_keys: Sequence[str],
     default_animation_duration: float,
     max_animation_duration: float | None,
     fps: float,
@@ -552,20 +570,26 @@ def _build_scenario_artifacts(
         )
 
     variants: list[VariantArtifacts] = []
-    variants.append(
-        _render_browser_variant(
-            browser_renderer,
-            scenario,
-            svg_text,
-            duration=duration,
-            fps=fps,
-            output_dir=scenario_dir / "browser",
-            montage_frames=montage_frames,
-            root_output_dir=output_dir,
+    if "browser" in variant_keys:
+        if browser_renderer is None:
+            raise RuntimeError("Browser variant requested but browser renderer is unavailable.")
+        variants.append(
+            _render_browser_variant(
+                browser_renderer,
+                scenario,
+                svg_text,
+                duration=duration,
+                fps=fps,
+                output_dir=scenario_dir / "browser",
+                montage_frames=montage_frames,
+                root_output_dir=output_dir,
+            )
         )
-    )
 
-    for key, label, fidelity_tier in VARIANT_SPECS[1:]:
+    for key in variant_keys:
+        if key == "browser":
+            continue
+        label, fidelity_tier = VARIANT_SPECS[key]
         output_key = key.replace(" ", "_")
         variant = _render_powerpoint_variant(
             powerpoint_renderer,
@@ -659,7 +683,11 @@ def _build_proof_deck(
         width=12.3,
         height=0.8,
         text=(
-            "Columns: Browser SVG, Native, Mimic, Rasterised. "
+            "Columns: "
+            + ", ".join(
+                variant.label for result in results[:1] for variant in result.variants
+            )
+            + ". "
             "Animated slides show frame montages; APNG artifacts live under the run output."
         ),
         font_size=16,
@@ -678,9 +706,15 @@ def _build_proof_deck(
     margin_left = 0.25
     margin_right = 0.25
     gap = 0.12
-    column_width = (SLIDE_WIDTH_IN - margin_left - margin_right - (gap * 3)) / 4.0
 
     for result in results:
+        variant_count = max(1, len(result.variants))
+        column_width = (
+            SLIDE_WIDTH_IN
+            - margin_left
+            - margin_right
+            - (gap * (variant_count - 1))
+        ) / variant_count
         slide = presentation.slides.add_slide(blank_layout)
         _add_textbox(
             slide,
@@ -786,6 +820,18 @@ def _iter_scenarios(args: argparse.Namespace) -> list[ScenarioSpec]:
     return scenarios
 
 
+def _selected_variant_keys(args: argparse.Namespace) -> tuple[str, ...]:
+    raw_keys = ALL_VARIANTS if args.all_variants else tuple(args.variants)
+    selected: list[str] = []
+    for key in raw_keys:
+        if key in selected:
+            continue
+        selected.append(key)
+    if not selected:
+        raise SystemExit("At least one capture variant must be selected.")
+    return tuple(selected)
+
+
 def main() -> None:
     args = _parse_args()
     logging.basicConfig(
@@ -796,9 +842,10 @@ def main() -> None:
 
     output_dir = args.output.resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
+    variant_keys = _selected_variant_keys(args)
 
-    browser_renderer = default_browser_renderer()
-    if not browser_renderer.available:
+    browser_renderer = default_browser_renderer() if "browser" in variant_keys else None
+    if browser_renderer is not None and not browser_renderer.available:
         raise SystemExit(
             "Browser rendering is unavailable. Install Playwright and its browser runtime."
         )
@@ -827,6 +874,7 @@ def main() -> None:
                 output_dir=output_dir,
                 browser_renderer=browser_renderer,
                 powerpoint_renderer=powerpoint_renderer,
+                variant_keys=variant_keys,
                 default_animation_duration=args.animation_duration,
                 max_animation_duration=args.max_animation_duration,
                 fps=args.fps,

@@ -232,6 +232,57 @@ class TestBuild:
         assert path is not None
         assert path.count("L ") > 2
 
+    def test_linear_calc_mode_without_key_times_retimes_each_value_equally(
+        self, handler: MotionAnimationHandler
+    ):
+        anim = make_motion_animation(
+            values=["M0,200 L0,167 L0,111 L0,0"],
+            calc_mode=CalcMode.LINEAR,
+        )
+
+        points = handler._retime_motion_points(
+            [(0.0, 200.0), (0.0, 167.0), (0.0, 111.0), (0.0, 0.0)],
+            anim,
+        )
+
+        assert len(points) > 4
+        assert points.index((0.0, 167.0)) == 32
+        assert points.index((0.0, 111.0)) == 64
+
+    def test_paced_calc_mode_without_key_times_uses_distance_weighting(
+        self, handler: MotionAnimationHandler
+    ):
+        anim = make_motion_animation(
+            values=["M0,200 L0,167 L0,111 L0,0"],
+            calc_mode=CalcMode.PACED,
+        )
+
+        points = handler._retime_motion_points(
+            [(0.0, 200.0), (0.0, 167.0), (0.0, 111.0), (0.0, 0.0)],
+            anim,
+        )
+
+        assert len(points) > 4
+        assert points.index((0.0, 167.0)) == 16
+        assert points.index((0.0, 111.0)) == 43
+
+    def test_key_points_retime_path_progress(self, handler: MotionAnimationHandler):
+        anim = make_motion_animation(
+            values=["M0,0 L100,0"],
+            key_times=[0.0, 0.5, 1.0],
+            key_points=[0.0, 1.0, 0.5],
+            calc_mode=CalcMode.LINEAR,
+        )
+
+        points = handler._retime_motion_points(
+            [(0.0, 0.0), (100.0, 0.0)],
+            anim,
+        )
+
+        assert points[0] == (0.0, 0.0)
+        assert points[48] == (100.0, 0.0)
+        assert points[-1] == (50.0, 0.0)
+
     def test_projects_motion_path_into_absolute_shape_positions(
         self, handler: MotionAnimationHandler
     ):

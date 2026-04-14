@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.6.7 - 2026-04-14
+
+- expanded SVG animation plumbing for SMIL timing, from/to/by values, repeat/end/restart handling, keyPoints, native-match metadata, and unsupported-trigger policy decisions
+- improved PowerPoint animation fidelity for fade in/out, calcMode linear/paced path retiming, motion keyPoints, opacity pulses, scale transforms, and display/visibility fill behavior
+- added a native animation mapping spec plus oracle/proof-deck tooling for matching SVG animation features to PresentationML structures
+- updated animation golden fixtures and regression coverage, including the duplicate drawingml image test module collection fix
+
 ## 0.6.6 - 2026-04-12
 
 - improved PowerPoint animation fidelity across motion, rotate, opacity, and line endpoint handling, including safer composition of sampled motion stacks and clearer unsupported-case tracing
