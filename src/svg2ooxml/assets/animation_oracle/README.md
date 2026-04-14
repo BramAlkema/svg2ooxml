@@ -198,35 +198,38 @@ string picked from a fixed vocabulary. The `entr/filter_effect` and
 template per direction, with `FILTER` + `PRESET_ID` + `PRESET_SUBTYPE`
 tokens substituting into the same structure.
 
-### Verified filter strings
+### Filter vocabulary SSOT
 
-Extracted from `.visual_tmp/samples/experiment 7.pptx` and empirically
-swept via `.visual_tmp/filter_sweep.py`:
+The complete authoritative list of filter strings lives in
+`filter_vocabulary.xml` at the oracle root — each entry records the
+exact value, entrance and exit preset-ID mappings, verification state,
+and provenance. **Load the vocabulary programmatically via the oracle**
+rather than hand-coding the table:
 
-| Filter                          | Preset (example) | Visible effect                         |
-| ------------------------------- | ---------------- | -------------------------------------- |
-| `fade`                          | entr 9 / exit 9  | opacity fade in/out                    |
-| `dissolve`                      | entr 10 / exit 10 | pixel-noise dissolve                   |
-| `wipe(down)`                    | entr 22/4        | top-to-bottom directional reveal       |
-| `wipe(up)`                      | entr 22/1        | bottom-to-top directional reveal       |
-| `wipe(left)`                    | entr 22/8        | right-to-left directional reveal       |
-| `wipe(right)`                   | entr 22/2        | left-to-right directional reveal       |
-| `wedge`                         | entr 37          | wedge-slice reveal                     |
-| `wheel(1)`                      | entr 21/1        | 1-spoke clock-wipe                     |
-| `wheel(2)`                      | entr 21/2        | 2-spoke clock-wipe                     |
-| `circle(in)`                    | entr 18/12       | elliptical reveal from center          |
-| `circle(out)`                   | entr 19/12       | elliptical reveal to edges             |
-| `strips(downLeft)`              | entr 25          | diagonal strip reveal                  |
-| `blinds(horizontal)`            | entr 42/10       | horizontal blinds                      |
-| `checkerboard(across)`          | entr 43          | checkerboard pattern reveal            |
-| `barn(inVertical)`              | entr 45          | vertical barn-door reveal              |
-| `randombar(horizontal)`         | entr 52          | horizontal random bar reveal           |
+```python
+from svg2ooxml.drawingml.animation.oracle import default_oracle
 
-All 16 were verified to animate as entrance effects via the oracle
-template. Each filter's sub-parameter (e.g. the direction in
-`wipe(down)`, the spoke count in `wheel(1)`) is part of the string literal
-— change the subparameter to get directional variants without modifying
-the template.
+oracle = default_oracle()
+vocab = oracle.filter_vocabulary()      # tuple[FilterEntry, ...]
+entry = oracle.filter_entry("wipe(down)")
+entry.entrance_preset_id         # 22
+entry.entrance_preset_subtype    # 4
+entry.verification               # "visually-verified"
+entry.description                # "top-to-bottom directional reveal"
+```
+
+The SSOT currently declares 29 filter values: 17 `visually-verified`
+entries (all 16 swept through the tune loop plus `image` as a pseudo
+filter used by the transparency compound) and 12 `derived-from-handler`
+variants (additional direction/spoke subparameters that share structure
+with verified entries but haven't been individually swept).
+
+Each filter's sub-parameter (e.g. the direction in `wipe(down)`, the
+spoke count in `wheel(1)`) is part of the string literal — change the
+subparameter to get directional variants without modifying the oracle
+template. To promote a `derived-from-handler` entry to `visually-verified`,
+add it to `.visual_tmp/filter_sweep.py`'s FILTERS list, run the sweep,
+and update `filter_vocabulary.xml`.
 
 ### Usage
 

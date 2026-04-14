@@ -11,6 +11,7 @@ from lxml import etree
 from svg2ooxml.drawingml.animation.oracle import (
     AnimationOracle,
     BehaviorFragment,
+    FilterEntry,
     OracleSlotError,
     default_oracle,
 )
@@ -306,3 +307,78 @@ def test_compound_unknown_fragment_raises() -> None:
             duration_ms=1000,
             behaviors=[BehaviorFragment("does_not_exist", {})],
         )
+
+
+# ---------------------------------------------------------- filter vocabulary
+
+
+def test_filter_vocabulary_loads_and_is_cached() -> None:
+    oracle = default_oracle()
+    vocab1 = oracle.filter_vocabulary()
+    vocab2 = oracle.filter_vocabulary()
+    assert vocab1 is vocab2  # cached tuple
+    assert len(vocab1) > 0
+    assert all(isinstance(e, FilterEntry) for e in vocab1)
+
+
+def test_filter_vocabulary_core_values_present() -> None:
+    """The empirically-verified filters must appear in the SSOT."""
+    oracle = default_oracle()
+    values = {e.value for e in oracle.filter_vocabulary()}
+    core = {
+        "fade", "dissolve",
+        "wipe(down)", "wipe(up)", "wipe(left)", "wipe(right)",
+        "wedge", "wheel(1)", "wheel(2)",
+        "circle(in)", "circle(out)",
+        "strips(downLeft)",
+        "blinds(horizontal)",
+        "checkerboard(across)",
+        "barn(inVertical)",
+        "randombar(horizontal)",
+    }
+    assert core.issubset(values)
+
+
+def test_filter_vocabulary_verified_count_matches_sweep() -> None:
+    """16 filters were empirically swept; at least 16 must carry visually-verified."""
+    oracle = default_oracle()
+    verified = [e for e in oracle.filter_vocabulary() if e.verification == "visually-verified"]
+    # 16 swept entrance filters + image (pseudo, verified via transparency slot)
+    assert len(verified) >= 16
+
+
+def test_filter_entry_lookup_by_value() -> None:
+    oracle = default_oracle()
+    entry = oracle.filter_entry("wipe(down)")
+    assert entry.value == "wipe(down)"
+    assert entry.entrance_preset_id == 22
+    assert entry.entrance_preset_subtype == 4
+    assert entry.verification == "visually-verified"
+
+
+def test_filter_entry_unknown_raises() -> None:
+    oracle = default_oracle()
+    with pytest.raises(OracleSlotError):
+        oracle.filter_entry("nonexistent_filter_xyz")
+
+
+def test_image_filter_is_pseudo() -> None:
+    """The 'image' filter is a standalone animEffect value that PPT only honors
+    inside emphasis effects (preset 9 transparency, preset 27 color pulse).
+    Its preset-id sentinel is -1 to mark it as pseudo."""
+    oracle = default_oracle()
+    entry = oracle.filter_entry("image")
+    assert entry.is_pseudo is True
+    assert entry.verification == "visually-verified"
+
+
+def test_filter_vocabulary_preset_subtype_mappings_consistent() -> None:
+    """Entrance and exit preset mappings for directional filters should share
+    the same preset_id (direction is carried by the filter string itself,
+    not by changing the preset)."""
+    oracle = default_oracle()
+    wipe_down = oracle.filter_entry("wipe(down)")
+    wipe_up = oracle.filter_entry("wipe(up)")
+    # Both are preset 22, different subtypes
+    assert wipe_down.entrance_preset_id == wipe_up.entrance_preset_id == 22
+    assert wipe_down.entrance_preset_subtype != wipe_up.entrance_preset_subtype

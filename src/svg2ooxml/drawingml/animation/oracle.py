@@ -40,6 +40,7 @@ NS_A = "http://schemas.openxmlformats.org/drawingml/2006/main"
 __all__ = [
     "AnimationOracle",
     "BehaviorFragment",
+    "FilterEntry",
     "OracleSlotError",
     "PresetSlot",
     "default_oracle",
@@ -66,6 +67,44 @@ class PresetSlot:
     source: str
     verification: str
     notes: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class FilterEntry:
+    """One entry from the animEffect filter vocabulary SSOT.
+
+    Represents a single `<p:animEffect filter="value">` string value that
+    PowerPoint recognises for entrance and exit presets. Loaded from
+    ``filter_vocabulary.xml`` at the oracle root.
+    """
+
+    value: str
+    description: str
+    entrance_preset_id: int | None
+    entrance_preset_subtype: int | None
+    exit_preset_id: int | None
+    exit_preset_subtype: int | None
+    verification: str
+    source: str
+
+    @property
+    def is_entrance_only(self) -> bool:
+        return self.entrance_preset_id is not None and self.exit_preset_id is None
+
+    @property
+    def is_exit_only(self) -> bool:
+        return self.exit_preset_id is not None and self.entrance_preset_id is None
+
+    @property
+    def is_pseudo(self) -> bool:
+        """True for filter values not usable as standalone entrance/exit effects.
+
+        Pseudo-entries (e.g. ``image``) appear in the vocabulary because they
+        are valid ``<p:animEffect filter>`` values but carry their semantics
+        through the enclosing preset (opacity in preset 9/27, not a standalone
+        entrance). Their preset IDs are encoded as -1 in the SSOT.
+        """
+        return self.entrance_preset_id == -1 and self.exit_preset_id == -1
 
 
 @dataclass(frozen=True, slots=True)
@@ -100,6 +139,7 @@ class AnimationOracle:
             raise FileNotFoundError(f"Animation oracle index missing: {index_path}")
         self._index: dict[str, PresetSlot] = {}
         self._templates: dict[str, str] = {}
+        self._filter_vocabulary: tuple[FilterEntry, ...] | None = None
         self._load_index(index_path)
 
     # ------------------------------------------------------------------ load
@@ -130,6 +170,48 @@ class AnimationOracle:
             self._index[name] = slot
             self._templates[name] = template_path.read_text(encoding="utf-8")
 
+    def _load_filter_vocabulary(self) -> tuple[FilterEntry, ...]:
+        vocab_path = self._root / "filter_vocabulary.xml"
+        if not vocab_path.is_file():
+            raise FileNotFoundError(
+                f"Filter vocabulary SSOT missing: {vocab_path}"
+            )
+        parser = etree.XMLParser(remove_blank_text=True, remove_comments=True)
+        root = etree.fromstring(vocab_path.read_bytes(), parser)
+        entries: list[FilterEntry] = []
+        for filt in root.findall("filter"):
+            value = filt.get("value", "")
+            description = (filt.findtext("description") or "").strip()
+            entrance = filt.find("entrance")
+            exit_el = filt.find("exit")
+            verification = (filt.findtext("verification") or "unknown").strip()
+            source = (filt.findtext("source") or "").strip()
+
+            def _int_or_none(el: etree._Element | None, attr: str) -> int | None:
+                if el is None:
+                    return None
+                raw = el.get(attr)
+                if raw is None:
+                    return None
+                try:
+                    return int(raw)
+                except ValueError:
+                    return None
+
+            entries.append(
+                FilterEntry(
+                    value=value,
+                    description=description,
+                    entrance_preset_id=_int_or_none(entrance, "preset-id"),
+                    entrance_preset_subtype=_int_or_none(entrance, "preset-subtype"),
+                    exit_preset_id=_int_or_none(exit_el, "preset-id"),
+                    exit_preset_subtype=_int_or_none(exit_el, "preset-subtype"),
+                    verification=verification,
+                    source=source,
+                )
+            )
+        return tuple(entries)
+
     # ---------------------------------------------------------------- access
 
     @property
@@ -138,6 +220,24 @@ class AnimationOracle:
 
     def slots(self) -> list[PresetSlot]:
         return list(self._index.values())
+
+    def filter_vocabulary(self) -> tuple[FilterEntry, ...]:
+        """Return the complete animEffect filter vocabulary SSOT.
+
+        Loaded lazily from ``filter_vocabulary.xml`` and cached on first
+        access. Each entry describes one filter string value, its
+        entrance/exit preset-ID mappings, verification state, and source.
+        """
+        if self._filter_vocabulary is None:
+            self._filter_vocabulary = self._load_filter_vocabulary()
+        return self._filter_vocabulary
+
+    def filter_entry(self, value: str) -> FilterEntry:
+        """Look up a :class:`FilterEntry` by its ``value`` field."""
+        for entry in self.filter_vocabulary():
+            if entry.value == value:
+                return entry
+        raise OracleSlotError(f"Unknown filter vocabulary value: {value!r}")
 
     def slot(self, name: str) -> PresetSlot:
         try:
