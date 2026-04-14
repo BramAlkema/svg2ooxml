@@ -707,3 +707,114 @@ class TestBuildBehaviorCoreElem:
         )
         ctn = elem.find(f"{{{NS_P}}}cTn")
         assert ctn.get("repeatCount") is None
+
+
+class TestBuildCompoundPar:
+    """Test build_compound_par — the compound oracle entry point."""
+
+    def test_single_fragment(self):
+        """One fragment → one compound par with one behavior child."""
+        from svg2ooxml.drawingml.animation.oracle import BehaviorFragment
+
+        builder = AnimationXMLBuilder()
+        par = builder.build_compound_par(
+            shape_id="2",
+            par_id=5,
+            duration_ms=2000,
+            behaviors=[
+                BehaviorFragment("rotate", {
+                    "BEHAVIOR_ID": 10,
+                    "ROTATION_BY": "21600000",
+                }),
+            ],
+        )
+        assert par.tag == f"{{{NS_P}}}par"
+        ctn = par.find(f"{{{NS_P}}}cTn")
+        assert ctn is not None
+        assert ctn.get("nodeType") == "clickEffect"
+        assert ctn.get("dur") == "2000"
+        children = ctn.find(f"{{{NS_P}}}childTnLst")
+        assert children is not None
+        # Fragment 'rotate' has one <p:animRot> child.
+        assert len(children) == 1
+        assert children[0].tag == f"{{{NS_P}}}animRot"
+
+    def test_multi_fragment_stacks_all_behaviors(self):
+        """Multiple fragments → compound cTn with all behaviors as siblings."""
+        from svg2ooxml.drawingml.animation.oracle import BehaviorFragment
+
+        builder = AnimationXMLBuilder()
+        par = builder.build_compound_par(
+            shape_id="2",
+            par_id=5,
+            duration_ms=3000,
+            behaviors=[
+                BehaviorFragment("transparency", {
+                    "SET_BEHAVIOR_ID": 10,
+                    "EFFECT_BEHAVIOR_ID": 11,
+                    "TARGET_OPACITY": "0.5",
+                }),
+                BehaviorFragment("rotate", {
+                    "BEHAVIOR_ID": 20,
+                    "ROTATION_BY": "21600000",
+                }),
+                BehaviorFragment("motion", {
+                    "BEHAVIOR_ID": 30,
+                    "PATH_DATA": "M 0 0 L 0.1 0.2 E",
+                }),
+            ],
+        )
+        children = par.find(f"{{{NS_P}}}cTn/{{{NS_P}}}childTnLst")
+        assert children is not None
+        # transparency = 2 children (set + animEffect), rotate = 1, motion = 1
+        tags = [etree.QName(c).localname for c in children]
+        assert tags == ["set", "animEffect", "animRot", "animMotion"]
+
+    def test_accepts_plain_tuple_behaviors(self):
+        """Plain (name, tokens) tuples are normalised to BehaviorFragments."""
+        builder = AnimationXMLBuilder()
+        par = builder.build_compound_par(
+            shape_id="2",
+            par_id=5,
+            duration_ms=1500,
+            behaviors=[
+                ("bold", {"BEHAVIOR_ID": 10}),
+                ("underline", {"BEHAVIOR_ID": 20}),
+            ],
+        )
+        children = par.find(f"{{{NS_P}}}cTn/{{{NS_P}}}childTnLst")
+        assert children is not None
+        # Both bold and underline emit one <p:set> each.
+        assert len(children) == 2
+        for child in children:
+            assert etree.QName(child).localname == "set"
+
+    def test_shape_fill_color_quadruple(self):
+        """The fill_color fragment expands to 4 primitive children targeting <p:bg/>."""
+        from svg2ooxml.drawingml.animation.oracle import BehaviorFragment
+
+        builder = AnimationXMLBuilder()
+        par = builder.build_compound_par(
+            shape_id="2",
+            par_id=5,
+            duration_ms=2000,
+            behaviors=[
+                BehaviorFragment("fill_color", {
+                    "STYLE_CLR_BEHAVIOR_ID": 10,
+                    "FILL_CLR_BEHAVIOR_ID": 11,
+                    "FILL_TYPE_BEHAVIOR_ID": 12,
+                    "FILL_ON_BEHAVIOR_ID": 13,
+                    "TO_COLOR": "C81010",
+                }),
+            ],
+        )
+        children = par.find(f"{{{NS_P}}}cTn/{{{NS_P}}}childTnLst")
+        assert children is not None
+        tags = [etree.QName(c).localname for c in children]
+        assert tags == ["animClr", "animClr", "set", "set"]
+        # All targets should carry <p:bg/> (shape background scope).
+        for child in children:
+            bg = child.find(f".//{{{NS_P}}}bg")
+            assert bg is not None, (
+                f"fill_color child {etree.QName(child).localname} missing <p:bg/>"
+            )

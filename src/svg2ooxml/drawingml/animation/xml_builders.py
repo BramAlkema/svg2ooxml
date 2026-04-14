@@ -357,6 +357,58 @@ class AnimationXMLBuilder:
 
         return par
 
+    def build_compound_par(
+        self,
+        *,
+        shape_id: str | int,
+        par_id: int,
+        duration_ms: int,
+        delay_ms: int = 0,
+        behaviors: list,
+    ) -> etree._Element:
+        """Build a compound ``<p:par>`` by injecting behavior fragments.
+
+        *behaviors* is a sequence of
+        :class:`~svg2ooxml.drawingml.animation.oracle.BehaviorFragment`
+        instances (or plain ``(name, tokens)`` tuples). Each fragment names
+        a file under ``src/svg2ooxml/assets/animation_oracle/emph/behaviors/``
+        and a token map for its private placeholders. The compound slot's
+        single ``<p:cTn>`` receives every fragment's children as siblings,
+        so they all fire simultaneously on the outer click.
+
+        This is the primary emission path when one shape has multiple
+        simultaneous SVG animations: the handler aggregates them into one
+        fragment list and calls this method once instead of emitting
+        multiple sibling ``<p:par>`` elements.
+
+        Duration and ``SHAPE_ID``/``INNER_FILL`` propagate into every
+        fragment automatically. Per-fragment tokens (``BEHAVIOR_ID``,
+        ``TO_COLOR``, ``ROTATION_BY``, etc.) must be supplied on each
+        ``BehaviorFragment.tokens``.
+        """
+        # Local import to avoid a module-import cycle when the animation
+        # package is still being initialised.
+        from svg2ooxml.drawingml.animation.oracle import (
+            BehaviorFragment,
+            default_oracle,
+        )
+
+        normalised: list = []
+        for item in behaviors:
+            if isinstance(item, BehaviorFragment):
+                normalised.append(item)
+            else:
+                name, tokens = item
+                normalised.append(BehaviorFragment(name=name, tokens=tokens))
+
+        return default_oracle().instantiate_compound(
+            shape_id=shape_id,
+            par_id=par_id,
+            duration_ms=duration_ms,
+            delay_ms=delay_ms,
+            behaviors=normalised,
+        )
+
     def build_delayed_child_par(
         self,
         *,
