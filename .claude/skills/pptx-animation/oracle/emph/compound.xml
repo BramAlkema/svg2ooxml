@@ -1,0 +1,12 @@
+<p:par>
+    <p:cTn id="{PAR_ID}" dur="{DURATION_MS}" fill="hold" nodeType="clickEffect" grpId="{PAR_ID}">
+        <p:stCondLst>
+            <p:cond delay="{DELAY_MS}"/>
+        </p:stCondLst>
+        <p:iterate type="lt">
+            <p:tmAbs val="0"/>
+        </p:iterate>
+        <p:childTnLst>
+        </p:childTnLst>
+    </p:cTn>
+</p:par>

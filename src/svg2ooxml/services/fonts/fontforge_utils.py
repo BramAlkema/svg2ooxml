@@ -18,6 +18,22 @@ except Exception:  # pragma: no cover - environments without FontForge
     fontforge = None  # type: ignore[assignment]
     FONTFORGE_AVAILABLE = False
 
+
+@contextmanager
+def suppress_stderr() -> Iterator[None]:
+    """Suppress noisy C-level stderr output for the duration of the context."""
+    saved_stderr = os.dup(2)
+    try:
+        with open(os.devnull, "wb") as devnull:
+            os.dup2(devnull.fileno(), 2)
+            yield
+    finally:
+        try:
+            os.dup2(saved_stderr, 2)
+        finally:
+            os.close(saved_stderr)
+
+
 @contextmanager
 def open_font(source: str | bytes, *, suffix: str = ".ttf") -> Iterator[Any]:
     if not FONTFORGE_AVAILABLE:  # pragma: no cover - optional dependency guard
@@ -36,7 +52,8 @@ def open_font(source: str | bytes, *, suffix: str = ".ttf") -> Iterator[Any]:
     else:
         path = source
 
-    font = fontforge.open(path)
+    with suppress_stderr():
+        font = fontforge.open(path)
     try:
         yield font
     finally:
@@ -59,7 +76,8 @@ def generate_font_bytes(font: Any, *, suffix: str = ".ttf") -> bytes:
     ) as temp_file:
         temp_path = Path(temp_file.name)
     try:
-        font.generate(str(temp_path))
+        with suppress_stderr():
+            font.generate(str(temp_path))
         return temp_path.read_bytes()
     finally:
         try:
@@ -83,4 +101,5 @@ __all__ = [
     "generate_font_bytes",
     "get_table_data",
     "open_font",
+    "suppress_stderr",
 ]

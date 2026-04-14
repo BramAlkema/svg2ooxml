@@ -39,6 +39,23 @@ def test_resolve_paints_for_solid_styles() -> None:
     assert stroke.paint.opacity == pytest.approx(1.0)
 
 
+def test_resolve_stroke_style_defaults_width_to_one() -> None:
+    svg_markup = """
+        <svg xmlns="http://www.w3.org/2000/svg">
+            <polygon points="0,0 10,0 10,10 0,10" fill="none" stroke="green"/>
+        </svg>
+    """
+    result = normalize_svg_string(svg_markup)
+    polygon = next(child for child in result.tree.root.children if getattr(child, "tag", "") == "polygon")
+
+    stroke = resolve_stroke_style(polygon.stroke, result.tree)
+
+    assert isinstance(stroke, Stroke)
+    assert stroke.width == pytest.approx(1.0)
+    assert isinstance(stroke.paint, SolidPaint)
+    assert stroke.paint.rgb == "008000"
+
+
 def test_resolve_paints_for_linear_gradient() -> None:
     svg_markup = """
         <svg xmlns="http://www.w3.org/2000/svg">

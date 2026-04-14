@@ -1,0 +1,68 @@
+<p:par>
+    <p:cTn id="{PAR_ID}" dur="{DURATION_MS}" fill="remove" nodeType="clickEffect" grpId="{PAR_ID}" presetID="27" presetClass="emph" presetSubtype="0">
+        <p:stCondLst>
+            <p:cond delay="{DELAY_MS}"/>
+        </p:stCondLst>
+        <p:iterate type="lt">
+            <p:tmPct val="0"/>
+        </p:iterate>
+        <p:childTnLst>
+            <p:animClr clrSpc="rgb" dir="cw">
+                <p:cBhvr override="childStyle">
+                    <p:cTn id="{STYLE_CLR_BEHAVIOR_ID}" dur="{DURATION_MS}" autoRev="1" fill="remove"/>
+                    <p:tgtEl>
+                        <p:spTgt spid="{SHAPE_ID}"><p:txEl><p:pRg st="0" end="0"/></p:txEl></p:spTgt>
+                    </p:tgtEl>
+                    <p:attrNameLst>
+                        <p:attrName>style.color</p:attrName>
+                    </p:attrNameLst>
+                </p:cBhvr>
+                <p:to>
+                    <a:srgbClr val="{TO_COLOR}"/>
+                </p:to>
+            </p:animClr>
+            <p:animClr clrSpc="rgb" dir="cw">
+                <p:cBhvr>
+                    <p:cTn id="{FILL_CLR_BEHAVIOR_ID}" dur="{DURATION_MS}" autoRev="1" fill="remove"/>
+                    <p:tgtEl>
+                        <p:spTgt spid="{SHAPE_ID}"><p:txEl><p:pRg st="0" end="0"/></p:txEl></p:spTgt>
+                    </p:tgtEl>
+                    <p:attrNameLst>
+                        <p:attrName>fillcolor</p:attrName>
+                    </p:attrNameLst>
+                </p:cBhvr>
+                <p:to>
+                    <a:srgbClr val="{TO_COLOR}"/>
+                </p:to>
+            </p:animClr>
+            <p:set>
+                <p:cBhvr>
+                    <p:cTn id="{FILL_TYPE_BEHAVIOR_ID}" dur="{DURATION_MS}" autoRev="1" fill="remove"/>
+                    <p:tgtEl>
+                        <p:spTgt spid="{SHAPE_ID}"><p:txEl><p:pRg st="0" end="0"/></p:txEl></p:spTgt>
+                    </p:tgtEl>
+                    <p:attrNameLst>
+                        <p:attrName>fill.type</p:attrName>
+                    </p:attrNameLst>
+                </p:cBhvr>
+                <p:to>
+                    <p:strVal val="solid"/>
+                </p:to>
+            </p:set>
+            <p:set>
+                <p:cBhvr>
+                    <p:cTn id="{FILL_ON_BEHAVIOR_ID}" dur="{DURATION_MS}" autoRev="1" fill="remove"/>
+                    <p:tgtEl>
+                        <p:spTgt spid="{SHAPE_ID}"><p:txEl><p:pRg st="0" end="0"/></p:txEl></p:spTgt>
+                    </p:tgtEl>
+                    <p:attrNameLst>
+                        <p:attrName>fill.on</p:attrName>
+                    </p:attrNameLst>
+                </p:cBhvr>
+                <p:to>
+                    <p:strVal val="true"/>
+                </p:to>
+            </p:set>
+        </p:childTnLst>
+    </p:cTn>
+</p:par>

@@ -1,0 +1,10 @@
+<fragment>
+    <p:animMotion origin="layout" path="{PATH_DATA}" pathEditMode="relative">
+        <p:cBhvr>
+            <p:cTn id="{BEHAVIOR_ID}" dur="{DURATION_MS}" fill="{INNER_FILL}"/>
+            <p:tgtEl>
+                <p:spTgt spid="{SHAPE_ID}"/>
+            </p:tgtEl>
+        </p:cBhvr>
+    </p:animMotion>
+</fragment>

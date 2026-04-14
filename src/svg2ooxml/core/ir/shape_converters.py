@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import io
 from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path as FsPath
@@ -29,6 +30,11 @@ from svg2ooxml.core.styling import style_runtime as styles_runtime
 from svg2ooxml.core.styling.style_extractor import StyleResult
 from svg2ooxml.core.traversal.constants import DEFAULT_TOLERANCE
 from svg2ooxml.core.traversal.coordinate_space import CoordinateSpace
+from svg2ooxml.core.traversal.viewbox import (
+    ViewportEngine,
+    parse_preserve_aspect_ratio,
+    resolve_viewbox_dimensions,
+)
 from svg2ooxml.ir.geometry import LineSegment, Point, Rect, SegmentType
 from svg2ooxml.ir.paint import (
     LinearGradientPaint,
@@ -37,13 +43,13 @@ from svg2ooxml.ir.paint import (
     SolidPaint,
     Stroke,
 )
-
-_NATIVE_FILL_TYPES = (SolidPaint, LinearGradientPaint, RadialGradientPaint)
 from svg2ooxml.ir.scene import ClipRef, Group, Image, MaskInstance, MaskRef, Path
 from svg2ooxml.ir.text import Run, TextAnchor, TextFrame
 from svg2ooxml.policy.constants import FALLBACK_BITMAP, FALLBACK_EMF
 from svg2ooxml.policy.geometry import apply_geometry_policy
 from svg2ooxml.services.image_service import ImageResource, ImageService
+
+_NATIVE_FILL_TYPES = (SolidPaint, LinearGradientPaint, RadialGradientPaint)
 
 
 class ShapeConversionMixin(ShapeResvgMixin, ShapeFallbackMixin):
@@ -97,6 +103,8 @@ class ShapeConversionMixin(ShapeResvgMixin, ShapeFallbackMixin):
     def _pattern_fill_requires_path_fallback(fill) -> bool:
         if not isinstance(fill, PatternPaint):
             return False
+        if fill.tile_image or fill.tile_relationship_id:
+            return False
 
         transform = fill.transform
         if transform is None:
@@ -125,12 +133,26 @@ class ShapeConversionMixin(ShapeResvgMixin, ShapeFallbackMixin):
         allow_bitmap_fallback: bool,
     ) -> str | None:
         geometry_policy = metadata.setdefault("policy", {}).setdefault("geometry", {})
-        if allow_emf_fallback:
-            geometry_policy.setdefault("suggest_fallback", FALLBACK_EMF)
-            return FALLBACK_EMF
         if allow_bitmap_fallback:
             geometry_policy.setdefault("suggest_fallback", FALLBACK_BITMAP)
             return FALLBACK_BITMAP
+        return None
+
+    @staticmethod
+    def _prefer_non_native_fill_fallback(
+        fill,
+        *,
+        allow_emf_fallback: bool,
+        allow_bitmap_fallback: bool,
+    ) -> str | None:
+        if isinstance(fill, PatternPaint):
+            if allow_bitmap_fallback:
+                return FALLBACK_BITMAP
+            return None
+        if allow_bitmap_fallback:
+            return FALLBACK_BITMAP
+        if allow_emf_fallback:
+            return FALLBACK_EMF
         return None
 
     def _convert_use(
@@ -416,10 +438,13 @@ class ShapeConversionMixin(ShapeResvgMixin, ShapeFallbackMixin):
         if pattern_fallback is not None:
             render_mode = pattern_fallback
         elif style.fill and not self._fill_can_render_natively(style.fill, metadata):
-            if allow_bitmap_fallback:
-                render_mode = FALLBACK_BITMAP
-            elif allow_emf_fallback:
-                render_mode = FALLBACK_EMF
+            fill_fallback = self._prefer_non_native_fill_fallback(
+                style.fill,
+                allow_emf_fallback=allow_emf_fallback,
+                allow_bitmap_fallback=allow_bitmap_fallback,
+            )
+            if fill_fallback is not None:
+                render_mode = fill_fallback
 
         if render_mode == FALLBACK_EMF:
             emf_image = self._convert_path_to_emf(
@@ -539,10 +564,13 @@ class ShapeConversionMixin(ShapeResvgMixin, ShapeFallbackMixin):
         if pattern_fallback is not None:
             render_mode = pattern_fallback
         elif style.fill and not self._fill_can_render_natively(style.fill, metadata):
-            if allow_bitmap_fallback:
-                render_mode = FALLBACK_BITMAP
-            elif allow_emf_fallback:
-                render_mode = FALLBACK_EMF
+            fill_fallback = self._prefer_non_native_fill_fallback(
+                style.fill,
+                allow_emf_fallback=allow_emf_fallback,
+                allow_bitmap_fallback=allow_bitmap_fallback,
+            )
+            if fill_fallback is not None:
+                render_mode = fill_fallback
 
         fallback_to_bitmap = False
         if render_mode == FALLBACK_EMF:
@@ -652,17 +680,6 @@ class ShapeConversionMixin(ShapeResvgMixin, ShapeFallbackMixin):
         x = _parse_float(element.get("x"), default=0.0) or 0.0
         y = _parse_float(element.get("y"), default=0.0) or 0.0
 
-        rect_points = [
-            (x, y),
-            (x + width, y),
-            (x + width, y + height),
-            (x, y + height),
-        ]
-        transformed_points = [
-            coord_space.apply_point(px, py) for (px, py) in rect_points
-        ]
-        bbox = _compute_bbox(transformed_points)
-
         image_policy = self._policy_options("image")
         style = styles_runtime.extract_style(self, element)
 
@@ -689,6 +706,27 @@ class ShapeConversionMixin(ShapeResvgMixin, ShapeFallbackMixin):
             resource.data if resource else None,
             resource.mime_type if resource else None,
         )
+
+        viewport_rect = Rect(x, y, width, height)
+        visible_rect, image_layout = self._resolve_image_layout(
+            element=element,
+            viewport_rect=viewport_rect,
+            resource=resource,
+            format_hint=format_hint,
+        )
+        rect_points = [
+            (visible_rect.x, visible_rect.y),
+            (visible_rect.x + visible_rect.width, visible_rect.y),
+            (
+                visible_rect.x + visible_rect.width,
+                visible_rect.y + visible_rect.height,
+            ),
+            (visible_rect.x, visible_rect.y + visible_rect.height),
+        ]
+        transformed_points = [
+            coord_space.apply_point(px, py) for (px, py) in rect_points
+        ]
+        bbox = _compute_bbox(transformed_points)
         clip_ref = self._resolve_clip_ref(element)
         mask_ref, mask_instance = self._resolve_mask_ref(element)
         metadata: dict[str, Any] = dict(style.metadata)
@@ -696,6 +734,7 @@ class ShapeConversionMixin(ShapeResvgMixin, ShapeFallbackMixin):
             metadata["image_source"] = resource.source
         if href:
             metadata["href"] = href
+        metadata["image_layout"] = image_layout
         self._attach_policy_metadata(metadata, "image")
         if image_policy:
             self._attach_policy_metadata(metadata, "image", extra=image_policy)
@@ -738,6 +777,118 @@ class ShapeConversionMixin(ShapeResvgMixin, ShapeFallbackMixin):
             subject=element.get("id"),
         )
         return image
+
+    def _resolve_image_layout(
+        self,
+        *,
+        element: etree._Element,
+        viewport_rect: Rect,
+        resource: ImageResource | None,
+        format_hint: str,
+    ) -> tuple[Rect, dict[str, Any]]:
+        """Resolve the actual painted image box inside the SVG image viewport."""
+
+        layout = {
+            "viewport": {
+                "x": float(viewport_rect.x),
+                "y": float(viewport_rect.y),
+                "width": float(viewport_rect.width),
+                "height": float(viewport_rect.height),
+            },
+            "content_offset": {"x": 0.0, "y": 0.0},
+            "content_size": {
+                "width": float(viewport_rect.width),
+                "height": float(viewport_rect.height),
+            },
+            "preserve_aspect_ratio": element.get("preserveAspectRatio") or "",
+        }
+
+        intrinsic_size = self._resolve_intrinsic_image_size(resource, format_hint)
+        if intrinsic_size is None:
+            return viewport_rect, layout
+
+        intrinsic_width, intrinsic_height = intrinsic_size
+        if intrinsic_width <= 0 or intrinsic_height <= 0:
+            return viewport_rect, layout
+
+        preserve = parse_preserve_aspect_ratio(element.get("preserveAspectRatio"))
+        if preserve.is_none or preserve.meet_or_slice.lower() == "slice":
+            return viewport_rect, layout
+
+        engine = ViewportEngine()
+        result = engine.compute(
+            (0.0, 0.0, intrinsic_width, intrinsic_height),
+            (float(viewport_rect.width), float(viewport_rect.height)),
+            preserve,
+        )
+
+        content_rect = Rect(
+            viewport_rect.x + result.translate_x,
+            viewport_rect.y + result.translate_y,
+            intrinsic_width * result.scale_x,
+            intrinsic_height * result.scale_y,
+        )
+        layout["content_offset"] = {
+            "x": float(content_rect.x - viewport_rect.x),
+            "y": float(content_rect.y - viewport_rect.y),
+        }
+        layout["content_size"] = {
+            "width": float(content_rect.width),
+            "height": float(content_rect.height),
+        }
+        return content_rect, layout
+
+    def _resolve_intrinsic_image_size(
+        self,
+        resource: ImageResource | None,
+        format_hint: str,
+    ) -> tuple[float, float] | None:
+        if resource is None or not resource.data:
+            return None
+        if format_hint == "svg":
+            return self._resolve_svg_intrinsic_image_size(resource.data)
+        return self._resolve_raster_intrinsic_image_size(resource.data)
+
+    def _resolve_svg_intrinsic_image_size(
+        self,
+        payload: bytes,
+    ) -> tuple[float, float] | None:
+        try:
+            root = etree.fromstring(payload)
+        except (etree.XMLSyntaxError, ValueError, TypeError):
+            return None
+        if not isinstance(root.tag, str) or root.tag.split("}", 1)[-1] != "svg":
+            return None
+
+        unit_converter = getattr(self._services, "unit_converter", None)
+        if unit_converter is None:
+            return None
+
+        try:
+            width_px, height_px, _, _ = resolve_viewbox_dimensions(root, unit_converter)
+        except (TypeError, ValueError):
+            return None
+        if width_px <= 0 or height_px <= 0:
+            return None
+        return (float(width_px), float(height_px))
+
+    @staticmethod
+    def _resolve_raster_intrinsic_image_size(
+        payload: bytes,
+    ) -> tuple[float, float] | None:
+        try:
+            from PIL import Image as PILImage
+        except ImportError:
+            return None
+
+        try:
+            with PILImage.open(io.BytesIO(payload)) as image:
+                width, height = image.size
+        except (OSError, ValueError):
+            return None
+        if width <= 0 or height <= 0:
+            return None
+        return (float(width), float(height))
 
     @staticmethod
     def _normalize_image_href(href: str | None) -> str | None:

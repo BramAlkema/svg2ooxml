@@ -17,6 +17,9 @@ from svg2ooxml.core.traversal.viewbox import (
 
 def instantiate_use_target(converter, target: etree._Element, use_element: etree._Element) -> list[etree._Element]:
     clone = deepcopy(target)
+    source_id = target.get("id")
+    if source_id:
+        clone.set("data-svg2ooxml-source-id", source_id)
     _apply_computed_presentation(converter, target, clone)
     local = converter._local_name(clone.tag)
     if local == "symbol":
@@ -36,6 +39,9 @@ def wrap_symbol_clone(converter, symbol_clone: etree._Element, use_element: etre
     for attr in ("class", "style"):
         if attr in symbol_clone.attrib:
             group.set(attr, symbol_clone.attrib[attr])
+    source_id = symbol_clone.get("data-svg2ooxml-source-id") or symbol_clone.get("id")
+    if source_id:
+        group.set("data-svg2ooxml-source-id", source_id)
     _apply_computed_presentation(converter, symbol_clone, group)
     apply_use_attributes(converter, use_element, group)
     propagate_symbol_use_attributes(converter, group, use_element)

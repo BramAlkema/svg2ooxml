@@ -13,6 +13,12 @@ from tests.unit.filters.policy import (
 )
 
 from svg2ooxml.common.units import px_to_emu
+from svg2ooxml.filters.base import FilterContext
+from svg2ooxml.filters.primitives.gaussian_blur import GaussianBlurFilter
+from svg2ooxml.filters.primitives.lighting import (
+    DiffuseLightingFilter,
+    SpecularLightingFilter,
+)
 from svg2ooxml.services.filter_service import FilterService
 from svg2ooxml.services.filter_types import FilterEffectResult
 
@@ -141,6 +147,80 @@ def test_component_transfer_enriches_blip_when_policy_enabled() -> None:
     assert effect.metadata.get("blip_effect_enrichment_applied") is True
 
 
+def test_component_transfer_alpha_stack_collapses_to_effect_dag() -> None:
+    service = FilterService()
+    element = etree.fromstring(
+        "<filter id='f'>"
+        "  <feComponentTransfer result='a1'>"
+        "    <feFuncA type='linear' slope='0.5' intercept='0'/>"
+        "  </feComponentTransfer>"
+        "  <feComponentTransfer in='a1'>"
+        "    <feFuncA type='linear' slope='0.8' intercept='0'/>"
+        "  </feComponentTransfer>"
+        "</filter>"
+    )
+    service.register_filter("f", element)
+
+    results = service.resolve_effects(
+        "f",
+        context={"policy": {"enable_effect_dag": True}},
+    )
+
+    assert len(results) == 1
+    effect = results[0]
+    assert_fallback(effect, modern=None)
+    assert_strategy(effect, modern="native")
+    assert_no_assets(effect)
+    assert effect.metadata["stack_type"] == "component_transfer_alpha_stack"
+    assert effect.metadata["editable_stack"] is True
+    assert effect.metadata["alpha_scale_total"] == 0.4
+    assert effect.metadata["alpha_mod_amount"] == 40000
+    assert effect.effect.drawingml.startswith("<a:effectDag>")
+    assert '<a:alphaModFix amt="40000">' in effect.effect.drawingml
+
+
+def test_color_transform_stack_collapses_to_blip_enriched_placeholder() -> None:
+    service = FilterService()
+    element = etree.fromstring(
+        "<filter id='f'>"
+        "  <feColorMatrix type='saturate' values='0.5' result='sat'/>"
+        "  <feComponentTransfer in='sat'>"
+        "    <feFuncA type='linear' slope='0.4' intercept='0'/>"
+        "  </feComponentTransfer>"
+        "</filter>"
+    )
+    service.register_filter("f", element)
+
+    results = service.resolve_effects(
+        "f",
+        context={
+            "policy": {
+                "enable_native_color_transforms": True,
+                "enable_blip_effect_enrichment": True,
+            }
+        },
+    )
+
+    assert len(results) == 1
+    effect = results[0]
+    assert_fallback(effect, modern="bitmap")
+    assert_strategy(effect, modern="raster")
+    assert_assets(effect, modern="raster")
+    assert effect.metadata["stack_type"] == "color_transform_blip_stack"
+    assert effect.metadata["editable_stack"] is False
+    assert effect.metadata["source_primitives"] == [
+        "feColorMatrix",
+        "feComponentTransfer",
+    ]
+    assert effect.metadata["blip_color_transforms"] == [
+        {"tag": "satMod", "val": 50000},
+        {"tag": "alphaModFix", "amt": 40000},
+    ]
+    assert '<a:satMod val="50000"/>' in effect.effect.drawingml
+    assert '<a:alphaModFix amt="40000"/>' in effect.effect.drawingml
+    assert effect.metadata.get("blip_effect_enrichment_applied") is True
+
+
 def test_convolve_matrix_tracks_kernel() -> None:
     service = FilterService()
     results = _resolve(
@@ -232,6 +312,198 @@ def test_merge_combines_inputs_and_preserves_order() -> None:
     assert merge.effect.drawingml == expected
 
 
+def test_flood_blur_merge_sourcegraphic_collapses_to_editable_glow() -> None:
+    service = FilterService()
+    results = _resolve(
+        service,
+        "<filter id='f'>"
+        "  <feFlood flood-color='#112233' flood-opacity='0.7' result='flood'/>"
+        "  <feGaussianBlur in='flood' stdDeviation='3' result='halo'/>"
+        "  <feMerge>"
+        "    <feMergeNode in='halo'/>"
+        "    <feMergeNode in='SourceGraphic'/>"
+        "  </feMerge>"
+        "</filter>",
+    )
+    assert len(results) == 1
+    effect = results[0]
+    assert effect.strategy == "native"
+    assert effect.fallback is None
+    assert effect.metadata["stack_type"] == "flood_blur_merge"
+    assert effect.metadata["editable_stack"] is True
+    assert effect.metadata["approximation"] == "glow"
+    assert effect.metadata["flood_color"] == "112233"
+    assert effect.metadata["radius_px"] == 6.0
+    assert effect.metadata["radius_emu"] == int(px_to_emu(6.0))
+    drawingml = effect.effect.drawingml
+    assert "<a:glow" in drawingml
+    assert 'val="112233"' in drawingml
+    assert 'val="70000"' in drawingml
+
+
+def test_flood_blur_merge_stack_respects_glow_policy_clamps() -> None:
+    service = FilterService()
+    element = etree.fromstring(
+        "<filter id='f'>"
+        "  <feFlood style='flood-color:#445566;flood-opacity:0.9' result='flood'/>"
+        "  <feGaussianBlur in='flood' stdDeviation='3' result='halo'/>"
+        "  <feMerge>"
+        "    <feMergeNode in='halo'/>"
+        "    <feMergeNode in='SourceGraphic'/>"
+        "  </feMerge>"
+        "</filter>"
+    )
+    service.register_filter("f", element)
+
+    results = service.resolve_effects(
+        "f",
+        context={"policy": {"max_glow_radius": 4, "max_glow_alpha": 0.25}},
+    )
+
+    assert len(results) == 1
+    effect = results[0]
+    assert effect.metadata["flood_color"] == "445566"
+    assert effect.metadata["radius_px"] == 6.0
+    assert effect.metadata["radius_effective"] == 4.0
+    assert effect.metadata["clamped_radius"] == 4.0
+    assert effect.metadata["radius_emu"] == int(px_to_emu(4.0))
+    assert effect.metadata["alpha"] == 0.25
+    assert effect.metadata["alpha_clamped"] is True
+    assert effect.metadata["policy"]["max_glow_radius"] == 4.0
+    assert effect.metadata["policy"]["max_glow_alpha"] == 0.25
+
+
+def test_flood_blur_merge_noop_does_not_return_nested_list() -> None:
+    service = FilterService()
+    results = _resolve(
+        service,
+        "<filter id='f'>"
+        "  <feFlood flood-color='#112233' flood-opacity='0' result='flood'/>"
+        "  <feGaussianBlur in='flood' stdDeviation='0' result='halo'/>"
+        "  <feMerge>"
+        "    <feMergeNode in='halo'/>"
+        "    <feMergeNode in='SourceGraphic'/>"
+        "  </feMerge>"
+        "</filter>",
+    )
+
+    assert results
+    assert all(isinstance(result, FilterEffectResult) for result in results)
+    assert all(result.metadata.get("editable_stack") is not True for result in results)
+
+
+def test_flood_blur_merge_stack_requires_approximation_policy() -> None:
+    service = FilterService()
+    element = etree.fromstring(
+        "<filter id='f'>"
+        "  <feFlood flood-color='#112233' flood-opacity='0.7' result='flood'/>"
+        "  <feGaussianBlur in='flood' stdDeviation='3' result='halo'/>"
+        "  <feMerge>"
+        "    <feMergeNode in='halo'/>"
+        "    <feMergeNode in='SourceGraphic'/>"
+        "  </feMerge>"
+        "</filter>"
+    )
+    service.register_filter("f", element)
+
+    results = service.resolve_effects(
+        "f",
+        context={"policy": {"strategy": "native", "approximation_allowed": False}},
+    )
+
+    assert len(results) >= 3
+    assert all(result.metadata.get("editable_stack") is not True for result in results)
+    blur = next(
+        effect for effect in results if effect.metadata.get("filter_type") == "gaussian_blur"
+    )
+    assert blur.fallback == "bitmap"
+    assert blur.metadata.get("approximation_blocked") == "intermediate_input"
+
+
+def test_flood_blur_merge_without_sourcegraphic_keeps_primitive_pipeline() -> None:
+    service = FilterService()
+    results = _resolve(
+        service,
+        "<filter id='f'>"
+        "  <feFlood flood-color='#112233' flood-opacity='0.7' result='flood'/>"
+        "  <feGaussianBlur in='flood' stdDeviation='3' result='halo'/>"
+        "  <feMerge>"
+        "    <feMergeNode in='halo'/>"
+        "  </feMerge>"
+        "</filter>",
+    )
+    assert len(results) >= 3
+    assert results[-1].metadata.get("filter_type") == "merge"
+    assert "stack_type" not in results[-1].metadata
+
+
+def test_shadow_stack_collapses_to_editable_outer_shadow() -> None:
+    service = FilterService()
+    element = etree.fromstring(
+        "<filter id='f'>"
+        "  <feOffset in='SourceAlpha' dx='10' dy='6' result='off'/>"
+        "  <feGaussianBlur in='off' stdDeviation='4' result='blur'/>"
+        "  <feFlood flood-color='#1D3557' flood-opacity='0.32' result='color'/>"
+        "  <feComposite in='color' in2='blur' operator='in' result='shadow'/>"
+        "  <feMerge>"
+        "    <feMergeNode in='shadow'/>"
+        "    <feMergeNode in='SourceGraphic'/>"
+        "  </feMerge>"
+        "</filter>"
+    )
+    service.register_filter("f", element)
+
+    results = service.resolve_effects(
+        "f",
+        context={"policy": {"strategy": "native", "approximation_allowed": True}},
+    )
+
+    assert len(results) == 1
+    effect = results[0]
+    assert effect.strategy == "native"
+    assert effect.fallback is None
+    assert effect.metadata["stack_type"] == "offset_blur_flood_composite_merge"
+    assert effect.metadata["editable_stack"] is True
+    assert effect.metadata["approximation"] == "outer_shadow"
+    assert effect.metadata["flood_color"] == "1D3557"
+    assert effect.metadata["distance_px"] == 11.661903789690601
+    assert effect.metadata["radius_px"] == 8.0
+    drawingml = effect.effect.drawingml
+    assert "<a:outerShdw" in drawingml
+    assert 'val="1D3557"' in drawingml
+    assert 'val="32000"' in drawingml
+
+
+def test_shadow_stack_requires_approximation_policy() -> None:
+    service = FilterService()
+    element = etree.fromstring(
+        "<filter id='f'>"
+        "  <feOffset in='SourceAlpha' dx='10' dy='6' result='off'/>"
+        "  <feGaussianBlur in='off' stdDeviation='4' result='blur'/>"
+        "  <feFlood flood-color='#1D3557' flood-opacity='0.32' result='color'/>"
+        "  <feComposite in='color' in2='blur' operator='in' result='shadow'/>"
+        "  <feMerge>"
+        "    <feMergeNode in='shadow'/>"
+        "    <feMergeNode in='SourceGraphic'/>"
+        "  </feMerge>"
+        "</filter>"
+    )
+    service.register_filter("f", element)
+
+    results = service.resolve_effects(
+        "f",
+        context={"policy": {"strategy": "native", "approximation_allowed": False}},
+    )
+
+    assert len(results) >= 5
+    assert all(result.metadata.get("editable_stack") is not True for result in results)
+    blur = next(
+        effect for effect in results if effect.metadata.get("filter_type") == "gaussian_blur"
+    )
+    assert blur.fallback == "bitmap"
+    assert blur.metadata.get("approximation_blocked") == "intermediate_input"
+
+
 def test_diffuse_lighting_resvg_path() -> None:
     service = FilterService()
     results = _resolve(
@@ -245,10 +517,57 @@ def test_diffuse_lighting_resvg_path() -> None:
     )
     effect = next((res for res in results if res.metadata.get("filter_type") == "diffuse_lighting"), None)
     assert effect is not None
-    if effect.metadata.get("approximation") == "glow" and effect.fallback is None:
+    if effect.fallback is None:
         assert_no_assets(effect)
     else:
         assert_assets(effect, modern="raster")
+
+
+def test_diffuse_lighting_uses_generic_approximation_policy_flag() -> None:
+    primitive = etree.fromstring(
+        "<feDiffuseLighting surfaceScale='2' diffuseConstant='1.3' lighting-color='#ffeeaa'>"
+        "  <feDistantLight azimuth='45' elevation='45'/>"
+        "</feDiffuseLighting>"
+    )
+    context = FilterContext(
+        filter_element=primitive,
+        options={"policy": {"approximation_allowed": True}},
+    )
+
+    result = DiffuseLightingFilter().apply(primitive, context)
+
+    assert result.fallback is None
+    assert result.metadata.get("native_support") is True
+    assert result.metadata.get("approximation") == "editable_lighting"
+    assert result.metadata.get("mimic_strategy") == "fill_overlay_glow_inner_shadow_soft_edge"
+    assert "<a:fillOverlay" in result.drawingml
+    assert "<a:glow" in result.drawingml
+    assert "<a:innerShdw" in result.drawingml
+    assert "<a:softEdge" in result.drawingml
+
+
+def test_diffuse_lighting_blocks_approximation_for_image_source() -> None:
+    primitive = etree.fromstring(
+        "<feDiffuseLighting surfaceScale='2' diffuseConstant='1.3' lighting-color='#ffeeaa'>"
+        "  <feDistantLight azimuth='45' elevation='45'/>"
+        "</feDiffuseLighting>"
+    )
+    image = etree.fromstring(
+        "<image xmlns='http://www.w3.org/2000/svg' href='bump.png' width='50' height='30'/>"
+    )
+    context = FilterContext(
+        filter_element=primitive,
+        options={
+            "policy": {"approximation_allowed": True},
+            "element": image,
+        },
+    )
+
+    result = DiffuseLightingFilter().apply(primitive, context)
+
+    assert result.fallback == "raster"
+    assert result.metadata.get("approximation") is None
+    assert result.metadata.get("approximation_blocked") == "image_source"
 
 
 def test_specular_lighting_resvg_path() -> None:
@@ -263,10 +582,258 @@ def test_specular_lighting_resvg_path() -> None:
     )
     effect = next((res for res in results if res.metadata.get("filter_type") == "specular_lighting"), None)
     assert effect is not None
-    if effect.metadata.get("approximation") == "glow" and effect.fallback is None:
+    if effect.fallback is None:
         assert_no_assets(effect)
     else:
         assert_assets(effect, modern="raster")
+
+
+def test_specular_lighting_blocks_approximation_for_image_source() -> None:
+    primitive = etree.fromstring(
+        "<feSpecularLighting surfaceScale='3' specularConstant='1' specularExponent='8' lighting-color='#aaddff'>"
+        "  <feSpotLight x='20' y='15' z='30' pointsAtX='20' pointsAtY='15' pointsAtZ='0' limitingConeAngle='35'/>"
+        "</feSpecularLighting>"
+    )
+    image = etree.fromstring(
+        "<image xmlns='http://www.w3.org/2000/svg' href='bump.png' width='50' height='30'/>"
+    )
+    context = FilterContext(
+        filter_element=primitive,
+        options={
+            "policy": {"approximation_allowed": True},
+            "element": image,
+        },
+    )
+
+    result = SpecularLightingFilter().apply(primitive, context)
+
+    assert result.fallback == "raster"
+    assert result.metadata.get("approximation") is None
+    assert result.metadata.get("approximation_blocked") == "image_source"
+
+
+def test_specular_lighting_uses_editable_approximation_when_allowed() -> None:
+    primitive = etree.fromstring(
+        "<feSpecularLighting surfaceScale='3' specularConstant='1' specularExponent='8' lighting-color='#aaddff'>"
+        "  <feSpotLight x='20' y='15' z='30' pointsAtX='20' pointsAtY='15' pointsAtZ='0' limitingConeAngle='35'/>"
+        "</feSpecularLighting>"
+    )
+    context = FilterContext(
+        filter_element=primitive,
+        options={"policy": {"approximation_allowed": True}},
+    )
+
+    result = SpecularLightingFilter().apply(primitive, context)
+
+    assert result.fallback is None
+    assert result.metadata.get("native_support") is True
+    assert result.metadata.get("approximation") == "editable_lighting"
+    assert result.metadata.get("mimic_strategy") == "fill_overlay_glow_inner_shadow"
+    assert "<a:fillOverlay" in result.drawingml
+    assert "<a:glow" in result.drawingml
+    assert "<a:innerShdw" in result.drawingml
+
+
+def test_diffuse_lighting_composite_stack_collapses_to_editable_mimic() -> None:
+    service = FilterService()
+    element = etree.fromstring(
+        "<filter id='f'>"
+        "  <feDiffuseLighting in='SourceAlpha' surfaceScale='4' diffuseConstant='1.2' lighting-color='#CDEBFF' result='light'>"
+        "    <feDistantLight azimuth='20' elevation='35'/>"
+        "  </feDiffuseLighting>"
+        "  <feComposite in='light' in2='SourceGraphic' operator='arithmetic' k2='1' k3='1'/>"
+        "</filter>"
+    )
+    service.register_filter("f", element)
+
+    results = service.resolve_effects(
+        "f",
+        context={"policy": {"strategy": "native", "approximation_allowed": True}},
+    )
+
+    assert len(results) == 1
+    effect = results[0]
+    assert effect.strategy == "native"
+    assert effect.fallback is None
+    assert effect.metadata.get("stack_type") == "diffuse_lighting_composite"
+    assert effect.metadata.get("lighting_filter_type") == "diffuse_lighting"
+    assert effect.metadata.get("editable_stack") is True
+    assert "<a:fillOverlay" in effect.effect.drawingml
+    assert "<a:innerShdw" in effect.effect.drawingml
+    assert "<a:softEdge" in effect.effect.drawingml
+
+
+def test_specular_lighting_composite_stack_collapses_to_editable_mimic() -> None:
+    service = FilterService()
+    element = etree.fromstring(
+        "<filter id='f'>"
+        "  <feSpecularLighting in='SourceAlpha' surfaceScale='5' specularConstant='1.1' specularExponent='24' lighting-color='#DFF4FF' result='spec'>"
+        "    <feDistantLight azimuth='25' elevation='38'/>"
+        "  </feSpecularLighting>"
+        "  <feComposite in='spec' in2='SourceGraphic' operator='arithmetic' k2='1' k3='1'/>"
+        "</filter>"
+    )
+    service.register_filter("f", element)
+
+    results = service.resolve_effects(
+        "f",
+        context={"policy": {"strategy": "native", "approximation_allowed": True}},
+    )
+
+    assert len(results) == 1
+    effect = results[0]
+    assert effect.strategy == "native"
+    assert effect.fallback is None
+    assert effect.metadata.get("stack_type") == "specular_lighting_composite"
+    assert effect.metadata.get("lighting_filter_type") == "specular_lighting"
+    assert effect.metadata.get("editable_stack") is True
+    assert "<a:fillOverlay" in effect.effect.drawingml
+    assert "<a:glow" in effect.effect.drawingml
+    assert "<a:innerShdw" in effect.effect.drawingml
+
+
+def test_lighting_composite_stack_requires_approximation_policy() -> None:
+    service = FilterService()
+    element = etree.fromstring(
+        "<filter id='f'>"
+        "  <feDiffuseLighting in='SourceAlpha' surfaceScale='4' diffuseConstant='1.2' lighting-color='#CDEBFF' result='light'>"
+        "    <feDistantLight azimuth='20' elevation='35'/>"
+        "  </feDiffuseLighting>"
+        "  <feComposite in='light' in2='SourceGraphic' operator='arithmetic' k2='1' k3='1'/>"
+        "</filter>"
+    )
+    service.register_filter("f", element)
+
+    results = service.resolve_effects(
+        "f",
+        context={"policy": {"strategy": "native", "approximation_allowed": False}},
+    )
+
+    assert len(results) >= 2
+    assert all(result.metadata.get("editable_stack") is not True for result in results)
+
+
+def test_gaussian_blur_blocks_native_for_grouped_use_source() -> None:
+    primitive = etree.fromstring("<feGaussianBlur stdDeviation='10'/>")
+    use = etree.fromstring(
+        "<use xmlns='http://www.w3.org/2000/svg' href='#rects'/>"
+    )
+    context = FilterContext(
+        filter_element=primitive,
+        options={"element": use},
+    )
+
+    result = GaussianBlurFilter().apply(primitive, context)
+
+    assert result.fallback == "bitmap"
+    assert result.metadata.get("approximation_blocked") == "group_source"
+
+
+def test_gaussian_blur_allows_group_mimic_when_enabled() -> None:
+    primitive = etree.fromstring("<feGaussianBlur stdDeviation='10'/>")
+    use = etree.fromstring(
+        "<use xmlns='http://www.w3.org/2000/svg' href='#rects'/>"
+    )
+    context = FilterContext(
+        filter_element=primitive,
+        options={
+            "element": use,
+            "policy": {
+                "approximation_allowed": True,
+                "blur_strategy": "soft_edge",
+                "primitives": {
+                    "fegaussianblur": {
+                        "allow_group_mimic": True,
+                    }
+                },
+            },
+        },
+    )
+
+    result = GaussianBlurFilter().apply(primitive, context)
+
+    assert result.fallback is None
+    assert result.metadata.get("approximation") == "group_per_child"
+    assert result.metadata.get("mimic_scope") == "group_children"
+    assert "<a:blur" in (result.drawingml or "")
+
+
+def test_gaussian_blur_group_mimic_honors_explicit_soft_edge_strategy_and_scale() -> None:
+    primitive = etree.fromstring("<feGaussianBlur stdDeviation='10'/>")
+    use = etree.fromstring(
+        "<use xmlns='http://www.w3.org/2000/svg' href='#rects'/>"
+    )
+    context = FilterContext(
+        filter_element=primitive,
+        options={
+            "element": use,
+            "policy": {
+                "approximation_allowed": True,
+                "blur_strategy": "blur",
+                "primitives": {
+                    "fegaussianblur": {
+                        "allow_group_mimic": True,
+                        "group_blur_strategy": "soft_edge",
+                        "group_radius_scale": 4.0,
+                    }
+                },
+            },
+        },
+    )
+
+    result = GaussianBlurFilter().apply(primitive, context)
+
+    assert result.fallback is None
+    assert result.metadata.get("blur_strategy") == "soft_edge"
+    assert result.metadata.get("radius_scale") == 4.0
+    assert 'rad="381000"' in (result.drawingml or "")
+    assert "<a:softEdge" in (result.drawingml or "")
+
+
+def test_anisotropic_gaussian_blur_blocks_native_for_grouped_use_source() -> None:
+    primitive = etree.fromstring("<feGaussianBlur stdDeviation='20 1'/>")
+    use = etree.fromstring(
+        "<use xmlns='http://www.w3.org/2000/svg' href='#rects'/>"
+    )
+    context = FilterContext(
+        filter_element=primitive,
+        options={"element": use},
+    )
+
+    result = GaussianBlurFilter().apply(primitive, context)
+
+    assert result.fallback == "bitmap"
+    assert result.metadata.get("approximation_blocked") == "group_source"
+
+
+def test_anisotropic_gaussian_blur_allows_group_mimic_when_enabled() -> None:
+    primitive = etree.fromstring("<feGaussianBlur stdDeviation='20 1'/>")
+    use = etree.fromstring(
+        "<use xmlns='http://www.w3.org/2000/svg' href='#rects'/>"
+    )
+    context = FilterContext(
+        filter_element=primitive,
+        options={
+            "element": use,
+            "policy": {
+                "approximation_allowed": True,
+                "allow_anisotropic_native": True,
+                "blur_strategy": "blur",
+                "primitives": {
+                    "fegaussianblur": {
+                        "allow_group_mimic": True,
+                    }
+                },
+            },
+        },
+    )
+
+    result = GaussianBlurFilter().apply(primitive, context)
+
+    assert result.fallback is None
+    assert result.metadata.get("approximation") == "group_per_child"
+    assert result.metadata.get("anisotropic_mode") == "approx_native"
+    assert "<a:blur" in (result.drawingml or "")
 
 
 def test_image_without_href_warns_and_falls_back() -> None:
@@ -362,7 +929,7 @@ def test_diffuse_lighting_captures_light_source() -> None:
     assert results
     effect = results[0]
     assert effect.metadata.get("filter_type") == "diffuse_lighting"
-    if effect.metadata.get("approximation") == "glow" and effect.fallback is None:
+    if effect.fallback is None:
         assert effect.metadata.get("native_support") is True
         assert_fallback(effect, modern=None)
         assert_strategy(effect, modern="native")
@@ -387,7 +954,7 @@ def test_specular_lighting_serialises_spot_light() -> None:
     assert results
     effect = results[0]
     assert effect.metadata.get("filter_type") == "specular_lighting"
-    if effect.metadata.get("approximation") == "glow" and effect.fallback is None:
+    if effect.fallback is None:
         assert effect.metadata.get("native_support") is True
         assert_fallback(effect, modern=None)
         assert_strategy(effect, modern="native")

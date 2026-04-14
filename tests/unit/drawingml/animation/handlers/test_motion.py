@@ -16,9 +16,9 @@ from svg2ooxml.drawingml.animation.xml_builders import AnimationXMLBuilder
 from svg2ooxml.drawingml.xml_builder import NS_P
 from svg2ooxml.ir.animation import (
     AnimationDefinition,
-    CalcMode,
     AnimationTiming,
     AnimationType,
+    CalcMode,
 )
 from svg2ooxml.ir.geometry import Point
 
@@ -95,6 +95,12 @@ class TestBuild:
         ctn = par.find(f"{{{NS_P}}}cTn")
         assert ctn.get("id") == "4"
 
+    def test_ctn_uses_nonzero_effect_group(self, handler: MotionAnimationHandler):
+        anim = make_motion_animation()
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        ctn = par.find(f"{{{NS_P}}}cTn")
+        assert ctn.get("grpId") == "4"
+
     def test_anim_motion_present(self, handler: MotionAnimationHandler):
         anim = make_motion_animation()
         par = handler.build(anim, par_id=4, behavior_id=5)
@@ -107,9 +113,11 @@ class TestBuild:
         anim_motion = par.find(f".//{{{NS_P}}}animMotion")
         assert anim_motion.get("origin") == "layout"
         assert anim_motion.get("pathEditMode") == "relative"
-        assert anim_motion.get("rAng") == "0"
+        assert anim_motion.get("rAng") is None
 
-    def test_anim_motion_auto_rotate_sets_non_zero_rang(self, handler: MotionAnimationHandler):
+    def test_anim_motion_auto_rotate_sets_non_zero_rang(
+        self, handler: MotionAnimationHandler
+    ):
         anim = make_motion_animation(
             values=["M0,0 L0,100"],
             motion_rotate="auto",
@@ -117,6 +125,37 @@ class TestBuild:
         par = handler.build(anim, par_id=4, behavior_id=5)
         anim_motion = par.find(f".//{{{NS_P}}}animMotion")
         assert anim_motion.get("rAng") == "5400000"
+
+    def test_anim_motion_auto_rotate_turn_emits_stacked_anim_rot(
+        self, handler: MotionAnimationHandler
+    ):
+        anim = make_motion_animation(
+            values=["M0,0 L100,0 L100,100"],
+            motion_rotate="auto",
+        )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        anim_motion = par.find(f".//{{{NS_P}}}animMotion")
+        rots = par.findall(f".//{{{NS_P}}}animRot")
+
+        assert anim_motion.get("rAng") is None
+        assert len(rots) == 1
+        assert rots[0].get("by") == "5400000"
+
+    def test_anim_motion_auto_reverse_turn_keeps_initial_flip(
+        self, handler: MotionAnimationHandler
+    ):
+        anim = make_motion_animation(
+            values=["M0,0 L100,0 L100,100"],
+            motion_rotate="auto-reverse",
+        )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        anim_motion = par.find(f".//{{{NS_P}}}animMotion")
+        rots = par.findall(f".//{{{NS_P}}}animRot")
+
+        assert anim_motion.get("rAng") is None
+        assert len(rots) == 2
+        assert rots[0].get("by") == "10800000"
+        assert rots[1].get("by") == "5400000"
 
     def test_behavior_id(self, handler: MotionAnimationHandler):
         anim = make_motion_animation()
@@ -130,21 +169,17 @@ class TestBuild:
         sp_tgt = par.find(f".//{{{NS_P}}}spTgt")
         assert sp_tgt.get("spid") == "motion_shape"
 
-    def test_attr_name_list(self, handler: MotionAnimationHandler):
+    def test_does_not_emit_attr_name_list(self, handler: MotionAnimationHandler):
         anim = make_motion_animation()
         par = handler.build(anim, par_id=4, behavior_id=5)
         attr_names = par.findall(f".//{{{NS_P}}}attrName")
-        texts = [a.text for a in attr_names]
-        assert "ppt_x" in texts
-        assert "ppt_y" in texts
+        assert not attr_names
 
-    def test_rotation_center(self, handler: MotionAnimationHandler):
+    def test_does_not_emit_rotation_center_child(self, handler: MotionAnimationHandler):
         anim = make_motion_animation()
         par = handler.build(anim, par_id=4, behavior_id=5)
         rctr = par.find(f".//{{{NS_P}}}rCtr")
-        assert rctr is not None
-        assert rctr.get("x") == "4306"
-        assert rctr.get("y") == "0"
+        assert rctr is None
 
     def test_preset_class_is_path(self, handler: MotionAnimationHandler):
         anim = make_motion_animation()
@@ -167,8 +202,11 @@ class TestBuild:
         path = anim_motion.get("path")
         assert path.startswith("M ")
         assert " L " in path
+        assert path.endswith(" E")
 
-    def test_discrete_calc_mode_expands_step_path(self, handler: MotionAnimationHandler):
+    def test_discrete_calc_mode_expands_step_path(
+        self, handler: MotionAnimationHandler
+    ):
         anim = make_motion_animation(
             values=["M0,0 L100,0"],
             key_times=[0.0, 0.4, 1.0],
@@ -178,9 +216,11 @@ class TestBuild:
         anim_motion = par.find(f".//{{{NS_P}}}animMotion")
         path = anim_motion.get("path")
         assert path.count("L ") > 1
-        assert len(anim_motion.get("ptsTypes")) > 2
+        assert path.endswith(" E")
 
-    def test_paced_calc_mode_with_key_times_retimes_path(self, handler: MotionAnimationHandler):
+    def test_paced_calc_mode_with_key_times_retimes_path(
+        self, handler: MotionAnimationHandler
+    ):
         anim = make_motion_animation(
             values=["M0,0 L10,0 L40,0"],
             key_times=[0.0, 0.9, 1.0],
@@ -188,7 +228,135 @@ class TestBuild:
         )
         par = handler.build(anim, par_id=4, behavior_id=5)
         anim_motion = par.find(f".//{{{NS_P}}}animMotion")
-        assert len(anim_motion.get("ptsTypes")) > 3
+        path = anim_motion.get("path")
+        assert path is not None
+        assert path.count("L ") > 2
+
+    def test_linear_calc_mode_without_key_times_retimes_each_value_equally(
+        self, handler: MotionAnimationHandler
+    ):
+        anim = make_motion_animation(
+            values=["M0,200 L0,167 L0,111 L0,0"],
+            calc_mode=CalcMode.LINEAR,
+        )
+
+        points = handler._retime_motion_points(
+            [(0.0, 200.0), (0.0, 167.0), (0.0, 111.0), (0.0, 0.0)],
+            anim,
+        )
+
+        assert len(points) > 4
+        assert points.index((0.0, 167.0)) == 32
+        assert points.index((0.0, 111.0)) == 64
+
+    def test_paced_calc_mode_without_key_times_uses_distance_weighting(
+        self, handler: MotionAnimationHandler
+    ):
+        anim = make_motion_animation(
+            values=["M0,200 L0,167 L0,111 L0,0"],
+            calc_mode=CalcMode.PACED,
+        )
+
+        points = handler._retime_motion_points(
+            [(0.0, 200.0), (0.0, 167.0), (0.0, 111.0), (0.0, 0.0)],
+            anim,
+        )
+
+        assert len(points) > 4
+        assert points.index((0.0, 167.0)) == 16
+        assert points.index((0.0, 111.0)) == 43
+
+    def test_key_points_retime_path_progress(self, handler: MotionAnimationHandler):
+        anim = make_motion_animation(
+            values=["M0,0 L100,0"],
+            key_times=[0.0, 0.5, 1.0],
+            key_points=[0.0, 1.0, 0.5],
+            calc_mode=CalcMode.LINEAR,
+        )
+
+        points = handler._retime_motion_points(
+            [(0.0, 0.0), (100.0, 0.0)],
+            anim,
+        )
+
+        assert points[0] == (0.0, 0.0)
+        assert points[48] == (100.0, 0.0)
+        assert points[-1] == (50.0, 0.0)
+
+    def test_projects_motion_path_into_absolute_shape_positions(
+        self, handler: MotionAnimationHandler
+    ):
+        anim = make_motion_animation(
+            motion_space_matrix=(1.0, 0.0, 0.0, 1.0, 50.0, 90.0),
+            element_motion_offset_px=(0.0, -19.2),
+        )
+
+        projected = handler._project_motion_points([(0.0, 0.0), (50.0, 180.0)], anim)
+
+        assert projected == [(50.0, 70.8), (100.0, 250.8)]
+
+    def test_projects_motion_path_with_shape_anchor_offset(
+        self, handler: MotionAnimationHandler
+    ):
+        anim = make_motion_animation(
+            element_motion_offset_px=(-30.0, -60.0),
+        )
+
+        projected = handler._project_motion_points([(90.0, 258.0), (390.0, 180.0)], anim)
+
+        assert projected == [(60.0, 198.0), (360.0, 120.0)]
+
+    def test_resolves_exact_initial_tangent_for_cubic_motion_path(
+        self, handler: MotionAnimationHandler
+    ):
+        anim = make_motion_animation(
+            motion_space_matrix=(1.0, 0.0, 0.0, 1.0, 0.0, 0.0),
+        )
+
+        angle = handler._resolve_exact_initial_tangent_angle(
+            "M25,225 C25,175 125,150 175,200",
+            anim,
+            "auto",
+        )
+
+        assert angle == pytest.approx(-90.0)
+
+    def test_resolves_exact_initial_tangent_relative_to_element_heading(
+        self, handler: MotionAnimationHandler
+    ):
+        anim = make_motion_animation(
+            motion_space_matrix=(1.0, 0.0, 0.0, 1.0, 0.0, 0.0),
+            element_heading_deg=-90.0,
+        )
+
+        angle = handler._resolve_exact_initial_tangent_angle(
+            "M25,225 C25,175 125,150 175,200",
+            anim,
+            "auto",
+        )
+
+        assert angle == pytest.approx(0.0)
+
+    def test_auto_rotate_uses_element_heading_for_dynamic_curve(
+        self, handler: MotionAnimationHandler
+    ):
+        anim = make_motion_animation(
+            values=["M25,225 C25,175 125,150 175,200"],
+            timing=AnimationTiming(begin=0.0, duration=6.0),
+            motion_rotate="auto",
+            motion_viewport_px=(480.0, 360.0),
+            element_heading_deg=-90.0,
+        )
+
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        rots = par.findall(f".//{{{NS_P}}}animRot")
+        first_rot_ctn = par.find(
+            f".//{{{NS_P}}}childTnLst/{{{NS_P}}}par/{{{NS_P}}}cTn"
+        )
+
+        assert rots
+        assert first_rot_ctn is not None
+        assert first_rot_ctn.get("dur") != "1"
 
 
 # ------------------------------------------------------------------ #
@@ -200,7 +368,9 @@ class TestParseMotionPath:
     def test_returns_empty_for_empty_path(self, handler: MotionAnimationHandler):
         assert handler._parse_motion_path("") == []
 
-    def test_parses_simple_move_line_path(self, handler: MotionAnimationHandler, monkeypatch):
+    def test_parses_simple_move_line_path(
+        self, handler: MotionAnimationHandler, monkeypatch
+    ):
         mock_parse = Mock()
         start = Point(x=0, y=0)
         end = Point(x=100, y=100)
@@ -221,7 +391,9 @@ class TestParseMotionPath:
         control1 = Point(x=50, y=0)
         control2 = Point(x=50, y=100)
         end = Point(x=100, y=100)
-        segment = BezierSegment(start=start, control1=control1, control2=control2, end=end)
+        segment = BezierSegment(
+            start=start, control1=control1, control2=control2, end=end
+        )
         mock_parse.return_value = [segment]
         monkeypatch.setattr(
             "svg2ooxml.common.geometry.paths.parse_path_data",
@@ -233,7 +405,9 @@ class TestParseMotionPath:
         assert abs(result[-1][0] - 100.0) < 1.0
         assert abs(result[-1][1] - 100.0) < 1.0
 
-    def test_deduplicates_consecutive_points(self, handler: MotionAnimationHandler, monkeypatch):
+    def test_deduplicates_consecutive_points(
+        self, handler: MotionAnimationHandler, monkeypatch
+    ):
         mock_parse = Mock()
         start = Point(x=0, y=0)
         mid = Point(x=0, y=0)
@@ -250,7 +424,9 @@ class TestParseMotionPath:
         result = handler._parse_motion_path("M0,0 L0,0 L100,100")
         assert len(result) == 2
 
-    def test_handles_path_parse_error(self, handler: MotionAnimationHandler, monkeypatch):
+    def test_handles_path_parse_error(
+        self, handler: MotionAnimationHandler, monkeypatch
+    ):
         from svg2ooxml.common.geometry.paths import PathParseError
 
         mock_parse = Mock(side_effect=PathParseError("Invalid path"))

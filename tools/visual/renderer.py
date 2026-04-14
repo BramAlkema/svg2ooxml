@@ -5,14 +5,16 @@ from __future__ import annotations
 import logging
 import os
 import platform
+import re
 import shutil
 import subprocess
 import sys
 import zipfile
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Sequence
 
+import numpy as np
 from lxml import etree as ET
 from PIL import Image
 
@@ -144,8 +146,7 @@ class LibreOfficeRenderer:
             try:
                 return subprocess.run(
                     cmd,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
+                    capture_output=True,
                     check=False,
                     timeout=self._timeout,
                     text=True,
@@ -273,17 +274,19 @@ class PowerPointRenderer:
         output_dir = Path(output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        output_path = output_dir / "slide_1.png"
+        slide_count = _pptx_slide_count(pptx_path)
         self._run_capture_helper(
             [
                 str(pptx_path),
-                str(output_path),
+                str(output_dir),
                 "--mode",
-                "slideshow",
+                "slideshow-all",
                 "--delay",
                 str(self._delay),
                 "--slideshow-delay",
                 str(self._slideshow_delay),
+                "--slide-delay",
+                str(self._slide_delay),
                 "--open-timeout",
                 str(self._open_timeout),
                 "--capture-timeout",
@@ -291,10 +294,16 @@ class PowerPointRenderer:
                 "--backend",
                 self._backend,
             ],
-            timeout=max(80.0, self._open_timeout + self._capture_timeout + 15.0),
+            timeout=max(
+                80.0,
+                self._open_timeout
+                + (self._capture_timeout * max(1, slide_count))
+                + (self._slide_delay * max(1, slide_count))
+                + 15.0,
+            ),
         )
 
-        generated = sorted(output_dir.glob("slide_*.png"))
+        generated = sorted(output_dir.glob("slide_*.png"), key=_natural_sort_key)
         if not generated:
             raise VisualRendererError(
                 f"PowerPoint capture completed but produced no PNG files in {output_dir}."
@@ -357,7 +366,7 @@ class PowerPointRenderer:
             ),
         )
 
-        generated = tuple(sorted(output_dir.glob("frame_*.png")))
+        generated = tuple(sorted(output_dir.glob("frame_*.png"), key=_natural_sort_key))
         if not generated:
             raise VisualRendererError(
                 f"PowerPoint animation capture produced no PNG files in {output_dir}."
@@ -379,8 +388,7 @@ class PowerPointRenderer:
         try:
             completed = subprocess.run(
                 cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
+                capture_output=True,
                 text=True,
                 check=False,
                 timeout=timeout,
@@ -417,10 +425,95 @@ def _normalize_pngs(
 
     for image_path in images:
         with Image.open(image_path) as img:
-            if img.size == target_size:
+            normalized = _normalize_slide_capture(img, target_size)
+            if normalized.size == target_size and normalized is img:
                 continue
-            resized = img.resize(target_size, resample=Image.LANCZOS)
-            resized.save(image_path)
+            normalized.save(image_path)
+
+
+def _normalize_slide_capture(
+    image: Image.Image,
+    target_size: tuple[int, int],
+) -> Image.Image:
+    normalized = image
+    crop_box = _detect_slide_crop_box(image, target_size=target_size)
+    if crop_box is not None:
+        normalized = image.crop(crop_box)
+    if normalized.size == target_size:
+        return normalized
+    return normalized.resize(target_size, resample=Image.LANCZOS)
+
+
+def _detect_slide_crop_box(
+    image: Image.Image,
+    *,
+    target_size: tuple[int, int],
+) -> tuple[int, int, int, int] | None:
+    if image.width < 8 or image.height < 8:
+        return None
+
+    rgb = np.array(image.convert("RGB"))
+    height, width = rgb.shape[:2]
+    center_y = height // 2
+    center_x = width // 2
+    patch_radius = max(2, min(width, height) // 100)
+    center_patch = rgb[
+        max(0, center_y - patch_radius) : min(height, center_y + patch_radius + 1),
+        max(0, center_x - patch_radius) : min(width, center_x + patch_radius + 1),
+    ]
+    if center_patch.size == 0:
+        return None
+
+    border_pixels = np.vstack((rgb[0, 0], rgb[0, -1], rgb[-1, 0], rgb[-1, -1]))
+    border_color = np.median(border_pixels, axis=0)
+    center_color = np.median(center_patch.reshape(-1, 3), axis=0)
+    if float(np.max(np.abs(center_color - border_color))) < 24.0:
+        return None
+
+    tolerance = 16
+    similar_to_center = (
+        np.max(np.abs(rgb.astype(np.int16) - center_color.astype(np.int16)), axis=2)
+        <= tolerance
+    )
+    row_fraction = similar_to_center.mean(axis=1)
+    col_fraction = similar_to_center.mean(axis=0)
+    row_indexes = np.where(row_fraction > 0.15)[0]
+    col_indexes = np.where(col_fraction > 0.15)[0]
+    if row_indexes.size == 0 or col_indexes.size == 0:
+        return None
+
+    top = int(row_indexes[0])
+    bottom = int(row_indexes[-1]) + 1
+    left = int(col_indexes[0])
+    right = int(col_indexes[-1]) + 1
+
+    crop_width = right - left
+    crop_height = bottom - top
+    if crop_width <= 0 or crop_height <= 0:
+        return None
+
+    target_aspect = target_size[0] / target_size[1]
+    current_aspect = crop_width / crop_height
+    if abs(current_aspect - target_aspect) > 0.02:
+        if current_aspect > target_aspect:
+            adjusted_width = max(1, int(round(crop_height * target_aspect)))
+            x_center = (left + right) // 2
+            left = max(0, x_center - (adjusted_width // 2))
+            right = min(width, left + adjusted_width)
+            left = max(0, right - adjusted_width)
+        else:
+            adjusted_height = max(1, int(round(crop_width / target_aspect)))
+            y_center = (top + bottom) // 2
+            top = max(0, y_center - (adjusted_height // 2))
+            bottom = min(height, top + adjusted_height)
+            top = max(0, bottom - adjusted_height)
+
+    if left <= 0 and top <= 0 and right >= width and bottom >= height:
+        return None
+    crop_area_fraction = ((right - left) * (bottom - top)) / float(width * height)
+    if crop_area_fraction < 0.45:
+        return None
+    return (left, top, right, bottom)
 
 
 def default_renderer(
@@ -520,6 +613,30 @@ def _slide_size_to_pixels(pptx_path: Path, dpi: float) -> tuple[int, int] | None
     if width_px <= 0 or height_px <= 0:
         return None
     return (width_px, height_px)
+
+
+def _pptx_slide_count(pptx_path: Path) -> int:
+    try:
+        with zipfile.ZipFile(pptx_path, "r") as archive:
+            count = sum(
+                1
+                for name in archive.namelist()
+                if name.startswith("ppt/slides/slide") and name.endswith(".xml")
+            )
+    except (FileNotFoundError, zipfile.BadZipFile, OSError):
+        return 1
+    return max(1, count)
+
+
+def _natural_sort_key(path: Path) -> tuple[object, ...]:
+    parts = re.split(r"(\d+)", path.name)
+    key: list[object] = []
+    for part in parts:
+        if part.isdigit():
+            key.append(int(part))
+        else:
+            key.append(part)
+    return tuple(key)
 
 
 def _read_slide_size_emu(pptx_path: Path) -> tuple[int, int] | None:

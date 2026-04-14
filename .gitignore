@@ -27,6 +27,7 @@ tmp/
 .visual_server/
 .visual_tmp/
 /svg2ooxml.egg-info/
+dist/
 reports/
 working_tmp/
 tests/corpus/output/

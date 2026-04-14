@@ -1,0 +1,25 @@
+<fragment>
+    <p:anim calcmode="discrete" valueType="str">
+        <p:cBhvr>
+            <p:cTn id="{BEHAVIOR_ID}" dur="{DURATION_MS}" fill="hold"/>
+            <p:tgtEl>
+                <p:spTgt spid="{SHAPE_ID}"/>
+            </p:tgtEl>
+            <p:attrNameLst>
+                <p:attrName>style.visibility</p:attrName>
+            </p:attrNameLst>
+        </p:cBhvr>
+        <p:tavLst>
+            <p:tav tm="0">
+                <p:val>
+                    <p:strVal val="hidden"/>
+                </p:val>
+            </p:tav>
+            <p:tav tm="50000">
+                <p:val>
+                    <p:strVal val="visible"/>
+                </p:val>
+            </p:tav>
+        </p:tavLst>
+    </p:anim>
+</fragment>

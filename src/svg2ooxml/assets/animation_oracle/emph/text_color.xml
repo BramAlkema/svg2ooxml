@@ -1,0 +1,26 @@
+<p:par>
+    <p:cTn id="{PAR_ID}" dur="{DURATION_MS}" fill="hold" nodeType="clickEffect" grpId="{PAR_ID}" presetID="3" presetClass="emph" presetSubtype="2">
+        <p:stCondLst>
+            <p:cond delay="{DELAY_MS}"/>
+        </p:stCondLst>
+        <p:iterate type="lt">
+            <p:tmPct val="0"/>
+        </p:iterate>
+        <p:childTnLst>
+            <p:animClr clrSpc="rgb" dir="cw">
+                <p:cBhvr override="childStyle">
+                    <p:cTn id="{BEHAVIOR_ID}" dur="{DURATION_MS}" fill="{INNER_FILL}"/>
+                    <p:tgtEl>
+                        <p:spTgt spid="{SHAPE_ID}"/>
+                    </p:tgtEl>
+                    <p:attrNameLst>
+                        <p:attrName>style.color</p:attrName>
+                    </p:attrNameLst>
+                </p:cBhvr>
+                <p:to>
+                    <a:srgbClr val="{TO_COLOR}"/>
+                </p:to>
+            </p:animClr>
+        </p:childTnLst>
+    </p:cTn>
+</p:par>

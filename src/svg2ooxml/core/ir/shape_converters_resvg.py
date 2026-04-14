@@ -13,6 +13,7 @@ from svg2ooxml.core.ir.shape_converters_utils import (
     _uniform_scale,
 )
 from svg2ooxml.core.styling.style_extractor import StyleResult
+from svg2ooxml.core.styling.style_helpers import parse_style_attr
 from svg2ooxml.core.traversal.constants import DEFAULT_TOLERANCE
 from svg2ooxml.core.traversal.coordinate_space import CoordinateSpace
 from svg2ooxml.core.traversal.geometry_utils import (
@@ -27,6 +28,37 @@ from svg2ooxml.ir.shapes import Circle, Ellipse, Rectangle
 
 
 class ShapeResvgMixin:
+    @staticmethod
+    def _append_metadata_element_id(
+        metadata: dict[str, Any],
+        element_id: str | None,
+    ) -> None:
+        if not isinstance(element_id, str) or not element_id:
+            return
+        element_ids = metadata.setdefault("element_ids", [])
+        if not isinstance(element_ids, list):
+            element_ids = []
+            metadata["element_ids"] = element_ids
+        if element_id not in element_ids:
+            element_ids.append(element_id)
+
+    @staticmethod
+    def _source_explicitly_disables_paint(
+        source_element: etree._Element | None,
+        attribute: str,
+    ) -> bool:
+        if source_element is None:
+            return False
+        attr_value = source_element.get(attribute)
+        if isinstance(attr_value, str) and attr_value.strip().lower() == "none":
+            return True
+        style_attr = source_element.get("style")
+        if not isinstance(style_attr, str) or attribute not in style_attr:
+            return False
+        parsed = parse_style_attr(style_attr)
+        value = parsed.get(attribute)
+        return isinstance(value, str) and value.strip().lower() == "none"
+
     @staticmethod
     def _merge_pattern_paint(
         runtime_paint: PatternPaint, analyzed_paint: PatternPaint
@@ -463,6 +495,7 @@ class ShapeResvgMixin:
             source_element = getattr(resvg_node, "source", None)
         source_style: StyleResult | None = None
         if isinstance(source_element, etree._Element):
+            self._append_metadata_element_id(metadata, source_element.get("id"))
             paint_dict = self._style_resolver.compute_paint_style(
                 source_element, context=self._css_context
             )
@@ -522,6 +555,9 @@ class ShapeResvgMixin:
             tree = getattr(self, "_resvg_tree", None)
             if tree is None:
                 return updated
+            source_element = getattr(node, "source", None)
+            if not isinstance(source_element, etree._Element):
+                source_element = None
             if hasattr(node, "stroke") and node.stroke is not None:
                 from svg2ooxml.paint.resvg_bridge import resolve_stroke_style
 
@@ -535,10 +571,12 @@ class ShapeResvgMixin:
                         resvg_stroke = replace(
                             resvg_stroke,
                             paint=self._merge_pattern_paint(
-                                resvg_stroke.paint, updated.stroke.paint
-                            ),
-                        )
-                    updated = replace(updated, stroke=resvg_stroke)
+                            resvg_stroke.paint, updated.stroke.paint
+                        ),
+                    )
+                updated = replace(updated, stroke=resvg_stroke)
+            elif self._source_explicitly_disables_paint(source_element, "stroke"):
+                updated = replace(updated, stroke=None)
             if hasattr(node, "fill") and node.fill is not None:
                 from svg2ooxml.paint.resvg_bridge import resolve_fill_paint
 
@@ -549,6 +587,10 @@ class ShapeResvgMixin:
                     ):
                         resvg_fill = self._merge_pattern_paint(resvg_fill, updated.fill)
                     updated = replace(updated, fill=resvg_fill)
+                elif self._source_explicitly_disables_paint(source_element, "fill"):
+                    updated = replace(updated, fill=None)
+            elif self._source_explicitly_disables_paint(source_element, "fill"):
+                updated = replace(updated, fill=None)
             return updated
 
         style = _apply_resvg_paint_overrides(resvg_node, style)

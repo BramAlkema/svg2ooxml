@@ -9,7 +9,7 @@ svg2ooxml converts SVG markup into Office Open XML (PPTX) files. It parses SVG, 
 ## Build & Setup
 
 ```bash
-./tools/bootstrap_venv.sh          # creates Python 3.13 venv
+./tools/bootstrap_venv.sh          # prefers Python 3.14 locally, falls back to 3.13
 source .venv/bin/activate
 pip install -e .[dev,render,color,slides,api,cloud] # editable install with all extras
 ```
@@ -18,7 +18,7 @@ For a subset: `pip install -e .[slides]`, `.[render]`, `.[color]`, `.[api]`, `.[
 
 ## Common Commands
 
-**Always use the project venv** — prefix all Python/pytest commands with `.venv/bin/`:
+**Always use the project venv** — prefix all Python/pytest commands with `.venv/bin/`. Do not use the system interpreter for tests or visual tooling; local FontForge and Skia support now live in `.venv`:
 
 ```bash
 # Testing
@@ -87,7 +87,7 @@ Tests mirror production code: `tests/unit/`, `tests/integration/`, `tests/visual
 
 ## Project-Specific Notes
 
-- Python >=3.13, targets py313 for ruff/black/mypy.
+- Python >=3.13, with local development preferring Python 3.14 so Homebrew FontForge bindings and `skia-python` both import in `.venv`. Ruff/black/mypy still target py313 syntax.
 - The GCP project (`powerful-layout-467812-p1`) was deleted 2026-01-16 — Cloud Run and related CI/CD are currently non-functional.
 - `SVG2OOXML_SOFFICE_PATH` env var overrides LibreOffice binary path; `SVG2OOXML_SOFFICE_USER_INSTALL` sets a custom profile dir if headless soffice crashes.
 - ADRs in `docs/adr/` document key architectural decisions (resvg strategy, EMF fallbacks, queue/cache, gcloud setup).

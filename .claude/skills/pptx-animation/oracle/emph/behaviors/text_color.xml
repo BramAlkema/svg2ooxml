@@ -1,0 +1,16 @@
+<fragment>
+    <p:animClr clrSpc="rgb" dir="cw">
+        <p:cBhvr override="childStyle">
+            <p:cTn id="{BEHAVIOR_ID}" dur="{DURATION_MS}" fill="{INNER_FILL}"/>
+            <p:tgtEl>
+                <p:spTgt spid="{SHAPE_ID}"/>
+            </p:tgtEl>
+            <p:attrNameLst>
+                <p:attrName>style.color</p:attrName>
+            </p:attrNameLst>
+        </p:cBhvr>
+        <p:to>
+            <a:srgbClr val="{TO_COLOR}"/>
+        </p:to>
+    </p:animClr>
+</fragment>

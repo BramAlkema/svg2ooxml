@@ -109,6 +109,15 @@ class TestBuildScale:
         anim_scale = par.find(f".//{{{NS_P}}}animScale")
         assert anim_scale is not None
 
+    def test_scale_does_not_target_rotation(self, handler: TransformAnimationHandler):
+        anim = make_transform_animation(
+            transform_type=TransformType.SCALE, values=["1", "2"]
+        )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        anim_scale = par.find(f".//{{{NS_P}}}animScale")
+        attr_names = anim_scale.findall(f".//{{{NS_P}}}attrName")
+        assert [node.text for node in attr_names] == []
+
     def test_behavior_id(self, handler: TransformAnimationHandler):
         anim = make_transform_animation(
             transform_type=TransformType.SCALE, values=["1", "2"]
@@ -180,6 +189,45 @@ class TestBuildScale:
         # Single value: from and to are the same
         assert from_elem.get("x") == to_elem.get("x")
 
+    def test_scale_with_element_center_adds_origin_compensation_motion(
+        self, handler: TransformAnimationHandler
+    ):
+        anim = make_transform_animation(
+            transform_type=TransformType.SCALE,
+            values=["1", "2"],
+            element_center_px=(100.0, 60.0),
+            motion_viewport_px=(480.0, 360.0),
+        )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        motions = par.findall(f".//{{{NS_P}}}animMotion")
+        assert len(motions) == 1
+        assert motions[0].get("path") == "M 0 0 L 0.208333 0.166667 E"
+
+    def test_scale_from_zero_to_one_does_not_overshoot_origin_compensation(
+        self, handler: TransformAnimationHandler
+    ):
+        anim = make_transform_animation(
+            transform_type=TransformType.SCALE,
+            values=["0", "1"],
+            element_center_px=(100.0, 60.0),
+            motion_viewport_px=(480.0, 360.0),
+        )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        motions = par.findall(f".//{{{NS_P}}}animMotion")
+        assert len(motions) == 0
+
+    def test_scale_without_element_center_skips_origin_compensation_motion(
+        self, handler: TransformAnimationHandler
+    ):
+        anim = make_transform_animation(
+            transform_type=TransformType.SCALE,
+            values=["1", "2"],
+            motion_viewport_px=(480.0, 360.0),
+        )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        motions = par.findall(f".//{{{NS_P}}}animMotion")
+        assert len(motions) == 0
+
     def test_delay_from_begin(self, handler: TransformAnimationHandler):
         anim = make_transform_animation(
             transform_type=TransformType.SCALE,
@@ -249,6 +297,14 @@ class TestBuildRotate:
         bhvr_ctn = par.find(f".//{{{NS_P}}}cBhvr/{{{NS_P}}}cTn")
         assert bhvr_ctn.get("id") == "5"
 
+    def test_rotate_targets_r_attribute(self, handler: TransformAnimationHandler):
+        anim = make_transform_animation(
+            transform_type=TransformType.ROTATE, values=["0", "360"]
+        )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        attr_names = [node.text for node in par.findall(f".//{{{NS_P}}}attrName")]
+        assert "r" in attr_names
+
     def test_single_rotate_value(self, handler: TransformAnimationHandler):
         anim = make_transform_animation(
             transform_type=TransformType.ROTATE, values=["45"]
@@ -263,7 +319,9 @@ class TestBuildRotate:
 class TestMultiKeyframeRotate:
     """Multi-keyframe rotate splits into sequential segments."""
 
-    def test_three_values_produces_two_anim_rot(self, handler: TransformAnimationHandler):
+    def test_three_values_produces_two_anim_rot(
+        self, handler: TransformAnimationHandler
+    ):
         anim = make_transform_animation(
             transform_type=TransformType.ROTATE, values=["0", "360", "0"]
         )
@@ -281,18 +339,22 @@ class TestMultiKeyframeRotate:
         assert rots[0].get("by") == "21600000"
         assert rots[1].get("by") == "-21600000"
 
-    def test_four_values_produces_three_segments(self, handler: TransformAnimationHandler):
+    def test_four_values_produces_three_segments(
+        self, handler: TransformAnimationHandler
+    ):
         anim = make_transform_animation(
             transform_type=TransformType.ROTATE, values=["0", "90", "180", "0"]
         )
         par = handler.build(anim, par_id=4, behavior_id=5)
         rots = par.findall(f".//{{{NS_P}}}animRot")
         assert len(rots) == 3
-        assert rots[0].get("by") == "5400000"   # 90°
-        assert rots[1].get("by") == "5400000"   # 90°
+        assert rots[0].get("by") == "5400000"  # 90°
+        assert rots[1].get("by") == "5400000"  # 90°
         assert rots[2].get("by") == "-10800000"  # -180°
 
-    def test_key_times_affect_segment_durations(self, handler: TransformAnimationHandler):
+    def test_key_times_affect_segment_durations(
+        self, handler: TransformAnimationHandler
+    ):
         anim = make_transform_animation(
             transform_type=TransformType.ROTATE,
             values=["0", "360", "0"],
@@ -321,6 +383,16 @@ class TestMultiKeyframeRotate:
         ctn = par.find(f"{{{NS_P}}}cTn")
         assert ctn.get("presetID") == "8"
         assert ctn.get("presetClass") == "emph"
+
+    def test_simple_transform_uses_nonzero_effect_group(
+        self, handler: TransformAnimationHandler
+    ):
+        anim = make_transform_animation(
+            transform_type=TransformType.SCALE, values=["1", "2"]
+        )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        ctn = par.find(f"{{{NS_P}}}cTn")
+        assert ctn.get("grpId") == "4"
 
 
 class TestRotateWithOrbit:
@@ -393,6 +465,18 @@ class TestRotateWithOrbit:
         assert len(rots) == 2  # multi-keyframe split
         assert len(motions) == 1  # orbital companion
 
+    def test_multi_keyframe_rotate_uses_nonzero_effect_group(
+        self, handler: TransformAnimationHandler
+    ):
+        anim = make_transform_animation(
+            transform_type=TransformType.ROTATE,
+            values=["0", "360", "0"],
+        )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        ctn = par.find(f"{{{NS_P}}}cTn")
+        assert ctn is not None
+        assert ctn.get("grpId") == "4"
+
     def test_orbit_path_has_nonzero_values(self, handler: TransformAnimationHandler):
         """Orbit path coordinates should be non-trivial for offset center."""
         anim = make_transform_animation(
@@ -408,7 +492,8 @@ class TestRotateWithOrbit:
         coords = [p.strip().rstrip(" E").split() for p in parts]
         has_nonzero = any(
             abs(float(c[0])) > 1e-6 or abs(float(c[1])) > 1e-6
-            for c in coords if len(c) == 2
+            for c in coords
+            if len(c) == 2
         )
         assert has_nonzero
 
@@ -435,16 +520,42 @@ class TestBuildTranslate:
         anim_motion = par.find(f".//{{{NS_P}}}animMotion")
         assert anim_motion is not None
 
-    def test_by_element_present(self, handler: TransformAnimationHandler):
+    def test_two_value_translate_uses_relative_path(self, handler: TransformAnimationHandler):
         anim = make_transform_animation(
             transform_type=TransformType.TRANSLATE, values=["0 0", "10 20"]
         )
         par = handler.build(anim, par_id=4, behavior_id=5)
         by_elem = par.find(f".//{{{NS_P}}}by")
-        assert by_elem is not None
-        # Values are EMU-converted: 10px and 20px
-        assert by_elem.get("x") is not None
-        assert by_elem.get("y") is not None
+        assert by_elem is None
+        anim_motion = par.find(f".//{{{NS_P}}}animMotion")
+        assert anim_motion is not None
+        assert anim_motion.get("path") is not None
+        assert anim_motion.get("pathEditMode") == "relative"
+
+    def test_two_value_translate_uses_scene_viewport(self, handler: TransformAnimationHandler):
+        anim = make_transform_animation(
+            transform_type=TransformType.TRANSLATE,
+            values=["0 0", "10 20"],
+            motion_viewport_px=(480.0, 360.0),
+        )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        anim_motion = par.find(f".//{{{NS_P}}}animMotion")
+        assert anim_motion is not None
+        assert anim_motion.get("path") == "M 0 0 L 0.0208333 0.0555556 E"
+
+    def test_two_value_translate_projects_motion_space_matrix(
+        self, handler: TransformAnimationHandler
+    ):
+        anim = make_transform_animation(
+            transform_type=TransformType.TRANSLATE,
+            values=["0 0", "10 20"],
+            motion_viewport_px=(480.0, 360.0),
+            motion_space_matrix=(2.0, 0.0, 0.0, 3.0, 50.0, 90.0),
+        )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        anim_motion = par.find(f".//{{{NS_P}}}animMotion")
+        assert anim_motion is not None
+        assert anim_motion.get("path") == "M 0 0 L 0.0416667 0.166667 E"
 
     def test_preset_class_is_path(self, handler: TransformAnimationHandler):
         anim = make_transform_animation(
@@ -559,19 +670,32 @@ class TestBuildTranslateMultiKeyframe:
         anim_motion = par.find(f".//{{{NS_P}}}animMotion")
         assert anim_motion.get("ptsTypes") == "AAA"
 
-    def test_two_values_still_uses_by(self, handler: TransformAnimationHandler):
-        """Verify 2-value translate still uses the simple by approach."""
+    def test_two_values_emit_path_not_by(self, handler: TransformAnimationHandler):
         anim = make_transform_animation(
             transform_type=TransformType.TRANSLATE, values=["0 0", "10 20"]
         )
         par = handler.build(anim, par_id=4, behavior_id=5)
-        by_elem = par.find(f".//{{{NS_P}}}by")
-        assert by_elem is not None
-        # Should NOT have path attribute
         anim_motion = par.find(f".//{{{NS_P}}}animMotion")
-        assert anim_motion.get("path") is None
+        assert anim_motion is not None
+        assert anim_motion.get("path") is not None
+        assert par.find(f".//{{{NS_P}}}by") is None
 
-    def test_discrete_calc_mode_expands_step_path(self, handler: TransformAnimationHandler):
+    def test_multi_keyframe_translate_uses_scene_viewport(
+        self, handler: TransformAnimationHandler
+    ):
+        anim = make_transform_animation(
+            transform_type=TransformType.TRANSLATE,
+            values=["0 0", "50 0", "50 50"],
+            motion_viewport_px=(480.0, 360.0),
+        )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        anim_motion = par.find(f".//{{{NS_P}}}animMotion")
+        assert anim_motion is not None
+        assert anim_motion.get("path") == "M 0 0 L 0.104167 0 L 0.104167 0.138889 E"
+
+    def test_discrete_calc_mode_expands_step_path(
+        self, handler: TransformAnimationHandler
+    ):
         anim = make_transform_animation(
             transform_type=TransformType.TRANSLATE,
             values=["0 0", "50 0", "50 50"],
@@ -585,7 +709,9 @@ class TestBuildTranslateMultiKeyframe:
         assert path.count("L ") > 2
         assert len(anim_motion.get("ptsTypes")) > 3
 
-    def test_paced_calc_mode_respects_distance_weighting(self, handler: TransformAnimationHandler):
+    def test_paced_calc_mode_respects_distance_weighting(
+        self, handler: TransformAnimationHandler
+    ):
         anim = make_transform_animation(
             transform_type=TransformType.TRANSLATE,
             values=["0 0", "10 0", "40 0"],
@@ -604,7 +730,9 @@ class TestBuildTranslateMultiKeyframe:
 
 
 class TestBuildMatrix:
-    def test_matrix_translate_returns_anim_motion(self, handler: TransformAnimationHandler):
+    def test_matrix_translate_returns_anim_motion(
+        self, handler: TransformAnimationHandler
+    ):
         anim = make_transform_animation(
             transform_type=TransformType.MATRIX,
             values=["1 0 0 1 0 0", "1 0 0 1 15 5"],
@@ -729,7 +857,9 @@ class TestClassifyMatrix:
         assert mtype == "rotate"
         assert abs(payload - 30.0) < 0.01
 
-    def test_composite_decomposes_to_translate(self, handler: TransformAnimationHandler):
+    def test_composite_decomposes_to_translate(
+        self, handler: TransformAnimationHandler
+    ):
         """Scale+translate composite decomposes; translate wins by priority."""
         m = Matrix2D(2, 0, 0, 2, 5, 5)
         mtype, payload = handler._classify_matrix(m)
@@ -842,7 +972,9 @@ class TestClassifyMatrixComposite:
         mtype, payload = handler._classify_matrix(m)
         assert mtype == "translate"
 
-    def test_classify_falls_through_to_decompose(self, handler: TransformAnimationHandler):
+    def test_classify_falls_through_to_decompose(
+        self, handler: TransformAnimationHandler
+    ):
         """A matrix that fails simple classification is decomposed."""
         import math
 

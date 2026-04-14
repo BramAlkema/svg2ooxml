@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import re
 from collections.abc import Iterable, Mapping
 from dataclasses import replace
@@ -21,7 +22,6 @@ from svg2ooxml.core.ir.text_pipeline import TextConversionPipeline
 from svg2ooxml.core.traversal.coordinate_space import CoordinateSpace
 from svg2ooxml.ir.geometry import Point, Rect
 from svg2ooxml.ir.text import Run, TextAnchor, TextFrame
-from svg2ooxml.policy.constants import FALLBACK_EMF
 from svg2ooxml.policy.text_policy import TextPolicyDecision
 
 if TYPE_CHECKING:  # pragma: no cover - type checking only
@@ -94,6 +94,7 @@ class TextConverter:
             return None
 
         run = self._run_from_resvg_node(resvg_node, text_content)
+        text_scale = self._text_scale_for_coord_space(coord_space)
         from dataclasses import replace as _replace
 
         # Parse style attribute once for all CSS property lookups below
@@ -117,6 +118,7 @@ class TextConverter:
         if font_variant == "small-caps":
             run = _replace(run, font_variant="small-caps")
 
+        run = self._scale_run_metrics(run, text_scale)
         updated, run_policy = self.apply_policy(run)
         runs = [updated]
 
@@ -156,7 +158,11 @@ class TextConverter:
 
         metadata: dict[str, Any] = {}
         self._attach_text_path_metadata(element, metadata, resvg_node=resvg_node)
-        self._attach_resvg_text_metadata(resvg_node, metadata)
+        self._attach_resvg_text_metadata(
+            resvg_node,
+            metadata,
+            text_scale=text_scale,
+        )
         self._context.attach_policy_metadata(metadata, "text")
         if font_variant == "small-caps":
             metadata["font_variant"] = "small-caps"
@@ -210,14 +216,16 @@ class TextConverter:
             if dx_only:
                 dx_vals = _per_char_attrs["dx"]
                 if len(dx_vals) >= 1:
-                    avg_dx = sum(dx_vals) / len(dx_vals)
+                    avg_dx = (sum(dx_vals) / len(dx_vals)) * text_scale
                     is_uniform = (
                         all(
-                            abs(v - avg_dx) / max(abs(avg_dx), 0.01) < 0.1
+                            abs((v * text_scale) - avg_dx)
+                            / max(abs(avg_dx), 0.01)
+                            < 0.1
                             for v in dx_vals
                         )
                         if avg_dx != 0
-                        else all(abs(v) < 0.5 for v in dx_vals)
+                        else all(abs(v * text_scale) < 0.5 for v in dx_vals)
                     )
                     if is_uniform and abs(avg_dx) > 0.01:
                         base_ls = updated.letter_spacing or 0.0
@@ -272,7 +280,7 @@ class TextConverter:
         text_length_attr = element.get("textLength")
         if text_length_attr and text_content.strip():
             try:
-                target_width = float(text_length_attr)
+                target_width = float(text_length_attr) * text_scale
                 char_count = len(text_content.strip())
                 if char_count > 1 and target_width > 0:
                     # Estimate natural width from bbox (will be computed below)
@@ -504,6 +512,7 @@ class TextConverter:
         font_service = self._context.services.resolve("font")
         policy_meta_accum: dict[str, Any] = {}
         decision = self._resolve_policy_decision()
+        text_scale = self._text_scale_for_coord_space(coord_space)
 
         # Extract text direction
         direction = base_style.get("direction") or element.get("direction") or None
@@ -518,6 +527,7 @@ class TextConverter:
             run = self._create_run_from_style(text, style)
             if not run.text:
                 continue
+            run = self._scale_run_metrics(run, text_scale)
             updated, run_policy = self.apply_policy(run)
             if run_policy:
                 policy_meta_accum.update(run_policy)
@@ -910,6 +920,65 @@ class TextConverter:
         return merged
 
     @staticmethod
+    def _text_scale_for_coord_space(
+        coord_space: CoordinateSpace,
+        *,
+        tolerance: float = 1e-6,
+    ) -> float:
+        matrix = getattr(coord_space, "current", None)
+        if matrix is None:
+            return 1.0
+
+        scale_x = math.hypot(float(matrix.a), float(matrix.b))
+        scale_y = math.hypot(float(matrix.c), float(matrix.d))
+
+        if scale_x <= tolerance and scale_y <= tolerance:
+            return 1.0
+        if scale_x <= tolerance:
+            return max(scale_y, 1.0)
+        if scale_y <= tolerance:
+            return max(scale_x, 1.0)
+
+        dot_product = abs(
+            float(matrix.a) * float(matrix.c)
+            + float(matrix.b) * float(matrix.d)
+        )
+        max_scale = max(scale_x, scale_y)
+        if (
+            dot_product <= tolerance * max(1.0, max_scale * max_scale)
+            and abs(scale_x - scale_y) <= max_scale * 0.01
+        ):
+            return (scale_x + scale_y) / 2.0
+
+        determinant = abs(
+            float(matrix.a) * float(matrix.d)
+            - float(matrix.b) * float(matrix.c)
+        )
+        if determinant > tolerance:
+            return math.sqrt(determinant)
+
+        return (scale_x + scale_y) / 2.0
+
+    @staticmethod
+    def _scale_run_metrics(run: Run, scale: float) -> Run:
+        if not math.isfinite(scale) or scale <= 0.0 or abs(scale - 1.0) <= 1e-6:
+            return run
+
+        def _scaled(value: float | None) -> float | None:
+            if value is None:
+                return None
+            return float(value) * scale
+
+        return replace(
+            run,
+            font_size_pt=max(run.font_size_pt * scale, 0.01),
+            stroke_width_px=_scaled(run.stroke_width_px),
+            kerning=_scaled(run.kerning),
+            letter_spacing=_scaled(run.letter_spacing),
+            word_spacing=_scaled(run.word_spacing),
+        )
+
+    @staticmethod
     def _runs_compatible(first: Run, second: Run) -> bool:
         return (
             first.font_family == second.font_family
@@ -930,7 +999,11 @@ class TextConverter:
         )
 
     def _attach_resvg_text_metadata(
-        self, resvg_node: Any, metadata: dict[str, Any]
+        self,
+        resvg_node: Any,
+        metadata: dict[str, Any],
+        *,
+        text_scale: float = 1.0,
     ) -> None:
         if not hasattr(resvg_node, "text_content"):
             return
@@ -961,14 +1034,14 @@ class TextConverter:
         if tree is not None:
             from svg2ooxml.paint.resvg_bridge import _resolve_paint_reference
 
-            paint_resolver = lambda ref: _resolve_paint_reference(
-                ref, tree
-            )  # noqa: E731
+            def paint_resolver(ref):
+                return _resolve_paint_reference(ref, tree)
 
         generator = DrawingMLTextGenerator(
             font_service=self._context.services.resolve("font"),
             embedding_engine=self._context.services.resolve("font_embedding"),
             paint_resolver=paint_resolver,
+            text_scale=text_scale,
         )
         try:
             runs_xml = generator.generate_runs_xml(resvg_node)
@@ -1138,9 +1211,6 @@ class TextConverter:
             if fallback and fallback.lower() != updated.font_family.lower():
                 updated = replace(updated, font_family=fallback)
                 metadata["font_fallback"] = fallback
-        elif behavior in {"outline", FALLBACK_EMF, "embedded"}:
-            metadata["rendering_behavior"] = behavior
-
         glyph_fallback = decision.fallback.glyph_fallback
         if glyph_fallback:
             metadata["glyph_fallback"] = glyph_fallback

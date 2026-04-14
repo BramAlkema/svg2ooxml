@@ -4,7 +4,8 @@ from lxml import etree
 
 from svg2ooxml.drawingml.animation.id_allocator import TimingIDAllocator
 from svg2ooxml.drawingml.animation.xml_builders import AnimationXMLBuilder
-from svg2ooxml.drawingml.xml_builder import NS_P
+from svg2ooxml.drawingml.xml_builder import NS_P, p_elem, p_sub
+from svg2ooxml.ir.animation import BeginTrigger, BeginTriggerType
 
 
 class TestAttributeList:
@@ -243,6 +244,27 @@ class TestBuildTimingTree:
         assert click_child_lst is not None
         assert len(click_child_lst) == 2
 
+    def test_click_group_uses_powerpoint_autostart_conditions(self):
+        builder = AnimationXMLBuilder()
+        ids = TimingIDAllocator().allocate(1)
+        tree = builder.build_timing_tree(
+            ids=ids,
+            animation_elements=[self._make_dummy_par()],
+            animated_shape_ids=[],
+        )
+        click_ctn = tree.find(f".//{{{NS_P}}}cTn[@id='3']")
+        assert click_ctn is not None
+        st_cond_lst = click_ctn.find(f"{{{NS_P}}}stCondLst")
+        assert st_cond_lst is not None
+        conds = st_cond_lst.findall(f"{{{NS_P}}}cond")
+        assert len(conds) == 2
+        assert conds[0].get("delay") == "indefinite"
+        assert conds[1].get("evt") == "onBegin"
+        assert conds[1].get("delay") == "0"
+        tn = conds[1].find(f"{{{NS_P}}}tn")
+        assert tn is not None
+        assert tn.get("val") == "2"
+
     def test_navigation_triggers(self):
         builder = AnimationXMLBuilder()
         ids = TimingIDAllocator().allocate(0)
@@ -271,6 +293,44 @@ class TestBuildTimingTree:
         assert len(bld_ps) == 2
         assert bld_ps[0].get("spid") == "42"
         assert bld_ps[1].get("spid") == "99"
+        assert bld_ps[0].get("animBg") == "1"
+        assert bld_ps[1].get("animBg") == "1"
+
+    def test_bld_lst_includes_effect_group_entries(self):
+        builder = AnimationXMLBuilder()
+        ids = TimingIDAllocator().allocate(1)
+        par = p_elem("par")
+        ctn = p_sub(
+            par,
+            "cTn",
+            id="4",
+            fill="hold",
+            nodeType="clickEffect",
+            grpId="7",
+            presetID="6",
+            presetClass="emph",
+        )
+        child_tn_lst = p_sub(ctn, "childTnLst")
+        anim_scale = p_sub(child_tn_lst, "animScale")
+        c_bhvr = p_sub(anim_scale, "cBhvr")
+        p_sub(c_bhvr, "cTn", id="5", dur="1000")
+        tgt_el = p_sub(c_bhvr, "tgtEl")
+        p_sub(tgt_el, "spTgt", spid="42")
+
+        tree = builder.build_timing_tree(
+            ids=ids,
+            animation_elements=[par],
+            animated_shape_ids=["42"],
+        )
+
+        bld_ps = tree.findall(f".//{{{NS_P}}}bldP")
+        assert len(bld_ps) == 2
+        assert bld_ps[0].get("spid") == "42"
+        assert bld_ps[0].get("grpId") == "0"
+        assert bld_ps[0].get("animBg") == "1"
+        assert bld_ps[1].get("spid") == "42"
+        assert bld_ps[1].get("grpId") == "4"
+        assert bld_ps[1].get("animBg") == "1"
 
     def test_no_bld_lst_when_empty(self):
         builder = AnimationXMLBuilder()
@@ -363,6 +423,87 @@ class TestBuildParContainerElem:
         assert len(child_tn_lst) == 1
         assert child_tn_lst[0].tag == f"{{{NS_P}}}set"
 
+    def test_repeat_count_is_mapped_on_outer_container(self):
+        builder = AnimationXMLBuilder()
+        from svg2ooxml.drawingml.xml_builder import p_elem as _p
+
+        par = builder.build_par_container_elem(
+            par_id=4,
+            duration_ms=1000,
+            delay_ms=0,
+            child_element=_p("set"),
+            repeat_count=3,
+        )
+
+        ctn = par.find(f"{{{NS_P}}}cTn")
+        assert ctn.get("repeatCount") == "3000"
+
+    def test_apply_native_timing_overrides_adds_restart_repeat_dur_and_end_conditions(self):
+        builder = AnimationXMLBuilder()
+        child = p_elem("anim")
+        c_bhvr = p_sub(child, "cBhvr")
+        p_sub(c_bhvr, "cTn", id="5", dur="1000", repeatCount="indefinite")
+
+        par = builder.build_par_container_elem(
+            par_id=4,
+            duration_ms=1000,
+            delay_ms=0,
+            child_element=child,
+        )
+
+        builder.apply_native_timing_overrides(
+            par=par,
+            repeat_duration_ms=2500,
+            restart="whenNotActive",
+            end_triggers=[
+                BeginTrigger(
+                    trigger_type=BeginTriggerType.TIME_OFFSET,
+                    delay_seconds=1.0,
+                ),
+                BeginTrigger(
+                    trigger_type=BeginTriggerType.CLICK,
+                    target_element_id="button",
+                    delay_seconds=0.25,
+                ),
+            ],
+            default_target_shape="shape1",
+        )
+
+        outer_ctn = par.find(f"{{{NS_P}}}cTn")
+        repeat_ctn = par.find(f".//{{{NS_P}}}cTn[@repeatCount='indefinite']")
+        assert outer_ctn.get("restart") == "whenNotActive"
+        assert outer_ctn.get("repeatDur") is None
+        assert repeat_ctn.get("repeatDur") == "2500"
+        end_cond_lst = outer_ctn.find(f"{{{NS_P}}}endCondLst")
+        assert end_cond_lst is not None
+        conds = end_cond_lst.findall(f"{{{NS_P}}}cond")
+        assert len(conds) == 2
+        assert conds[0].get("delay") == "1000"
+        assert conds[1].get("evt") == "onClick"
+        assert conds[1].get("delay") == "250"
+        sp_tgt = conds[1].find(f".//{{{NS_P}}}spTgt")
+        assert sp_tgt is not None
+        assert sp_tgt.get("spid") == "button"
+
+    def test_build_delayed_child_par(self):
+        builder = AnimationXMLBuilder()
+        from svg2ooxml.drawingml.xml_builder import p_elem as _p
+
+        par = builder.build_delayed_child_par(
+            par_id=9,
+            delay_ms=250,
+            duration_ms=400,
+            child_element=_p("animRot"),
+        )
+
+        ctn = par.find(f"{{{NS_P}}}cTn")
+        cond = par.find(f".//{{{NS_P}}}cond")
+        child_tn_lst = par.find(f".//{{{NS_P}}}childTnLst")
+        assert ctn.get("id") == "9"
+        assert ctn.get("dur") == "400"
+        assert cond.get("delay") == "250"
+        assert child_tn_lst[0].tag == f"{{{NS_P}}}animRot"
+
 
 class TestBuildBehaviorCoreElem:
     """Test build_behavior_core_elem."""
@@ -425,6 +566,38 @@ class TestBuildBehaviorCoreElem:
         assert attr_lst is not None
         names = attr_lst.findall(f"{{{NS_P}}}attrName")
         assert len(names) == 2
+
+    def test_ppt_runtime_context_for_ppt_properties(self):
+        builder = AnimationXMLBuilder()
+        elem = builder.build_behavior_core_elem(
+            behavior_id=5,
+            duration_ms=1000,
+            target_shape="shape1",
+            attr_name_list=["ppt_w"],
+        )
+        assert elem.get("rctx") == "PPT"
+
+    def test_ppt_runtime_context_for_style_properties(self):
+        builder = AnimationXMLBuilder()
+        elem = builder.build_behavior_core_elem(
+            behavior_id=5,
+            duration_ms=1000,
+            target_shape="shape1",
+            attr_name_list=["style.opacity"],
+        )
+        assert elem.get("rctx") == "PPT"
+
+    def test_behavior_core_auto_reverse(self):
+        builder = AnimationXMLBuilder()
+        elem = builder.build_behavior_core_elem(
+            behavior_id=5,
+            duration_ms=1000,
+            target_shape="shape1",
+            auto_reverse=True,
+        )
+        ctn = elem.find(f"{{{NS_P}}}cTn")
+        assert ctn is not None
+        assert ctn.get("autoRev") == "1"
 
     def test_additive_sum(self):
         builder = AnimationXMLBuilder()
@@ -534,3 +707,114 @@ class TestBuildBehaviorCoreElem:
         )
         ctn = elem.find(f"{{{NS_P}}}cTn")
         assert ctn.get("repeatCount") is None
+
+
+class TestBuildCompoundPar:
+    """Test build_compound_par — the compound oracle entry point."""
+
+    def test_single_fragment(self):
+        """One fragment → one compound par with one behavior child."""
+        from svg2ooxml.drawingml.animation.oracle import BehaviorFragment
+
+        builder = AnimationXMLBuilder()
+        par = builder.build_compound_par(
+            shape_id="2",
+            par_id=5,
+            duration_ms=2000,
+            behaviors=[
+                BehaviorFragment("rotate", {
+                    "BEHAVIOR_ID": 10,
+                    "ROTATION_BY": "21600000",
+                }),
+            ],
+        )
+        assert par.tag == f"{{{NS_P}}}par"
+        ctn = par.find(f"{{{NS_P}}}cTn")
+        assert ctn is not None
+        assert ctn.get("nodeType") == "clickEffect"
+        assert ctn.get("dur") == "2000"
+        children = ctn.find(f"{{{NS_P}}}childTnLst")
+        assert children is not None
+        # Fragment 'rotate' has one <p:animRot> child.
+        assert len(children) == 1
+        assert children[0].tag == f"{{{NS_P}}}animRot"
+
+    def test_multi_fragment_stacks_all_behaviors(self):
+        """Multiple fragments → compound cTn with all behaviors as siblings."""
+        from svg2ooxml.drawingml.animation.oracle import BehaviorFragment
+
+        builder = AnimationXMLBuilder()
+        par = builder.build_compound_par(
+            shape_id="2",
+            par_id=5,
+            duration_ms=3000,
+            behaviors=[
+                BehaviorFragment("transparency", {
+                    "SET_BEHAVIOR_ID": 10,
+                    "EFFECT_BEHAVIOR_ID": 11,
+                    "TARGET_OPACITY": "0.5",
+                }),
+                BehaviorFragment("rotate", {
+                    "BEHAVIOR_ID": 20,
+                    "ROTATION_BY": "21600000",
+                }),
+                BehaviorFragment("motion", {
+                    "BEHAVIOR_ID": 30,
+                    "PATH_DATA": "M 0 0 L 0.1 0.2 E",
+                }),
+            ],
+        )
+        children = par.find(f"{{{NS_P}}}cTn/{{{NS_P}}}childTnLst")
+        assert children is not None
+        # transparency = 2 children (set + animEffect), rotate = 1, motion = 1
+        tags = [etree.QName(c).localname for c in children]
+        assert tags == ["set", "animEffect", "animRot", "animMotion"]
+
+    def test_accepts_plain_tuple_behaviors(self):
+        """Plain (name, tokens) tuples are normalised to BehaviorFragments."""
+        builder = AnimationXMLBuilder()
+        par = builder.build_compound_par(
+            shape_id="2",
+            par_id=5,
+            duration_ms=1500,
+            behaviors=[
+                ("bold", {"BEHAVIOR_ID": 10}),
+                ("underline", {"BEHAVIOR_ID": 20}),
+            ],
+        )
+        children = par.find(f"{{{NS_P}}}cTn/{{{NS_P}}}childTnLst")
+        assert children is not None
+        # Both bold and underline emit one <p:set> each.
+        assert len(children) == 2
+        for child in children:
+            assert etree.QName(child).localname == "set"
+
+    def test_shape_fill_color_quadruple(self):
+        """The fill_color fragment expands to 4 primitive children targeting <p:bg/>."""
+        from svg2ooxml.drawingml.animation.oracle import BehaviorFragment
+
+        builder = AnimationXMLBuilder()
+        par = builder.build_compound_par(
+            shape_id="2",
+            par_id=5,
+            duration_ms=2000,
+            behaviors=[
+                BehaviorFragment("fill_color", {
+                    "STYLE_CLR_BEHAVIOR_ID": 10,
+                    "FILL_CLR_BEHAVIOR_ID": 11,
+                    "FILL_TYPE_BEHAVIOR_ID": 12,
+                    "FILL_ON_BEHAVIOR_ID": 13,
+                    "TO_COLOR": "C81010",
+                }),
+            ],
+        )
+        children = par.find(f"{{{NS_P}}}cTn/{{{NS_P}}}childTnLst")
+        assert children is not None
+        tags = [etree.QName(c).localname for c in children]
+        assert tags == ["animClr", "animClr", "set", "set"]
+        # All targets should carry <p:bg/> (shape background scope).
+        for child in children:
+            bg = child.find(f".//{{{NS_P}}}bg")
+            assert bg is not None, (
+                f"fill_color child {etree.QName(child).localname} missing <p:bg/>"
+            )

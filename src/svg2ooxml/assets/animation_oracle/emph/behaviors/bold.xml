@@ -1,0 +1,20 @@
+<fragment>
+    <p:set>
+        <p:cBhvr override="childStyle">
+            <p:cTn id="{BEHAVIOR_ID}" dur="indefinite"/>
+            <p:tgtEl>
+                <p:spTgt spid="{SHAPE_ID}">
+                    <p:txEl>
+                        <p:pRg st="0" end="0"/>
+                    </p:txEl>
+                </p:spTgt>
+            </p:tgtEl>
+            <p:attrNameLst>
+                <p:attrName>style.fontWeight</p:attrName>
+            </p:attrNameLst>
+        </p:cBhvr>
+        <p:to>
+            <p:strVal val="bold"/>
+        </p:to>
+    </p:set>
+</fragment>

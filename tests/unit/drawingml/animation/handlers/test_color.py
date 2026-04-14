@@ -103,16 +103,16 @@ class TestCanHandle:
 
 class TestMapColorAttribute:
     def test_maps_fill(self, handler: ColorAnimationHandler):
-        assert handler._map_color_attribute("fill") == "fillClr"
+        assert handler._map_color_attribute("fill") == "fill.color"
 
     def test_maps_stroke(self, handler: ColorAnimationHandler):
-        assert handler._map_color_attribute("stroke") == "lnClr"
+        assert handler._map_color_attribute("stroke") == "stroke.color"
 
     def test_maps_stop_color(self, handler: ColorAnimationHandler):
-        assert handler._map_color_attribute("stop-color") == "fillClr"
+        assert handler._map_color_attribute("stop-color") == "fill.color"
 
     def test_defaults_unknown(self, handler: ColorAnimationHandler):
-        assert handler._map_color_attribute("unknown") == "fillClr"
+        assert handler._map_color_attribute("unknown") == "fill.color"
 
 
 # ------------------------------------------------------------------ #
@@ -132,6 +132,12 @@ class TestBuild:
         par = handler.build(anim, par_id=4, behavior_id=5)
         ctn = par.find(f"{{{NS_P}}}cTn")
         assert ctn.get("id") == "4"
+
+    def test_ctn_uses_nonzero_effect_group(self, handler: ColorAnimationHandler):
+        anim = make_color_animation()
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        ctn = par.find(f"{{{NS_P}}}cTn")
+        assert ctn.get("grpId") == "4"
 
     def test_anim_clr_present(self, handler: ColorAnimationHandler):
         anim = make_color_animation()
@@ -182,13 +188,22 @@ class TestBuild:
         anim = make_color_animation(target_attribute="fill")
         par = handler.build(anim, par_id=4, behavior_id=5)
         attr_name = par.find(f".//{{{NS_P}}}attrName")
-        assert attr_name.text == "fillClr"
+        assert attr_name.text == "fill.color"
+
+    def test_color_behavior_overrides_child_style(
+        self, handler: ColorAnimationHandler
+    ):
+        anim = make_color_animation(target_attribute="fill")
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        c_bhvr = par.find(f".//{{{NS_P}}}animClr/{{{NS_P}}}cBhvr")
+        assert c_bhvr is not None
+        assert c_bhvr.get("override") == "childStyle"
 
     def test_attribute_name_mapped_stroke(self, handler: ColorAnimationHandler):
         anim = make_color_animation(target_attribute="stroke")
         par = handler.build(anim, par_id=4, behavior_id=5)
         attr_name = par.find(f".//{{{NS_P}}}attrName")
-        assert attr_name.text == "lnClr"
+        assert attr_name.text == "stroke.color"
 
     def test_delay_from_begin(self, handler: ColorAnimationHandler):
         anim = make_color_animation(
@@ -269,6 +284,9 @@ class TestTAVList:
             )
             == 1.0
         )
+        ctn = par.find(f"{{{NS_P}}}cTn")
+        assert ctn is not None
+        assert ctn.get("grpId") == "4"
 
     def test_explicit_key_times_split_delay_and_duration(
         self, handler: ColorAnimationHandler
@@ -289,6 +307,25 @@ class TestTAVList:
         cond = segment_ctn.find(f"./{{{NS_P}}}stCondLst/{{{NS_P}}}cond")
         assert cond is not None
         assert cond.get("delay") == "500"
+
+    def test_spline_color_keeps_authored_segments(
+        self, handler: ColorAnimationHandler
+    ):
+        anim = make_color_animation(
+            values=["#FF0000", "#00FF00", "#0000FF"],
+            key_times=[0.0, 0.25, 1.0],
+            calc_mode=CalcMode.SPLINE,
+            key_splines=[[0.42, 0.0, 0.58, 1.0], [0.42, 0.0, 0.58, 1.0]],
+            timing=AnimationTiming(begin=0.0, duration=2.0),
+        )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        anim_clr = par.findall(f".//{{{NS_P}}}animClr")
+        segment_ctns = par.findall(
+            f"./{{{NS_P}}}cTn/{{{NS_P}}}childTnLst/{{{NS_P}}}par/{{{NS_P}}}cTn"
+        )
+
+        assert len(anim_clr) == 2
+        assert [ctn.get("dur") for ctn in segment_ctns] == ["500", "1500"]
 
     def test_discrete_calc_mode_emits_color_set_steps(
         self, handler: ColorAnimationHandler

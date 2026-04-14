@@ -1,0 +1,58 @@
+<fragment>
+    <p:animClr clrSpc="rgb" dir="cw">
+        <p:cBhvr override="childStyle">
+            <p:cTn id="{STYLE_CLR_BEHAVIOR_ID}" dur="{DURATION_MS}" fill="{INNER_FILL}"/>
+            <p:tgtEl>
+                <p:spTgt spid="{SHAPE_ID}"><p:bg/></p:spTgt>
+            </p:tgtEl>
+            <p:attrNameLst>
+                <p:attrName>style.color</p:attrName>
+            </p:attrNameLst>
+        </p:cBhvr>
+        <p:to>
+            <a:srgbClr val="{TO_COLOR}"/>
+        </p:to>
+    </p:animClr>
+    <p:animClr clrSpc="rgb" dir="cw">
+        <p:cBhvr>
+            <p:cTn id="{FILL_CLR_BEHAVIOR_ID}" dur="{DURATION_MS}" fill="{INNER_FILL}"/>
+            <p:tgtEl>
+                <p:spTgt spid="{SHAPE_ID}"><p:bg/></p:spTgt>
+            </p:tgtEl>
+            <p:attrNameLst>
+                <p:attrName>fillcolor</p:attrName>
+            </p:attrNameLst>
+        </p:cBhvr>
+        <p:to>
+            <a:srgbClr val="{TO_COLOR}"/>
+        </p:to>
+    </p:animClr>
+    <p:set>
+        <p:cBhvr>
+            <p:cTn id="{FILL_TYPE_BEHAVIOR_ID}" dur="{DURATION_MS}" fill="{INNER_FILL}"/>
+            <p:tgtEl>
+                <p:spTgt spid="{SHAPE_ID}"><p:bg/></p:spTgt>
+            </p:tgtEl>
+            <p:attrNameLst>
+                <p:attrName>fill.type</p:attrName>
+            </p:attrNameLst>
+        </p:cBhvr>
+        <p:to>
+            <p:strVal val="solid"/>
+        </p:to>
+    </p:set>
+    <p:set>
+        <p:cBhvr>
+            <p:cTn id="{FILL_ON_BEHAVIOR_ID}" dur="{DURATION_MS}" fill="{INNER_FILL}"/>
+            <p:tgtEl>
+                <p:spTgt spid="{SHAPE_ID}"><p:bg/></p:spTgt>
+            </p:tgtEl>
+            <p:attrNameLst>
+                <p:attrName>fill.on</p:attrName>
+            </p:attrNameLst>
+        </p:cBhvr>
+        <p:to>
+            <p:strVal val="true"/>
+        </p:to>
+    </p:set>
+</fragment>

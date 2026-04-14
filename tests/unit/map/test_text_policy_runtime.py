@@ -45,7 +45,7 @@ def test_low_quality_strips_effects_and_applies_fallback() -> None:
     assert metadata["prefer_vector_fallback"] is False
 
 
-def test_balanced_policy_preserves_effects_and_marks_outline() -> None:
+def test_balanced_policy_preserves_effects_without_claiming_outline_fallback() -> None:
     converter = _make_converter("balanced")
     run = Run(
         text="Outline",
@@ -58,7 +58,7 @@ def test_balanced_policy_preserves_effects_and_marks_outline() -> None:
 
     assert updated.underline is True
     assert updated.font_family == "Handwritten"
-    assert metadata["rendering_behavior"] == "outline"
+    assert "rendering_behavior" not in metadata
     assert metadata["wordart_detection"]["enabled"] is True
     assert metadata["wordart_detection"]["confidence_threshold"] == _build_balanced_decision().wordart.confidence_threshold
     assert metadata["prefer_vector_fallback"] is True

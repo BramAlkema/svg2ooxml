@@ -1,0 +1,35 @@
+<p:par>
+    <p:cTn id="{PAR_ID}" dur="{DURATION_MS}" fill="hold" nodeType="clickEffect" grpId="{PAR_ID}" presetID="{PRESET_ID}" presetClass="entr" presetSubtype="{PRESET_SUBTYPE}">
+        <p:stCondLst>
+            <p:cond delay="{DELAY_MS}"/>
+        </p:stCondLst>
+        <p:childTnLst>
+            <p:set>
+                <p:cBhvr>
+                    <p:cTn id="{SET_BEHAVIOR_ID}" dur="1" fill="hold">
+                        <p:stCondLst>
+                            <p:cond delay="0"/>
+                        </p:stCondLst>
+                    </p:cTn>
+                    <p:tgtEl>
+                        <p:spTgt spid="{SHAPE_ID}"/>
+                    </p:tgtEl>
+                    <p:attrNameLst>
+                        <p:attrName>style.visibility</p:attrName>
+                    </p:attrNameLst>
+                </p:cBhvr>
+                <p:to>
+                    <p:strVal val="visible"/>
+                </p:to>
+            </p:set>
+            <p:animEffect transition="in" filter="{FILTER}">
+                <p:cBhvr>
+                    <p:cTn id="{EFFECT_BEHAVIOR_ID}" dur="{DURATION_MS}"/>
+                    <p:tgtEl>
+                        <p:spTgt spid="{SHAPE_ID}"/>
+                    </p:tgtEl>
+                </p:cBhvr>
+            </p:animEffect>
+        </p:childTnLst>
+    </p:cTn>
+</p:par>

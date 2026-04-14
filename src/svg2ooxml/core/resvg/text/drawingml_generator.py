@@ -15,12 +15,10 @@ FontEmbeddingEngine for font subsetting/embedding when configured.
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 from lxml import etree  # For type annotations
-
-# Import centralized color model for hex conversion
-from collections.abc import Callable
 
 from svg2ooxml.color.models import Color as CentralizedColor
 
@@ -35,6 +33,8 @@ from svg2ooxml.drawingml.xml_builder import a_elem, a_sub, p_elem, to_string
 if TYPE_CHECKING:
     from svg2ooxml.core.resvg.painting.paint import (
         Color as ResvgColor,
+    )
+    from svg2ooxml.core.resvg.painting.paint import (
         FillStyle,
         PaintReference,
         StrokeStyle,
@@ -200,6 +200,7 @@ class DrawingMLTextGenerator:
         font_service: FontService | None = None,
         embedding_engine: FontEmbeddingEngine | None = None,
         paint_resolver: Callable[[PaintReference], Paint | None] | None = None,
+        text_scale: float = 1.0,
     ) -> None:
         """Initialize the DrawingML text generator.
 
@@ -212,6 +213,7 @@ class DrawingMLTextGenerator:
         self._font_service = font_service
         self._embedding_engine = embedding_engine
         self._paint_resolver = paint_resolver
+        self._text_scale = float(text_scale) if text_scale > 0.0 else 1.0
 
     def generate_wordart_text_body(self, node: TextNode, preset: str) -> str:
         """Generate <p:txBody> with prstTxWarp for WordArt rendering.
@@ -372,7 +374,8 @@ class DrawingMLTextGenerator:
         """
         # 1. Outline (stroke) - MUST come before fill per DrawingML spec
         if stroke_style and stroke_style.width is not None and stroke_style.width > 0:
-            ln = a_sub(rPr, "ln", w=str(round(px_to_emu(stroke_style.width))))
+            stroke_width = float(stroke_style.width) * self._text_scale
+            ln = a_sub(rPr, "ln", w=str(round(px_to_emu(stroke_width))))
             stroke_grad_elem = self._resolve_gradient_fill(stroke_style.reference)
             if stroke_grad_elem is not None:
                 ln.append(stroke_grad_elem)
@@ -409,7 +412,9 @@ class DrawingMLTextGenerator:
             # Uses centralized conversion with proper rounding
             if text_style.font_size is not None and text_style.font_size > 0:
                 try:
-                    size_hundredths = _font_size_pt_to_drawingml(text_style.font_size)
+                    size_hundredths = _font_size_pt_to_drawingml(
+                        text_style.font_size * self._text_scale
+                    )
                     rPr.set("sz", str(size_hundredths))
                 except ValueError:
                     # Invalid font size, skip attribute
@@ -434,7 +439,7 @@ class DrawingMLTextGenerator:
             # Letter-spacing → spc (hundredths of a point)
             if text_style.letter_spacing is not None:
                 # Convert px to hundredths of a point: px * (72/96) * 100
-                spc = round(text_style.letter_spacing * 75)
+                spc = round(text_style.letter_spacing * self._text_scale * 75)
                 rPr.set("spc", str(spc))
 
             # Font family (lxml handles special characters like & automatically)

@@ -244,7 +244,11 @@ class FilterService:
                 if strategy == "native" and not resvg_preferred:
                     return self._finalize_results(filter_ref, results, filter_context)
                 if strategy == "auto" and not resvg_preferred:
-                    if all(result.fallback is None for result in native_results):
+                    if all(result.fallback is None for result in native_results) or all(
+                        isinstance(result.metadata, dict)
+                        and result.metadata.get("terminal_stack") is True
+                        for result in native_results
+                    ):
                         return self._finalize_results(
                             filter_ref, results, filter_context
                         )
@@ -269,16 +273,18 @@ class FilterService:
                             filter_ref, results, filter_context
                         )
 
-            descriptor_results = self._descriptor_fallback(
-                descriptor_payload,
-                bounds_payload,
-                filter_ref,
-                strategy_hint=strategy,
-            )
-            if descriptor_results:
-                results.extend(descriptor_results)
-                if emf_sources:
-                    results = self._attach_emf_metadata(results, emf_sources)
+            descriptor_results = None
+            if strategy != "raster":
+                descriptor_results = self._descriptor_fallback(
+                    descriptor_payload,
+                    bounds_payload,
+                    filter_ref,
+                    strategy_hint=strategy,
+                )
+                if descriptor_results:
+                    results.extend(descriptor_results)
+                    if emf_sources:
+                        results = self._attach_emf_metadata(results, emf_sources)
 
             if strategy in {"auto", "raster"}:
                 raster_results = self._render_raster(

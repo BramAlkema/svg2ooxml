@@ -6,7 +6,7 @@ from collections.abc import Callable
 from dataclasses import replace
 from typing import TYPE_CHECKING, Any
 
-from svg2ooxml.ir.animation import AnimationDefinition
+from svg2ooxml.ir.animation import AnimationDefinition, BeginTriggerType
 
 from .animation import DrawingMLAnimationWriter
 
@@ -27,33 +27,72 @@ class AnimationPipeline:
         self._trace_writer = trace_writer
         self._payload: dict[str, Any] | None = None
         self._shape_map: dict[str, str] = {}
+        self._animation_target_map: dict[str, str] = {}
+        self._bookmark_trigger_map: dict[str, str] = {}
+        self._animation_element_ids: set[str] = set()
         self._policy: dict[str, object] = {}
         self._tracer: ConversionTracer | None = None
 
     def reset(self, payload: dict[str, Any] | None, *, tracer: ConversionTracer | None = None) -> None:
         self._payload = payload
         self._shape_map = {}
+        self._animation_target_map = {}
+        self._bookmark_trigger_map = {}
+        self._animation_element_ids = set()
         self._policy = {}
         self._tracer = tracer
         if isinstance(payload, dict):
             payload_policy = payload.get("policy")
             if isinstance(payload_policy, dict):
                 self._policy = dict(payload_policy)
+            definitions = payload.get("definitions") or []
+            for definition in definitions:
+                element_id = getattr(definition, "element_id", None)
+                if isinstance(element_id, str):
+                    self._animation_element_ids.add(element_id)
 
     def register_mapping(self, metadata: dict[str, object] | None, shape_id: int) -> None:
         if not isinstance(metadata, dict):
             return
         element_ids = metadata.get("element_ids")
         if not isinstance(element_ids, list):
-            return
+            element_ids = []
         for element_id in element_ids:
             if isinstance(element_id, str):
                 self._shape_map.setdefault(element_id, str(shape_id))
+        self._register_navigation_trigger(metadata, shape_id)
 
     def register_element_ids(self, element_ids: list[object], shape_id: int) -> None:
         for element_id in element_ids:
             if isinstance(element_id, str):
                 self._shape_map.setdefault(element_id, str(shape_id))
+
+    def metadata_targets_animation(self, metadata: dict[str, object] | None) -> bool:
+        if not isinstance(metadata, dict) or not self._animation_element_ids:
+            return False
+        element_ids = metadata.get("element_ids")
+        if not isinstance(element_ids, list):
+            return False
+        return any(
+            isinstance(element_id, str) and element_id in self._animation_element_ids
+            for element_id in element_ids
+        )
+
+    def _register_navigation_trigger(self, metadata: dict[str, object], shape_id: int) -> None:
+        navigation = metadata.get("navigation")
+        if not isinstance(navigation, dict):
+            return
+        if navigation.get("kind") != "bookmark":
+            return
+
+        bookmark = navigation.get("bookmark")
+        name: object | None = None
+        if isinstance(bookmark, dict):
+            name = bookmark.get("name")
+        if name is None:
+            name = navigation.get("bookmark_name")
+        if isinstance(name, str) and name:
+            self._bookmark_trigger_map.setdefault(name, str(shape_id))
 
     def build(self, *, max_shape_id: int = 0) -> str:
         if not self._payload:
@@ -63,6 +102,16 @@ class AnimationPipeline:
         timeline = self._payload.get("timeline") or []
         if not definitions:
             return ""
+
+        self._animation_target_map = {}
+        for definition in definitions:
+            element_id = getattr(definition, "element_id", None)
+            animation_id = getattr(definition, "animation_id", None)
+            if not isinstance(element_id, str) or not isinstance(animation_id, str):
+                continue
+            shape_id = self._shape_map.get(element_id)
+            if shape_id:
+                self._animation_target_map.setdefault(animation_id, shape_id)
 
         remapped: list[AnimationDefinition] = []
         animated_shape_ids: set[str] = set()
@@ -151,12 +200,34 @@ class AnimationPipeline:
         remapped_triggers = []
         changed = False
         for trigger in begin_triggers:
+            trigger_type_enum = getattr(trigger, "trigger_type", None)
+            if trigger_type_enum == BeginTriggerType.INDEFINITE:
+                mapped_click_shape = None
+                animation_id = getattr(definition, "animation_id", None)
+                if isinstance(animation_id, str):
+                    mapped_click_shape = self._bookmark_trigger_map.get(animation_id)
+                if mapped_click_shape is not None:
+                    changed = True
+                    remapped_triggers.append(
+                        replace(
+                            trigger,
+                            trigger_type=BeginTriggerType.CLICK,
+                            target_element_id=mapped_click_shape,
+                            delay_seconds=0.0,
+                        )
+                    )
+                else:
+                    remapped_triggers.append(trigger)
+                continue
+
             target_id = getattr(trigger, "target_element_id", None)
             if not target_id:
                 remapped_triggers.append(trigger)
                 continue
 
             mapped = self._shape_map.get(target_id)
+            if mapped is None:
+                mapped = self._animation_target_map.get(target_id)
             if mapped is None:
                 trigger_type = getattr(getattr(trigger, "trigger_type", None), "value", None)
                 # Fallback for unresolved explicit click target: click defaults to current shape.

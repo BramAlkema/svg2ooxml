@@ -258,6 +258,46 @@ class TestPolicySkipReason:
         reason = policy._policy_skip_reason(animation, 0.0)
         assert reason == "unsupported_begin_indefinite"
 
+    def test_begin_access_key_is_skipped(self):
+        """Unsupported keyboard begin triggers should not silently fallback."""
+        policy = AnimationPolicy({})
+
+        trigger = Mock()
+        trigger.trigger_type = Mock(value="access_key")
+        animation = Mock()
+        animation.key_splines = []
+        animation.timing = Mock(begin_triggers=[trigger], end_triggers=[])
+
+        reason = policy._policy_skip_reason(animation, 0.0)
+        assert reason == "unsupported_begin_access_key"
+
+    def test_native_end_trigger_is_not_skipped(self):
+        """Native-compatible end triggers are handled by endCondLst emission."""
+        policy = AnimationPolicy({})
+
+        trigger = Mock()
+        trigger.trigger_type = Mock(value="click")
+        trigger.target_element_id = "button"
+        animation = Mock()
+        animation.key_splines = []
+        animation.timing = Mock(begin_triggers=[], end_triggers=[trigger])
+
+        reason = policy._policy_skip_reason(animation, 0.0)
+        assert reason is None
+
+    def test_unsupported_end_trigger_is_skipped(self):
+        """End triggers with no native PowerPoint equivalent should be skipped."""
+        policy = AnimationPolicy({})
+
+        trigger = Mock()
+        trigger.trigger_type = Mock(value="wallclock")
+        animation = Mock()
+        animation.key_splines = []
+        animation.timing = Mock(begin_triggers=[], end_triggers=[trigger])
+
+        reason = policy._policy_skip_reason(animation, 0.0)
+        assert reason == "unsupported_end_wallclock"
+
 
 class TestShouldSkip:
     """Test public should_skip method."""

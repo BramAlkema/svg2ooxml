@@ -200,6 +200,7 @@ class TestBuildAnimation:
             calc_mode="spline",
         )
         from svg2ooxml.ir.animation import CalcMode
+
         anim = _numeric_anim(
             values=["0", "100"],
             key_times=[0.0, 1.0],
@@ -227,6 +228,7 @@ class TestBuildAnimation:
         anim = _opacity_anim()
         elem, _ = writer._build_animation(anim, {}, par_id=42, behavior_id=43)
         from svg2ooxml.drawingml.xml_builder import to_string
+
         xml = to_string(elem)
         assert 'id="42"' in xml
         assert 'id="43"' in xml
@@ -271,15 +273,29 @@ class TestBuild:
         assert result != ""
         # Should have 3 animation <p:par> elements nested within the tree
         assert result.count("animEffect") >= 1  # opacity
-        assert result.count("animClr") >= 1     # color
-        assert result.count("<p:anim") >= 1      # numeric
+        assert result.count("animClr") >= 1  # color
+        assert result.count("<p:anim") >= 1  # numeric
 
     def test_all_ids_unique(self, writer):
-        anims = [
-            _opacity_anim(element_id=f"s{i}") for i in range(5)
-        ]
+        anims = [_opacity_anim(element_id=f"s{i}") for i in range(5)]
         result = writer.build(anims, [])
         found_ids = re.findall(r'id="(\d+)"', result)
+        assert len(found_ids) == len(set(found_ids))
+
+    def test_generated_companion_motion_ids_do_not_collide(self, writer):
+        result = writer.build(
+            [
+                _transform_anim(
+                    values=["1 1", "2 2"],
+                    element_center_px=(100.0, 100.0),
+                    motion_viewport_px=(960.0, 720.0),
+                ),
+                _opacity_anim(),
+            ],
+            [],
+        )
+
+        found_ids = re.findall(r'<p:cTn id="(\d+)"', result)
         assert len(found_ids) == len(set(found_ids))
 
     def test_ids_start_at_one(self, writer):
@@ -296,13 +312,24 @@ class TestBuild:
         assert "<p:bldLst>" in result
         assert 'spid="shape42"' in result
 
+    def test_includes_effect_group_build_list_entries(self, writer):
+        result = writer.build(
+            [_motion_anim(element_id="shape42")],
+            [],
+            animated_shape_ids=["shape42"],
+        )
+        assert '<p:bldP spid="shape42" grpId="0" animBg="1"/>' in result
+        assert 'spid="shape42" grpId="4" animBg="1"' in result
+
     def test_handles_none_options(self, writer):
         result = writer.build([_opacity_anim()], [], options=None)
         assert result != ""
 
     def test_passes_options_to_policy(self, writer):
         options = {"max_spline_error": 1.5, "fallback_mode": "raster"}
-        with patch.object(writer, "_build_animation", wraps=writer._build_animation) as mock:
+        with patch.object(
+            writer, "_build_animation", wraps=writer._build_animation
+        ) as mock:
             writer.build([_opacity_anim()], [], options=options)
             mock.assert_called_once()
             call_options = mock.call_args[0][1]
@@ -318,6 +345,102 @@ class TestBuild:
         anim = _motion_anim(values=["M0,0"])
         result = writer.build([anim], [])
         assert result == ""
+
+    def test_merges_concurrent_simple_numeric_motions(self, writer):
+        result = writer.build(
+            [
+                _numeric_anim(
+                    target_attribute="x",
+                    values=["0", "100"],
+                    motion_viewport_px=(1000.0, 1000.0),
+                ),
+                _numeric_anim(
+                    target_attribute="y",
+                    values=["0", "200"],
+                    motion_viewport_px=(1000.0, 1000.0),
+                ),
+            ],
+            [],
+        )
+
+        assert result.count("<p:animMotion") == 1
+        assert 'path="M 0 0 L 0.1 0.2 E"' in result
+        assert result.count('<p:bldP spid="shape1"') == 1
+
+    def test_merges_scale_origin_motion_with_concurrent_translate(self, writer):
+        result = writer.build(
+            [
+                _transform_anim(
+                    values=["1 1", "2 2"],
+                    additive="sum",
+                    element_center_px=(50.0, 60.0),
+                    motion_viewport_px=(1000.0, 1000.0),
+                ),
+                _numeric_anim(
+                    target_attribute="x",
+                    values=["0", "100"],
+                    motion_viewport_px=(1000.0, 1000.0),
+                ),
+            ],
+            [],
+        )
+
+        assert "animScale" in result
+        assert result.count("<p:animMotion") == 1
+        assert 'path="M 0 0 L 0.15 0.06 E"' in result
+
+    def test_merges_numeric_scale_anchor_motion_with_translate(self, writer):
+        result = writer.build(
+            [
+                _numeric_anim(
+                    target_attribute="width",
+                    values=["100", "200"],
+                    additive="sum",
+                    motion_viewport_px=(1000.0, 1000.0),
+                ),
+                _numeric_anim(
+                    target_attribute="x",
+                    values=["0", "100"],
+                    motion_viewport_px=(1000.0, 1000.0),
+                ),
+            ],
+            [],
+        )
+
+        assert "animScale" in result
+        assert result.count("<p:animMotion") == 1
+        assert 'path="M 0 0 L 0.15 0 E"' in result
+
+    def test_does_not_merge_complex_authored_motion_paths(self, writer):
+        result = writer.build(
+            [
+                _motion_anim(values=["M0,0 L100,0 L100,100"]),
+                _numeric_anim(
+                    target_attribute="x",
+                    values=["0", "100"],
+                    motion_viewport_px=(1000.0, 1000.0),
+                ),
+            ],
+            [],
+        )
+
+        assert result.count("<p:animMotion") == 2
+
+    def test_does_not_drop_explicit_motion_rotation_when_merging(self, writer):
+        result = writer.build(
+            [
+                _motion_anim(values=["M0,0 L100,0"], motion_rotate="45"),
+                _numeric_anim(
+                    target_attribute="x",
+                    values=["0", "100"],
+                    motion_viewport_px=(1000.0, 1000.0),
+                ),
+            ],
+            [],
+        )
+
+        assert result.count("<p:animMotion") == 2
+        assert 'rAng="2700000"' in result
 
 
 # ------------------------------------------------------------------ #

@@ -368,19 +368,36 @@ class StyleExtractor:
         filter_attr = element.get("filter")
         if not filter_attr:
             return []
+        filter_id = _extract_url_id(filter_attr) or filter_attr
 
         filter_service = services.filter_service
         if filter_service and hasattr(filter_service, "resolve_effects"):
             try:
-                effects = filter_service.resolve_effects(filter_attr, context=context)  # type: ignore[call-arg]
+                if isinstance(context, dict):
+                    filter_context = dict(context)
+                else:
+                    filter_context = {}
+                if "policy" not in filter_context:
+                    policy_context = getattr(services, "policy_context", None)
+                    if policy_context is None and hasattr(services, "resolve"):
+                        policy_context = services.resolve("policy_context")
+                    if policy_context is not None and hasattr(policy_context, "get"):
+                        filter_policy = policy_context.get("filter")
+                        if isinstance(filter_policy, dict) and filter_policy:
+                            filter_context["policy"] = dict(filter_policy)
+                if self._tracer is not None and "tracer" not in filter_context:
+                    filter_context["tracer"] = self._tracer
+                filter_context.setdefault("element", element)
+                effects = filter_service.resolve_effects(  # type: ignore[call-arg]
+                    filter_id,
+                    context=filter_context,
+                )
                 if effects:
-                    filter_id = _extract_url_id(filter_attr) or filter_attr
                     metadata.setdefault("filter_ids", []).append(filter_id)
                     return list(effects)
             except Exception:  # pragma: no cover - defensive
                 pass
 
-        filter_id = _extract_url_id(filter_attr) or filter_attr
         metadata.setdefault("filter_ids", []).append(filter_id)
         return []
 
@@ -542,6 +559,9 @@ class StyleExtractor:
         foreground = None
         background = None
         background_opacity = 1.0
+        tile_image = None
+        tile_width_px = None
+        tile_height_px = None
         processor = self._get_pattern_processor(services)
         if processor is not None:
             try:
@@ -563,6 +583,12 @@ class StyleExtractor:
                     background = cleaned[1]
                 elif len(cleaned) == 1:
                     background_opacity = 0.0
+                tile_payload = processor.build_tile_payload(
+                    pattern_element,
+                    analysis=analysis,
+                )
+                if tile_payload is not None:
+                    tile_image, tile_width_px, tile_height_px = tile_payload
             except Exception:  # pragma: no cover - defensive
                 pass
 
@@ -579,6 +605,9 @@ class StyleExtractor:
             foreground=foreground,
             background=background,
             background_opacity=background_opacity,
+            tile_image=tile_image,
+            tile_width_px=tile_width_px,
+            tile_height_px=tile_height_px,
         )
 
     def _get_gradient_processor(self, services: ConversionServices):

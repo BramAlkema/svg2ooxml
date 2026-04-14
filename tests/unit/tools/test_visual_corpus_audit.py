@@ -7,6 +7,7 @@ from tools.visual.corpus_audit import (
     _default_output_dir,
     _svg_has_animation,
     AuditResult,
+    audit_svgs,
     build_summary,
     discover_svg_paths,
     render_markdown_summary,
@@ -153,6 +154,9 @@ def test_render_markdown_summary_includes_animation_columns() -> None:
         diff_status="ok",
         animation_status="mismatch",
         animation_min_ssim=0.8123,
+        animation_emitted_count=3,
+        animation_skipped_count=1,
+        animation_reason_counts={"unsupported_begin_target_missing": 1},
         score=42.0,
     )
 
@@ -160,8 +164,47 @@ def test_render_markdown_summary_includes_animation_columns() -> None:
     summary = build_summary([item])
 
     assert "| Anim |" in markdown
+    assert "| Reason | Count |" in markdown
+    assert "unsupported_begin_target_missing" in markdown
+    assert "3/1" in markdown
     assert "0.8123" in markdown
     assert summary["animation_mismatches"] == 1
+    assert summary["animation_fragments_emitted"] == 3
+    assert summary["animation_fragments_skipped"] == 1
+    assert summary["animation_reason_totals"] == {"unsupported_begin_target_missing": 1}
+
+
+def test_build_summary_aggregates_animation_reason_totals() -> None:
+    first = AuditResult(
+        svg_path="one.svg",
+        artifact_dir="out/one",
+        animation_reason_counts={
+            "unsupported_begin_target_missing": 2,
+            "timing_skipped": 1,
+        },
+        animation_emitted_count=4,
+        animation_skipped_count=2,
+    )
+    second = AuditResult(
+        svg_path="two.svg",
+        artifact_dir="out/two",
+        animation_reason_counts={
+            "unsupported_begin_target_missing": 1,
+            "begin_expression_invalid": 3,
+        },
+        animation_emitted_count=1,
+        animation_skipped_count=1,
+    )
+
+    summary = build_summary([first, second])
+
+    assert summary["animation_fragments_emitted"] == 5
+    assert summary["animation_fragments_skipped"] == 3
+    assert summary["animation_reason_totals"] == {
+        "begin_expression_invalid": 3,
+        "unsupported_begin_target_missing": 3,
+        "timing_skipped": 1,
+    }
 
 
 def test_svg_has_animation_detects_smil_tags() -> None:
@@ -171,3 +214,49 @@ def test_svg_has_animation_detects_smil_tags() -> None:
     assert not _svg_has_animation(
         "<svg xmlns='http://www.w3.org/2000/svg'><rect x='0' y='0' width='10' height='10'/></svg>"
     )
+
+
+def test_svg_has_animation_recovers_malformed_header() -> None:
+    assert _svg_has_animation(
+        """<svg xmlns='http://www.w3.org/2000/svg' width='1000' height='1000'>
+<
+<path d='M0,0 L10,10'>
+  <animateMotion dur='1s' path='M0,0 L10,10'/>
+</path>
+</svg>"""
+    )
+
+
+def test_audit_svgs_passes_fidelity_tier_to_builder(monkeypatch, tmp_path: Path) -> None:
+    svg_path = tmp_path / "sample.svg"
+    svg_path.write_text("<svg xmlns='http://www.w3.org/2000/svg'/>", encoding="utf-8")
+
+    recorded: dict[str, object] = {}
+
+    class StubBuilder:
+        def __init__(self, **kwargs) -> None:
+            recorded.update(kwargs)
+
+    def fake_audit_svg(*args, **kwargs):
+        return AuditResult(
+            svg_path=svg_path.as_posix(),
+            artifact_dir=(tmp_path / "out").as_posix(),
+            build_status="ok",
+            render_status="skipped",
+            browser_status="skipped",
+            diff_status="skipped",
+        )
+
+    monkeypatch.setattr("tools.visual.corpus_audit.PptxBuilder", StubBuilder)
+    monkeypatch.setattr("tools.visual.corpus_audit.audit_svg", fake_audit_svg)
+
+    results = audit_svgs(
+        [svg_path],
+        output_dir=tmp_path / "audit",
+        skip_render=True,
+        skip_browser=True,
+        fidelity_tier="bitmap",
+    )
+
+    assert len(results) == 1
+    assert recorded["fidelity_tier"] == "bitmap"

@@ -1,0 +1,13 @@
+<fragment>
+    <p:animRot by="{ROTATION_BY}">
+        <p:cBhvr>
+            <p:cTn id="{BEHAVIOR_ID}" dur="{DURATION_MS}" fill="{INNER_FILL}"/>
+            <p:tgtEl>
+                <p:spTgt spid="{SHAPE_ID}"/>
+            </p:tgtEl>
+            <p:attrNameLst>
+                <p:attrName>r</p:attrName>
+            </p:attrNameLst>
+        </p:cBhvr>
+    </p:animRot>
+</fragment>

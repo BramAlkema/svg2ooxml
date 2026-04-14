@@ -4,6 +4,7 @@
 from svg2ooxml.core.resvg.painting.paint import (
     _parse_component,
     parse_color,
+    resolve_stroke,
 )
 
 
@@ -160,6 +161,15 @@ class TestParseColor:
         """Test that invalid color strings return None."""
         assert parse_color("invalid", 1.0) is None
         assert parse_color("rgb(invalid)", 1.0) is None
+
+
+class TestResolveStroke:
+    """Test suite for stroke defaulting behavior."""
+
+    def test_defaults_stroke_width_to_one_for_stroked_shapes(self):
+        stroke = resolve_stroke("green", None, None, None)
+        assert stroke.color is not None
+        assert stroke.width == 1.0
 
 
 __all__ = ["TestParseComponent", "TestParseColor"]

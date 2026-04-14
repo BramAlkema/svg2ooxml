@@ -16,13 +16,19 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import math
+import re
+import struct
+import zlib
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 
 from lxml import etree as ET
 
+from svg2ooxml.common.geometry import Matrix2D, parse_transform_list
 from svg2ooxml.color import summarize_palette
+from svg2ooxml.core.styling.style_helpers import clean_color, parse_percentage
 from svg2ooxml.services import ConversionServices
 
 logger = logging.getLogger(__name__)
@@ -191,6 +197,53 @@ class PatternProcessor:
         )
 
         return analysis
+
+    def build_tile_payload(
+        self,
+        element: ET.Element,
+        *,
+        analysis: PatternAnalysis,
+    ) -> tuple[bytes, int, int] | None:
+        """Build a reusable tile image for simple translated dot patterns."""
+        if analysis.pattern_type != PatternType.DOTS:
+            return None
+        if analysis.complexity != PatternComplexity.SIMPLE:
+            return None
+        if analysis.geometry.transform_matrix is None:
+            return None
+        if not self._is_translation_only(analysis.geometry.transform_matrix):
+            return None
+
+        tile_width = max(float(analysis.geometry.tile_width), 0.0)
+        tile_height = max(float(analysis.geometry.tile_height), 0.0)
+        width_px = max(int(math.ceil(tile_width)), 1)
+        height_px = max(int(math.ceil(tile_height)), 1)
+
+        ellipses = list(
+            self._iter_tile_ellipses(
+                element,
+                tile_width=tile_width,
+                tile_height=tile_height,
+            )
+        )
+        if not ellipses:
+            return None
+
+        pixels = bytearray(width_px * height_px * 4)
+        for center_x, center_y, radius_x, radius_y, color, opacity in ellipses:
+            self._rasterize_ellipse(
+                pixels,
+                width_px=width_px,
+                height_px=height_px,
+                center_x=center_x,
+                center_y=center_y,
+                radius_x=radius_x,
+                radius_y=radius_y,
+                color=color,
+                opacity=opacity,
+            )
+
+        return self._encode_rgba_png(pixels, width_px, height_px), width_px, height_px
 
     def _perform_pattern_analysis(
         self, element: ET.Element, context: Any
@@ -828,6 +881,274 @@ class PatternProcessor:
 
         _walk(element)
         return flattened
+
+    def _iter_tile_ellipses(
+        self,
+        element: ET.Element,
+        *,
+        tile_width: float,
+        tile_height: float,
+    ):
+        def _walk(node: ET.Element, transform: Matrix2D):
+            current = transform
+            transform_attr = node.get("transform")
+            if transform_attr:
+                try:
+                    current = current.multiply(parse_transform_list(transform_attr))
+                except Exception:
+                    current = transform
+
+            for child in node:
+                if not isinstance(child.tag, str):
+                    continue
+                tag = _local_name(child.tag)
+                if tag in {"g", "a", "switch"}:
+                    yield from _walk(child, current)
+                    continue
+                fill_spec = self._pattern_fill_spec(child)
+                if fill_spec is None:
+                    continue
+                ellipse = self._tile_ellipse_geometry(child, current)
+                if ellipse is None:
+                    continue
+                center_x, center_y, radius_x, radius_y = ellipse
+                if (
+                    center_x + radius_x < 0.0
+                    or center_y + radius_y < 0.0
+                    or center_x - radius_x > tile_width
+                    or center_y - radius_y > tile_height
+                ):
+                    continue
+                yield (
+                    center_x,
+                    center_y,
+                    radius_x,
+                    radius_y,
+                    fill_spec[0],
+                    fill_spec[1],
+                )
+
+        yield from _walk(element, Matrix2D.identity())
+
+    def _pattern_fill_spec(
+        self, element: ET.Element
+    ) -> tuple[tuple[int, int, int], float] | None:
+        style = self._style_map(element)
+        fill = element.get("fill") or style.get("fill")
+        if not self._is_visible_paint_token(fill):
+            return None
+        color = clean_color(fill)
+        if color is None:
+            return None
+        opacity = self._pattern_opacity(
+            style.get("fill-opacity") or element.get("fill-opacity"),
+            default=1.0,
+        )
+        opacity *= self._pattern_opacity(style.get("opacity") or element.get("opacity"))
+        return (
+            (
+                int(color[0:2], 16),
+                int(color[2:4], 16),
+                int(color[4:6], 16),
+            ),
+            max(0.0, min(1.0, opacity)),
+        )
+
+    def _tile_ellipse_geometry(
+        self,
+        element: ET.Element,
+        transform: Matrix2D,
+    ) -> tuple[float, float, float, float] | None:
+        if abs(transform.b) > 1e-9 or abs(transform.c) > 1e-9:
+            return None
+
+        tag = _local_name(element.tag)
+        geometry: tuple[float, float, float, float] | None = None
+        if tag == "circle":
+            cx = self._parse_float_attr(element, "cx")
+            cy = self._parse_float_attr(element, "cy")
+            radius = self._parse_float_attr(element, "r")
+            if cx is not None and cy is not None and radius is not None:
+                geometry = (cx, cy, radius, radius)
+        elif tag == "ellipse":
+            cx = self._parse_float_attr(element, "cx")
+            cy = self._parse_float_attr(element, "cy")
+            rx = self._parse_float_attr(element, "rx")
+            ry = self._parse_float_attr(element, "ry")
+            if cx is not None and cy is not None and rx is not None and ry is not None:
+                geometry = (cx, cy, rx, ry)
+        elif tag == "path":
+            geometry = self._path_ellipse_geometry(element)
+
+        if geometry is None:
+            return None
+
+        cx, cy, rx, ry = geometry
+        center_x, center_y = transform.transform_xy(cx, cy)
+        edge_x, _edge_y = transform.transform_xy(cx + rx, cy)
+        _up_x, up_y = transform.transform_xy(cx, cy + ry)
+        radius_x = abs(edge_x - center_x)
+        radius_y = abs(up_y - center_y)
+        if radius_x <= 0.0 or radius_y <= 0.0:
+            return None
+        return center_x, center_y, radius_x, radius_y
+
+    def _path_ellipse_geometry(
+        self, element: ET.Element
+    ) -> tuple[float, float, float, float] | None:
+        sodipodi_ns = "http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+        cx = self._parse_float_attr(element, f"{{{sodipodi_ns}}}cx")
+        cy = self._parse_float_attr(element, f"{{{sodipodi_ns}}}cy")
+        rx = self._parse_float_attr(element, f"{{{sodipodi_ns}}}rx")
+        ry = self._parse_float_attr(element, f"{{{sodipodi_ns}}}ry")
+        if cx is not None and cy is not None and rx is not None and ry is not None:
+            return (cx, cy, rx, ry)
+
+        if not self._is_dot_like_path(element):
+            return None
+
+        path_data = element.get("d") or ""
+        match = re.search(
+            r"M\s*([-+]?[\d.]+)\s*,?\s*([-+]?[\d.]+)\s+"
+            r"A\s*([-+]?[\d.]+)\s*,?\s*([-+]?[\d.]+)",
+            path_data,
+            flags=re.IGNORECASE,
+        )
+        if match is None:
+            return None
+
+        start_x = float(match.group(1))
+        start_y = float(match.group(2))
+        radius_x = float(match.group(3))
+        radius_y = float(match.group(4))
+        return (start_x - radius_x, start_y, radius_x, radius_y)
+
+    @staticmethod
+    def _parse_float_attr(element: ET.Element, attribute: str) -> float | None:
+        value = element.get(attribute)
+        if value is None:
+            return None
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
+
+    @staticmethod
+    def _pattern_opacity(value: str | None, default: float = 1.0) -> float:
+        if value is None:
+            return default
+        try:
+            return max(0.0, min(1.0, parse_percentage(value)))
+        except Exception:
+            return default
+
+    def _rasterize_ellipse(
+        self,
+        pixels: bytearray,
+        *,
+        width_px: int,
+        height_px: int,
+        center_x: float,
+        center_y: float,
+        radius_x: float,
+        radius_y: float,
+        color: tuple[int, int, int],
+        opacity: float,
+    ) -> None:
+        if opacity <= 0.0:
+            return
+        min_x = max(int(math.floor(center_x - radius_x - 1.0)), 0)
+        max_x = min(int(math.ceil(center_x + radius_x + 1.0)), width_px)
+        min_y = max(int(math.floor(center_y - radius_y - 1.0)), 0)
+        max_y = min(int(math.ceil(center_y + radius_y + 1.0)), height_px)
+        if min_x >= max_x or min_y >= max_y:
+            return
+
+        sample_offsets = (0.25, 0.75)
+        inv_rx = 1.0 / radius_x
+        inv_ry = 1.0 / radius_y
+
+        for py in range(min_y, max_y):
+            for px in range(min_x, max_x):
+                coverage = 0
+                for sy in sample_offsets:
+                    for sx in sample_offsets:
+                        dx = ((px + sx) - center_x) * inv_rx
+                        dy = ((py + sy) - center_y) * inv_ry
+                        if dx * dx + dy * dy <= 1.0:
+                            coverage += 1
+                if coverage == 0:
+                    continue
+                alpha = opacity * (coverage / 4.0)
+                self._composite_rgba_pixel(
+                    pixels,
+                    width_px=width_px,
+                    x=px,
+                    y=py,
+                    color=color,
+                    alpha=alpha,
+                )
+
+    @staticmethod
+    def _composite_rgba_pixel(
+        pixels: bytearray,
+        *,
+        width_px: int,
+        x: int,
+        y: int,
+        color: tuple[int, int, int],
+        alpha: float,
+    ) -> None:
+        alpha = max(0.0, min(1.0, alpha))
+        if alpha <= 0.0:
+            return
+
+        index = (y * width_px + x) * 4
+        dst_r = pixels[index] / 255.0
+        dst_g = pixels[index + 1] / 255.0
+        dst_b = pixels[index + 2] / 255.0
+        dst_a = pixels[index + 3] / 255.0
+        src_r = color[0] / 255.0
+        src_g = color[1] / 255.0
+        src_b = color[2] / 255.0
+        out_a = alpha + dst_a * (1.0 - alpha)
+        if out_a <= 0.0:
+            return
+        out_r = (src_r * alpha + dst_r * dst_a * (1.0 - alpha)) / out_a
+        out_g = (src_g * alpha + dst_g * dst_a * (1.0 - alpha)) / out_a
+        out_b = (src_b * alpha + dst_b * dst_a * (1.0 - alpha)) / out_a
+        pixels[index] = int(round(out_r * 255.0))
+        pixels[index + 1] = int(round(out_g * 255.0))
+        pixels[index + 2] = int(round(out_b * 255.0))
+        pixels[index + 3] = int(round(out_a * 255.0))
+
+    @staticmethod
+    def _encode_rgba_png(pixels: bytearray, width_px: int, height_px: int) -> bytes:
+        def _png_chunk(chunk_type: bytes, data: bytes) -> bytes:
+            crc = zlib.crc32(chunk_type + data) & 0xFFFFFFFF
+            return (
+                struct.pack(">I", len(data))
+                + chunk_type
+                + data
+                + struct.pack(">I", crc)
+            )
+
+        rows = bytearray()
+        row_stride = width_px * 4
+        for row_idx in range(height_px):
+            rows.append(0)
+            start = row_idx * row_stride
+            rows.extend(pixels[start : start + row_stride])
+
+        return (
+            b"\x89PNG\r\n\x1a\n"
+            + _png_chunk(
+                b"IHDR",
+                struct.pack(">IIBBBBB", width_px, height_px, 8, 6, 0, 0, 0),
+            )
+            + _png_chunk(b"IDAT", zlib.compress(bytes(rows)))
+            + _png_chunk(b"IEND", b"")
+        )
 
     def _style_map(self, element: ET.Element) -> dict[str, str]:
         style = element.get("style")

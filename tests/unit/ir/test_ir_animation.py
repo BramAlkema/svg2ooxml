@@ -24,6 +24,18 @@ def test_animation_timing_end_time_indefinite() -> None:
     assert timing.is_active_at_time(5.0)
 
 
+def test_animation_timing_repeat_duration_bounds_indefinite_repeat() -> None:
+    timing = AnimationTiming(
+        begin=1.0,
+        duration=2.0,
+        repeat_count="indefinite",
+        repeat_duration=5.5,
+    )
+    assert timing.get_end_time() == pytest.approx(6.5)
+    assert timing.is_active_at_time(6.0)
+    assert not timing.is_active_at_time(7.0)
+
+
 def test_animation_timing_can_store_begin_triggers() -> None:
     timing = AnimationTiming(
         begin=0.0,
@@ -40,6 +52,35 @@ def test_animation_timing_can_store_begin_triggers() -> None:
     assert timing.begin_triggers[0].trigger_type is BeginTriggerType.ELEMENT_END
     assert timing.begin_triggers[0].target_element_id == "shape1"
     assert timing.begin_triggers[0].delay_seconds == pytest.approx(0.5)
+
+
+def test_animation_timing_can_store_end_triggers() -> None:
+    timing = AnimationTiming(
+        end_triggers=[
+            BeginTrigger(
+                trigger_type=BeginTriggerType.CLICK,
+                target_element_id="stopButton",
+                delay_seconds=0.25,
+            )
+        ],
+    )
+    assert timing.end_triggers is not None
+    assert timing.end_triggers[0].trigger_type is BeginTriggerType.CLICK
+    assert timing.end_triggers[0].target_element_id == "stopButton"
+    assert timing.end_triggers[0].delay_seconds == pytest.approx(0.25)
+
+
+def test_begin_trigger_can_store_non_clock_event_fields() -> None:
+    trigger = BeginTrigger(
+        trigger_type=BeginTriggerType.ELEMENT_REPEAT,
+        target_element_id="loop",
+        event_name="repeat",
+        repeat_iteration="1/4",
+    )
+
+    assert trigger.target_element_id == "loop"
+    assert trigger.event_name == "repeat"
+    assert trigger.repeat_iteration == "1/4"
 
 
 def test_animation_definition_keyframe_validation() -> None:
@@ -65,6 +106,30 @@ def test_animation_definition_allows_motion_path_key_times() -> None:
         key_times=[0.0, 0.5, 1.0],
     )
     assert definition.key_times == [0.0, 0.5, 1.0]
+
+
+def test_animation_definition_carries_smil_plumbing_fields() -> None:
+    definition = AnimationDefinition(
+        element_id="shape",
+        animation_type=AnimationType.ANIMATE_MOTION,
+        target_attribute="position",
+        values=["M0,0 L100,0"],
+        timing=AnimationTiming(repeat_duration=3.0),
+        attribute_type="XML",
+        from_value="0 0",
+        to_value="100 0",
+        by_value="10 0",
+        key_points=[0.0, 0.25, 1.0],
+        raw_attributes={"keyPoints": "0;.25;1"},
+    )
+    assert definition.attribute_type == "XML"
+    assert definition.from_value == "0 0"
+    assert definition.to_value == "100 0"
+    assert definition.by_value == "10 0"
+    assert definition.key_points == [0.0, 0.25, 1.0]
+    assert definition.repeat_duration_ms == 3000
+    assert definition.raw_attributes["keyPoints"] == "0;.25;1"
+    assert definition.end_triggers is None
 
 
 def test_animation_definition_generates_even_keyframes() -> None:

@@ -55,6 +55,7 @@ def run_suite(
     golden_namespace: str,
     names: Iterable[str] | None,
     output_dir: Path,
+    build_only: bool = False,
     export: ExportOptions | None = None,
     renderer_name: str = "soffice",
     soffice_path: str | None = None,
@@ -67,31 +68,33 @@ def run_suite(
     powerpoint_use_keys: bool = False,
     powerpoint_no_reopen: bool = False,
 ) -> None:
-    if renderer_name == "powerpoint":
-        renderer = PowerPointRenderer(
-            backend=powerpoint_backend,
-            delay=powerpoint_delay,
-            slideshow_delay=powerpoint_slideshow_delay,
-            open_timeout=powerpoint_open_timeout,
-            capture_timeout=powerpoint_capture_timeout,
-            use_keys=powerpoint_use_keys,
-            allow_reopen=not powerpoint_no_reopen,
-        )
-        if not renderer.available:
-            raise SystemExit("PowerPoint rendering is only available on macOS.")
-    else:
-        if soffice_path:
-            renderer = LibreOfficeRenderer(
-                soffice_path=soffice_path,
-                user_installation=soffice_profile,
+    renderer = None
+    if not build_only:
+        if renderer_name == "powerpoint":
+            renderer = PowerPointRenderer(
+                backend=powerpoint_backend,
+                delay=powerpoint_delay,
+                slideshow_delay=powerpoint_slideshow_delay,
+                open_timeout=powerpoint_open_timeout,
+                capture_timeout=powerpoint_capture_timeout,
+                use_keys=powerpoint_use_keys,
+                allow_reopen=not powerpoint_no_reopen,
             )
+            if not renderer.available:
+                raise SystemExit("PowerPoint rendering is only available on macOS.")
         else:
-            renderer = default_renderer(user_installation=soffice_profile)
-        if not renderer.available:
-            raise SystemExit(
-                "LibreOffice (soffice) is not available. Install it or set "
-                "SVG2OOXML_SOFFICE_PATH before running the suite."
-            )
+            if soffice_path:
+                renderer = LibreOfficeRenderer(
+                    soffice_path=soffice_path,
+                    user_installation=soffice_profile,
+                )
+            else:
+                renderer = default_renderer(user_installation=soffice_profile)
+            if not renderer.available:
+                raise SystemExit(
+                    "LibreOffice (soffice) is not available. Install it or set "
+                    "SVG2OOXML_SOFFICE_PATH before running the suite."
+                )
 
     stack = default_visual_stack()
     builder = stack.builder
@@ -123,7 +126,10 @@ def run_suite(
         svg_text = svg_path.read_text(encoding="utf-8")
         build_result = builder.build_from_svg(svg_text, pptx_path, source_path=svg_path)
         logger.info("%s: generated PPTX (%d slide(s))", name, build_result.slide_count)
+        if build_only:
+            continue
 
+        assert renderer is not None
         try:
             rendered = renderer.render(build_result.pptx_path, render_dir)
         except VisualRendererError as exc:
@@ -249,6 +255,11 @@ def run_cli(
         help="Enable verbose logging",
     )
     parser.add_argument(
+        "--build-only",
+        action="store_true",
+        help="Only build PPTX artefacts; skip render, browser, and diff steps.",
+    )
+    parser.add_argument(
         "--export-service-url",
         default=None,
         help="Optional Cloud Run export API base URL (e.g. https://service.run.app)",
@@ -341,6 +352,7 @@ def run_cli(
         golden_namespace=golden_namespace,
         names=args.scenarios,
         output_dir=output_dir,
+        build_only=args.build_only,
         export=export_opts,
         renderer_name=args.renderer,
         soffice_path=args.soffice,

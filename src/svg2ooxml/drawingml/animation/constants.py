@@ -10,6 +10,9 @@ __all__ = [
     "FADE_ATTRIBUTES",
     "COLOR_ATTRIBUTES",
     "ANGLE_ATTRIBUTES",
+    "DISPLAY_ATTRIBUTES",
+    "VISIBILITY_ATTRIBUTES",
+    "DISCRETE_VISIBILITY_ATTRIBUTES",
     "ATTRIBUTE_NAME_MAP",
     "COLOR_ATTRIBUTE_NAME_MAP",
     "AXIS_MAP",
@@ -45,6 +48,22 @@ ANGLE_ATTRIBUTES: frozenset[str] = frozenset({
 })
 """Attributes that represent angles (need conversion to PPT 60000ths)."""
 
+DISPLAY_ATTRIBUTES: frozenset[str] = frozenset({
+    "display",
+})
+"""Attributes that gate SVG render-tree participation."""
+
+VISIBILITY_ATTRIBUTES: frozenset[str] = frozenset({
+    "visibility",
+    "style.visibility",
+})
+"""Attributes that map to PowerPoint-native visibility state."""
+
+DISCRETE_VISIBILITY_ATTRIBUTES: frozenset[str] = (
+    DISPLAY_ATTRIBUTES | VISIBILITY_ATTRIBUTES
+)
+"""Discrete show/hide attributes handled by the visibility compiler."""
+
 # ------------------------------------------------------------------ #
 # Attribute Name Mappings                                            #
 # ------------------------------------------------------------------ #
@@ -52,8 +71,6 @@ ANGLE_ATTRIBUTES: frozenset[str] = frozenset({
 ATTRIBUTE_NAME_MAP: dict[str, str] = {
     # Position attributes → ppt_x/ppt_y
     "x": "ppt_x",
-    "x1": "ppt_x",
-    "x2": "ppt_x",
     "cx": "ppt_x",
     "dx": "ppt_x",
     "fx": "ppt_x",
@@ -61,8 +78,6 @@ ATTRIBUTE_NAME_MAP: dict[str, str] = {
     "right": "ppt_x",
 
     "y": "ppt_y",
-    "y1": "ppt_y",
-    "y2": "ppt_y",
     "cy": "ppt_y",
     "dy": "ppt_y",
     "fy": "ppt_y",
@@ -83,11 +98,14 @@ ATTRIBUTE_NAME_MAP: dict[str, str] = {
     "rotation": "ppt_angle",
     "angle": "ppt_angle",
 
-    # Line width → ln_w
-    "stroke-width": "ln_w",
+    # Line width → stroke.weight
+    "stroke-width": "stroke.weight",
 
     # Dash offset animation → Wipe entrance (line drawing effect)
     "stroke-dashoffset": "style.visibility",
+
+    # Visibility → PowerPoint visibility property
+    "visibility": "style.visibility",
 }
 
 # Attributes that should use Wipe entrance animation instead of <p:anim>
@@ -102,17 +120,17 @@ PowerPoint's coordinate system. This mapping normalizes them for animation.
 """
 
 COLOR_ATTRIBUTE_NAME_MAP: dict[str, str] = {
-    "fill": "fillClr",
-    "stroke": "lnClr",
-    "stop-color": "fillClr",
-    "stopcolor": "fillClr",
-    "flood-color": "fillClr",
-    "lighting-color": "fillClr",
+    "fill": "fill.color",
+    "stroke": "stroke.color",
+    "stop-color": "fill.color",
+    "stopcolor": "fill.color",
+    "flood-color": "fill.color",
+    "lighting-color": "fill.color",
 }
 """Map color attribute names to PowerPoint color property names.
 
-PowerPoint uses different names for color properties in animations
-(fillClr, lnClr) than in the shape definitions.
+PowerPoint slideshow playback expects property names such as
+``fill.color`` and ``stroke.color`` on animation targets.
 """
 
 AXIS_MAP: dict[str, str] = {
@@ -120,6 +138,7 @@ AXIS_MAP: dict[str, str] = {
     "ppt_y": "y",
     "ppt_w": "width",
     "ppt_h": "height",
+    "stroke.weight": "width",
     "ln_w": "width",
 }
 """Map PowerPoint attribute names to axis hints for unit conversion.

@@ -197,9 +197,12 @@ def resolve_stroke(
             color = parse_color(stroke_value, effective_opacity)
     else:
         color = None
+    width = stroke_width
+    if width is None and (color is not None or reference is not None):
+        width = 1.0
     return StrokeStyle(
         color=color,
-        width=stroke_width,
+        width=width,
         opacity=effective_opacity,
         reference=reference,
         dash_array=_parse_dash_array(dasharray),

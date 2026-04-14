@@ -7,7 +7,7 @@
         <p:nvPr/>
     </p:nvCxnSpPr>
     <p:spPr>
-        <a:xfrm>
+        <a:xfrm{XFRM_ATTRS}>
             <a:off x="{X_EMU}" y="{Y_EMU}"/>
             <a:ext cx="{WIDTH_EMU}" cy="{HEIGHT_EMU}"/>
         </a:xfrm>

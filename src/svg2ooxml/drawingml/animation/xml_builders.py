@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 from lxml import etree
 
 from svg2ooxml.drawingml.xml_builder import (
+    NS_P,
     p_elem,
     p_sub,
 )
@@ -21,7 +22,7 @@ from .constants import SVG2_ANIMATION_NS
 etree.register_namespace("svg2", SVG2_ANIMATION_NS)
 
 if TYPE_CHECKING:
-    from .id_allocator import TimingIDs
+    from svg2ooxml.drawingml.animation.id_allocator import TimingIDs
     from svg2ooxml.ir.animation import BeginTrigger
 
 __all__ = ["AnimationXMLBuilder"]
@@ -150,7 +151,8 @@ class AnimationXMLBuilder:
         # tmRoot
         root_par = p_sub(tn_lst, "par")
         root_ctn = p_sub(
-            root_par, "cTn",
+            root_par,
+            "cTn",
             id=str(ids.root),
             dur="indefinite",
             restart="never",
@@ -161,18 +163,23 @@ class AnimationXMLBuilder:
         # mainSeq
         seq = p_sub(root_child_tn_lst, "seq", concurrent="1", nextAc="seek")
         seq_ctn = p_sub(
-            seq, "cTn",
+            seq,
+            "cTn",
             id=str(ids.main_seq),
             dur="indefinite",
             nodeType="mainSeq",
         )
         main_child_tn_lst = p_sub(seq_ctn, "childTnLst")
 
-        # Click group wrapper
+        # Click group wrapper. PowerPoint-authored decks typically gate the
+        # wrapper with an indefinite delay plus an onBegin reference to the
+        # main sequence instead of a plain delay=0 condition.
         click_par = p_sub(main_child_tn_lst, "par")
         click_ctn = p_sub(click_par, "cTn", id=str(ids.click_group), fill="hold")
         click_st = p_sub(click_ctn, "stCondLst")
-        p_sub(click_st, "cond", delay="0")
+        p_sub(click_st, "cond", delay="indefinite")
+        click_begin = p_sub(click_st, "cond", evt="onBegin", delay="0")
+        p_sub(click_begin, "tn", val=str(ids.main_seq))
         click_child_tn_lst = p_sub(click_ctn, "childTnLst")
 
         # Append animation elements
@@ -188,13 +195,48 @@ class AnimationXMLBuilder:
         next_cond = p_sub(next_cond_lst, "cond", evt="onNext", delay="0")
         p_sub(p_sub(next_cond, "tgtEl"), "sldTgt")
 
-        # Build list
-        if animated_shape_ids:
+        # Build list. PowerPoint uses grpId=0 entries for the shape itself and
+        # separate non-zero grpId entries for authored animation effects that
+        # should surface in the Animation Pane.
+        effect_build_entries = self._collect_effect_build_entries(animation_elements)
+        if animated_shape_ids or effect_build_entries:
             bld_lst = p_sub(timing, "bldLst")
             for shape_id in animated_shape_ids:
                 p_sub(bld_lst, "bldP", spid=shape_id, grpId="0", animBg="1")
+            for shape_id, grp_id in effect_build_entries:
+                p_sub(bld_lst, "bldP", spid=shape_id, grpId=grp_id, animBg="1")
 
         return timing
+
+    def _collect_effect_build_entries(
+        self,
+        animation_elements: list[etree._Element],
+    ) -> list[tuple[str, str]]:
+        entries: list[tuple[str, str]] = []
+        seen: set[tuple[str, str]] = set()
+
+        for par in animation_elements:
+            for elem in par.iter():
+                if elem.tag != f"{{{NS_P}}}cTn":
+                    continue
+                if not elem.get("presetClass") and not elem.get("presetID"):
+                    continue
+                entry_id = elem.get("id")
+                if not entry_id:
+                    continue
+                sp_tgt = elem.find(f".//{{{NS_P}}}spTgt")
+                if sp_tgt is None:
+                    continue
+                shape_id = sp_tgt.get("spid")
+                if not shape_id:
+                    continue
+                key = (shape_id, entry_id)
+                if key in seen:
+                    continue
+                seen.add(key)
+                entries.append(key)
+
+        return entries
 
     def build_par_container_elem(
         self,
@@ -209,6 +251,9 @@ class AnimationXMLBuilder:
         node_type: str = "withEffect",
         begin_triggers: list[BeginTrigger] | None = None,
         default_target_shape: str | None = None,
+        auto_reverse: bool = False,
+        effect_group_id: int | str | None = None,
+        repeat_count: int | str | None = None,
     ) -> etree._Element:
         """Build ``<p:par>`` container accepting a child *element*.
 
@@ -222,7 +267,7 @@ class AnimationXMLBuilder:
             "dur": str(duration_ms),
             "fill": "hold",
             "nodeType": node_type,
-            "grpId": "0",
+            "grpId": (str(effect_group_id) if effect_group_id is not None else "0"),
         }
         if preset_id:
             ctn_attrs["presetID"] = str(preset_id)
@@ -230,6 +275,11 @@ class AnimationXMLBuilder:
             ctn_attrs["presetClass"] = preset_class
         if preset_subtype is not None and preset_id:
             ctn_attrs["presetSubtype"] = str(preset_subtype)
+        if auto_reverse:
+            ctn_attrs["autoRev"] = "1"
+        ppt_repeat = self._repeat_count_value(repeat_count)
+        if ppt_repeat is not None:
+            ctn_attrs["repeatCount"] = ppt_repeat
 
         ctn = p_sub(par, "cTn", **ctn_attrs)
 
@@ -247,6 +297,139 @@ class AnimationXMLBuilder:
         child_tn_lst = p_sub(ctn, "childTnLst")
         child_tn_lst.append(child_element)
 
+        return par
+
+    def build_par_container_with_children_elem(
+        self,
+        *,
+        par_id: int,
+        duration_ms: int,
+        delay_ms: int,
+        child_elements: list[etree._Element],
+        preset_id: int | None = None,
+        preset_class: str | None = None,
+        preset_subtype: int | None = None,
+        node_type: str = "withEffect",
+        begin_triggers: list[BeginTrigger] | None = None,
+        default_target_shape: str | None = None,
+        auto_reverse: bool = False,
+        effect_group_id: int | str | None = None,
+        repeat_count: int | str | None = None,
+    ) -> etree._Element:
+        """Build ``<p:par>`` containing multiple child timing elements."""
+        par = p_elem("par")
+
+        ctn_attrs: dict[str, str] = {
+            "id": str(par_id),
+            "dur": str(duration_ms),
+            "fill": "hold",
+            "nodeType": node_type,
+            "grpId": (str(effect_group_id) if effect_group_id is not None else "0"),
+        }
+        if preset_id:
+            ctn_attrs["presetID"] = str(preset_id)
+        if preset_class:
+            ctn_attrs["presetClass"] = preset_class
+        if preset_subtype is not None and preset_id:
+            ctn_attrs["presetSubtype"] = str(preset_subtype)
+        if auto_reverse:
+            ctn_attrs["autoRev"] = "1"
+        ppt_repeat = self._repeat_count_value(repeat_count)
+        if ppt_repeat is not None:
+            ctn_attrs["repeatCount"] = ppt_repeat
+
+        ctn = p_sub(par, "cTn", **ctn_attrs)
+
+        st_cond_lst = p_sub(ctn, "stCondLst")
+        if begin_triggers:
+            self._append_begin_conditions(
+                st_cond_lst=st_cond_lst,
+                begin_triggers=begin_triggers,
+                fallback_delay_ms=delay_ms,
+                default_target_shape=default_target_shape,
+            )
+        else:
+            p_sub(st_cond_lst, "cond", delay=str(delay_ms))
+
+        child_tn_lst = p_sub(ctn, "childTnLst")
+        for child_element in child_elements:
+            child_tn_lst.append(child_element)
+
+        return par
+
+    def build_compound_par(
+        self,
+        *,
+        shape_id: str | int,
+        par_id: int,
+        duration_ms: int,
+        delay_ms: int = 0,
+        behaviors: list,
+    ) -> etree._Element:
+        """Build a compound ``<p:par>`` by injecting behavior fragments.
+
+        *behaviors* is a sequence of
+        :class:`~svg2ooxml.drawingml.animation.oracle.BehaviorFragment`
+        instances (or plain ``(name, tokens)`` tuples). Each fragment names
+        a file under ``src/svg2ooxml/assets/animation_oracle/emph/behaviors/``
+        and a token map for its private placeholders. The compound slot's
+        single ``<p:cTn>`` receives every fragment's children as siblings,
+        so they all fire simultaneously on the outer click.
+
+        This is the primary emission path when one shape has multiple
+        simultaneous SVG animations: the handler aggregates them into one
+        fragment list and calls this method once instead of emitting
+        multiple sibling ``<p:par>`` elements.
+
+        Duration and ``SHAPE_ID``/``INNER_FILL`` propagate into every
+        fragment automatically. Per-fragment tokens (``BEHAVIOR_ID``,
+        ``TO_COLOR``, ``ROTATION_BY``, etc.) must be supplied on each
+        ``BehaviorFragment.tokens``.
+        """
+        # Local import to avoid a module-import cycle when the animation
+        # package is still being initialised.
+        from svg2ooxml.drawingml.animation.oracle import (
+            BehaviorFragment,
+            default_oracle,
+        )
+
+        normalised: list = []
+        for item in behaviors:
+            if isinstance(item, BehaviorFragment):
+                normalised.append(item)
+            else:
+                name, tokens = item
+                normalised.append(BehaviorFragment(name=name, tokens=tokens))
+
+        return default_oracle().instantiate_compound(
+            shape_id=shape_id,
+            par_id=par_id,
+            duration_ms=duration_ms,
+            delay_ms=delay_ms,
+            behaviors=normalised,
+        )
+
+    def build_delayed_child_par(
+        self,
+        *,
+        par_id: int,
+        delay_ms: int,
+        duration_ms: int,
+        child_element: etree._Element,
+    ) -> etree._Element:
+        """Build a child ``<p:par>`` wrapper with its own start delay."""
+        par = p_elem("par")
+        ctn = p_sub(
+            par,
+            "cTn",
+            id=str(par_id),
+            dur=str(max(1, duration_ms)),
+            fill="hold",
+        )
+        st_cond_lst = p_sub(ctn, "stCondLst")
+        p_sub(st_cond_lst, "cond", delay=str(max(0, delay_ms)))
+        child_tn_lst = p_sub(ctn, "childTnLst")
+        child_tn_lst.append(child_element)
         return par
 
     def _append_begin_conditions(
@@ -279,8 +462,15 @@ class AnimationXMLBuilder:
                 created += 1
                 continue
 
-            if trigger_type in (BeginTriggerType.ELEMENT_BEGIN, BeginTriggerType.ELEMENT_END):
-                evt = "onBegin" if trigger_type == BeginTriggerType.ELEMENT_BEGIN else "onEnd"
+            if trigger_type in (
+                BeginTriggerType.ELEMENT_BEGIN,
+                BeginTriggerType.ELEMENT_END,
+            ):
+                evt = (
+                    "onBegin"
+                    if trigger_type == BeginTriggerType.ELEMENT_BEGIN
+                    else "onEnd"
+                )
                 cond = p_sub(st_cond_lst, "cond", evt=evt, delay=str(delay_ms))
                 if trigger.target_element_id:
                     tgt_el = p_sub(cond, "tgtEl")
@@ -294,6 +484,106 @@ class AnimationXMLBuilder:
         if created == 0:
             p_sub(st_cond_lst, "cond", delay=str(fallback_delay_ms))
 
+    def apply_native_timing_overrides(
+        self,
+        *,
+        par: etree._Element,
+        repeat_duration_ms: int | None = None,
+        restart: str | None = None,
+        end_triggers: list[BeginTrigger] | None = None,
+        default_target_shape: str | None = None,
+    ) -> None:
+        """Apply optional SMIL timing fields to a generated animation fragment.
+
+        Handlers build different native structures. This post-pass keeps common
+        timing semantics centralized and avoids threading rarely used timing
+        fields through every handler path.
+        """
+        ctn = par.find(f"{{{NS_P}}}cTn")
+        if ctn is None:
+            return
+
+        if restart in {"always", "whenNotActive", "never"}:
+            ctn.set("restart", restart)
+
+        if repeat_duration_ms is not None:
+            repeat_duration = str(max(1, repeat_duration_ms))
+            targets = self._repeat_duration_targets(par, fallback=ctn)
+            for target in targets:
+                target.set("repeatDur", repeat_duration)
+
+        if end_triggers:
+            end_cond_lst = ctn.find(f"{{{NS_P}}}endCondLst")
+            if end_cond_lst is None:
+                end_cond_lst = p_sub(ctn, "endCondLst")
+            self._append_end_conditions(
+                end_cond_lst=end_cond_lst,
+                end_triggers=end_triggers,
+                default_target_shape=default_target_shape,
+            )
+
+    @staticmethod
+    def _repeat_duration_targets(
+        par: etree._Element,
+        *,
+        fallback: etree._Element,
+    ) -> list[etree._Element]:
+        targets = [
+            ctn
+            for ctn in par.iter(f"{{{NS_P}}}cTn")
+            if ctn.get("repeatCount") is not None
+        ]
+        return targets or [fallback]
+
+    def _append_end_conditions(
+        self,
+        *,
+        end_cond_lst: etree._Element,
+        end_triggers: list[BeginTrigger],
+        default_target_shape: str | None,
+    ) -> None:
+        """Append native-compatible end conditions from parsed SMIL end tokens."""
+        from svg2ooxml.ir.animation import BeginTriggerType
+
+        created = 0
+        for trigger in end_triggers:
+            delay_ms = max(0, int(round(trigger.delay_seconds * 1000)))
+            trigger_type = trigger.trigger_type
+
+            if trigger_type == BeginTriggerType.TIME_OFFSET:
+                p_sub(end_cond_lst, "cond", delay=str(delay_ms))
+                created += 1
+                continue
+
+            if trigger_type == BeginTriggerType.CLICK:
+                cond = p_sub(end_cond_lst, "cond", evt="onClick", delay=str(delay_ms))
+                target_shape = trigger.target_element_id or default_target_shape
+                if target_shape:
+                    tgt_el = p_sub(cond, "tgtEl")
+                    p_sub(tgt_el, "spTgt", spid=target_shape)
+                created += 1
+                continue
+
+            if trigger_type in (
+                BeginTriggerType.ELEMENT_BEGIN,
+                BeginTriggerType.ELEMENT_END,
+            ):
+                evt = (
+                    "onBegin"
+                    if trigger_type == BeginTriggerType.ELEMENT_BEGIN
+                    else "onEnd"
+                )
+                cond = p_sub(end_cond_lst, "cond", evt=evt, delay=str(delay_ms))
+                if trigger.target_element_id:
+                    tgt_el = p_sub(cond, "tgtEl")
+                    p_sub(tgt_el, "spTgt", spid=trigger.target_element_id)
+                created += 1
+
+        if created == 0:
+            parent = end_cond_lst.getparent()
+            if parent is not None:
+                parent.remove(end_cond_lst)
+
     def build_behavior_core_elem(
         self,
         *,
@@ -306,6 +596,8 @@ class AnimationXMLBuilder:
         accel: int | None = None,
         decel: int | None = None,
         attr_name_list: list[str] | None = None,
+        auto_reverse: bool = False,
+        override: str | None = None,
     ) -> etree._Element:
         """Build ``<p:cBhvr>`` common behavior element.
 
@@ -327,6 +619,11 @@ class AnimationXMLBuilder:
         """
         cBhvr = p_elem("cBhvr")
 
+        if self._needs_ppt_runtime_context(attr_name_list):
+            cBhvr.set("rctx", "PPT")
+        if override:
+            cBhvr.set("override", override)
+
         # Additive attribute on <p:cBhvr> itself (not on cTn)
         if additive == "sum":
             cBhvr.set("additive", "sum")
@@ -337,16 +634,7 @@ class AnimationXMLBuilder:
             ppt_fill = "remove"
 
         # Map repeat_count — omit for default (play once)
-        ppt_repeat: str | None = None
-        if repeat_count == "indefinite":
-            ppt_repeat = "indefinite"
-        elif repeat_count is not None:
-            try:
-                n = int(repeat_count)
-                if n > 1:
-                    ppt_repeat = str(n * 1000)
-            except (ValueError, TypeError):
-                pass
+        ppt_repeat = self._repeat_count_value(repeat_count)
 
         ctn_attrs: dict[str, str] = {
             "id": str(behavior_id),
@@ -360,6 +648,8 @@ class AnimationXMLBuilder:
             ctn_attrs["accel"] = str(accel)
         if decel is not None:
             ctn_attrs["decel"] = str(decel)
+        if auto_reverse:
+            ctn_attrs["autoRev"] = "1"
 
         cTn = p_sub(cBhvr, "cTn", **ctn_attrs)
 
@@ -373,6 +663,33 @@ class AnimationXMLBuilder:
             cBhvr.append(self.build_attribute_list(attr_name_list))
 
         return cBhvr
+
+    @staticmethod
+    def _repeat_count_value(repeat_count: str | int | None) -> str | None:
+        if repeat_count == "indefinite":
+            return "indefinite"
+
+        if repeat_count is None:
+            return None
+
+        try:
+            count = int(repeat_count)
+        except (TypeError, ValueError):
+            return None
+
+        if count > 1:
+            return str(count * 1000)
+        return None
+
+    @staticmethod
+    def _needs_ppt_runtime_context(attr_name_list: list[str] | None) -> bool:
+        """Return True when the behavior targets PPT runtime-only properties."""
+        if not attr_name_list:
+            return False
+        return any(
+            name.startswith("ppt_") or name.startswith("style.")
+            for name in attr_name_list
+        )
 
     def build_set_elem(
         self,
