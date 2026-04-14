@@ -1,0 +1,118 @@
+{
+  "schema_version": 1,
+  "slots": {
+    "entr/fade": {
+      "path": "entr/fade.xml",
+      "preset_class": "entr",
+      "preset_id": 9,
+      "preset_subtype": 0,
+      "family_signature": "clickEffect|entr|9|set+animEffect|style.visibility",
+      "content_tokens": [],
+      "behavior_tokens": ["SET_BEHAVIOR_ID", "EFFECT_BEHAVIOR_ID"],
+      "smil_patterns": [
+        "animate[opacity,0,1,linear]",
+        "animate[opacity,0,1]"
+      ],
+      "source": "tmp/powerpoint-oracle-groups-triggers-starter.oracle/.../slide7/timing.normalized.xml",
+      "verification": "oracle-matched",
+      "notes": "Exact structural match to starter-deck slide7 preset 9 entrance fade. Requires multi-slide harness on macOS PPT so the build engine pre-hides before the click-group fires."
+    },
+    "exit/fade": {
+      "path": "exit/fade.xml",
+      "preset_class": "exit",
+      "preset_id": 9,
+      "preset_subtype": 0,
+      "family_signature": "clickEffect|exit|9|set+animEffect|style.visibility",
+      "content_tokens": [],
+      "behavior_tokens": ["SET_BEHAVIOR_ID", "EFFECT_BEHAVIOR_ID"],
+      "smil_patterns": [
+        "animate[opacity,1,0,linear]",
+        "animate[opacity,1,0]"
+      ],
+      "source": "tests/golden/animation/opacity_fade_out.xml",
+      "verification": "derived-from-handler",
+      "notes": "Mirrors entr/fade with transition=out and visibility=hidden. UNVERIFIED: oracle corpus has no preset 9 exit fade — all observed exit fades use preset 31/37/47/53 with extra anim children. Preset ID may be wrong; visually verify before promoting."
+    },
+    "entr/appear": {
+      "path": "entr/appear.xml",
+      "preset_class": "entr",
+      "preset_id": 1,
+      "preset_subtype": 0,
+      "family_signature": "clickEffect|entr|1|set|style.visibility",
+      "content_tokens": [],
+      "behavior_tokens": ["BEHAVIOR_ID"],
+      "smil_patterns": [
+        "set[visibility,visible]",
+        "set[display,inline]"
+      ],
+      "source": "docs/research/powerpoint_oracle/selected/cloudpresentationpack-azurefunc-animation/slide1",
+      "verification": "oracle-matched",
+      "notes": "Authored from oracle; diverges from current set.py handler which emits a nested fade effect. Migration to this template will require updating set.py."
+    },
+    "emph/color": {
+      "path": "emph/color.xml",
+      "preset_class": "emph",
+      "preset_id": 7,
+      "preset_subtype": null,
+      "family_signature": "withEffect|emph|7|animClr|fill.color",
+      "content_tokens": ["FROM_COLOR", "TO_COLOR", "TARGET_ATTRIBUTE", "INNER_FILL"],
+      "behavior_tokens": ["BEHAVIOR_ID"],
+      "smil_patterns": [
+        "animate[fill,from,to]",
+        "animate[stroke,from,to]",
+        "animateColor[*,from,to]"
+      ],
+      "source": "tests/golden/animation/color_red_to_blue.xml",
+      "verification": "derived-from-handler",
+      "notes": "TARGET_ATTRIBUTE = fill.color|line.color|shadow.color etc. INNER_FILL is the SVG fill_mode mapped to PPT 'hold' or 'remove'. UNVERIFIED: oracle corpus has an animClr example with presetID=27 nodeType=clickEffect grpId=0 (different preset, cleaner inner cTn, schemeClr instead of srgbClr) — our preset 7 withEffect shape may not match what PowerPoint authors for 'Change Fill Color'. Revisit when an oracle sample for preset 7 emph is captured."
+    },
+    "emph/rotate": {
+      "path": "emph/rotate.xml",
+      "preset_class": "emph",
+      "preset_id": 8,
+      "preset_subtype": 0,
+      "family_signature": "clickEffect|emph|8|animRot|r",
+      "content_tokens": ["ROTATION_BY", "INNER_FILL"],
+      "behavior_tokens": ["BEHAVIOR_ID"],
+      "smil_patterns": [
+        "animateTransform[rotate,by]",
+        "animateTransform[rotate,from,to]"
+      ],
+      "source": "tests/golden/animation/rotate_90deg.xml",
+      "verification": "derived-from-handler",
+      "notes": "ROTATION_BY is in 60000ths of a degree (PPT angle factor). INNER_FILL is the SVG fill_mode mapped to 'hold' or 'remove'."
+    },
+    "emph/scale": {
+      "path": "emph/scale.xml",
+      "preset_class": "emph",
+      "preset_id": 6,
+      "preset_subtype": 0,
+      "family_signature": "clickEffect|emph|6|animScale|-",
+      "content_tokens": ["FROM_X", "FROM_Y", "TO_X", "TO_Y", "INNER_FILL"],
+      "behavior_tokens": ["BEHAVIOR_ID"],
+      "smil_patterns": [
+        "animateTransform[scale,from,to]"
+      ],
+      "source": "tests/golden/animation/scale_uniform.xml",
+      "verification": "derived-from-handler",
+      "notes": "Scale values in 100000ths (PPT scale factor). INNER_FILL is the SVG fill_mode mapped to 'hold' or 'remove'. Companion animMotion for origin compensation is NOT emitted by this template alone — see emph/scale_with_origin for the composed version when authored."
+    },
+    "path/motion": {
+      "path": "path/motion.xml",
+      "preset_class": "path",
+      "preset_id": null,
+      "preset_subtype": null,
+      "family_signature": "{NODE_TYPE}|path|-|animMotion|-",
+      "content_tokens": ["PATH_DATA", "NODE_TYPE", "INNER_FILL"],
+      "behavior_tokens": ["BEHAVIOR_ID"],
+      "smil_patterns": [
+        "animateMotion[path]",
+        "animate[ppt_x,ppt_y]",
+        "animateTransform[translate,from,to]"
+      ],
+      "source": "tests/golden/animation/numeric_x.xml",
+      "verification": "derived-from-handler",
+      "notes": "PATH_DATA is a PPT motion-path string (coordinates normalized to 0-1, ends with E). NODE_TYPE is 'clickEffect' for standalone motion (motion.py) or 'withEffect' for composed motion (numeric.py width→scale+motion). INNER_FILL is the SVG fill_mode mapped to 'hold' or 'remove'. Does NOT express rotation (rAng) — motion animations with auto-rotate or fixed-rAng fall through to the imperative path."
+    }
+  }
+}

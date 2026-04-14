@@ -15,8 +15,9 @@ from svg2ooxml.drawingml.animation.constants import (
     COLOR_ATTRIBUTES,
 )
 from svg2ooxml.drawingml.animation.handlers.base import AnimationHandler
+from svg2ooxml.drawingml.animation.oracle import default_oracle
 from svg2ooxml.drawingml.xml_builder import NS_P, a_sub, p_elem, p_sub
-from svg2ooxml.ir.animation import AnimationType
+from svg2ooxml.ir.animation import AnimationType, BeginTriggerType
 
 if TYPE_CHECKING:
     from svg2ooxml.ir.animation import AnimationDefinition
@@ -101,6 +102,27 @@ class SetAnimationHandler(AnimationHandler):
             return COLOR_ATTRIBUTE_NAME_MAP.get(attribute, attribute)
         return ATTRIBUTE_NAME_MAP.get(attribute, attribute)
 
+    @staticmethod
+    def _visibility_uses_oracle(animation: AnimationDefinition) -> bool:
+        """Gate the ``entr/appear`` oracle path to simple start conditions.
+
+        The template only emits a single time-offset ``<p:cond>`` and no
+        additive / repeat modifiers. Anything more complex falls through to
+        the imperative ``<p:animEffect>`` path so the full trigger grammar
+        stays available.
+        """
+        if (animation.additive or "replace").lower() == "sum":
+            return False
+        if animation.repeat_count not in (None, 1, "1"):
+            return False
+        triggers = animation.begin_triggers
+        if triggers:
+            if len(triggers) > 1:
+                return False
+            if triggers[0].trigger_type != BeginTriggerType.TIME_OFFSET:
+                return False
+        return True
+
     def _build_visibility_effect(
         self,
         *,
@@ -114,6 +136,22 @@ class SetAnimationHandler(AnimationHandler):
         preset_class = "entr" if transition == "in" else "exit"
         duration_ms = max(1, animation.duration_ms)
         effect_ctn_id = par_id * 10
+
+        if transition == "in" and self._visibility_uses_oracle(animation):
+            effect_par = default_oracle().instantiate(
+                "entr/appear",
+                shape_id=animation.element_id,
+                par_id=effect_ctn_id,
+                duration_ms=duration_ms,
+                delay_ms=0,
+                BEHAVIOR_ID=behavior_id,
+            )
+            return self._xml.build_delayed_child_par(
+                par_id=par_id,
+                delay_ms=animation.begin_ms,
+                duration_ms=duration_ms,
+                child_element=effect_par,
+            )
 
         anim_effect = p_elem("animEffect")
         anim_effect.set("transition", transition)

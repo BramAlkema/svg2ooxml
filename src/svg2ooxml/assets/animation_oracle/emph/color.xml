@@ -1,0 +1,30 @@
+<p:par>
+    <p:cTn id="{PAR_ID}" dur="{DURATION_MS}" fill="hold" nodeType="withEffect" grpId="{PAR_ID}" presetID="7" presetClass="emph">
+        <p:stCondLst>
+            <p:cond delay="{DELAY_MS}"/>
+        </p:stCondLst>
+        <p:childTnLst>
+            <p:animClr clrSpc="rgb" dir="cw">
+                <p:cBhvr override="childStyle">
+                    <p:cTn id="{BEHAVIOR_ID}" dur="{DURATION_MS}" fill="{INNER_FILL}" nodeType="withEffect">
+                        <p:stCondLst>
+                            <p:cond delay="0"/>
+                        </p:stCondLst>
+                    </p:cTn>
+                    <p:tgtEl>
+                        <p:spTgt spid="{SHAPE_ID}"/>
+                    </p:tgtEl>
+                    <p:attrNameLst>
+                        <p:attrName>{TARGET_ATTRIBUTE}</p:attrName>
+                    </p:attrNameLst>
+                </p:cBhvr>
+                <p:from>
+                    <a:srgbClr val="{FROM_COLOR}"/>
+                </p:from>
+                <p:to>
+                    <a:srgbClr val="{TO_COLOR}"/>
+                </p:to>
+            </p:animClr>
+        </p:childTnLst>
+    </p:cTn>
+</p:par>

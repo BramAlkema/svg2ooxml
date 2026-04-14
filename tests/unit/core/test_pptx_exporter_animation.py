@@ -994,7 +994,7 @@ def test_multi_keyframe_width_animation_with_custom_key_times_uses_segmented_sca
     assert render_result.slide_xml.count("<p:animScale") == 2
     assert "<p:attrName>ppt_w</p:attrName>" not in render_result.slide_xml
     assert "<p:tav " not in render_result.slide_xml
-    assert render_result.slide_xml.count('animBg="1"') == 2
+    assert render_result.slide_xml.count('animBg="1"') == 3
 
 
 def test_animate_elem_10_linear_calc_mode_uses_playable_scale_and_retimed_motion() -> None:

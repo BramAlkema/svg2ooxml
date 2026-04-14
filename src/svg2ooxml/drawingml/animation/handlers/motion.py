@@ -11,12 +11,13 @@ from typing import TYPE_CHECKING
 
 from lxml import etree
 
+from svg2ooxml.drawingml.animation.oracle import default_oracle
 from svg2ooxml.drawingml.animation.timing_utils import (
     compute_paced_key_times_2d,
     compute_segment_durations_ms,
 )
 from svg2ooxml.drawingml.xml_builder import p_elem
-from svg2ooxml.ir.animation import AnimationType, CalcMode
+from svg2ooxml.ir.animation import AnimationType, BeginTriggerType, CalcMode
 
 from .base import AnimationHandler
 
@@ -93,6 +94,19 @@ class MotionAnimationHandler(AnimationHandler):
                     )
 
         rotation = self._resolve_rotation_angle(animation, points)
+        if rotation == "0" and self._motion_uses_oracle(animation):
+            return default_oracle().instantiate(
+                "path/motion",
+                shape_id=animation.element_id,
+                par_id=par_id,
+                duration_ms=animation.duration_ms,
+                delay_ms=animation.begin_ms,
+                BEHAVIOR_ID=behavior_id,
+                PATH_DATA=motion_path,
+                NODE_TYPE="clickEffect",
+                INNER_FILL=("hold" if animation.fill_mode == "freeze" else "remove"),
+            )
+
         anim_motion = self._build_anim_motion_element(
             animation=animation,
             behavior_id=behavior_id,
@@ -113,6 +127,28 @@ class MotionAnimationHandler(AnimationHandler):
             default_target_shape=animation.element_id,
             effect_group_id=par_id,
         )
+
+    @staticmethod
+    def _motion_uses_oracle(animation: AnimationDefinition) -> bool:
+        """Gate the ``path/motion`` oracle template to simple start/trigger conditions.
+
+        The template emits a single time-offset ``<p:cond>`` and does not
+        express ``additive``, ``repeatCount``, or the ``rAng`` rotation
+        attribute. Anything more elaborate falls through to
+        ``_build_anim_motion_element`` + ``build_par_container_elem`` which can
+        inject those via ``build_behavior_core_elem``.
+        """
+        if (animation.additive or "replace").lower() == "sum":
+            return False
+        if animation.repeat_count not in (None, 1, "1"):
+            return False
+        triggers = animation.begin_triggers
+        if triggers:
+            if len(triggers) > 1:
+                return False
+            if triggers[0].trigger_type != BeginTriggerType.TIME_OFFSET:
+                return False
+        return True
 
     def _build_anim_motion_element(
         self,

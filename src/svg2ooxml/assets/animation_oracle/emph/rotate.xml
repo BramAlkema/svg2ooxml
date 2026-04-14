@@ -1,0 +1,24 @@
+<p:par>
+    <p:cTn id="{PAR_ID}" dur="{DURATION_MS}" fill="hold" nodeType="clickEffect" grpId="{PAR_ID}" presetID="8" presetClass="emph" presetSubtype="0">
+        <p:stCondLst>
+            <p:cond delay="{DELAY_MS}"/>
+        </p:stCondLst>
+        <p:childTnLst>
+            <p:animRot by="{ROTATION_BY}">
+                <p:cBhvr>
+                    <p:cTn id="{BEHAVIOR_ID}" dur="{DURATION_MS}" fill="{INNER_FILL}" nodeType="withEffect">
+                        <p:stCondLst>
+                            <p:cond delay="0"/>
+                        </p:stCondLst>
+                    </p:cTn>
+                    <p:tgtEl>
+                        <p:spTgt spid="{SHAPE_ID}"/>
+                    </p:tgtEl>
+                    <p:attrNameLst>
+                        <p:attrName>r</p:attrName>
+                    </p:attrNameLst>
+                </p:cBhvr>
+            </p:animRot>
+        </p:childTnLst>
+    </p:cTn>
+</p:par>

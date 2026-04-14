@@ -16,8 +16,9 @@ from svg2ooxml.drawingml.animation.constants import (
     COLOR_ATTRIBUTES,
 )
 from svg2ooxml.drawingml.animation.handlers.base import AnimationHandler
+from svg2ooxml.drawingml.animation.oracle import default_oracle
 from svg2ooxml.drawingml.xml_builder import a_sub, p_elem, p_sub
-from svg2ooxml.ir.animation import AnimationType, CalcMode
+from svg2ooxml.ir.animation import AnimationType, BeginTriggerType, CalcMode
 
 if TYPE_CHECKING:
     from svg2ooxml.ir.animation import AnimationDefinition
@@ -53,6 +54,20 @@ class ColorAnimationHandler(AnimationHandler):
                 ppt_attribute,
             )
 
+        if self._should_use_oracle_template(animation):
+            return default_oracle().instantiate(
+                "emph/color",
+                shape_id=animation.element_id,
+                par_id=par_id,
+                duration_ms=animation.duration_ms,
+                delay_ms=animation.begin_ms,
+                BEHAVIOR_ID=behavior_id,
+                FROM_COLOR=self._processor.parse_color(animation.values[0]),
+                TO_COLOR=self._processor.parse_color(animation.values[-1]),
+                TARGET_ATTRIBUTE=ppt_attribute,
+                INNER_FILL=("hold" if animation.fill_mode == "freeze" else "remove"),
+            )
+
         anim_clr = self._build_anim_clr_element(
             behavior_id=behavior_id,
             duration_ms=animation.duration_ms,
@@ -76,6 +91,27 @@ class ColorAnimationHandler(AnimationHandler):
             default_target_shape=animation.element_id,
             effect_group_id=par_id,
         )
+
+    @staticmethod
+    def _should_use_oracle_template(animation: AnimationDefinition) -> bool:
+        """Gate the oracle path to simple color tweens with no extra modifiers.
+
+        The ``emph/color`` template only emits a single ``<p:cond>`` delay, no
+        ``additive``/``repeatCount`` attributes, and no event-based begin
+        triggers. Anything more elaborate falls through to the imperative
+        construction path which can express those modifiers.
+        """
+        if (animation.additive or "replace").lower() == "sum":
+            return False
+        if animation.repeat_count not in (None, 1, "1"):
+            return False
+        triggers = animation.begin_triggers
+        if triggers:
+            if len(triggers) > 1:
+                return False
+            if triggers[0].trigger_type != BeginTriggerType.TIME_OFFSET:
+                return False
+        return True
 
     @staticmethod
     def _should_segment(animation: AnimationDefinition) -> bool:

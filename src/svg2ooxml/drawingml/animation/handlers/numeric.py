@@ -18,6 +18,7 @@ from svg2ooxml.drawingml.animation.constants import (
     WIPE_ATTRIBUTES,
 )
 from svg2ooxml.drawingml.animation.handlers.base import AnimationHandler
+from svg2ooxml.drawingml.animation.oracle import default_oracle
 from svg2ooxml.drawingml.animation.timing_utils import (
     compute_paced_key_times,
     compute_segment_durations_ms,
@@ -25,7 +26,7 @@ from svg2ooxml.drawingml.animation.timing_utils import (
 )
 from svg2ooxml.drawingml.animation.value_formatters import format_numeric_value
 from svg2ooxml.drawingml.xml_builder import p_elem, p_sub
-from svg2ooxml.ir.animation import AnimationType, CalcMode
+from svg2ooxml.ir.animation import AnimationType, BeginTriggerType, CalcMode
 
 if TYPE_CHECKING:
     from svg2ooxml.ir.animation import AnimationDefinition
@@ -252,6 +253,19 @@ class NumericAnimationHandler(AnimationHandler):
             f"{delta_y / slide_h_emu:.6f} E"
         )
 
+        if self._position_uses_oracle(animation):
+            return default_oracle().instantiate(
+                "path/motion",
+                shape_id=animation.element_id,
+                par_id=par_id,
+                duration_ms=animation.duration_ms,
+                delay_ms=animation.begin_ms,
+                BEHAVIOR_ID=behavior_id,
+                PATH_DATA=path,
+                NODE_TYPE="withEffect",
+                INNER_FILL=("hold" if animation.fill_mode == "freeze" else "remove"),
+            )
+
         animMotion = p_elem("animMotion")
         animMotion.set("origin", "layout")
         animMotion.set("path", path)
@@ -276,6 +290,27 @@ class NumericAnimationHandler(AnimationHandler):
             default_target_shape=animation.element_id,
             effect_group_id=par_id,
         )
+
+    @staticmethod
+    def _position_uses_oracle(animation: AnimationDefinition) -> bool:
+        """Gate the ``path/motion`` oracle path for numeric position animations.
+
+        The template only emits a single time-offset ``<p:cond>`` and cannot
+        express ``additive``, ``repeatCount``, or event-based begin triggers.
+        Falls through to ``_build_par_container_elem`` when any of those are
+        present.
+        """
+        if (animation.additive or "replace").lower() == "sum":
+            return False
+        if animation.repeat_count not in (None, 1, "1"):
+            return False
+        triggers = animation.begin_triggers
+        if triggers:
+            if len(triggers) > 1:
+                return False
+            if triggers[0].trigger_type != BeginTriggerType.TIME_OFFSET:
+                return False
+        return True
 
     def _build_generic_anim(
         self,

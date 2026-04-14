@@ -15,12 +15,13 @@ from lxml import etree
 
 from svg2ooxml.common.conversions.scale import scale_to_ppt
 from svg2ooxml.common.units import emu_to_px
+from svg2ooxml.drawingml.animation.oracle import default_oracle
 from svg2ooxml.drawingml.animation.timing_utils import (
     compute_paced_key_times_2d,
     compute_segment_durations_ms,
 )
 from svg2ooxml.drawingml.xml_builder import p_elem, p_sub
-from svg2ooxml.ir.animation import CalcMode, TransformType
+from svg2ooxml.ir.animation import BeginTriggerType, CalcMode, TransformType
 
 from .base import AnimationHandler
 
@@ -138,6 +139,18 @@ class TransformAnimationHandler(AnimationHandler):
         if child is None:
             return None
 
+        if self._transform_uses_oracle(animation):
+            oracle_par = self._try_instantiate_transform_oracle(
+                animation=animation,
+                par_id=par_id,
+                behavior_id=behavior_id,
+                preset_class=preset_class,
+                preset_id=preset_id,
+                child=child,
+            )
+            if oracle_par is not None:
+                return oracle_par
+
         return self._xml.build_par_container_elem(
             par_id=par_id,
             duration_ms=animation.duration_ms,
@@ -151,6 +164,104 @@ class TransformAnimationHandler(AnimationHandler):
             default_target_shape=animation.element_id,
             effect_group_id=par_id,
         )
+
+    @staticmethod
+    def _transform_uses_oracle(animation: AnimationDefinition) -> bool:
+        """Gate the oracle fast-path to simple start-conditions only.
+
+        The templates emit a single ``<p:cond delay="{DELAY_MS}"/>`` and do
+        not express ``additive``, ``repeatCount``, event-based begin triggers,
+        multi-keyframe sequences, or custom ``keyTimes``. Any of those →
+        fall through to the imperative builder.
+        """
+        if (animation.additive or "replace").lower() == "sum":
+            return False
+        if animation.repeat_count not in (None, 1, "1"):
+            return False
+        if len(animation.values) > 2:
+            return False
+        if animation.key_times:
+            return False
+        if animation.calc_mode in {CalcMode.DISCRETE, CalcMode.SPLINE}:
+            return False
+        if animation.key_splines:
+            return False
+        triggers = animation.begin_triggers
+        if triggers:
+            if len(triggers) > 1:
+                return False
+            if triggers[0].trigger_type != BeginTriggerType.TIME_OFFSET:
+                return False
+        return True
+
+    def _try_instantiate_transform_oracle(
+        self,
+        *,
+        animation: AnimationDefinition,
+        par_id: int,
+        behavior_id: int,
+        preset_class: str | None,
+        preset_id: int | None,
+        child: etree._Element,
+    ) -> etree._Element | None:
+        """Return an oracle-driven par for the simple transform preset slots.
+
+        Only ``emph/scale`` (preset 6), ``emph/rotate`` (preset 8), and
+        ``path/motion`` (preset class ``path``) are currently wired. The
+        remaining imperative paths handle multi-keyframe and composed effects
+        which don't fit the single-template shape.
+        """
+        from svg2ooxml.drawingml.xml_builder import NS_P
+
+        inner_fill = "hold" if animation.fill_mode == "freeze" else "remove"
+        if preset_class == "emph" and preset_id == 6:
+            scale_from = child.find(f"{{{NS_P}}}from")
+            scale_to = child.find(f"{{{NS_P}}}to")
+            if scale_from is None or scale_to is None:
+                return None
+            return default_oracle().instantiate(
+                "emph/scale",
+                shape_id=animation.element_id,
+                par_id=par_id,
+                duration_ms=animation.duration_ms,
+                delay_ms=animation.begin_ms,
+                BEHAVIOR_ID=behavior_id,
+                FROM_X=scale_from.get("x", "100000"),
+                FROM_Y=scale_from.get("y", "100000"),
+                TO_X=scale_to.get("x", "100000"),
+                TO_Y=scale_to.get("y", "100000"),
+                INNER_FILL=inner_fill,
+            )
+        if preset_class == "emph" and preset_id == 8:
+            rotation_by = child.get("by")
+            if rotation_by is None:
+                return None
+            return default_oracle().instantiate(
+                "emph/rotate",
+                shape_id=animation.element_id,
+                par_id=par_id,
+                duration_ms=animation.duration_ms,
+                delay_ms=animation.begin_ms,
+                BEHAVIOR_ID=behavior_id,
+                ROTATION_BY=rotation_by,
+                INNER_FILL=inner_fill,
+            )
+        if preset_class == "path":
+            path_data = child.get("path")
+            if path_data is None:
+                return None
+            return default_oracle().instantiate(
+                "path/motion",
+                shape_id=animation.element_id,
+                par_id=par_id,
+                duration_ms=animation.duration_ms,
+                delay_ms=animation.begin_ms,
+                BEHAVIOR_ID=behavior_id,
+                PATH_DATA=path_data,
+                NODE_TYPE="clickEffect",
+                INNER_FILL=inner_fill,
+            )
+        return None
 
     # ------------------------------------------------------------------ #
     # Scale                                                                #

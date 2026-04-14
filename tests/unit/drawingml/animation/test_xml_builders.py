@@ -293,8 +293,8 @@ class TestBuildTimingTree:
         assert len(bld_ps) == 2
         assert bld_ps[0].get("spid") == "42"
         assert bld_ps[1].get("spid") == "99"
-        assert bld_ps[0].get("animBg") is None
-        assert bld_ps[1].get("animBg") is None
+        assert bld_ps[0].get("animBg") == "1"
+        assert bld_ps[1].get("animBg") == "1"
 
     def test_bld_lst_includes_effect_group_entries(self):
         builder = AnimationXMLBuilder()
@@ -327,7 +327,7 @@ class TestBuildTimingTree:
         assert len(bld_ps) == 2
         assert bld_ps[0].get("spid") == "42"
         assert bld_ps[0].get("grpId") == "0"
-        assert bld_ps[0].get("animBg") is None
+        assert bld_ps[0].get("animBg") == "1"
         assert bld_ps[1].get("spid") == "42"
         assert bld_ps[1].get("grpId") == "4"
         assert bld_ps[1].get("animBg") == "1"

@@ -117,7 +117,11 @@ class TestBuild:
             node.get("id")
             for node in par.findall(f".//{{{NS_P}}}cBhvr/{{{NS_P}}}cTn")
         }
-        assert {"5", "6"} <= behavior_ids
+        # Visible-entrance path routes through the ``entr/appear`` oracle
+        # template which carries a single ``<p:cBhvr>`` for the visibility
+        # ``<p:set>``. The no-op 1 ms animEffect wrapper that used to bump the
+        # behavior count was dropped to match the oracle fragment.
+        assert behavior_ids == {"5"}
 
     def test_target_shape(self, handler: SetAnimationHandler):
         anim = make_set_animation(element_id="shape42")

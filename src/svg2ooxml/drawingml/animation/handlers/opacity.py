@@ -12,10 +12,11 @@ from lxml import etree
 
 from svg2ooxml.drawingml.animation.constants import FADE_ATTRIBUTES
 from svg2ooxml.drawingml.animation.handlers.base import AnimationHandler
+from svg2ooxml.drawingml.animation.oracle import default_oracle
 from svg2ooxml.drawingml.animation.timing_utils import sample_spline_keyframes
 from svg2ooxml.drawingml.animation.value_formatters import format_numeric_value
 from svg2ooxml.drawingml.xml_builder import p_elem, p_sub
-from svg2ooxml.ir.animation import AnimationType, CalcMode
+from svg2ooxml.ir.animation import AnimationType, BeginTriggerType, CalcMode
 
 if TYPE_CHECKING:
     from svg2ooxml.ir.animation import AnimationDefinition
@@ -61,36 +62,41 @@ class OpacityAnimationHandler(AnimationHandler):
             return None
         if animation.key_splines:
             return None
+        if not self._authored_fade_begin_triggers_are_simple(animation):
+            return None
         fade_params = self._resolve_authored_fade(animation)
         if fade_params is None:
             return None
 
         transition, preset_class = fade_params
-
-        anim_effect = p_elem("animEffect")
-        cBhvr = self._xml.build_behavior_core_elem(
-            behavior_id=behavior_id,
-            duration_ms=animation.duration_ms,
-            target_shape=animation.element_id,
-            additive=animation.additive,
-            fill_mode=animation.fill_mode,
-            repeat_count=animation.repeat_count,
-        )
-        anim_effect.append(cBhvr)
-        anim_effect.set("transition", transition)
-        anim_effect.set("filter", "fade")
-
-        return self._xml.build_par_container_elem(
+        slot_name = "entr/fade" if transition == "in" else "exit/fade"
+        return default_oracle().instantiate(
+            slot_name,
+            shape_id=animation.element_id,
             par_id=par_id,
             duration_ms=animation.duration_ms,
             delay_ms=animation.begin_ms,
-            child_element=anim_effect,
-            preset_id=10,
-            preset_class=preset_class,
-            begin_triggers=animation.begin_triggers,
-            default_target_shape=animation.element_id,
-            effect_group_id=par_id,
+            SET_BEHAVIOR_ID=behavior_id,
+            EFFECT_BEHAVIOR_ID=behavior_id * 10 + 1,
         )
+
+    @staticmethod
+    def _authored_fade_begin_triggers_are_simple(
+        animation: AnimationDefinition,
+    ) -> bool:
+        """Only route through the oracle template for trivial start conditions.
+
+        The static template only emits a single ``<p:cond delay=.../>``, so any
+        non-time-offset begin trigger (event, element-begin reference, click)
+        must fall through to the property-animation code path which can inject
+        a full ``<p:stCondLst>`` via ``_append_begin_conditions``.
+        """
+        triggers = animation.begin_triggers
+        if not triggers:
+            return True
+        if len(triggers) > 1:
+            return False
+        return triggers[0].trigger_type == BeginTriggerType.TIME_OFFSET
 
     def _build_transparency_pulse_animation(
         self,

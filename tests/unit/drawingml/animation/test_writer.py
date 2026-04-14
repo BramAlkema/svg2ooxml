@@ -318,7 +318,7 @@ class TestBuild:
             [],
             animated_shape_ids=["shape42"],
         )
-        assert '<p:bldP spid="shape42" grpId="0"/>' in result
+        assert '<p:bldP spid="shape42" grpId="0" animBg="1"/>' in result
         assert 'spid="shape42" grpId="4" animBg="1"' in result
 
     def test_handles_none_options(self, writer):

@@ -202,7 +202,7 @@ class AnimationXMLBuilder:
         if animated_shape_ids or effect_build_entries:
             bld_lst = p_sub(timing, "bldLst")
             for shape_id in animated_shape_ids:
-                p_sub(bld_lst, "bldP", spid=shape_id, grpId="0")
+                p_sub(bld_lst, "bldP", spid=shape_id, grpId="0", animBg="1")
             for shape_id, grp_id in effect_build_entries:
                 p_sub(bld_lst, "bldP", spid=shape_id, grpId=grp_id, animBg="1")
 
