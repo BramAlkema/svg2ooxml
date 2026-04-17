@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 from collections.abc import Iterable
 from dataclasses import dataclass
 
@@ -13,14 +12,13 @@ from svg2ooxml.common.time import parse_time_value
 from svg2ooxml.ir.animation import (
     AnimationDefinition,
     AnimationSummary,
-    AnimationTiming,
     AnimationType,
-    BeginTrigger,
-    BeginTriggerType,
     CalcMode,
-    FillMode,
     TransformType,
 )
+
+from . import timing_parser as _timing
+from . import value_parser as _values
 
 
 class SMILParsingError(Exception):
@@ -54,31 +52,6 @@ class SMILParser:
         "animateMotion",
         "set",
     )
-    _TIME_OFFSET_RE = re.compile(
-        r"^[+-]?(?:\d+(?:\.\d+)?|\.\d+)(?:ms|s|min|h)?$",
-        re.IGNORECASE,
-    )
-    _ELEMENT_EVENT_RE = re.compile(
-        r"^([A-Za-z_][\w.\-]*)\.([A-Za-z_][\w.\-]*)\s*([+-].+)?$",
-        re.IGNORECASE,
-    )
-    _REPEAT_EVENT_RE = re.compile(
-        r"^([A-Za-z_][\w.\-]*)\.repeat\(([^)]+)\)\s*([+-].+)?$",
-        re.IGNORECASE,
-    )
-    _ACCESS_KEY_RE = re.compile(
-        r"^accessKey\(([^)]+)\)\s*([+-].+)?$",
-        re.IGNORECASE,
-    )
-    _WALLCLOCK_RE = re.compile(
-        r"^wallclock\(([^)]+)\)\s*([+-].+)?$",
-        re.IGNORECASE,
-    )
-    _CLICK_OFFSET_RE = re.compile(
-        r"^click\s*([+-].+)$",
-        re.IGNORECASE,
-    )
-    _NUMBER_LIST_SPLIT_RE = re.compile(r"[,\s]+")
 
     def __init__(self) -> None:
         self.animation_summary = AnimationSummary()
@@ -175,19 +148,41 @@ class SMILParser:
         from_value = element.get("from")
         to_value = element.get("to")
         by_value = element.get("by")
-        values = self._parse_animation_values(
+        values = _values.parse_animation_values(
             element,
             animation_type,
             target_attribute=target_attribute,
+            namespace_map=self._namespace_map,
+            animation_summary=self.animation_summary,
+            record_degradation=self._record_degradation,
+            resolve_motion_path_reference=self._resolve_motion_path_reference,
+            resolve_underlying_animation_value=self._resolve_underlying_animation_value,
         )
         if not values:
             raise SMILParsingError("Animation missing values")
 
-        timing = self._parse_timing(element)
-        key_times = self._parse_key_times(element)
-        key_points = self._parse_key_points(element, animation_type)
-        key_splines = self._parse_key_splines(element)
-        calc_mode = self._parse_calc_mode(element, animation_type)
+        timing = _timing.parse_timing(
+            element,
+            animation_summary=self.animation_summary,
+            record_degradation=self._record_degradation,
+        )
+        key_times = _timing.parse_key_times(
+            element,
+            animation_summary=self.animation_summary,
+            record_degradation=self._record_degradation,
+        )
+        key_points = _timing.parse_key_points(
+            element,
+            animation_type,
+            animation_summary=self.animation_summary,
+            record_degradation=self._record_degradation,
+        )
+        key_splines = _timing.parse_key_splines(
+            element,
+            animation_summary=self.animation_summary,
+            record_degradation=self._record_degradation,
+        )
+        calc_mode = _timing.parse_calc_mode(element, animation_type)
         key_times, key_points, key_splines = self._sanitize_interpolation_inputs(
             animation_type=animation_type,
             values=values,
@@ -354,7 +349,7 @@ class SMILParser:
             href = element.get("href") or element.get("{http://www.w3.org/1999/xlink}href")
             if href and href.startswith("#"):
                 continue
-            
+
             # Check parent
             parent = element.getparent()
             if parent is not None and not parent.get("id"):
@@ -382,96 +377,9 @@ class SMILParser:
 
         return None
 
-    def _parse_animation_values(
-        self,
-        element: etree._Element,
-        animation_type: AnimationType,
-        *,
-        target_attribute: str | None,
-    ) -> list[str]:
-        if animation_type == AnimationType.ANIMATE_MOTION:
-            path = element.get("path")
-            if path:
-                return [path.strip()]
-            mpath = (
-                element.find(".//mpath")
-                or element.find(".//svg:mpath", namespaces=self._namespace_map)
-            )
-            if mpath is not None:
-                href = mpath.get("href", mpath.get("{http://www.w3.org/1999/xlink}href"))
-                if href:
-                    resolved = self._resolve_motion_path_reference(element, href.strip())
-                    if resolved is not None:
-                        return [resolved]
-                    self.animation_summary.add_warning(
-                        f"animateMotion mpath reference unresolved: {href}"
-                    )
-                    self._record_degradation("mpath_reference_unresolved")
-            # Fall back to from/to or values coordinate pairs
-            values_attr = element.get("values")
-            if values_attr:
-                coords = [v.strip() for v in values_attr.split(";") if v.strip()]
-                if coords:
-                    parts = [f"M {coords[0]}"] + [f"L {c}" for c in coords[1:]]
-                    return [" ".join(parts)]
-            from_val = element.get("from")
-            to_val = element.get("to")
-            by_val = element.get("by")
-            if from_val and to_val:
-                return [f"M {from_val.strip()} L {to_val.strip()}"]
-            if from_val and by_val:
-                endpoint = self._combine_numeric_values(from_val, by_val, operator="+")
-                return [
-                    f"M {from_val.strip()} L {(endpoint or by_val).strip()}"
-                ]
-            if to_val and by_val:
-                startpoint = self._combine_numeric_values(to_val, by_val, operator="-")
-                if startpoint:
-                    return [f"M {startpoint} L {to_val.strip()}"]
-            if to_val:
-                return [f"M 0,0 L {to_val.strip()}"]
-            if by_val:
-                return [f"M 0,0 L {by_val.strip()}"]
-            return ["M 0,0"]
-
-        values_attr = element.get("values")
-        if values_attr:
-            return [value.strip() for value in values_attr.split(";") if value.strip()]
-
-        from_value = element.get("from")
-        to_value = element.get("to")
-        by_value = element.get("by")
-
-        if from_value is not None and to_value is not None:
-            return [from_value.strip(), to_value.strip()]
-
-        if from_value is not None and by_value is not None:
-            endpoint = self._combine_numeric_values(from_value, by_value, operator="+")
-            return [from_value.strip(), endpoint or by_value.strip()]
-
-        if to_value is not None and by_value is not None:
-            startpoint = self._combine_numeric_values(to_value, by_value, operator="-")
-            return [startpoint or by_value.strip(), to_value.strip()]
-
-        if to_value is not None:
-            underlying = self._resolve_underlying_animation_value(
-                element,
-                target_attribute=target_attribute,
-            )
-            if underlying is not None:
-                return [underlying, to_value.strip()]
-            return [to_value.strip()]
-
-        if by_value is not None:
-            return [by_value.strip()]
-
-        if animation_type == AnimationType.SET:
-            set_value = element.get("to")
-            if set_value is not None:
-                return [set_value.strip()]
-
-        return []
-
+    # ------------------------------------------------------------------ #
+    # Value resolution (stays in coordinator — depends on element lookup) #
+    # ------------------------------------------------------------------ #
     def _resolve_underlying_animation_value(
         self,
         animation_element: etree._Element,
@@ -502,57 +410,9 @@ class SMILParser:
 
         return None
 
-    def _combine_numeric_values(
-        self,
-        left: str,
-        right: str,
-        *,
-        operator: str,
-    ) -> str | None:
-        left_values = self._parse_numeric_list(left)
-        right_values = self._parse_numeric_list(right)
-        if left_values is None or right_values is None:
-            self._record_degradation("by_value_non_numeric")
-            return None
-        if len(right_values) == 1 and len(left_values) > 1:
-            right_values = right_values * len(left_values)
-        if len(left_values) != len(right_values):
-            self._record_degradation("by_value_dimension_mismatch")
-            return None
-
-        if operator == "+":
-            combined = [
-                left_value + right_value
-                for left_value, right_value in zip(left_values, right_values, strict=True)
-            ]
-        elif operator == "-":
-            combined = [
-                left_value - right_value
-                for left_value, right_value in zip(left_values, right_values, strict=True)
-            ]
-        else:
-            return None
-        return " ".join(self._format_number(value) for value in combined)
-
-    def _parse_numeric_list(self, value: str) -> list[float] | None:
-        tokens = [
-            token
-            for token in self._NUMBER_LIST_SPLIT_RE.split(value.strip())
-            if token
-        ]
-        if not tokens:
-            return None
-        try:
-            return [float(token) for token in tokens]
-        except ValueError:
-            return None
-
-    @staticmethod
-    def _format_number(value: float) -> str:
-        if abs(value) < 1e-12:
-            return "0"
-        return f"{value:.12g}"
-
+    # ------------------------------------------------------------------ #
+    # Transform / motion parsing (stays — heavy element lookup use)      #
+    # ------------------------------------------------------------------ #
     def _resolve_motion_path_reference(
         self,
         animation_element: etree._Element,
@@ -684,289 +544,6 @@ class SMILParser:
             return None
         return matches[0]
 
-    def _parse_timing(self, element: etree._Element) -> AnimationTiming:
-        begin, begin_triggers = self._parse_begin(element.get("begin"))
-        end_triggers = self._parse_end(element.get("end"))
-        dur_value = element.get("dur", "1s")
-        duration = float("inf") if dur_value == "indefinite" else parse_time_value(dur_value)
-        repeat_duration = self._parse_optional_duration(element.get("repeatDur"))
-
-        repeat_attr = element.get("repeatCount", "1")
-        if repeat_attr == "indefinite":
-            repeat_count: int | str = "indefinite"
-        else:
-            try:
-                repeat_count = int(float(repeat_attr))
-            except (ValueError, TypeError):
-                repeat_count = 1
-
-        fill_attr = element.get("fill", "remove")
-        fill_mode = FillMode.FREEZE if fill_attr == "freeze" else FillMode.REMOVE
-
-        return AnimationTiming(
-            begin=begin,
-            duration=duration,
-            repeat_count=repeat_count,
-            repeat_duration=repeat_duration,
-            fill_mode=fill_mode,
-            begin_triggers=begin_triggers,
-            end_triggers=end_triggers,
-        )
-
-    @staticmethod
-    def _parse_optional_duration(value: str | None) -> float | None:
-        if not value or value == "indefinite":
-            return None
-        return parse_time_value(value)
-
-    def _parse_begin(self, begin_attr: str | None) -> tuple[float, list[BeginTrigger] | None]:
-        """Parse SMIL begin expression(s) into fallback seconds and trigger metadata."""
-        if begin_attr is None:
-            return (0.0, [BeginTrigger(trigger_type=BeginTriggerType.TIME_OFFSET, delay_seconds=0.0)])
-
-        begin_text = begin_attr.strip()
-        if not begin_text:
-            return (0.0, [BeginTrigger(trigger_type=BeginTriggerType.TIME_OFFSET, delay_seconds=0.0)])
-
-        tokens = [token.strip() for token in begin_text.split(";") if token.strip()]
-        parsed: list[BeginTrigger] = []
-        for token in tokens:
-            trigger = self._parse_begin_token(token)
-            if trigger is None:
-                self.animation_summary.add_warning(f"Invalid begin expression: {token}")
-                self._record_degradation("begin_expression_invalid")
-                continue
-            parsed.append(trigger)
-
-        if not parsed:
-            self._record_degradation("begin_fallback_default_zero")
-            return (0.0, [BeginTrigger(trigger_type=BeginTriggerType.TIME_OFFSET, delay_seconds=0.0)])
-
-        # Backward-compatible numeric begin fallback used by existing timing helpers.
-        begin_seconds = 0.0
-        for trigger in parsed:
-            if trigger.trigger_type == BeginTriggerType.TIME_OFFSET and trigger.target_element_id is None:
-                begin_seconds = trigger.delay_seconds
-                break
-
-        return (begin_seconds, parsed)
-
-    def _parse_end(self, end_attr: str | None) -> list[BeginTrigger] | None:
-        """Parse SMIL end expressions for IR plumbing.
-
-        The writer does not yet fully realize end conditions natively; this
-        keeps them visible to later policy and emitter work.
-        """
-        if end_attr is None:
-            return None
-
-        end_text = end_attr.strip()
-        if not end_text:
-            return None
-
-        parsed: list[BeginTrigger] = []
-        for token in [part.strip() for part in end_text.split(";") if part.strip()]:
-            trigger = self._parse_begin_token(token)
-            if trigger is None:
-                self.animation_summary.add_warning(f"Invalid end expression: {token}")
-                self._record_degradation("end_expression_invalid")
-                continue
-            parsed.append(trigger)
-
-        return parsed or None
-
-    def _parse_begin_token(self, token: str) -> BeginTrigger | None:
-        raw_token = token.strip()
-        lowered = raw_token.lower()
-        if not raw_token:
-            return None
-        if lowered == "indefinite":
-            return BeginTrigger(trigger_type=BeginTriggerType.INDEFINITE)
-        if lowered == "click":
-            return BeginTrigger(trigger_type=BeginTriggerType.CLICK)
-        click_offset_match = self._CLICK_OFFSET_RE.match(lowered)
-        if click_offset_match:
-            offset_value = re.sub(r"\s+", "", click_offset_match.group(1).strip())
-            if not self._TIME_OFFSET_RE.match(offset_value):
-                return None
-            return BeginTrigger(
-                trigger_type=BeginTriggerType.CLICK,
-                delay_seconds=parse_time_value(offset_value),
-            )
-        if self._TIME_OFFSET_RE.match(lowered):
-            return BeginTrigger(
-                trigger_type=BeginTriggerType.TIME_OFFSET,
-                delay_seconds=parse_time_value(lowered),
-            )
-
-        repeat_match = self._REPEAT_EVENT_RE.match(raw_token)
-        if repeat_match:
-            target_element_id, repeat_iteration, offset_expr = repeat_match.groups()
-            delay_seconds = self._parse_optional_offset_seconds(offset_expr)
-            if delay_seconds is None:
-                return None
-            repeat_iteration = repeat_iteration.strip()
-            return BeginTrigger(
-                trigger_type=BeginTriggerType.ELEMENT_REPEAT,
-                delay_seconds=delay_seconds,
-                target_element_id=target_element_id,
-                event_name="repeat",
-                repeat_iteration=(
-                    int(repeat_iteration)
-                    if repeat_iteration.isdigit()
-                    else repeat_iteration
-                ),
-            )
-
-        access_key_match = self._ACCESS_KEY_RE.match(raw_token)
-        if access_key_match:
-            access_key, offset_expr = access_key_match.groups()
-            delay_seconds = self._parse_optional_offset_seconds(offset_expr)
-            if delay_seconds is None:
-                return None
-            return BeginTrigger(
-                trigger_type=BeginTriggerType.ACCESS_KEY,
-                delay_seconds=delay_seconds,
-                access_key=access_key.strip(),
-            )
-
-        wallclock_match = self._WALLCLOCK_RE.match(raw_token)
-        if wallclock_match:
-            wallclock_value, offset_expr = wallclock_match.groups()
-            delay_seconds = self._parse_optional_offset_seconds(offset_expr)
-            if delay_seconds is None:
-                return None
-            return BeginTrigger(
-                trigger_type=BeginTriggerType.WALLCLOCK,
-                delay_seconds=delay_seconds,
-                wallclock_value=wallclock_value.strip(),
-            )
-
-        match = self._ELEMENT_EVENT_RE.match(raw_token)
-        if not match:
-            return None
-
-        target_element_id, event_name, offset_expr = match.groups()
-        delay_seconds = self._parse_optional_offset_seconds(offset_expr)
-        if delay_seconds is None:
-            return None
-
-        event_name = event_name.lower()
-        if event_name == "click":
-            trigger_type = BeginTriggerType.CLICK
-        elif event_name == "begin":
-            trigger_type = BeginTriggerType.ELEMENT_BEGIN
-        elif event_name == "end":
-            trigger_type = BeginTriggerType.ELEMENT_END
-        else:
-            trigger_type = BeginTriggerType.EVENT
-
-        return BeginTrigger(
-            trigger_type=trigger_type,
-            delay_seconds=delay_seconds,
-            target_element_id=target_element_id,
-            event_name=event_name,
-        )
-
-    def _parse_optional_offset_seconds(self, offset_expr: str | None) -> float | None:
-        if not offset_expr:
-            return 0.0
-        offset_value = re.sub(r"\s+", "", offset_expr.strip())
-        if not self._TIME_OFFSET_RE.match(offset_value):
-            return None
-        return parse_time_value(offset_value)
-
-    def _parse_key_times(self, element: etree._Element) -> list[float] | None:
-        attr = element.get("keyTimes")
-        if not attr:
-            return None
-
-        try:
-            values = [float(value.strip()) for value in attr.split(";") if value.strip()]
-        except (ValueError, TypeError):
-            self.animation_summary.add_warning("Invalid keyTimes format")
-            self._record_degradation("key_times_invalid_format")
-            return None
-
-        if not all(0.0 <= value <= 1.0 for value in values):
-            self.animation_summary.add_warning("keyTimes values outside [0,1] range")
-            self._record_degradation("key_times_out_of_range")
-            return None
-        if values != sorted(values):
-            self.animation_summary.add_warning("keyTimes must be in ascending order")
-            self._record_degradation("key_times_not_ascending")
-            return None
-
-        return values or None
-
-    def _parse_key_points(
-        self,
-        element: etree._Element,
-        animation_type: AnimationType,
-    ) -> list[float] | None:
-        attr = element.get("keyPoints")
-        if not attr:
-            return None
-
-        try:
-            values = [float(value.strip()) for value in attr.split(";") if value.strip()]
-        except (ValueError, TypeError):
-            self.animation_summary.add_warning("Invalid keyPoints format")
-            self._record_degradation("key_points_invalid_format")
-            return None
-
-        if not all(0.0 <= value <= 1.0 for value in values):
-            self.animation_summary.add_warning("keyPoints values outside [0,1] range")
-            self._record_degradation("key_points_out_of_range")
-            return None
-
-        if animation_type != AnimationType.ANIMATE_MOTION:
-            self.animation_summary.add_warning(
-                "Ignoring keyPoints because animation is not animateMotion"
-            )
-            self._record_degradation("key_points_non_motion")
-            return None
-
-        return values or None
-
-    def _parse_key_splines(self, element: etree._Element) -> list[list[float]] | None:
-        attr = element.get("keySplines")
-        if not attr:
-            return None
-
-        try:
-            groups = [group.strip() for group in attr.split(";") if group.strip()]
-            splines: list[list[float]] = []
-            for group in groups:
-                numbers = [float(value.strip()) for value in re.split(r"[,\s]+", group) if value.strip()]
-                if len(numbers) != 4 or not all(0.0 <= number <= 1.0 for number in numbers):
-                    raise ValueError
-                splines.append(numbers)
-        except (ValueError, TypeError):
-            self.animation_summary.add_warning("Invalid keySplines format")
-            self._record_degradation("key_splines_invalid_format")
-            return None
-
-        return splines or None
-
-    def _parse_calc_mode(
-        self,
-        element: etree._Element,
-        animation_type: AnimationType,
-    ) -> CalcMode:
-        attr = (element.get("calcMode") or "").strip().lower()
-        mapping = {
-            "linear": CalcMode.LINEAR,
-            "discrete": CalcMode.DISCRETE,
-            "paced": CalcMode.PACED,
-            "spline": CalcMode.SPLINE,
-        }
-        if not attr:
-            if animation_type == AnimationType.ANIMATE_MOTION:
-                return CalcMode.PACED
-            return CalcMode.LINEAR
-        return mapping.get(attr, CalcMode.LINEAR)
-
     def _parse_transform_type(
         self,
         element: etree._Element,
@@ -1003,6 +580,9 @@ class SMILParser:
             return None
         return rotate
 
+    # ------------------------------------------------------------------ #
+    # Summary helpers                                                    #
+    # ------------------------------------------------------------------ #
     def _update_summary(self, animation: AnimationDefinition) -> None:
         if animation.timing.duration != float("inf"):
             end_time = animation.timing.get_end_time()
