@@ -24,6 +24,14 @@ class MockConverter(ShapeConversionMixin):
         self._logger = Mock()
         self._resvg_tree = None
         self._resvg_element_lookup = {}
+        from svg2ooxml.core.styling.style_extractor import StyleResult
+        mock_result = StyleResult(fill=None, stroke=None, opacity=1.0, metadata={}, effects=[])
+        mock_style = Mock()
+        mock_style.extract.return_value = mock_result
+        self._style_extractor = mock_style
+        self._services = Mock()
+        self._context = Mock()
+        self._css_context = {}
 
     def _policy_options(self, category):
         """Mock policy options method."""
