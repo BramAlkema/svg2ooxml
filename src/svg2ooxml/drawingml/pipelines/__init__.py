@@ -1,1 +1,0 @@
-# drawingml/pipelines sub-package
