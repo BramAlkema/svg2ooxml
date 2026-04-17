@@ -363,7 +363,7 @@ Total SVG Elements Analyzed: 46
 
 **Advanced Typography - Limited**:
 - ⚠️ Kerning/letter-spacing - Parsed and stored but not rendered in DrawingML
-- ⚠️ Font-variant - Stored but not applied (no small-caps, etc.)
+- ✅ Font-variant: small-caps - Applied via `cap="small"` on `<a:rPr>` (validated with .NET SDK)
 - ❌ OpenType features - No font-feature-settings support
 - ❌ Variable fonts - No font-variation-settings
 
