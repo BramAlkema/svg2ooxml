@@ -1,0 +1,775 @@
+"""Affine, rotation, projection, and element translation utilities for animation motion."""
+
+from __future__ import annotations
+
+import math
+from collections.abc import Mapping, Sequence
+from typing import Any
+
+from svg2ooxml.core.ir.converter import IRScene
+from svg2ooxml.ir.animation import AnimationDefinition, AnimationType, CalcMode
+
+
+# ---------------------------------------------------------------------------
+# Sampling & interpolation
+# ---------------------------------------------------------------------------
+
+
+def _sample_progress_values(steps: int = 12) -> list[float]:
+    return [step / steps for step in range(steps + 1)]
+
+
+def _lerp(start: float, end: float, progress: float) -> float:
+    return start + (end - start) * progress
+
+
+# ---------------------------------------------------------------------------
+# Affine matrix helpers
+# ---------------------------------------------------------------------------
+
+
+def _resolve_affine_matrix(
+    animations: Sequence[AnimationDefinition],
+) -> tuple[float, float, float, float, float, float] | None:
+    for animation in animations:
+        if animation.motion_space_matrix is not None:
+            return animation.motion_space_matrix
+    return None
+
+
+def _project_affine_point(
+    point: tuple[float, float],
+    matrix: tuple[float, float, float, float, float, float] | None,
+) -> tuple[float, float]:
+    x, y = point
+    if matrix is None:
+        return (x, y)
+    a, b, c, d, e, f = matrix
+    return (a * x + c * y + e, b * x + d * y + f)
+
+
+def _inverse_project_affine_point(
+    point: tuple[float, float],
+    matrix: tuple[float, float, float, float, float, float] | None,
+) -> tuple[float, float]:
+    x, y = point
+    if matrix is None:
+        return (x, y)
+    a, b, c, d, e, f = matrix
+    det = (a * d) - (b * c)
+    if abs(det) <= 1e-9:
+        return (x, y)
+    px = x - e
+    py = y - f
+    return ((d * px - c * py) / det, (-b * px + a * py) / det)
+
+
+def _inverse_project_affine_rect(
+    rect: Any,
+    matrix: tuple[float, float, float, float, float, float] | None,
+):
+    from svg2ooxml.ir.geometry import Rect
+
+    corners = (
+        (float(rect.x), float(rect.y)),
+        (float(rect.x + rect.width), float(rect.y)),
+        (float(rect.x), float(rect.y + rect.height)),
+        (float(rect.x + rect.width), float(rect.y + rect.height)),
+    )
+    local_corners = [_inverse_project_affine_point(corner, matrix) for corner in corners]
+    xs = [corner[0] for corner in local_corners]
+    ys = [corner[1] for corner in local_corners]
+    return Rect(
+        min(xs),
+        min(ys),
+        max(xs) - min(xs),
+        max(ys) - min(ys),
+    )
+
+
+def _image_local_layout(
+    element: Any,
+    local_bbox: Any,
+):
+    from svg2ooxml.ir.geometry import Rect
+
+    metadata = getattr(element, "metadata", None)
+    if not isinstance(metadata, dict):
+        return local_bbox, local_bbox
+    layout = metadata.get("image_layout")
+    if not isinstance(layout, dict):
+        return local_bbox, local_bbox
+
+    viewport = layout.get("viewport")
+    content_offset = layout.get("content_offset")
+    content_size = layout.get("content_size")
+    if not (
+        isinstance(viewport, dict)
+        and isinstance(content_offset, dict)
+        and isinstance(content_size, dict)
+    ):
+        return local_bbox, local_bbox
+
+    try:
+        viewport_rect = Rect(
+            float(viewport["x"]),
+            float(viewport["y"]),
+            float(viewport["width"]),
+            float(viewport["height"]),
+        )
+        content_rect = Rect(
+            viewport_rect.x + float(content_offset["x"]),
+            viewport_rect.y + float(content_offset["y"]),
+            float(content_size["width"]),
+            float(content_size["height"]),
+        )
+    except (KeyError, TypeError, ValueError):
+        return local_bbox, local_bbox
+
+    return viewport_rect, content_rect
+
+
+# ---------------------------------------------------------------------------
+# Rotation & projection
+# ---------------------------------------------------------------------------
+
+
+def _rotate_point(point: tuple[float, float], angle_deg: float) -> tuple[float, float]:
+    radians = math.radians(angle_deg)
+    cos_v = math.cos(radians)
+    sin_v = math.sin(radians)
+    x, y = point
+    return (x * cos_v - y * sin_v, x * sin_v + y * cos_v)
+
+
+def _project_linear_motion_delta(
+    dx: float,
+    dy: float,
+    animation: AnimationDefinition,
+) -> tuple[float, float]:
+    matrix = animation.motion_space_matrix
+    if matrix is None:
+        return (dx, dy)
+    a, b, c, d, _e, _f = matrix
+    return (a * dx + c * dy, b * dx + d * dy)
+
+
+def _format_motion_delta(value: float) -> str:
+    if abs(value) < 1e-10:
+        return "0"
+    return f"{value:.6g}"
+
+
+# ---------------------------------------------------------------------------
+# Element heading inference
+# ---------------------------------------------------------------------------
+
+
+def _infer_element_heading_deg(element: Any) -> float | None:
+    from svg2ooxml.ir.geometry import LineSegment
+    from svg2ooxml.ir.scene import Path as IRPath
+    from svg2ooxml.ir.shapes import Line, Polygon, Polyline
+
+    if isinstance(element, Line):
+        dx = element.end.x - element.start.x
+        dy = element.end.y - element.start.y
+        if abs(dx) <= 1e-9 and abs(dy) <= 1e-9:
+            return None
+        return _angle_deg(dx, dy)
+
+    if isinstance(element, Polyline):
+        return _infer_heading_from_points(
+            [(point.x, point.y) for point in element.points],
+            closed=False,
+        )
+
+    if isinstance(element, Polygon):
+        return _infer_heading_from_points(
+            [(point.x, point.y) for point in element.points],
+            closed=True,
+        )
+
+    if isinstance(element, IRPath):
+        points: list[tuple[float, float]] = []
+        for segment in element.segments:
+            start = getattr(segment, "start", None)
+            end = getattr(segment, "end", None)
+            if start is not None:
+                points.append((float(start.x), float(start.y)))
+            if isinstance(segment, LineSegment) and end is not None:
+                points.append((float(end.x), float(end.y)))
+        return _infer_heading_from_points(points, closed=element.is_closed)
+
+    return None
+
+
+def _infer_heading_from_points(
+    points: list[tuple[float, float]],
+    *,
+    closed: bool,
+) -> float | None:
+    vertices = _dedupe_motion_vertices(points, closed=closed)
+    if len(vertices) < 2:
+        return None
+
+    if closed and len(vertices) >= 3:
+        centroid_x = sum(x for x, _y in vertices) / len(vertices)
+        centroid_y = sum(y for _x, y in vertices) / len(vertices)
+        ranked = sorted(
+            (
+                ((x - centroid_x) ** 2 + (y - centroid_y) ** 2, x, y)
+                for x, y in vertices
+            ),
+            reverse=True,
+        )
+        if ranked[0][0] > 1e-6:
+            if len(ranked) == 1 or ranked[0][0] - ranked[1][0] > ranked[0][0] * 0.05:
+                _distance_sq, tip_x, tip_y = ranked[0]
+                return _angle_deg(tip_x - centroid_x, tip_y - centroid_y)
+
+    start_x, start_y = vertices[0]
+    end_x, end_y = vertices[-1]
+    dx = end_x - start_x
+    dy = end_y - start_y
+    if abs(dx) <= 1e-9 and abs(dy) <= 1e-9:
+        return None
+    return _angle_deg(dx, dy)
+
+
+def _dedupe_motion_vertices(
+    points: list[tuple[float, float]],
+    *,
+    closed: bool,
+) -> list[tuple[float, float]]:
+    deduped: list[tuple[float, float]] = []
+    for x, y in points:
+        if not deduped or abs(deduped[-1][0] - x) > 1e-6 or abs(deduped[-1][1] - y) > 1e-6:
+            deduped.append((x, y))
+    if (
+        closed
+        and len(deduped) > 1
+        and abs(deduped[0][0] - deduped[-1][0]) <= 1e-6
+        and abs(deduped[0][1] - deduped[-1][1]) <= 1e-6
+    ):
+        deduped.pop()
+    return deduped
+
+
+def _angle_deg(dx: float, dy: float) -> float:
+    return float(math.degrees(math.atan2(dy, dx)))
+
+
+# ---------------------------------------------------------------------------
+# Motion path parsing & sampling
+# ---------------------------------------------------------------------------
+
+
+def _parse_sampled_motion_points(path_value: str) -> list[tuple[float, float]]:
+    from svg2ooxml.common.geometry.paths import PathParseError, parse_path_data
+    from svg2ooxml.common.geometry.paths.segments import BezierSegment, LineSegment
+    from svg2ooxml.ir.geometry import Point
+
+    try:
+        segments = parse_path_data(path_value)
+    except PathParseError:
+        return []
+    if not segments:
+        return []
+
+    points: list[Point] = [segments[0].start]
+    for segment in segments:
+        if isinstance(segment, LineSegment):
+            points.append(segment.end)
+        elif isinstance(segment, BezierSegment):
+            for step in range(1, 21):
+                t = step / 20.0
+                mt = 1.0 - t
+                points.append(
+                    Point(
+                        x=(
+                            mt**3 * segment.start.x
+                            + 3 * mt**2 * t * segment.control1.x
+                            + 3 * mt * t**2 * segment.control2.x
+                            + t**3 * segment.end.x
+                        ),
+                        y=(
+                            mt**3 * segment.start.y
+                            + 3 * mt**2 * t * segment.control1.y
+                            + 3 * mt * t**2 * segment.control2.y
+                            + t**3 * segment.end.y
+                        ),
+                    )
+                )
+
+    deduped: list[tuple[float, float]] = []
+    for point in points:
+        pair = (float(point.x), float(point.y))
+        if (
+            not deduped
+            or abs(deduped[-1][0] - pair[0]) > 1e-6
+            or abs(deduped[-1][1] - pair[1]) > 1e-6
+        ):
+            deduped.append(pair)
+    return deduped
+
+
+def _sample_polyline_at_fraction(
+    points: list[tuple[float, float]],
+    fraction: float,
+) -> tuple[float, float]:
+    if fraction <= 0.0:
+        return points[0]
+    if fraction >= 1.0:
+        return points[-1]
+
+    cumulative = [0.0]
+    total = 0.0
+    for index in range(1, len(points)):
+        x0, y0 = points[index - 1]
+        x1, y1 = points[index]
+        total += math.hypot(x1 - x0, y1 - y0)
+        cumulative.append(total)
+    if total <= 1e-9:
+        return points[0]
+
+    target = total * fraction
+    for index in range(1, len(points)):
+        prev_dist = cumulative[index - 1]
+        curr_dist = cumulative[index]
+        if target <= curr_dist:
+            span = curr_dist - prev_dist
+            if span <= 1e-9:
+                return points[index]
+            t = (target - prev_dist) / span
+            x0, y0 = points[index - 1]
+            x1, y1 = points[index]
+            return (x0 + (x1 - x0) * t, y0 + (y1 - y0) * t)
+    return points[-1]
+
+
+# ---------------------------------------------------------------------------
+# Sampled motion path builder
+# ---------------------------------------------------------------------------
+
+
+def _build_sampled_motion_replacement(
+    *,
+    template: AnimationDefinition,
+    points: list[tuple[float, float]],
+) -> AnimationDefinition:
+    from dataclasses import replace as _replace
+
+    relative_points = _relative_motion_points(points)
+    path = _build_motion_path_from_relative_points(relative_points)
+    return _replace(
+        template,
+        animation_type=AnimationType.ANIMATE_MOTION,
+        target_attribute="position",
+        values=[path],
+        key_times=None,
+        key_splines=None,
+        calc_mode=CalcMode.LINEAR,
+        transform_type=None,
+        additive="replace",
+        accumulate="none",
+        motion_rotate=None,
+        element_motion_offset_px=None,
+        motion_space_matrix=None,
+    )
+
+
+def _relative_motion_points(
+    points: list[tuple[float, float]],
+) -> list[tuple[float, float]]:
+    deduped: list[tuple[float, float]] = []
+    start_x, start_y = points[0]
+    for x, y in points:
+        pair = (x - start_x, y - start_y)
+        if (
+            not deduped
+            or abs(deduped[-1][0] - pair[0]) > 1e-6
+            or abs(deduped[-1][1] - pair[1]) > 1e-6
+        ):
+            deduped.append(pair)
+    if len(deduped) == 1:
+        deduped.append(deduped[0])
+    return deduped
+
+
+def _build_motion_path_from_relative_points(
+    points: list[tuple[float, float]],
+) -> str:
+    segments = []
+    for index, (x, y) in enumerate(points):
+        command = "M" if index == 0 else "L"
+        segments.append(
+            f"{command} {_format_motion_delta(x)} {_format_motion_delta(y)}"
+        )
+    return " ".join(segments) + " E"
+
+
+# ---------------------------------------------------------------------------
+# Motion start extraction & projection
+# ---------------------------------------------------------------------------
+
+
+def _first_motion_point(
+    animation: AnimationDefinition,
+) -> tuple[float, float] | None:
+    from svg2ooxml.common.geometry.paths import PathParseError, parse_path_data
+
+    if not animation.values:
+        return None
+
+    path_value = animation.values[0].strip()
+    if not path_value:
+        return None
+
+    try:
+        segments = parse_path_data(path_value)
+    except PathParseError:
+        return None
+
+    if segments:
+        start = getattr(segments[0], "start", None)
+        if start is not None:
+            return (float(start.x), float(start.y))
+
+    return None
+
+
+def _project_motion_point(
+    point: tuple[float, float],
+    animation: AnimationDefinition,
+) -> tuple[float, float]:
+    x, y = point
+    if animation.motion_space_matrix is not None:
+        a, b, c, d, e, f = animation.motion_space_matrix
+        x, y = (a * x + c * y + e, b * x + d * y + f)
+
+    if animation.element_motion_offset_px is not None:
+        offset_x, offset_y = animation.element_motion_offset_px
+        x += offset_x
+        y += offset_y
+
+    return (x, y)
+
+
+# ---------------------------------------------------------------------------
+# Element translation helpers
+# ---------------------------------------------------------------------------
+
+
+def _translate_element_to_center_target(
+    element: Any,
+    center_targets: Mapping[str, tuple[float, float]],
+):
+    from dataclasses import replace as _replace
+
+    from svg2ooxml.ir.geometry import BezierSegment, LineSegment, Point, Rect
+    from svg2ooxml.ir.scene import Group, Image
+    from svg2ooxml.ir.scene import Path as IRPath
+    from svg2ooxml.ir.shapes import Circle, Ellipse, Line, Polygon, Polyline, Rectangle
+    from svg2ooxml.ir.text import TextFrame
+
+    metadata = getattr(element, "metadata", None)
+    element_ids = metadata.get("element_ids", []) if isinstance(metadata, dict) else []
+    bbox = getattr(element, "bbox", None)
+
+    dx = 0.0
+    dy = 0.0
+    if bbox is not None:
+        current_center = (bbox.x + bbox.width / 2.0, bbox.y + bbox.height / 2.0)
+        for element_id in element_ids:
+            if element_id in center_targets:
+                target_x, target_y = center_targets[element_id]
+                dx = target_x - current_center[0]
+                dy = target_y - current_center[1]
+                break
+
+    def _move_point(point: Point) -> Point:
+        return Point(point.x + dx, point.y + dy)
+
+    def _move_rect(rect: Rect) -> Rect:
+        return Rect(rect.x + dx, rect.y + dy, rect.width, rect.height)
+
+    if isinstance(element, Group):
+        moved_children = [
+            _translate_element_to_center_target(child, center_targets)
+            for child in element.children
+        ]
+        if abs(dx) > 1e-9 or abs(dy) > 1e-9:
+            moved_children = [
+                _translate_element_by_delta(child, dx, dy)
+                for child in moved_children
+            ]
+        return _replace(element, children=moved_children)
+
+    if abs(dx) <= 1e-9 and abs(dy) <= 1e-9:
+        return element
+
+    if isinstance(element, IRPath):
+        moved_segments = []
+        for segment in element.segments:
+            if isinstance(segment, LineSegment):
+                moved_segments.append(
+                    LineSegment(
+                        start=_move_point(segment.start),
+                        end=_move_point(segment.end),
+                    )
+                )
+            elif isinstance(segment, BezierSegment):
+                moved_segments.append(
+                    BezierSegment(
+                        start=_move_point(segment.start),
+                        control1=_move_point(segment.control1),
+                        control2=_move_point(segment.control2),
+                        end=_move_point(segment.end),
+                    )
+                )
+            else:
+                moved_segments.append(segment)
+        return _replace(element, segments=moved_segments)
+    if isinstance(element, Rectangle):
+        return _replace(element, bounds=_move_rect(element.bounds))
+    if isinstance(element, Circle):
+        return _replace(element, center=_move_point(element.center))
+    if isinstance(element, Ellipse):
+        return _replace(element, center=_move_point(element.center))
+    if isinstance(element, Line):
+        return _replace(
+            element,
+            start=_move_point(element.start),
+            end=_move_point(element.end),
+        )
+    if isinstance(element, Polyline):
+        return _replace(
+            element,
+            points=[_move_point(point) for point in element.points],
+        )
+    if isinstance(element, Polygon):
+        return _replace(
+            element,
+            points=[_move_point(point) for point in element.points],
+        )
+    if isinstance(element, TextFrame):
+        return _replace(
+            element,
+            origin=_move_point(element.origin),
+            bbox=_move_rect(element.bbox),
+        )
+    if isinstance(element, Image):
+        return _replace(
+            element,
+            origin=_move_point(element.origin),
+        )
+    return element
+
+
+def _translate_element_to_motion_start(
+    element: Any,
+    start_positions: Mapping[str, tuple[float, float]],
+):
+    from dataclasses import replace as _replace
+
+    from svg2ooxml.ir.geometry import BezierSegment, LineSegment, Point, Rect
+    from svg2ooxml.ir.scene import Group, Image
+    from svg2ooxml.ir.scene import Path as IRPath
+    from svg2ooxml.ir.shapes import Circle, Ellipse, Line, Polygon, Polyline, Rectangle
+    from svg2ooxml.ir.text import TextFrame
+
+    metadata = getattr(element, "metadata", None)
+    element_ids = metadata.get("element_ids", []) if isinstance(metadata, dict) else []
+    bbox = getattr(element, "bbox", None)
+
+    dx = 0.0
+    dy = 0.0
+    if bbox is not None:
+        for element_id in element_ids:
+            if element_id in start_positions:
+                target_x, target_y = start_positions[element_id]
+                dx = target_x - bbox.x
+                dy = target_y - bbox.y
+                break
+
+    def _move_point(point: Point) -> Point:
+        return Point(point.x + dx, point.y + dy)
+
+    def _move_rect(rect: Rect) -> Rect:
+        return Rect(rect.x + dx, rect.y + dy, rect.width, rect.height)
+
+    if isinstance(element, Group):
+        moved_children = [
+            _translate_element_to_motion_start(child, start_positions)
+            for child in element.children
+        ]
+        if abs(dx) > 1e-9 or abs(dy) > 1e-9:
+            moved_children = [
+                _translate_element_by_delta(child, dx, dy)
+                for child in moved_children
+            ]
+        return _replace(element, children=moved_children)
+
+    if abs(dx) <= 1e-9 and abs(dy) <= 1e-9:
+        return element
+
+    if isinstance(element, IRPath):
+        moved_segments = []
+        for segment in element.segments:
+            if isinstance(segment, LineSegment):
+                moved_segments.append(
+                    LineSegment(
+                        start=_move_point(segment.start),
+                        end=_move_point(segment.end),
+                    )
+                )
+            elif isinstance(segment, BezierSegment):
+                moved_segments.append(
+                    BezierSegment(
+                        start=_move_point(segment.start),
+                        control1=_move_point(segment.control1),
+                        control2=_move_point(segment.control2),
+                        end=_move_point(segment.end),
+                    )
+                )
+            else:
+                moved_segments.append(segment)
+        return _replace(element, segments=moved_segments)
+    if isinstance(element, Rectangle):
+        return _replace(element, bounds=_move_rect(element.bounds))
+    if isinstance(element, Circle):
+        return _replace(element, center=_move_point(element.center))
+    if isinstance(element, Ellipse):
+        return _replace(element, center=_move_point(element.center))
+    if isinstance(element, Line):
+        return _replace(
+            element,
+            start=_move_point(element.start),
+            end=_move_point(element.end),
+        )
+    if isinstance(element, Polyline):
+        return _replace(
+            element,
+            points=[_move_point(point) for point in element.points],
+        )
+    if isinstance(element, Polygon):
+        return _replace(
+            element,
+            points=[_move_point(point) for point in element.points],
+        )
+    if isinstance(element, TextFrame):
+        return _replace(
+            element,
+            origin=_move_point(element.origin),
+            bbox=_move_rect(element.bbox),
+        )
+    if isinstance(element, Image):
+        return _replace(
+            element,
+            origin=_move_point(element.origin),
+        )
+    return element
+
+
+def _translate_element_by_delta(element: Any, dx: float, dy: float):
+    from dataclasses import replace as _replace
+
+    from svg2ooxml.ir.geometry import BezierSegment, LineSegment, Point, Rect
+    from svg2ooxml.ir.scene import Group, Image
+    from svg2ooxml.ir.scene import Path as IRPath
+    from svg2ooxml.ir.shapes import Circle, Ellipse, Line, Polygon, Polyline, Rectangle
+    from svg2ooxml.ir.text import TextFrame
+
+    def _move_point(point: Point) -> Point:
+        return Point(point.x + dx, point.y + dy)
+
+    def _move_rect(rect: Rect) -> Rect:
+        return Rect(rect.x + dx, rect.y + dy, rect.width, rect.height)
+
+    if isinstance(element, Group):
+        return _replace(
+            element,
+            children=[_translate_element_by_delta(child, dx, dy) for child in element.children],
+        )
+    if isinstance(element, IRPath):
+        moved_segments = []
+        for segment in element.segments:
+            if isinstance(segment, LineSegment):
+                moved_segments.append(
+                    LineSegment(
+                        start=_move_point(segment.start),
+                        end=_move_point(segment.end),
+                    )
+                )
+            elif isinstance(segment, BezierSegment):
+                moved_segments.append(
+                    BezierSegment(
+                        start=_move_point(segment.start),
+                        control1=_move_point(segment.control1),
+                        control2=_move_point(segment.control2),
+                        end=_move_point(segment.end),
+                    )
+                )
+            else:
+                moved_segments.append(segment)
+        return _replace(element, segments=moved_segments)
+    if isinstance(element, Rectangle):
+        return _replace(element, bounds=_move_rect(element.bounds))
+    if isinstance(element, Circle):
+        return _replace(element, center=_move_point(element.center))
+    if isinstance(element, Ellipse):
+        return _replace(element, center=_move_point(element.center))
+    if isinstance(element, Line):
+        return _replace(
+            element,
+            start=_move_point(element.start),
+            end=_move_point(element.end),
+        )
+    if isinstance(element, Polyline):
+        return _replace(element, points=[_move_point(point) for point in element.points])
+    if isinstance(element, Polygon):
+        return _replace(element, points=[_move_point(point) for point in element.points])
+    if isinstance(element, TextFrame):
+        return _replace(element, origin=_move_point(element.origin), bbox=_move_rect(element.bbox))
+    if isinstance(element, Image):
+        return _replace(element, origin=_move_point(element.origin))
+    return element
+
+
+# ---------------------------------------------------------------------------
+# Immediate motion start application
+# ---------------------------------------------------------------------------
+
+
+def _apply_immediate_motion_starts(
+    scene: IRScene,
+    animations: list[AnimationDefinition],
+) -> None:
+    """Pre-position begin=0 motion targets at their SVG path start points."""
+    start_positions: dict[str, tuple[float, float]] = {}
+    for animation in animations:
+        if animation.animation_type != AnimationType.ANIMATE_MOTION:
+            continue
+        if (
+            animation.target_attribute == "position"
+            and animation.motion_space_matrix is None
+            and animation.element_motion_offset_px is None
+        ):
+            # Synthesized relative delta paths already start from the authored
+            # base geometry in the scene. Re-applying a motion-start probe
+            # would incorrectly snap those shapes to (0, 0).
+            continue
+        if abs(animation.timing.begin) > 1e-9:
+            continue
+        first_point = _first_motion_point(animation)
+        if first_point is None:
+            continue
+        start_positions[animation.element_id] = _project_motion_point(first_point, animation)
+
+    if not start_positions:
+        return
+
+    scene.elements = [
+        _translate_element_to_motion_start(element, start_positions)
+        for element in scene.elements
+    ]

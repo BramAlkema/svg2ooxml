@@ -1,0 +1,780 @@
+"""Animation serialization helpers, enrichment, and sampled center motion composition."""
+
+from __future__ import annotations
+
+from collections import Counter
+from collections.abc import Mapping
+from dataclasses import dataclass
+from typing import Any
+
+from svg2ooxml.core.ir.converter import IRScene
+from svg2ooxml.drawingml.animation.native_matcher import (
+    NativeAnimationMatch,
+    classify_native_animation,
+)
+from svg2ooxml.ir.animation import (
+    AnimationDefinition,
+    AnimationScene,
+    AnimationSummary,
+    AnimationTiming,
+    AnimationType,
+    CalcMode,
+    TransformType,
+)
+
+from svg2ooxml.core.export.motion_geometry import (
+    _build_sampled_motion_replacement,
+    _image_local_layout,
+    _inverse_project_affine_point,
+    _inverse_project_affine_rect,
+    _infer_element_heading_deg,
+    _lerp,
+    _parse_sampled_motion_points,
+    _project_affine_point,
+    _resolve_affine_matrix,
+    _rotate_point,
+    _sample_polyline_at_fraction,
+    _sample_progress_values,
+    _translate_element_to_center_target,
+)
+
+
+# ---------------------------------------------------------------------------
+# Serialization
+# ---------------------------------------------------------------------------
+
+
+def _build_animation_metadata(
+    animations: list[AnimationDefinition],
+    timeline_scenes: list[AnimationScene],
+    summary: AnimationSummary | None,
+    fallback_reasons: Mapping[str, int] | None,
+    policy: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    summary_dict = _serialize_animation_summary(summary, fallback_reasons=fallback_reasons)
+    timeline_payload = [_serialize_timeline_scene(scene) for scene in timeline_scenes]
+    native_matches = [classify_native_animation(defn) for defn in animations]
+    payload = {
+        "definition_count": len(animations),
+        "definitions": [
+            _serialize_animation_definition(defn, native_match)
+            for defn, native_match in zip(animations, native_matches, strict=True)
+        ],
+        "timeline": timeline_payload,
+        "summary": summary_dict,
+        "native_match_summary": _serialize_native_match_summary(native_matches),
+    }
+    if policy:
+        payload["policy"] = dict(policy)
+    return payload
+
+
+def _serialize_animation_definition(
+    definition: AnimationDefinition,
+    native_match: NativeAnimationMatch | None = None,
+) -> dict[str, Any]:
+    native_match = native_match or classify_native_animation(definition)
+    return {
+        "element_id": definition.element_id,
+        "animation_type": definition.animation_type.value,
+        "target_attribute": definition.target_attribute,
+        "values": list(definition.values),
+        "native_match": native_match.to_dict(),
+        "timing": _serialize_animation_timing(definition.timing),
+        "attribute_type": definition.attribute_type,
+        "from_value": definition.from_value,
+        "to_value": definition.to_value,
+        "by_value": definition.by_value,
+        "key_times": list(definition.key_times) if definition.key_times else None,
+        "key_points": list(definition.key_points) if definition.key_points else None,
+        "key_splines": [list(spline) for spline in definition.key_splines] if definition.key_splines else None,
+        "calc_mode": definition.calc_mode.value if isinstance(definition.calc_mode, CalcMode) else definition.calc_mode,
+        "transform_type": definition.transform_type.value if definition.transform_type else None,
+        "additive": definition.additive,
+        "accumulate": definition.accumulate,
+        "restart": definition.restart,
+        "min_ms": definition.min_ms,
+        "max_ms": definition.max_ms,
+        "raw_attributes": dict(definition.raw_attributes),
+        "element_heading_deg": definition.element_heading_deg,
+        "motion_space_matrix": list(definition.motion_space_matrix) if definition.motion_space_matrix else None,
+        "element_motion_offset_px": list(definition.element_motion_offset_px) if definition.element_motion_offset_px else None,
+        "motion_viewport_px": list(definition.motion_viewport_px) if definition.motion_viewport_px else None,
+    }
+
+
+def _serialize_native_match_summary(
+    native_matches: list[NativeAnimationMatch],
+) -> dict[str, Any]:
+    by_level: Counter[str] = Counter(match.level.value for match in native_matches)
+    by_reason: Counter[str] = Counter(match.reason for match in native_matches)
+    return {
+        "total": len(native_matches),
+        "by_level": dict(sorted(by_level.items())),
+        "by_reason": dict(sorted(by_reason.items())),
+        "mimic_allowed_count": sum(1 for match in native_matches if match.mimic_allowed),
+        "oracle_required_count": sum(1 for match in native_matches if match.oracle_required),
+        "visual_required_count": sum(1 for match in native_matches if match.visual_required),
+    }
+
+
+def _serialize_animation_timing(timing: AnimationTiming) -> dict[str, Any]:
+    return {
+        "begin": timing.begin,
+        "duration": timing.duration,
+        "repeat_count": timing.repeat_count,
+        "repeat_duration": timing.repeat_duration,
+        "fill_mode": timing.fill_mode.value,
+        "begin_triggers": [
+            _serialize_begin_trigger(trigger)
+            for trigger in (timing.begin_triggers or [])
+        ],
+        "end_triggers": [
+            _serialize_begin_trigger(trigger)
+            for trigger in (timing.end_triggers or [])
+        ],
+    }
+
+
+def _serialize_begin_trigger(trigger: Any) -> dict[str, Any]:
+    return {
+        "trigger_type": trigger.trigger_type.value,
+        "delay_seconds": trigger.delay_seconds,
+        "target_element_id": trigger.target_element_id,
+        "event_name": getattr(trigger, "event_name", None),
+        "repeat_iteration": getattr(trigger, "repeat_iteration", None),
+        "access_key": getattr(trigger, "access_key", None),
+        "wallclock_value": getattr(trigger, "wallclock_value", None),
+    }
+
+
+def _serialize_animation_summary(
+    summary: AnimationSummary | None,
+    *,
+    fallback_reasons: Mapping[str, int] | None = None,
+) -> dict[str, Any]:
+    if summary is None:
+        return {
+            "total_animations": 0,
+            "complexity": "simple",
+            "duration": 0.0,
+            "has_transforms": False,
+            "has_motion_paths": False,
+            "has_color_animations": False,
+            "has_easing": False,
+            "has_sequences": False,
+            "element_count": 0,
+            "warnings": [],
+            "fallback_reasons": {},
+        }
+
+    return {
+        "total_animations": summary.total_animations,
+        "complexity": summary.complexity.value,
+        "duration": summary.duration,
+        "has_transforms": summary.has_transforms,
+        "has_motion_paths": summary.has_motion_paths,
+        "has_color_animations": summary.has_color_animations,
+        "has_easing": summary.has_easing,
+        "has_sequences": summary.has_sequences,
+        "element_count": summary.element_count,
+        "warnings": list(summary.warnings),
+        "fallback_reasons": dict(fallback_reasons or {}),
+    }
+
+
+def _serialize_timeline_scene(scene: AnimationScene) -> dict[str, Any]:
+    return {
+        "time": scene.time,
+        "element_states": {element_id: dict(properties) for element_id, properties in scene.element_states.items()},
+    }
+
+
+# ---------------------------------------------------------------------------
+# Predicate helpers
+# ---------------------------------------------------------------------------
+
+
+def _single_matching_member(
+    members: list[tuple[int, AnimationDefinition]],
+    predicate,
+) -> tuple[int, AnimationDefinition] | None:
+    matches = [(index, animation) for index, animation in members if predicate(animation)]
+    if len(matches) != 1:
+        return None
+    return matches[0]
+
+
+def _is_simple_linear_two_value_animation(animation: AnimationDefinition) -> bool:
+    if len(animation.values) != 2:
+        return False
+    if animation.key_times or animation.key_splines:
+        return False
+    calc_mode = (
+        animation.calc_mode.value
+        if isinstance(animation.calc_mode, CalcMode)
+        else str(animation.calc_mode).lower()
+    )
+    return calc_mode == CalcMode.LINEAR.value
+
+
+def _is_simple_line_endpoint_animation(animation: AnimationDefinition) -> bool:
+    return (
+        animation.animation_type == AnimationType.ANIMATE
+        and animation.transform_type is None
+        and animation.target_attribute in {"x1", "x2", "y1", "y2"}
+        and animation.additive == "replace"
+        and _is_simple_linear_two_value_animation(animation)
+    )
+
+
+def _is_polyline_segment_fade_animation(animation: AnimationDefinition) -> bool:
+    return (
+        animation.animation_type == AnimationType.ANIMATE
+        and animation.transform_type is None
+        and animation.target_attribute in {"opacity", "fill-opacity", "stroke-opacity"}
+    )
+
+
+def _is_simple_linear_numeric_animation(animation: AnimationDefinition) -> bool:
+    return (
+        animation.animation_type == AnimationType.ANIMATE
+        and animation.transform_type is None
+        and animation.additive == "replace"
+        and _is_simple_linear_two_value_animation(animation)
+    )
+
+
+def _is_simple_motion_sampling_candidate(animation: AnimationDefinition) -> bool:
+    if animation.animation_type != AnimationType.ANIMATE_MOTION:
+        return False
+    if animation.key_times or animation.key_splines:
+        return False
+    calc_mode = (
+        animation.calc_mode.value
+        if isinstance(animation.calc_mode, CalcMode)
+        else str(animation.calc_mode).lower()
+    )
+    return calc_mode in {CalcMode.LINEAR.value, CalcMode.PACED.value}
+
+
+def _is_simple_origin_rotate_animation(animation: AnimationDefinition) -> bool:
+    from svg2ooxml.common.conversions.transforms import parse_numeric_list
+
+    if animation.animation_type != AnimationType.ANIMATE_TRANSFORM:
+        return False
+    if animation.transform_type != TransformType.ROTATE:
+        return False
+    if not _is_simple_linear_two_value_animation(animation):
+        return False
+    for value in animation.values:
+        if len(parse_numeric_list(value)) >= 3:
+            return False
+    return True
+
+
+def _simple_position_axis(animation: AnimationDefinition) -> str | None:
+    if animation.animation_type != AnimationType.ANIMATE:
+        return None
+    if animation.transform_type is not None:
+        return None
+    if len(animation.values) != 2:
+        return None
+    if animation.key_times or animation.key_splines:
+        return None
+    if animation.additive != "replace":
+        return None
+
+    calc_mode = (
+        animation.calc_mode.value
+        if isinstance(animation.calc_mode, CalcMode)
+        else str(animation.calc_mode).lower()
+    )
+    if calc_mode != CalcMode.LINEAR.value:
+        return None
+
+    if animation.target_attribute in {"x", "cx", "ppt_x"}:
+        return "x"
+    if animation.target_attribute in {"y", "cy", "ppt_y"}:
+        return "y"
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Parse helpers
+# ---------------------------------------------------------------------------
+
+
+def _parse_scale_bounds(
+    animation: AnimationDefinition,
+) -> tuple[tuple[float, float], tuple[float, float]]:
+    from svg2ooxml.common.conversions.transforms import parse_scale_pair
+
+    return (
+        parse_scale_pair(animation.values[0]),
+        parse_scale_pair(animation.values[-1]),
+    )
+
+
+def _parse_rotate_bounds(animation: AnimationDefinition) -> tuple[float, float]:
+    from svg2ooxml.common.conversions.transforms import parse_numeric_list
+
+    start_numbers = parse_numeric_list(animation.values[0])
+    end_numbers = parse_numeric_list(animation.values[-1])
+    start_angle = start_numbers[0] if start_numbers else 0.0
+    end_angle = end_numbers[0] if end_numbers else start_angle
+    return (start_angle, end_angle)
+
+
+def _numeric_bounds(
+    member: tuple[int, AnimationDefinition] | None,
+    *,
+    default: float,
+) -> tuple[float, float]:
+    if member is None:
+        return (default, default)
+    try:
+        return (float(member[1].values[0]), float(member[1].values[-1]))
+    except (TypeError, ValueError):
+        return (default, default)
+
+
+# ---------------------------------------------------------------------------
+# Grouping key helpers
+# ---------------------------------------------------------------------------
+
+
+def _sampled_motion_group_key(
+    animation: AnimationDefinition,
+    alias_map: dict[str, tuple[str, ...]],
+) -> tuple[Any, ...]:
+    timing = animation.timing
+    begin_triggers = tuple(
+        _begin_trigger_group_key(trigger)
+        for trigger in (timing.begin_triggers or [])
+    )
+    return (
+        alias_map.get(animation.element_id, (animation.element_id,)),
+        round(float(timing.begin), 6),
+        round(float(timing.duration), 6),
+        str(timing.repeat_count),
+        timing.fill_mode.value,
+        begin_triggers,
+    )
+
+
+def _begin_trigger_group_key(trigger: Any) -> tuple[Any, ...]:
+    return (
+        getattr(getattr(trigger, "trigger_type", None), "value", None),
+        float(getattr(trigger, "delay_seconds", 0.0)),
+        getattr(trigger, "target_element_id", None),
+        getattr(trigger, "event_name", None),
+        getattr(trigger, "repeat_iteration", None),
+        getattr(trigger, "access_key", None),
+        getattr(trigger, "wallclock_value", None),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Element enrichment
+# ---------------------------------------------------------------------------
+
+
+def _enrich_animations_with_element_centers(
+    animations: list[AnimationDefinition],
+    scene: IRScene,
+) -> list[AnimationDefinition]:
+    """Populate geometry-derived animation metadata from scene graph bounds.
+
+    This is needed so the rotate handler can compute orbital motion paths when
+    the SVG rotation center (cx, cy) differs from the shape center, and so
+    motion paths can be shifted into the absolute ``ppt_x``/``ppt_y`` space
+    that PowerPoint stores in ``<p:animMotion path="...">``.
+    """
+    from dataclasses import replace as _replace
+
+    from svg2ooxml.ir.scene import Group
+    from svg2ooxml.ir.text import TextFrame
+
+    bbox_map: dict[str, tuple[float, float, float, float]] = {}
+    center_map: dict[str, tuple[float, float]] = {}
+    heading_map: dict[str, float] = {}
+    text_origin_map: dict[str, tuple[float, float]] = {}
+
+    def _walk(elements: list) -> None:
+        for el in elements:
+            meta = getattr(el, "metadata", None)
+            bbox = getattr(el, "bbox", None)
+            if isinstance(meta, dict):
+                for eid in meta.get("element_ids", []):
+                    if not isinstance(eid, str) or bbox is None:
+                        continue
+                    bbox_map.setdefault(
+                        eid,
+                        (bbox.x, bbox.y, bbox.width, bbox.height),
+                    )
+                    center_map.setdefault(
+                        eid,
+                        (bbox.x + bbox.width / 2.0, bbox.y + bbox.height / 2.0),
+                    )
+                    heading = _infer_element_heading_deg(el)
+                    if heading is not None:
+                        heading_map.setdefault(eid, heading)
+                    if isinstance(el, TextFrame):
+                        text_origin_map.setdefault(
+                            eid,
+                            (el.origin.x, el.origin.y),
+                        )
+            if isinstance(el, Group):
+                _walk(getattr(el, "children", []))
+
+    _walk(scene.elements)
+
+    enriched = []
+    viewport_size = None
+    if getattr(scene, "width_px", None) and getattr(scene, "height_px", None):
+        viewport_size = (float(scene.width_px), float(scene.height_px))
+    for anim in animations:
+        if (
+            anim.transform_type in {TransformType.ROTATE, TransformType.SCALE}
+            and anim.element_center_px is None
+            and anim.element_id in center_map
+        ):
+            anim = _replace(anim, element_center_px=center_map[anim.element_id])
+        if anim.element_heading_deg is None and anim.element_id in heading_map:
+            anim = _replace(anim, element_heading_deg=heading_map[anim.element_id])
+        if (
+            anim.animation_type == AnimationType.ANIMATE_MOTION
+            and anim.element_motion_offset_px is None
+            and anim.element_id in bbox_map
+        ):
+            bbox_x, bbox_y, _, _ = bbox_map[anim.element_id]
+            if anim.element_id in text_origin_map:
+                origin_x, origin_y = text_origin_map[anim.element_id]
+            elif anim.motion_space_matrix is not None:
+                origin_x = anim.motion_space_matrix[4]
+                origin_y = anim.motion_space_matrix[5]
+            else:
+                origin_x = 0.0
+                origin_y = 0.0
+            anim = _replace(
+                anim,
+                element_motion_offset_px=(bbox_x - origin_x, bbox_y - origin_y),
+            )
+        if anim.motion_viewport_px is None and viewport_size is not None:
+            anim = _replace(anim, motion_viewport_px=viewport_size)
+        enriched.append(anim)
+    return enriched
+
+
+# ---------------------------------------------------------------------------
+# Sampled center motion composition
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class _SampledCenterMotionComposition:
+    replacement_index: int
+    consumed_indices: set[int]
+    replacement_animation: AnimationDefinition
+    updated_indices: dict[int, AnimationDefinition]
+    start_center: tuple[float, float]
+    element_id: str
+
+
+def _compose_sampled_center_motions(
+    animations: list[AnimationDefinition],
+    scene: IRScene,
+) -> list[AnimationDefinition]:
+    """Compose known stacked transform/motion cases into sampled center paths.
+
+    Some SVG stacks change the shape center in ways PowerPoint cannot infer by
+    simply combining independent native effects. For those cases we:
+
+    1. move the base IR element to the authored SVG start center
+    2. replace the position-changing fragments with one sampled motion path
+    3. keep the editable scale/rotate effect, but suppress its naive companion
+       motion because the composed path already includes that center movement
+    """
+    from svg2ooxml.ir.scene import Group
+
+    alias_map: dict[str, tuple[str, ...]] = {}
+    element_map: dict[str, object] = {}
+    center_map: dict[str, tuple[float, float]] = {}
+
+    def _walk(elements: list) -> None:
+        for el in elements:
+            meta = getattr(el, "metadata", None)
+            bbox = getattr(el, "bbox", None)
+            if isinstance(meta, dict) and bbox is not None:
+                element_ids = tuple(
+                    dict.fromkeys(
+                        eid
+                        for eid in meta.get("element_ids", [])
+                        if isinstance(eid, str) and eid
+                    )
+                )
+                if element_ids:
+                    center = (
+                        float(bbox.x + bbox.width / 2.0),
+                        float(bbox.y + bbox.height / 2.0),
+                    )
+                    for element_id in element_ids:
+                        alias_map[element_id] = element_ids
+                        element_map.setdefault(element_id, el)
+                        center_map.setdefault(element_id, center)
+            if isinstance(el, Group):
+                _walk(getattr(el, "children", []))
+
+    _walk(scene.elements)
+
+    group_map: dict[tuple[Any, ...], list[tuple[int, AnimationDefinition]]] = {}
+    for index, animation in enumerate(animations):
+        group_key = _sampled_motion_group_key(animation, alias_map)
+        group_map.setdefault(group_key, []).append((index, animation))
+
+    compositions: list[_SampledCenterMotionComposition] = []
+    for members in group_map.values():
+        base_animation = min(members, key=lambda item: item[0])[1]
+        element = element_map.get(base_animation.element_id)
+        current_center = center_map.get(base_animation.element_id)
+        if element is None or current_center is None:
+            continue
+
+        composition = _build_sampled_center_motion_composition(
+            element=element,
+            current_center=current_center,
+            members=members,
+        )
+        if composition is not None:
+            compositions.append(composition)
+
+    if not compositions:
+        return animations
+
+    center_targets = {
+        composition.element_id: composition.start_center
+        for composition in compositions
+    }
+    scene.elements = [
+        _translate_element_to_center_target(element, center_targets)
+        for element in scene.elements
+    ]
+
+    replacements = {
+        composition.replacement_index: composition
+        for composition in compositions
+    }
+    updated_indices: dict[int, AnimationDefinition] = {}
+    consumed_indices: set[int] = set()
+    for composition in compositions:
+        updated_indices.update(composition.updated_indices)
+        consumed_indices.update(composition.consumed_indices)
+
+    composed: list[AnimationDefinition] = []
+    for index, animation in enumerate(animations):
+        if index in replacements:
+            composed.append(replacements[index].replacement_animation)
+        if index in consumed_indices:
+            continue
+        composed.append(updated_indices.get(index, animation))
+    return composed
+
+
+def _build_sampled_center_motion_composition(
+    *,
+    element: object,
+    current_center: tuple[float, float],
+    members: list[tuple[int, AnimationDefinition]],
+) -> _SampledCenterMotionComposition | None:
+    from dataclasses import replace as _replace
+
+    from svg2ooxml.ir.scene import Image
+    from svg2ooxml.ir.scene import Path as IRPath
+    from svg2ooxml.ir.shapes import Circle, Polygon, Polyline
+
+    if isinstance(element, Circle):
+        scale_member = _single_matching_member(
+            members,
+            lambda anim: (
+                anim.animation_type == AnimationType.ANIMATE_TRANSFORM
+                and anim.transform_type == TransformType.SCALE
+                and _is_simple_linear_two_value_animation(anim)
+            ),
+        )
+        if scale_member is None:
+            return None
+
+        numeric_members = {
+            anim.target_attribute: (index, anim)
+            for index, anim in members
+            if _is_simple_linear_numeric_animation(anim)
+            and anim.target_attribute in {"x", "y", "cx", "cy"}
+        }
+        if not numeric_members:
+            return None
+
+        matrix = _resolve_affine_matrix(
+            [scale_member[1], *(anim for _, anim in numeric_members.values())]
+        )
+        local_center_x, local_center_y = _inverse_project_affine_point(
+            current_center,
+            matrix,
+        )
+        (from_sx, from_sy), (to_sx, to_sy) = _parse_scale_bounds(scale_member[1])
+
+        x0, x1 = _numeric_bounds(numeric_members.get("x"), default=0.0)
+        y0, y1 = _numeric_bounds(numeric_members.get("y"), default=0.0)
+        cx0, cx1 = _numeric_bounds(numeric_members.get("cx"), default=local_center_x)
+        cy0, cy1 = _numeric_bounds(numeric_members.get("cy"), default=local_center_y)
+
+        samples = _sample_progress_values()
+        center_points = []
+        for progress in samples:
+            sx = _lerp(from_sx, to_sx, progress)
+            sy = _lerp(from_sy, to_sy, progress)
+            tx = _lerp(x0, x1, progress)
+            ty = _lerp(y0, y1, progress)
+            cx = _lerp(cx0, cx1, progress)
+            cy = _lerp(cy0, cy1, progress)
+            center_points.append(
+                _project_affine_point(
+                    (tx + sx * cx, ty + sy * cy),
+                    matrix,
+                )
+            )
+
+        motion_template = min(numeric_members.values(), key=lambda item: item[0])[1]
+        replacement_index = min(index for index, _ in numeric_members.values())
+        consumed_indices = {index for index, _ in numeric_members.values()}
+        updated_scale = _replace(scale_member[1], element_center_px=None)
+        updated_indices = {scale_member[0]: updated_scale}
+        return _SampledCenterMotionComposition(
+            replacement_index=replacement_index,
+            consumed_indices=consumed_indices,
+            replacement_animation=_build_sampled_motion_replacement(
+                template=motion_template,
+                points=center_points,
+            ),
+            updated_indices=updated_indices,
+            start_center=center_points[0],
+            element_id=motion_template.element_id,
+        )
+
+    if isinstance(element, Image):
+        scale_member = _single_matching_member(
+            members,
+            lambda anim: (
+                anim.animation_type == AnimationType.ANIMATE_TRANSFORM
+                and anim.transform_type == TransformType.SCALE
+                and _is_simple_linear_two_value_animation(anim)
+            ),
+        )
+        if scale_member is None:
+            return None
+
+        numeric_members = {
+            anim.target_attribute: (index, anim)
+            for index, anim in members
+            if _is_simple_linear_numeric_animation(anim)
+            and anim.target_attribute in {"x", "y"}
+        }
+        if not numeric_members:
+            return None
+
+        matrix = _resolve_affine_matrix(
+            [scale_member[1], *(anim for _, anim in numeric_members.values())]
+        )
+        local_bbox = _inverse_project_affine_rect(element.bbox, matrix)
+        viewport_rect, content_rect = _image_local_layout(element, local_bbox)
+        (from_sx, from_sy), (to_sx, to_sy) = _parse_scale_bounds(scale_member[1])
+
+        x0, x1 = _numeric_bounds(numeric_members.get("x"), default=viewport_rect.x)
+        y0, y1 = _numeric_bounds(numeric_members.get("y"), default=viewport_rect.y)
+        content_offset_x = float(content_rect.x - viewport_rect.x)
+        content_offset_y = float(content_rect.y - viewport_rect.y)
+        width = float(content_rect.width)
+        height = float(content_rect.height)
+
+        center_points = []
+        for progress in _sample_progress_values():
+            sx = _lerp(from_sx, to_sx, progress)
+            sy = _lerp(from_sy, to_sy, progress)
+            x = _lerp(x0, x1, progress)
+            y = _lerp(y0, y1, progress)
+            center_points.append(
+                _project_affine_point(
+                    (
+                        sx * (x + content_offset_x + width / 2.0),
+                        sy * (y + content_offset_y + height / 2.0),
+                    ),
+                    matrix,
+                )
+            )
+
+        motion_template = min(numeric_members.values(), key=lambda item: item[0])[1]
+        replacement_index = min(index for index, _ in numeric_members.values())
+        consumed_indices = {index for index, _ in numeric_members.values()}
+        updated_scale = _replace(scale_member[1], element_center_px=None)
+        updated_indices = {scale_member[0]: updated_scale}
+        return _SampledCenterMotionComposition(
+            replacement_index=replacement_index,
+            consumed_indices=consumed_indices,
+            replacement_animation=_build_sampled_motion_replacement(
+                template=motion_template,
+                points=center_points,
+            ),
+            updated_indices=updated_indices,
+            start_center=center_points[0],
+            element_id=motion_template.element_id,
+        )
+
+    if isinstance(element, (IRPath, Polyline, Polygon)):
+        motion_member = _single_matching_member(
+            members,
+            lambda anim: (
+                anim.animation_type == AnimationType.ANIMATE_MOTION
+                and _is_simple_motion_sampling_candidate(anim)
+            ),
+        )
+        rotate_member = _single_matching_member(
+            members,
+            lambda anim: (
+                anim.animation_type == AnimationType.ANIMATE_TRANSFORM
+                and anim.transform_type == TransformType.ROTATE
+                and _is_simple_origin_rotate_animation(anim)
+            ),
+        )
+        if motion_member is None or rotate_member is None:
+            return None
+
+        matrix = _resolve_affine_matrix([motion_member[1], rotate_member[1]])
+        local_center = _inverse_project_affine_point(current_center, matrix)
+        motion_points = _parse_sampled_motion_points(motion_member[1].values[0])
+        if len(motion_points) < 2:
+            return None
+
+        start_angle, end_angle = _parse_rotate_bounds(rotate_member[1])
+        center_points = []
+        for progress in _sample_progress_values():
+            motion_point = _sample_polyline_at_fraction(motion_points, progress)
+            angle = _lerp(start_angle, end_angle, progress)
+            rotated = _rotate_point(
+                (local_center[0] + motion_point[0], local_center[1] + motion_point[1]),
+                angle,
+            )
+            center_points.append(_project_affine_point(rotated, matrix))
+
+        return _SampledCenterMotionComposition(
+            replacement_index=motion_member[0],
+            consumed_indices={motion_member[0]},
+            replacement_animation=_build_sampled_motion_replacement(
+                template=motion_member[1],
+                points=center_points,
+            ),
+            updated_indices={},
+            start_center=center_points[0],
+            element_id=motion_member[1].element_id,
+        )
+
+    return None
