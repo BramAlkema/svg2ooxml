@@ -379,9 +379,7 @@ def test_polyline_stroke_width_and_opacity_still_materializes_line_segments() ->
     assert render_result.slide_xml.count("<p:cxnSp>") == 2
     assert "<a:custGeom" not in render_result.slide_xml
     assert render_result.slide_xml.count("<p:attrName>stroke.weight</p:attrName>") == 2
-    # TODO: opacity on materialized polyline segments is dropped when the
-    # transparency oracle route is used — the segment-duplication logic in
-    # the exporter doesn't handle oracle-templated pars. Track as known gap.
+    assert render_result.slide_xml.count('filter="image"') >= 2
 
     skipped = [
         event
