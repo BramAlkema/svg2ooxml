@@ -54,7 +54,7 @@ class AssetPipeline:
         self._assets = assets
         self._trace_writer = trace_writer
         self._scene_background_color = scene_background_color
-        self._emf_manager = EMFRelationshipManager()
+        self._emf_manager.reset()
         self._next_media_index = 1
         self._pattern_tile_media_cache.clear()
         self._seen_filter_relationships.clear()
@@ -382,25 +382,9 @@ class AssetPipeline:
                 continue
             if bounds.width <= 0 or bounds.height <= 0:
                 continue
-            return (
-                f'<p:pic>'
-                f'<p:nvPicPr>'
-                f'<p:cNvPr id="{shape_id}" name="Picture {shape_id}"/>'
-                f'<p:cNvPicPr><a:picLocks noChangeAspect="1"/></p:cNvPicPr>'
-                f'<p:nvPr/>'
-                f'</p:nvPicPr>'
-                f'<p:blipFill>'
-                f'<a:blip r:embed="{rel_id}"/>'
-                f'<a:stretch><a:fillRect/></a:stretch>'
-                f'</p:blipFill>'
-                f'<p:spPr>'
-                f'<a:xfrm>'
-                f'<a:off x="{px_to_emu(bounds.x)}" y="{px_to_emu(bounds.y)}"/>'
-                f'<a:ext cx="{px_to_emu(bounds.width)}" cy="{px_to_emu(bounds.height)}"/>'
-                f'</a:xfrm>'
-                f'<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>'
-                f'</p:spPr>'
-                f'</p:pic>'
+            return _build_picture_xml(
+                shape_id, rel_id, bounds.x, bounds.y, bounds.width, bounds.height,
+                name="Picture",
             )
         return None
 
@@ -420,26 +404,40 @@ class AssetPipeline:
         alpha_ppt = int(round(group.opacity * 100000))
         alpha_attr = f'<a:alphaModFix amt="{alpha_ppt}"/>' if alpha_ppt < 100000 else ""
 
-        return (
-            f'<p:pic>'
-            f'<p:nvPicPr>'
-            f'<p:cNvPr id="{shape_id}" name="Group {shape_id}"/>'
-            f'<p:cNvPicPr><a:picLocks noChangeAspect="1"/></p:cNvPicPr>'
-            f'<p:nvPr/>'
-            f'</p:nvPicPr>'
-            f'<p:blipFill>'
-            f'<a:blip r:embed="{rid}">{alpha_attr}</a:blip>'
-            f'<a:stretch><a:fillRect/></a:stretch>'
-            f'</p:blipFill>'
-            f'<p:spPr>'
-            f'<a:xfrm>'
-            f'<a:off x="{px_to_emu(bounds.x)}" y="{px_to_emu(bounds.y)}"/>'
-            f'<a:ext cx="{px_to_emu(bounds.width)}" cy="{px_to_emu(bounds.height)}"/>'
-            f'</a:xfrm>'
-            f'<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>'
-            f'</p:spPr>'
-            f'</p:pic>'
+        return _build_picture_xml(
+            shape_id, rid, bounds.x, bounds.y, bounds.width, bounds.height,
+            name="Group", blip_children=alpha_attr,
         )
+
+
+def _build_picture_xml(
+    shape_id: int,
+    rel_id: str,
+    x: float, y: float, w: float, h: float,
+    *,
+    name: str = "Picture",
+    blip_children: str = "",
+) -> str:
+    return (
+        f'<p:pic>'
+        f'<p:nvPicPr>'
+        f'<p:cNvPr id="{shape_id}" name="{name} {shape_id}"/>'
+        f'<p:cNvPicPr><a:picLocks noChangeAspect="1"/></p:cNvPicPr>'
+        f'<p:nvPr/>'
+        f'</p:nvPicPr>'
+        f'<p:blipFill>'
+        f'<a:blip r:embed="{rel_id}">{blip_children}</a:blip>'
+        f'<a:stretch><a:fillRect/></a:stretch>'
+        f'</p:blipFill>'
+        f'<p:spPr>'
+        f'<a:xfrm>'
+        f'<a:off x="{px_to_emu(x)}" y="{px_to_emu(y)}"/>'
+        f'<a:ext cx="{px_to_emu(w)}" cy="{px_to_emu(h)}"/>'
+        f'</a:xfrm>'
+        f'<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>'
+        f'</p:spPr>'
+        f'</p:pic>'
+    )
 
 
 def _content_type_for_format(ext: str) -> str:

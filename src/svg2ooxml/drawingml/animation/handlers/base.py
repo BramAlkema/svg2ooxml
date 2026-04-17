@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING
 
 from lxml import etree
 
+from svg2ooxml.drawingml.xml_builder import NS_P, p_elem, p_sub
 from svg2ooxml.ir.animation import BeginTriggerType
 
 if TYPE_CHECKING:
@@ -76,8 +77,6 @@ class AnimationHandler(ABC):
         ``style.visibility``. For all other attributes, we emit one
         ``<p:set>`` per keyframe value.
         """
-        from svg2ooxml.drawingml.xml_builder import NS_P, p_elem, p_sub
-
         key_times = animation.key_times
         n = len(formatted_values)
 
