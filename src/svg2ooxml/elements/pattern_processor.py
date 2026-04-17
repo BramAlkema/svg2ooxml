@@ -27,19 +27,40 @@ from typing import Any
 from lxml import etree as ET
 
 from svg2ooxml.common.geometry import Matrix2D, parse_transform_list
-from svg2ooxml.color import summarize_palette
-from svg2ooxml.core.styling.style_helpers import clean_color, parse_percentage
+from svg2ooxml.core.styling.style_helpers import clean_color
 from svg2ooxml.services import ConversionServices
+
+from .patterns._helpers import (
+    flatten_pattern_children,
+    has_visible_paint,
+    is_dot_like_path,
+    is_visible_paint_token,
+    local_name,
+    parse_float_attr,
+    pattern_opacity,
+    style_map,
+)
+from .patterns.classifier import (
+    analyze_pattern_content,
+    assess_pattern_complexity,
+    assess_powerpoint_compatibility,
+)
+from .patterns.geometry import (
+    estimate_performance_impact,
+    extract_pattern_geometry,
+    identify_pattern_optimizations,
+    is_translation_only,
+    requires_preprocessing,
+    should_use_emf_fallback,
+)
+from .patterns.preset_matcher import find_preset_candidate
 
 logger = logging.getLogger(__name__)
 
 
+# Keep the old module-level helper available for backward compatibility
 def _local_name(tag: str | None) -> str:
-    if not tag:
-        return ""
-    if "}" in tag:
-        return tag.split("}", 1)[1]
-    return tag
+    return local_name(tag)
 
 
 class PatternComplexity(Enum):
@@ -211,7 +232,7 @@ class PatternProcessor:
             return None
         if analysis.geometry.transform_matrix is None:
             return None
-        if not self._is_translation_only(analysis.geometry.transform_matrix):
+        if not is_translation_only(analysis.geometry.transform_matrix):
             return None
 
         tile_width = max(float(analysis.geometry.tile_width), 0.0)
@@ -250,60 +271,75 @@ class PatternProcessor:
     ) -> PatternAnalysis:
         """Perform detailed pattern analysis."""
         # Extract pattern geometry
-        geometry = self._extract_pattern_geometry(element)
+        geo_dict = extract_pattern_geometry(element)
+        geometry = PatternGeometry(**geo_dict)
 
         # Analyze pattern content
-        pattern_type, child_count, color_summary = self._analyze_pattern_content(
-            element
+        pattern_type, child_count, color_summary = analyze_pattern_content(
+            element, PatternType
         )
         colors_used = color_summary.get("palette", [])
 
         # Assess complexity
-        complexity = self._assess_pattern_complexity(
-            pattern_type, child_count, geometry
+        complexity = assess_pattern_complexity(
+            pattern_type,
+            child_count,
+            geometry,
+            PatternComplexity,
+            is_translation_only,
         )
 
         # Check for transforms
         has_transforms = bool(element.get("patternTransform", "").strip())
 
         # Check PowerPoint compatibility
-        powerpoint_compatible = self._assess_powerpoint_compatibility(
+        powerpoint_compatible = assess_powerpoint_compatibility(
             pattern_type,
             complexity,
             has_transforms,
+            PatternComplexity,
+            PatternType,
         )
 
         # Find preset candidate
-        preset_candidate = self._find_preset_candidate(pattern_type, element, geometry)
+        preset_candidate = find_preset_candidate(
+            pattern_type, element, geometry, PatternType
+        )
 
         # Identify optimization opportunities
-        optimizations = self._identify_pattern_optimizations(
+        optimizations = identify_pattern_optimizations(
             element,
             pattern_type,
             complexity,
             has_transforms,
             geometry,
             color_summary,
+            PatternType,
+            PatternComplexity,
+            PatternOptimization,
         )
 
         # Estimate performance impact
-        performance_impact = self._estimate_performance_impact(
-            complexity, child_count, geometry, color_summary
+        performance_impact = estimate_performance_impact(
+            complexity, child_count, geometry, color_summary, PatternComplexity
         )
 
         # Check if preprocessing would help
-        requires_preprocessing = self._requires_preprocessing(
+        requires_preproc = requires_preprocessing(
             element,
             pattern_type,
             optimizations,
+            PatternOptimization,
         )
 
         # Determine EMF fallback recommendation
-        emf_fallback_recommended = self._should_use_emf_fallback(
+        emf_fallback_recommended = should_use_emf_fallback(
             pattern_type,
             complexity,
             has_transforms,
             preset_candidate,
+            PatternComplexity,
+            PatternType,
         )
 
         return PatternAnalysis(
@@ -319,568 +355,18 @@ class PatternProcessor:
             preset_candidate=preset_candidate,
             optimization_opportunities=optimizations,
             estimated_performance_impact=performance_impact,
-            requires_preprocessing=requires_preprocessing,
+            requires_preprocessing=requires_preproc,
             emf_fallback_recommended=emf_fallback_recommended,
         )
-
-    def _extract_pattern_geometry(self, element: ET.Element) -> PatternGeometry:
-        """Extract pattern geometric properties."""
-        # Extract dimensions
-        width_str = element.get("width", "10")
-        height_str = element.get("height", "10")
-
-        # Parse dimensions
-        width = self._parse_dimension(width_str)
-        height = self._parse_dimension(height_str)
-
-        # Calculate aspect ratio
-        aspect_ratio = width / height if height != 0 else 1.0
-
-        # Extract units and transforms
-        units = element.get("patternUnits", "objectBoundingBox")
-        content_units = element.get("patternContentUnits", "userSpaceOnUse")
-        transform_str = element.get("patternTransform", "")
-
-        # Parse transform matrix
-        transform_matrix = None
-        if transform_str:
-            transform_matrix = self._parse_transform_matrix(transform_str)
-
-        return PatternGeometry(
-            tile_width=width,
-            tile_height=height,
-            aspect_ratio=aspect_ratio,
-            units=units,
-            transform_matrix=transform_matrix,
-            content_units=content_units,
-        )
-
-    def _parse_dimension(self, dim_str: str) -> float:
-        """Parse dimension string to float value."""
-        try:
-            # Handle percentage
-            if dim_str.endswith("%"):
-                return float(dim_str[:-1]) / 100.0
-
-            # Handle units
-            if any(
-                dim_str.endswith(unit) for unit in ["px", "pt", "em", "cm", "mm", "in"]
-            ):
-                # Extract numeric part
-                import re
-
-                match = re.match(r"([\d.]+)", dim_str)
-                if match:
-                    return float(match.group(1))
-
-            # Direct numeric value
-            return float(dim_str)
-
-        except (ValueError, TypeError):
-            return 10.0  # Default value
-
-    def _parse_transform_matrix(self, transform_str: str) -> list[float] | None:
-        """Parse transform string to matrix values."""
-        try:
-            import re
-
-            # Look for matrix() function
-            matrix_match = re.search(
-                r"matrix\s*\(\s*([\d.-]+(?:\s*,?\s*[\d.-]+)*)\s*\)", transform_str
-            )
-            if matrix_match:
-                values_str = matrix_match.group(1)
-                values = [float(x.strip()) for x in re.split(r"[,\s]+", values_str)]
-                if len(values) == 6:
-                    return values
-
-            # Handle simple transforms
-            if "translate(" in transform_str:
-                translate_match = re.search(
-                    r"translate\s*\(\s*([\d.-]+)(?:\s*,?\s*([\d.-]+))?\s*\)",
-                    transform_str,
-                )
-                if translate_match:
-                    tx = float(translate_match.group(1))
-                    ty = (
-                        float(translate_match.group(2))
-                        if translate_match.group(2)
-                        else 0
-                    )
-                    return [1, 0, 0, 1, tx, ty]  # Identity + translation
-
-        except Exception as e:
-            self.logger.warning(f"Failed to parse transform: {e}")
-
-        return None
-
-    def _analyze_pattern_content(
-        self, element: ET.Element
-    ) -> tuple[PatternType, int, dict[str, object]]:
-        """Analyze pattern content to determine type and complexity."""
-        children = self._flatten_pattern_children(element)
-        colors_raw: list[str] = []
-
-        if not children:
-            return PatternType.UNSUPPORTED, 0, summarize_palette(())
-
-        # Analyze each child element
-        shapes = {
-            "circle": 0,
-            "ellipse": 0,
-            "rect": 0,
-            "line": 0,
-            "path": 0,
-            "other": 0,
-        }
-        visible_children: list[ET.Element] = []
-
-        for child in children:
-            if not self._has_visible_paint(child):
-                continue
-            visible_children.append(child)
-            tag = _local_name(child.tag)
-
-            # Count shape types
-            if tag in shapes:
-                shapes[tag] += 1
-            else:
-                shapes["other"] += 1
-
-            # Extract colors
-            style = self._style_map(child)
-            for attr in ["fill", "stroke"]:
-                color = child.get(attr) or style.get(attr)
-                if color and color.lower() not in ["none", "transparent"]:
-                    colors_raw.append(color)
-
-        child_count = len(visible_children)
-        if child_count == 0:
-            return PatternType.UNSUPPORTED, 0, summarize_palette(())
-
-        # Determine pattern type based on content
-        pattern_type = self._classify_pattern_type(shapes, visible_children)
-
-        return pattern_type, child_count, summarize_palette(colors_raw)
-
-    def _classify_pattern_type(
-        self, shapes: dict[str, int], children: list[ET.Element]
-    ) -> PatternType:
-        """Classify pattern type based on shape analysis."""
-        total_shapes = sum(shapes.values())
-
-        # No recognizable shapes
-        if total_shapes == 0 or shapes["other"] > total_shapes * 0.5:
-            return PatternType.UNSUPPORTED
-
-        # Dots pattern
-        if shapes["circle"] > 0 or shapes["ellipse"] > 0:
-            if shapes["circle"] + shapes["ellipse"] > total_shapes * 0.7:
-                return PatternType.DOTS
-
-        # Lines pattern
-        if shapes["line"] > 0:
-            if shapes["line"] > total_shapes * 0.7:
-                return PatternType.LINES
-
-        # Rectangle-based patterns
-        if shapes["rect"] > 0:
-            # Analyze rectangle dimensions to determine pattern type
-            rect_analysis = self._analyze_rectangles(children)
-            if rect_analysis["horizontal_lines"]:
-                return PatternType.LINES
-            elif rect_analysis["vertical_lines"]:
-                return PatternType.LINES
-            elif rect_analysis["grid"]:
-                return PatternType.GRID
-
-        # Path-based patterns
-        if shapes["path"] > 0:
-            path_analysis = self._analyze_paths(children)
-            if path_analysis["dots"]:
-                return PatternType.DOTS
-            elif path_analysis["diagonal"]:
-                return PatternType.DIAGONAL
-            elif path_analysis["grid"]:
-                return PatternType.CROSS
-
-        # Mixed patterns
-        if shapes["line"] > 0 and shapes["rect"] > 0:
-            return PatternType.GRID
-
-        return PatternType.CUSTOM
-
-    def _analyze_rectangles(self, children: list[ET.Element]) -> dict[str, bool]:
-        """Analyze rectangles to determine line patterns."""
-        horizontal_lines = 0
-        vertical_lines = 0
-        squares = 0
-
-        for child in children:
-            if _local_name(child.tag) == "rect":
-                try:
-                    width = float(child.get("width", "1"))
-                    height = float(child.get("height", "1"))
-
-                    # Check if it's a line (very thin rectangle)
-                    if width > height * 3:
-                        horizontal_lines += 1
-                    elif height > width * 3:
-                        vertical_lines += 1
-                    elif abs(width - height) < min(width, height) * 0.1:
-                        squares += 1
-
-                except (ValueError, TypeError):
-                    continue
-
-        total_rects = horizontal_lines + vertical_lines + squares
-
-        return {
-            "horizontal_lines": horizontal_lines > total_rects * 0.7,
-            "vertical_lines": vertical_lines > total_rects * 0.7,
-            "grid": squares > 0 or (horizontal_lines > 0 and vertical_lines > 0),
-        }
-
-    def _analyze_paths(self, children: list[ET.Element]) -> dict[str, bool]:
-        """Analyze paths to determine pattern type."""
-        dot_paths = 0
-        diagonal_paths = 0
-        grid_paths = 0
-
-        for child in children:
-            if _local_name(child.tag) == "path":
-                path_data = child.get("d", "")
-                path_data_upper = path_data.upper()
-
-                # Simple analysis - look for diagonal movement
-                if self._is_dot_like_path(child):
-                    dot_paths += 1
-
-                if "L" in path_data_upper and ("M" in path_data_upper):
-                    # Check for diagonal patterns (simplified)
-                    if "," in path_data:  # Likely has coordinates
-                        diagonal_paths += 1
-
-                # Look for grid-like patterns
-                if path_data_upper.count("L") > 2:  # Multiple line segments
-                    grid_paths += 1
-
-        total_paths = len([c for c in children if _local_name(c.tag) == "path"])
-
-        return {
-            "dots": dot_paths > total_paths * 0.7,
-            "diagonal": diagonal_paths > total_paths * 0.7,
-            "grid": grid_paths > total_paths * 0.5,
-        }
-
-    def _assess_pattern_complexity(
-        self, pattern_type: PatternType, child_count: int, geometry: PatternGeometry
-    ) -> PatternComplexity:
-        """Assess overall pattern complexity."""
-        # Base complexity from type
-        type_complexity = {
-            PatternType.DOTS: PatternComplexity.SIMPLE,
-            PatternType.LINES: PatternComplexity.SIMPLE,
-            PatternType.DIAGONAL: PatternComplexity.MODERATE,
-            PatternType.GRID: PatternComplexity.MODERATE,
-            PatternType.CROSS: PatternComplexity.MODERATE,
-            PatternType.CUSTOM: PatternComplexity.COMPLEX,
-            PatternType.UNSUPPORTED: PatternComplexity.UNSUPPORTED,
-        }.get(pattern_type, PatternComplexity.COMPLEX)
-
-        # Adjust for child count
-        if child_count > 10:
-            if type_complexity == PatternComplexity.SIMPLE:
-                type_complexity = PatternComplexity.MODERATE
-            elif type_complexity == PatternComplexity.MODERATE:
-                type_complexity = PatternComplexity.COMPLEX
-
-        # Adjust for non-trivial transforms
-        if geometry.transform_matrix and not self._is_translation_only(
-            geometry.transform_matrix
-        ):
-            if type_complexity == PatternComplexity.SIMPLE:
-                type_complexity = PatternComplexity.MODERATE
-
-        return type_complexity
-
-    def _assess_powerpoint_compatibility(
-        self,
-        pattern_type: PatternType,
-        complexity: PatternComplexity,
-        has_transforms: bool,
-    ) -> bool:
-        """Assess PowerPoint compatibility."""
-        # PowerPoint has limited pattern support
-        if complexity in [PatternComplexity.COMPLEX, PatternComplexity.UNSUPPORTED]:
-            return False
-
-        # Transforms may cause compatibility issues
-        if has_transforms:
-            return pattern_type in [PatternType.DOTS, PatternType.LINES]
-
-        # Simple patterns are usually compatible
-        return pattern_type in [
-            PatternType.DOTS,
-            PatternType.LINES,
-            PatternType.DIAGONAL,
-            PatternType.GRID,
-            PatternType.CROSS,
-        ]
-
-    def _find_preset_candidate(
-        self, pattern_type: PatternType, element: ET.Element, geometry: PatternGeometry
-    ) -> str | None:
-        """Find PowerPoint preset candidate for pattern."""
-        if pattern_type == PatternType.DOTS:
-            # Estimate dot density for percentage patterns
-            density = self._estimate_dot_density(element, geometry)
-            return self._map_density_to_preset(density)
-
-        elif pattern_type == PatternType.LINES:
-            # Determine line orientation
-            orientation = self._determine_line_orientation(element)
-            return self._map_orientation_to_preset(orientation)
-
-        elif pattern_type == PatternType.DIAGONAL:
-            # Determine diagonal direction
-            direction = self._determine_diagonal_direction(element)
-            return self._map_diagonal_to_preset(direction)
-
-        elif pattern_type in [PatternType.GRID, PatternType.CROSS]:
-            return "cross"  # Generic cross pattern
-
-        return None
-
-    def _estimate_dot_density(
-        self, element: ET.Element, geometry: PatternGeometry
-    ) -> float:
-        """Estimate dot density for percentage pattern mapping."""
-        children = self._flatten_pattern_children(element)
-        dot_count = sum(
-            1
-            for child in children
-            if self._has_visible_paint(child)
-            and (
-                _local_name(child.tag) in {"circle", "ellipse"}
-                or self._is_dot_like_path(child)
-            )
-        )
-
-        # Estimate coverage based on tile size and dot count
-        geometry.tile_width * geometry.tile_height
-        estimated_coverage = min(dot_count * 0.1, 0.9)  # Simplified estimation
-
-        return estimated_coverage
-
-    def _map_density_to_preset(self, density: float) -> str:
-        """Map density to PowerPoint percentage preset."""
-        if density <= 0.05:
-            return "pct5"
-        elif density <= 0.15:
-            return "pct10"
-        elif density <= 0.22:
-            return "pct20"
-        elif density <= 0.35:
-            return "pct30"
-        elif density <= 0.45:
-            return "pct40"
-        elif density <= 0.55:
-            return "pct50"
-        else:
-            return "pct75"
-
-    def _determine_line_orientation(self, element: ET.Element) -> str:
-        """Determine line orientation from pattern content."""
-        # Simplified orientation detection
-        children = self._flatten_pattern_children(element)
-
-        for child in children:
-            if _local_name(child.tag) == "line":
-                try:
-                    x1 = float(child.get("x1", "0"))
-                    y1 = float(child.get("y1", "0"))
-                    x2 = float(child.get("x2", "1"))
-                    y2 = float(child.get("y2", "0"))
-
-                    dx = abs(x2 - x1)
-                    dy = abs(y2 - y1)
-
-                    if dx > dy * 3:
-                        return "horizontal"
-                    elif dy > dx * 3:
-                        return "vertical"
-
-                except (ValueError, TypeError):
-                    continue
-
-        return "horizontal"  # Default
-
-    def _map_orientation_to_preset(self, orientation: str) -> str:
-        """Map line orientation to PowerPoint preset."""
-        if orientation == "horizontal":
-            return "horz"
-        elif orientation == "vertical":
-            return "vert"
-        else:
-            return "horz"
-
-    def _determine_diagonal_direction(self, element: ET.Element) -> str:
-        """Determine diagonal direction from pattern content."""
-        # Simplified diagonal detection
-        return "down"  # Default to down diagonal
-
-    def _map_diagonal_to_preset(self, direction: str) -> str:
-        """Map diagonal direction to PowerPoint preset."""
-        if direction == "up":
-            return "upDiag"
-        else:
-            return "dnDiag"
-
-    def _identify_pattern_optimizations(
-        self,
-        element: ET.Element,
-        pattern_type: PatternType,
-        complexity: PatternComplexity,
-        has_transforms: bool,
-        geometry: PatternGeometry,
-        color_summary: dict[str, object],
-    ) -> list[PatternOptimization]:
-        """Identify optimization opportunities."""
-        optimizations = []
-
-        # Preset mapping opportunity
-        if pattern_type in [PatternType.DOTS, PatternType.LINES, PatternType.DIAGONAL]:
-            optimizations.append(PatternOptimization.PRESET_MAPPING)
-
-        hue_spread = color_summary.get("hue_spread")
-        unique_count = color_summary.get("unique", 0)
-
-        # Color simplification
-        if isinstance(hue_spread, (int, float)):
-            if hue_spread < 35 and unique_count > 2:
-                optimizations.append(PatternOptimization.COLOR_SIMPLIFICATION)
-        elif unique_count and unique_count > 2:
-            optimizations.append(PatternOptimization.COLOR_SIMPLIFICATION)
-
-        recommended_space = color_summary.get("recommended_space")
-        complexity_score = float(color_summary.get("complexity", 0.0) or 0.0)
-        if recommended_space and recommended_space != "srgb":
-            optimizations.append(PatternOptimization.COLOR_SPACE_OPTIMIZATION)
-        elif complexity_score > 0.6:
-            optimizations.append(PatternOptimization.COLOR_SPACE_OPTIMIZATION)
-
-        # Transform flattening
-        if has_transforms:
-            optimizations.append(PatternOptimization.TRANSFORM_FLATTENING)
-
-        # EMF optimization for complex patterns
-        if complexity in [PatternComplexity.MODERATE, PatternComplexity.COMPLEX]:
-            optimizations.append(PatternOptimization.EMF_OPTIMIZATION)
-
-        # Tile optimization
-        if geometry.tile_width > 100 or geometry.tile_height > 100:
-            optimizations.append(PatternOptimization.TILE_OPTIMIZATION)
-
-        return optimizations
-
-    def _estimate_performance_impact(
-        self,
-        complexity: PatternComplexity,
-        child_count: int,
-        geometry: PatternGeometry,
-        color_summary: dict[str, object],
-    ) -> str:
-        """Estimate performance impact."""
-        color_complexity = float(color_summary.get("complexity", 0.0) or 0.0)
-
-        if (
-            complexity == PatternComplexity.SIMPLE
-            and child_count <= 3
-            and color_complexity < 0.4
-        ):
-            return "low"
-        elif (
-            complexity == PatternComplexity.MODERATE
-            or child_count <= 8
-            or color_complexity < 0.75
-        ):
-            return "medium"
-        elif (
-            complexity == PatternComplexity.COMPLEX
-            or child_count > 15
-            or color_complexity >= 0.75
-        ):
-            return "high"
-        else:
-            return "very_high"
-
-    def _requires_preprocessing(
-        self,
-        element: ET.Element,
-        pattern_type: PatternType,
-        optimizations: list[PatternOptimization],
-    ) -> bool:
-        """Check if pattern would benefit from preprocessing."""
-        # Already has preprocessing metadata
-        if element.get("data-pattern-optimized"):
-            return False
-
-        # Transform flattening would help
-        if PatternOptimization.TRANSFORM_FLATTENING in optimizations:
-            return True
-
-        # Color simplification would help
-        if PatternOptimization.COLOR_SIMPLIFICATION in optimizations:
-            return True
-
-        # Tile optimization would help
-        if PatternOptimization.TILE_OPTIMIZATION in optimizations:
-            return True
-
-        return False
-
-    def _should_use_emf_fallback(
-        self,
-        pattern_type: PatternType,
-        complexity: PatternComplexity,
-        has_transforms: bool,
-        preset_candidate: str | None,
-    ) -> bool:
-        """Determine if EMF fallback is recommended."""
-        # Complex patterns should use EMF
-        if complexity in [PatternComplexity.COMPLEX, PatternComplexity.UNSUPPORTED]:
-            return True
-
-        # Custom patterns without preset candidates
-        if pattern_type == PatternType.CUSTOM and not preset_candidate:
-            return True
-
-        # Patterns with complex transforms
-        if has_transforms and complexity != PatternComplexity.SIMPLE:
-            return True
-
-        return False
 
     def _generate_cache_key(self, element: ET.Element) -> str:
         """Generate cache key for element."""
         key_data = ET.tostring(element, encoding="unicode")
         return hashlib.md5(key_data.encode(), usedforsecurity=False).hexdigest()
 
-    def _flatten_pattern_children(self, element: ET.Element) -> list[ET.Element]:
-        flattened: list[ET.Element] = []
-
-        def _walk(node: ET.Element) -> None:
-            for child in node:
-                if not isinstance(child.tag, str):
-                    continue
-                if _local_name(child.tag) in {"g", "a", "switch"}:
-                    _walk(child)
-                    continue
-                flattened.append(child)
-
-        _walk(element)
-        return flattened
+    # ------------------------------------------------------------------
+    # Tile rasterization helpers (kept in coordinator — tightly coupled)
+    # ------------------------------------------------------------------
 
     def _iter_tile_ellipses(
         self,
@@ -901,7 +387,7 @@ class PatternProcessor:
             for child in node:
                 if not isinstance(child.tag, str):
                     continue
-                tag = _local_name(child.tag)
+                tag = local_name(child.tag)
                 if tag in {"g", "a", "switch"}:
                     yield from _walk(child, current)
                     continue
@@ -933,18 +419,18 @@ class PatternProcessor:
     def _pattern_fill_spec(
         self, element: ET.Element
     ) -> tuple[tuple[int, int, int], float] | None:
-        style = self._style_map(element)
-        fill = element.get("fill") or style.get("fill")
-        if not self._is_visible_paint_token(fill):
+        sm = style_map(element)
+        fill = element.get("fill") or sm.get("fill")
+        if not is_visible_paint_token(fill):
             return None
         color = clean_color(fill)
         if color is None:
             return None
-        opacity = self._pattern_opacity(
-            style.get("fill-opacity") or element.get("fill-opacity"),
+        opacity = pattern_opacity(
+            sm.get("fill-opacity") or element.get("fill-opacity"),
             default=1.0,
         )
-        opacity *= self._pattern_opacity(style.get("opacity") or element.get("opacity"))
+        opacity *= pattern_opacity(sm.get("opacity") or element.get("opacity"))
         return (
             (
                 int(color[0:2], 16),
@@ -962,19 +448,19 @@ class PatternProcessor:
         if abs(transform.b) > 1e-9 or abs(transform.c) > 1e-9:
             return None
 
-        tag = _local_name(element.tag)
+        tag = local_name(element.tag)
         geometry: tuple[float, float, float, float] | None = None
         if tag == "circle":
-            cx = self._parse_float_attr(element, "cx")
-            cy = self._parse_float_attr(element, "cy")
-            radius = self._parse_float_attr(element, "r")
+            cx = parse_float_attr(element, "cx")
+            cy = parse_float_attr(element, "cy")
+            radius = parse_float_attr(element, "r")
             if cx is not None and cy is not None and radius is not None:
                 geometry = (cx, cy, radius, radius)
         elif tag == "ellipse":
-            cx = self._parse_float_attr(element, "cx")
-            cy = self._parse_float_attr(element, "cy")
-            rx = self._parse_float_attr(element, "rx")
-            ry = self._parse_float_attr(element, "ry")
+            cx = parse_float_attr(element, "cx")
+            cy = parse_float_attr(element, "cy")
+            rx = parse_float_attr(element, "rx")
+            ry = parse_float_attr(element, "ry")
             if cx is not None and cy is not None and rx is not None and ry is not None:
                 geometry = (cx, cy, rx, ry)
         elif tag == "path":
@@ -997,14 +483,14 @@ class PatternProcessor:
         self, element: ET.Element
     ) -> tuple[float, float, float, float] | None:
         sodipodi_ns = "http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
-        cx = self._parse_float_attr(element, f"{{{sodipodi_ns}}}cx")
-        cy = self._parse_float_attr(element, f"{{{sodipodi_ns}}}cy")
-        rx = self._parse_float_attr(element, f"{{{sodipodi_ns}}}rx")
-        ry = self._parse_float_attr(element, f"{{{sodipodi_ns}}}ry")
+        cx = parse_float_attr(element, f"{{{sodipodi_ns}}}cx")
+        cy = parse_float_attr(element, f"{{{sodipodi_ns}}}cy")
+        rx = parse_float_attr(element, f"{{{sodipodi_ns}}}rx")
+        ry = parse_float_attr(element, f"{{{sodipodi_ns}}}ry")
         if cx is not None and cy is not None and rx is not None and ry is not None:
             return (cx, cy, rx, ry)
 
-        if not self._is_dot_like_path(element):
+        if not is_dot_like_path(element):
             return None
 
         path_data = element.get("d") or ""
@@ -1022,25 +508,6 @@ class PatternProcessor:
         radius_x = float(match.group(3))
         radius_y = float(match.group(4))
         return (start_x - radius_x, start_y, radius_x, radius_y)
-
-    @staticmethod
-    def _parse_float_attr(element: ET.Element, attribute: str) -> float | None:
-        value = element.get(attribute)
-        if value is None:
-            return None
-        try:
-            return float(value)
-        except (TypeError, ValueError):
-            return None
-
-    @staticmethod
-    def _pattern_opacity(value: str | None, default: float = 1.0) -> float:
-        if value is None:
-            return default
-        try:
-            return max(0.0, min(1.0, parse_percentage(value)))
-        except Exception:
-            return default
 
     def _rasterize_ellipse(
         self,
@@ -1150,69 +617,9 @@ class PatternProcessor:
             + _png_chunk(b"IEND", b"")
         )
 
-    def _style_map(self, element: ET.Element) -> dict[str, str]:
-        style = element.get("style")
-        if not style:
-            return {}
-        declarations: dict[str, str] = {}
-        for part in style.split(";"):
-            if ":" not in part:
-                continue
-            name, value = part.split(":", 1)
-            declarations[name.strip()] = value.strip()
-        return declarations
-
-    def _has_visible_paint(self, element: ET.Element) -> bool:
-        style = self._style_map(element)
-        fill = child_fill = element.get("fill") or style.get("fill")
-        stroke = child_stroke = element.get("stroke") or style.get("stroke")
-        return self._is_visible_paint_token(fill) or self._is_visible_paint_token(
-            stroke
-        )
-
-    @staticmethod
-    def _is_visible_paint_token(value: str | None) -> bool:
-        if value is None:
-            return False
-        token = value.strip().lower()
-        return bool(token) and token not in {"none", "transparent"}
-
-    def _is_dot_like_path(self, element: ET.Element) -> bool:
-        if _local_name(element.tag) != "path":
-            return False
-        if not self._has_visible_fill(element):
-            return False
-
-        path_data = (element.get("d") or "").upper()
-        if (
-            "A" in path_data
-            and "L" not in path_data
-            and "C" not in path_data
-            and "Q" not in path_data
-        ):
-            return True
-
-        for name, value in element.attrib.items():
-            if _local_name(name) == "type" and value == "arc":
-                return True
-        return False
-
-    def _has_visible_fill(self, element: ET.Element) -> bool:
-        style = self._style_map(element)
-        fill = element.get("fill") or style.get("fill")
-        return self._is_visible_paint_token(fill)
-
-    @staticmethod
-    def _is_translation_only(transform_matrix: list[float]) -> bool:
-        if len(transform_matrix) != 6:
-            return False
-        a, b, c, d, _tx, _ty = transform_matrix
-        return (
-            abs(a - 1.0) < 1e-9
-            and abs(d - 1.0) < 1e-9
-            and abs(b) < 1e-9
-            and abs(c) < 1e-9
-        )
+    # ------------------------------------------------------------------
+    # Statistics / cache management
+    # ------------------------------------------------------------------
 
     def get_processing_statistics(self) -> dict[str, int]:
         """Get processing statistics."""
