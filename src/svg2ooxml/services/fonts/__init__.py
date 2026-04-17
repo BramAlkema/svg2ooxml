@@ -42,6 +42,7 @@ __all__ = [
     'fontforge_utils',
     'loader',
     'opentype_utils',
+    'otf2ttf',
     'providers',
     'service',
     'svg_font_converter',
@@ -50,7 +51,7 @@ __all__ = [
 
 # map symbol -> relative module
 _symbol_map = {'FontEmbeddingRequest': 'embedding', 'EmbeddedFontPayload': 'embedding', 'FontOptimisationLevel': 'embedding', 'EmbeddingPermission': 'embedding', 'FontEmbeddingResult': 'embedding', 'FontEmbeddingEngine': 'embedding', 'EOTResult': 'eot', 'build_eot': 'eot', 'EOTConversionError': 'eot', 'MAX_FONT_SIZE': 'fetcher', 'FontFetcher': 'fetcher', 'FontSource': 'fetcher', 'get_table_data': 'fontforge_utils', 'generate_font_bytes': 'fontforge_utils', 'open_font': 'fontforge_utils', 'FontLoader': 'loader', 'DATA_URI_PATTERN': 'loader', 'LoadedFont': 'loader', 'WOFFTableEntry': 'loader', 'parse_os2_table': 'opentype_utils', 'parse_head_checksum': 'opentype_utils', 'OS2Metrics': 'opentype_utils', 'FontQuery': 'service', 'FontProvider': 'service', 'FontService': 'service', 'FontMatch': 'service', 'convert_svg_font': 'svg_font_converter', 'FontSystemConfig': 'system', 'FontSystem': 'system', 'collect_font_directories': 'system', 'parse_directory_list': 'system', 'ENV_FONT_DIRS': 'system'}
-_module_map = {'embedding': 'embedding', 'eot': 'eot', 'fetcher': 'fetcher', 'fontforge_utils': 'fontforge_utils', 'loader': 'loader', 'opentype_utils': 'opentype_utils', 'providers': 'providers', 'service': 'service', 'svg_font_converter': 'svg_font_converter', 'system': 'system'}
+_module_map = {'embedding': 'embedding', 'eot': 'eot', 'fetcher': 'fetcher', 'fontforge_utils': 'fontforge_utils', 'loader': 'loader', 'opentype_utils': 'opentype_utils', 'otf2ttf': 'otf2ttf', 'providers': 'providers', 'service': 'service', 'svg_font_converter': 'svg_font_converter', 'system': 'system'}
 
 
 def __getattr__(name: str) -> _Any:  # PEP 562

@@ -384,21 +384,24 @@ class TestMultiKeyframe:
         tavs = par.findall(f".//{{{NS_P}}}tav")
         assert len(tavs) == 3
 
-    def test_discrete_calc_mode_emits_step_tavs(self, handler: NumericAnimationHandler):
+    def test_discrete_calc_mode_emits_set_segments(self, handler: NumericAnimationHandler):
+        """Discrete non-visibility animations use ``<p:set>`` segments, not
+        TAV entries — PPT silently drops ``calcmode="discrete"`` on
+        non-visibility attrNames. Verified 2026-04-16."""
         anim = make_numeric_animation(
             values=["0", "10", "20"],
             key_times=[0.0, 0.4, 1.0],
             calc_mode=CalcMode.DISCRETE,
         )
         par = handler.build(anim, par_id=4, behavior_id=5)
-        tavs = par.findall(f".//{{{NS_P}}}tav")
-        assert [tav.get("tm") for tav in tavs] == [
-            "0",
-            "40000",
-            "40000",
-            "100000",
-            "100000",
-        ]
+        sets = par.findall(f".//{{{NS_P}}}set")
+        assert len(sets) == 3
+        str_vals = [s.find(f".//{{{NS_P}}}strVal") for s in sets]
+        vals = [v.get("val") for v in str_vals]
+        assert len(vals) == 3
+        assert vals[0] == "0"
+        assert float(vals[1]) > 0
+        assert float(vals[2]) > float(vals[1])
 
     def test_paced_calc_mode_overrides_explicit_key_times(
         self, handler: NumericAnimationHandler

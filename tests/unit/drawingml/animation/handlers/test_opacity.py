@@ -118,12 +118,15 @@ class TestBuild:
         anim_effect = par.find(f".//{{{NS_P}}}animEffect")
         assert anim_effect.get("transition") == "in"
 
-    def test_partial_fade_uses_property_animation(self, handler: OpacityAnimationHandler):
+    def test_partial_fade_uses_transparency_oracle(self, handler: OpacityAnimationHandler):
+        """Partial opacity (not 0→1 or 1→0) routes through the verified
+        emph/transparency oracle slot instead of the dead <p:anim> on
+        style.opacity TAV path. Verified 2026-04-16."""
         anim = make_opacity_animation(values=["0", "0.75"])
         par = handler.build(anim, par_id=4, behavior_id=5)
-        assert par.find(f".//{{{NS_P}}}animEffect") is None
-        anim_elem = par.find(f".//{{{NS_P}}}anim")
-        assert anim_elem is not None
+        anim_effect = par.find(f".//{{{NS_P}}}animEffect")
+        assert anim_effect is not None
+        assert "image" in (anim_effect.get("filter") or "")
         attr_name = par.find(f".//{{{NS_P}}}attrName")
         assert attr_name is not None
         assert attr_name.text == "style.opacity"
@@ -186,16 +189,16 @@ class TestBuild:
         ctn = par.find(f"{{{NS_P}}}cTn")
         assert ctn.get("presetClass") == "entr"
 
-    def test_nonzero_start_opacity_uses_property_animation(
+    def test_nonzero_start_opacity_uses_transparency_oracle(
         self, handler: OpacityAnimationHandler
     ):
+        """Non-0→1 partial opacity routes through emph/transparency oracle
+        (verified path) instead of the dead <p:anim> style.opacity TAV."""
         anim = make_opacity_animation(values=["0.1", "1"])
         par = handler.build(anim, par_id=4, behavior_id=5)
-        assert par.find(f".//{{{NS_P}}}animEffect") is None
-        anim_elem = par.find(f".//{{{NS_P}}}anim")
-        assert anim_elem is not None
-        attr_name = par.find(f".//{{{NS_P}}}attrName")
-        assert attr_name.text == "style.opacity"
+        anim_effect = par.find(f".//{{{NS_P}}}animEffect")
+        assert anim_effect is not None
+        assert "image" in (anim_effect.get("filter") or "")
 
     def test_multi_keyframe_opacity_uses_transparency_effect(
         self, handler: OpacityAnimationHandler

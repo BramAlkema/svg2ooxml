@@ -114,11 +114,36 @@ The W3C test `animate-elem-02-t.svg` has multiple `<animate>` elements targeting
 | `src/svg2ooxml/drawingml/animation/xml_builders.py` | additive/accumulate pre-computation |
 | `src/svg2ooxml/drawingml/animation/constants.py` | Preset lookup table |
 
-## 5. Exit Criteria
+## 5. Flipbook Fallback (added 2026-04-17)
+
+Animations that PPT cannot play natively now have a universal fallback:
+the **flipbook renderer** pre-renders N keyframes as stacked shapes and
+sequences `<p:set>` visibility toggles. Oracle API:
+`AnimationOracle.instantiate_flipbook()`.
+
+Covers: skew, path morph, stroke-width, stroke-opacity, fill-opacity,
+complex filter params, and any failed transform decomposition.
+
+Key structural requirement: `<p:bldP>` entries must carry `grpId`
+matching the animation `<p:cTn>` group. Mismatched `grpId` causes silent
+failure.
+
+Empirical findings from 2026-04-16/17 testing:
+- `calcMode="discrete"` on `fillcolor`: silently dropped. Only works on
+  `style.visibility`. Use `<p:set>` segments for discrete color jumps.
+- `cBhvr additive="sum"` on `<p:animMotion>`: broken (jumps to corner).
+  **Never emit.** Concurrent motion paths stack additively by default.
+- Sequenced `animScale` + `animRot`: scale applies in rotated frame.
+  Cannot produce skew via native primitives on 2D shapes.
+- Flipbook with `<p:set>` visibility: **works.** Visually verified with
+  8-frame color-cycling test.
+
+## 6. Exit Criteria
 
 - Simple `<animate attributeName="height">` plays correctly in PowerPoint
 - Simple `<animate attributeName="opacity">` plays correctly
-- `calcMode="discrete"` produces instant jumps (not interpolation)
+- `calcMode="discrete"` produces instant jumps via `<p:set>` segments
 - `fill="freeze"` holds the final value
 - `repeatCount="2"` repeats twice
+- Dead-path animations (skew, stroke-width, etc.) render via flipbook fallback
 - At least 50% of W3C animation test files play correctly

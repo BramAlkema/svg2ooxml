@@ -74,7 +74,7 @@ animation_oracle/
     └── motion.xml
 ```
 
-## Two layers
+## Three layers
 
 ### Layer 1 — Preset-specific slots (15 total)
 
@@ -160,6 +160,155 @@ opacity. Verified end-to-end via `.visual_tmp/xmas_tree_v3_compound.py`.
 Use this layer for SMIL→PPT mapping — each SVG `<animate>` / `<animateColor>`
 / `<animateTransform>` / `<animateMotion>` / `<set>` on one element becomes
 one fragment, aggregated into one compound call.
+
+### Layer 3 — Flipbook (universal fallback)
+
+**When PPT has no native or compound path for an animation**, the flipbook
+renderer pre-renders N keyframes of the animated element as separate shapes
+(custGeom vector or embedded PNG), stacks them at the same slide position,
+and sequences visibility toggles via timed `<p:set>` pairs on
+`style.visibility`.
+
+This is the universal fallback for every animation PPT cannot play natively:
+
+- `animateTransform type="skewX/skewY"` — no native skew primitive
+- `animate attributeName="d"` — path morph / shape interpolation
+- `animate attributeName="stroke-width"` — silently dropped by PPT
+- `animate attributeName="fill-opacity"` — per-layer opacity is dead
+- `animate attributeName="stroke-opacity"` — per-layer opacity is dead
+- Complex filter parameter animation
+- Any transform decomposition that fails (matrix, composed skew)
+- `font-size` when the preset-28 compound recipe is impractical
+
+```python
+from svg2ooxml.drawingml.animation.oracle import default_oracle
+
+oracle = default_oracle()
+par, bld_entries = oracle.instantiate_flipbook(
+    frame_shape_ids=[10, 11, 12, 13, 14, 15, 16, 17],
+    par_id=4,
+    duration_ms=3000,
+    delay_ms=0,
+)
+# bld_entries = [("10", 4), ("11", 4), ...] — emit as:
+# <p:bldP spid="10" grpId="4" animBg="1"/>
+# <p:bldP spid="11" grpId="4" animBg="1"/>
+# ...
+```
+
+**Critical structural requirement:** every frame shape's `<p:bldP>` entry
+must carry `grpId` matching the animation's `<p:cTn>` group ID (the
+`par_id` argument). The standard `build_timing_tree` helper does NOT do
+this automatically — the caller must emit `bld_entries` into the
+`<p:bldLst>` directly. Mismatched `grpId` causes PPT to silently ignore
+the visibility sets.
+
+**How the timing works:**
+
+1. On click, all frames 1..N-1 are immediately hidden (`<p:set>` at
+   delay=0 → `style.visibility=hidden`).
+2. Frame 0 is shown at delay=0 (already visible, but the set makes it
+   explicit).
+3. At `frame_dur` ms: frame 0 is hidden, frame 1 is shown.
+4. At `2×frame_dur` ms: frame 1 is hidden, frame 2 is shown.
+5. ...continues until frame N-1, which holds (no hide set).
+
+**Recommended frame counts:** 12–20 frames for a 2–3s animation gives
+125–250ms per frame, which appears smooth to the eye. Higher counts
+improve smoothness at the cost of file size (one shape per frame).
+
+**Shapes should be custGeom** (vector-scalable) when possible. Fall back
+to embedded PNG only for effects that require raster composition (complex
+filters, blend modes). custGeom flipbooks scale cleanly at any zoom level.
+
+Verified end-to-end via `.visual_tmp/flipbook_test2.py`: 8 colored
+rectangles cycling through blue→cyan→green→yellow-green→yellow→orange→
+red→purple at 500ms per frame. All 8 frames display correctly in
+PowerPoint slideshow mode.
+
+### Layer 4 — Morph transition (smooth vertex interpolation)
+
+**When the dead-path animation is the only animation on the slide**, the
+Morph slide transition can produce smooth geometry interpolation that the
+flipbook cannot: PPT interpolates custGeom vertices between two slides,
+morphing one shape into another over the transition duration.
+
+**How it works:**
+
+1. Emit two consecutive slides with identical content (background, static
+   shapes, text) — only the animated shape differs between them.
+2. Slide A has the shape at keyframe state 0, slide B at keyframe state 1.
+3. Wire a Morph transition on slide B with auto-advance (`advTm`) so the
+   user never needs to click — the slides flip automatically.
+4. The slide boundary is invisible: same background, same static content,
+   only the morphing shape moves/deforms.
+
+For multi-keyframe animations (`values="0;30;-30;0"`), emit N+1 slides
+with Morph between each consecutive pair. Auto-advance timing on each
+slide controls the per-segment duration.
+
+For continuous looping, the last slide auto-advances back to the first.
+
+**Morph transition XML (exact PPT-emitted structure):**
+
+```xml
+<mc:AlternateContent
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006">
+  <mc:Choice
+      xmlns:p159="http://schemas.microsoft.com/office/powerpoint/2015/09/main"
+      Requires="p159">
+    <p:transition spd="slow"
+        xmlns:p14="http://schemas.microsoft.com/office/powerpoint/2010/main"
+        p14:dur="2000">
+      <p159:morph option="byObject"/>
+    </p:transition>
+  </mc:Choice>
+  <mc:Fallback>
+    <p:transition spd="slow">
+      <p:fade/>
+    </p:transition>
+  </mc:Fallback>
+</mc:AlternateContent>
+```
+
+**Critical:** namespace declarations must be inline on each element, not
+hoisted to the `<p:sld>` root. Hoisting causes PPT to trigger a repair
+dialog that strips the transition. The `mc:AlternateContent` wrapper is
+required — a bare `<p:transition>` with `<p159:morph>` is silently ignored.
+
+**Shape matching:** Morph matches shapes by `name` attribute on
+`<p:cNvPr>`. Both slides must use the same shape name for the morphing
+shape. Shape IDs may differ.
+
+**Empirical vertex interpolation:** verified that Morph interpolates
+custGeom path vertices (not just bounding box position/size). A rectangle
+on slide 1 smoothly morphs into a parallelogram (skewX 30°) on slide 2,
+with each vertex traveling independently to its target position.
+
+**Covers (when sole animation on slide):**
+
+- Skew animation — rectangle → parallelogram vertex morph
+- Path morph (`d` attribute) — any shape → any shape with same vertex count
+- Stroke-width — geometry with different stroke widths
+- Any vertex-interpolatable geometry change
+
+**When NOT to use:**
+
+- Slide has other native animations (fade, rotate, motion) alongside the
+  dead-path animation — Morph would interrupt their timing. Use flipbook.
+- Animation has complex multi-keyframe sequences — each keyframe pair
+  costs a slide. Beyond 4-5 keyframes, flipbook is more practical.
+- Animation repeats indefinitely — slide looping can cause visual hiccups
+  on the loop point. Flipbook handles `repeatCount="indefinite"` better.
+
+**Policy rule:** Morph for slides where the dead-path animation is the
+ONLY animation. Flipbook for slides with mixed native + dead-path
+animations or complex keyframe sequences.
+
+Verified end-to-end via `.visual_tmp/morph_test.py`: blue rectangle on
+slide 1 morphs smoothly into a red parallelogram (skewX 30°) on slide 2.
+Vertex interpolation confirmed — the top edge shifts right while the
+bottom edge stays fixed, producing a true visual skew.
 
 ## Tokens
 

@@ -298,6 +298,27 @@
       "source": "tests/golden/animation/numeric_x.xml",
       "verification": "visually-verified",
       "notes": "PATH_DATA is a PPT motion-path string (coordinates normalized to 0-1, ends with E). NODE_TYPE is 'clickEffect' for standalone motion (motion.py) or 'withEffect' for composed motion (numeric.py width→scale+motion). INNER_FILL is the SVG fill_mode mapped to 'hold' or 'remove'. Verified via tools/visual/animation_tune motion_translate: shape centre measured at (1141, 803) pre-trigger and (1457, 882) post-motion — ~1 inch right, ~0.3 inch down, matching the authored path. Does NOT express rotation (rAng) — motion animations with auto-rotate or fixed-rAng fall through to the imperative path."
+    },
+    "emph/flipbook": {
+      "path": null,
+      "preset_class": "emph",
+      "preset_id": null,
+      "preset_subtype": null,
+      "family_signature": "clickEffect|emph|-|flipbook|style.visibility",
+      "content_tokens": [],
+      "behavior_tokens": [],
+      "bld_mode": "animBg",
+      "smil_patterns": [
+        "animateTransform[skewX] or [skewY]",
+        "animate[d] (path morph)",
+        "animate[stroke-width] (interpolated)",
+        "animate[fill-opacity] (per-layer)",
+        "animate[stroke-opacity] (per-layer)",
+        "any animation whose native mapping is unsupported or dead-path"
+      ],
+      "source": "empirically derived from entr/appear visibility set pattern — flipbook is N×(show+hide) pairs on stacked pre-rendered shapes",
+      "verification": "visually-verified",
+      "notes": "Universal fallback for animations PPT cannot play natively. Caller pre-renders N keyframes as shapes (custGeom vector or raster PNG), stacks them at the same slide position, and passes their shape IDs to AnimationOracle.instantiate_flipbook(). The method emits timed <p:set> pairs on style.visibility — show frame_i at t=i*frame_dur, hide at t=(i+1)*frame_dur — inside a single compound <p:cTn>. Last frame holds (no hide). Uses the verified <p:set> style.visibility mechanism from entr/appear. Recommended 12-20 frames for a 2-3s animation. Shapes should be custGeom (vector-scalable) when possible; fall back to embedded PNG for filter/raster effects. File size grows linearly with frame count — each frame adds one shape + two <p:set> elements. Not editable in PowerPoint's Animation Pane (no preset ID). Requires all frame shapes to be pre-hidden except frame 0 (set visibility=hidden on shapes 1..N-1 in the spTree)."
     }
   }
 }

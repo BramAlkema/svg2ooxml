@@ -208,7 +208,10 @@ class AnimationOracle:
         raw = json.loads(index_path.read_text(encoding="utf-8"))
         slots = raw.get("slots") or {}
         for name, entry in slots.items():
-            template_path = (self._root / entry["path"]).resolve()
+            raw_path = entry.get("path")
+            if raw_path is None:
+                continue
+            template_path = (self._root / raw_path).resolve()
             if not template_path.is_file():
                 raise FileNotFoundError(
                     f"Oracle slot '{name}' references missing template {template_path}"
@@ -531,6 +534,97 @@ class AnimationOracle:
                 child_tn_lst.append(child)
 
         return base
+
+    # --------------------------------------------------------- flipbook slot
+
+    def instantiate_flipbook(
+        self,
+        *,
+        frame_shape_ids: Sequence[str | int],
+        par_id: int,
+        duration_ms: int,
+        delay_ms: int = 0,
+        start_id: int = 100,
+    ) -> tuple[etree._Element, list[tuple[str, int]]]:
+        """Assemble a flipbook ``<p:par>`` that sequences N pre-rendered frames.
+
+        Each frame is a shape on the slide, all stacked at the same position.
+        Frame 0 starts visible; all others start hidden. The flipbook shows
+        each frame for ``duration_ms / len(frame_shape_ids)`` milliseconds
+        via timed ``<p:set>`` pairs (show at T, hide at T + frame_dur).
+
+        This is the universal fallback for any animation PPT cannot play
+        natively: skew, path morph, stroke-width interpolation,
+        per-layer opacity, complex filter params, etc. The caller
+        pre-renders the keyframes as shapes (custGeom or raster) and
+        passes their shape IDs here.
+
+        Returns ``(par_element, bld_entries)`` where *bld_entries* is a list
+        of ``(spid, grpId)`` tuples that the caller must emit as
+        ``<p:bldP spid="X" grpId="Y" animBg="1"/>`` in the ``<p:bldLst>``.
+        The ``grpId`` must match the animation's ``cTn`` group — the standard
+        timing-tree builder does not do this automatically for multi-target
+        flipbooks.
+        """
+        n_frames = len(frame_shape_ids)
+        if n_frames < 2:
+            raise OracleSlotError("Flipbook requires at least 2 frames")
+
+        frame_dur = duration_ms // n_frames
+        ctn_id = start_id
+
+        # Build <p:set> elements
+        set_children: list[etree._Element] = []
+
+        def _make_set(shape_id: str | int, delay: int, val: str) -> None:
+            nonlocal ctn_id
+            for child in self._render_behavior_fragment(
+                BehaviorFragment(
+                    f"flipbook_{'show' if val == 'visible' else 'hide'}",
+                    {
+                        ("SHOW_ID" if val == "visible" else "HIDE_ID"): str(ctn_id),
+                        ("SHOW_DELAY_MS" if val == "visible" else "HIDE_DELAY_MS"): str(delay),
+                        "FRAME_SHAPE_ID": str(shape_id),
+                    },
+                ),
+                shape_id=shape_id,
+                duration_ms=duration_ms,
+            ):
+                set_children.append(child)
+            ctn_id += 1
+
+        # Hide frames 1..N-1 immediately
+        for shape_id in frame_shape_ids[1:]:
+            _make_set(shape_id, 0, "hidden")
+
+        # Show/hide sequence
+        for i, shape_id in enumerate(frame_shape_ids):
+            _make_set(shape_id, i * frame_dur, "visible")
+            if i < n_frames - 1:
+                _make_set(shape_id, (i + 1) * frame_dur, "hidden")
+
+        # Build the <p:par> wrapper using compound slot
+        base = self.instantiate(
+            "emph/compound",
+            shape_id=frame_shape_ids[0],
+            par_id=par_id,
+            duration_ms=duration_ms,
+            delay_ms=delay_ms,
+        )
+        child_tn_lst = base.find(
+            f".//{{{NS_P}}}cTn/{{{NS_P}}}childTnLst"
+        )
+        if child_tn_lst is None:
+            raise OracleSlotError("emph/compound template missing <p:childTnLst>")
+
+        for child in set_children:
+            child_tn_lst.append(child)
+
+        # bldP entries — each frame shape needs grpId matching par_id
+        bld_entries = [
+            (str(shape_id), par_id) for shape_id in frame_shape_ids
+        ]
+        return base, bld_entries
 
     def _render_behavior_fragment(
         self,

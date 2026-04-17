@@ -35,9 +35,25 @@ scope for this spec.
 | `expand-native` | Precompute SVG semantics into several native effects or samples. Editable but not semantically compact. | yes | allowed when deterministic |
 | `metadata-only` | Preserve in IR/export metadata, but do not emit an attempted native effect yet. | yes | no visual claim |
 | `unsupported-native` | No credible editable PowerPoint native equivalent. | yes | report and skip |
+| `flipbook` | Pre-render N keyframes as stacked shapes, sequence with `<p:set>` visibility toggles. | yes | universal fallback for dead paths |
+| `morph-transition` | Duplicate slide with Morph transition for smooth vertex interpolation between two shape states. | yes | preferred over flipbook when sole animation on slide |
 
 `mimic-native` means “may be approximated by native PowerPoint effects.” It does
 not mean raster fallback.
+
+`flipbook` means “the animation cannot be expressed through any PPT animation
+primitive, but the visual result can be reproduced by cycling through
+pre-rendered static frames.” Shapes should be custGeom (vector) when possible.
+The oracle's `instantiate_flipbook()` method generates the timing XML.
+Visually verified with 8-frame color cycling test.
+
+`morph-transition` means “the animation can be expressed as smooth vertex
+interpolation between two shape states using PPT's Morph slide transition.”
+Requires duplicating the slide — all static content stays identical, only the
+animated shape differs. Produces continuous interpolation (no discrete steps)
+but consumes slides and cannot coexist with other in-slide animations.
+Use when the dead-path animation is the sole animation on the slide.
+Visually verified with rectangle → parallelogram skew morph.
 
 ## 3. PowerPoint Native Primitive Inventory
 

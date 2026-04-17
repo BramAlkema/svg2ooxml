@@ -96,6 +96,11 @@ class TransformAnimationHandler(AnimationHandler):
             angles = [p[0] for p in parsed]
             rotation_center = self._extract_rotation_center(parsed)
 
+            if animation.calc_mode == CalcMode.DISCRETE and len(angles) > 1:
+                return self._build_discrete_rotate_sets(
+                    animation, par_id, behavior_id, angles
+                )
+
             if len(angles) > 2:
                 return self._build_multi_keyframe_rotate(
                     animation,
@@ -573,6 +578,18 @@ class TransformAnimationHandler(AnimationHandler):
                 seg_t = (t - key_times[i]) / max(1e-9, key_times[i + 1] - key_times[i])
                 return angles[i] + (angles[i + 1] - angles[i]) * seg_t
         return angles[-1]
+
+    def _build_discrete_rotate_sets(
+        self,
+        animation: AnimationDefinition,
+        par_id: int,
+        behavior_id: int,
+        angles: list[float],
+    ) -> etree._Element:
+        formatted = [str(int(round(a * 60000))) for a in angles]
+        return self._build_discrete_set_sequence(
+            animation, par_id, behavior_id, "style.rotation", formatted
+        )
 
     def _build_multi_keyframe_rotate(
         self,

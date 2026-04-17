@@ -18,7 +18,7 @@ from svg2ooxml.drawingml.animation.constants import (
 from svg2ooxml.drawingml.animation.handlers.base import AnimationHandler
 from svg2ooxml.drawingml.animation.oracle import default_oracle
 from svg2ooxml.drawingml.xml_builder import a_sub, p_elem, p_sub
-from svg2ooxml.ir.animation import AnimationType, BeginTriggerType, CalcMode
+from svg2ooxml.ir.animation import AnimationDefinition, AnimationType, CalcMode
 
 if TYPE_CHECKING:
     from svg2ooxml.ir.animation import AnimationDefinition
@@ -55,7 +55,35 @@ class ColorAnimationHandler(AnimationHandler):
             )
 
         if self._should_use_oracle_template(animation):
-            return default_oracle().instantiate(
+            oracle = default_oracle()
+            to_color = self._processor.parse_color(animation.values[-1])
+            inner_fill = "hold" if animation.fill_mode == "freeze" else "remove"
+
+            if ppt_attribute == "style.color":
+                return oracle.instantiate(
+                    "emph/text_color",
+                    shape_id=animation.element_id,
+                    par_id=par_id,
+                    duration_ms=animation.duration_ms,
+                    delay_ms=animation.begin_ms,
+                    BEHAVIOR_ID=behavior_id,
+                    TO_COLOR=to_color,
+                    INNER_FILL=inner_fill,
+                )
+            if ppt_attribute == "stroke.color":
+                return oracle.instantiate(
+                    "emph/stroke_color",
+                    shape_id=animation.element_id,
+                    par_id=par_id,
+                    duration_ms=animation.duration_ms,
+                    delay_ms=animation.begin_ms,
+                    CLR_BEHAVIOR_ID=behavior_id,
+                    SET_BEHAVIOR_ID=behavior_id + 1,
+                    TO_COLOR=to_color,
+                    INNER_FILL=inner_fill,
+                )
+
+            return oracle.instantiate(
                 "emph/color",
                 shape_id=animation.element_id,
                 par_id=par_id,
@@ -63,9 +91,9 @@ class ColorAnimationHandler(AnimationHandler):
                 delay_ms=animation.begin_ms,
                 BEHAVIOR_ID=behavior_id,
                 FROM_COLOR=self._processor.parse_color(animation.values[0]),
-                TO_COLOR=self._processor.parse_color(animation.values[-1]),
+                TO_COLOR=to_color,
                 TARGET_ATTRIBUTE=ppt_attribute,
-                INNER_FILL=("hold" if animation.fill_mode == "freeze" else "remove"),
+                INNER_FILL=inner_fill,
             )
 
         anim_clr = self._build_anim_clr_element(
@@ -94,24 +122,7 @@ class ColorAnimationHandler(AnimationHandler):
 
     @staticmethod
     def _should_use_oracle_template(animation: AnimationDefinition) -> bool:
-        """Gate the oracle path to simple color tweens with no extra modifiers.
-
-        The ``emph/color`` template only emits a single ``<p:cond>`` delay, no
-        ``additive``/``repeatCount`` attributes, and no event-based begin
-        triggers. Anything more elaborate falls through to the imperative
-        construction path which can express those modifiers.
-        """
-        if (animation.additive or "replace").lower() == "sum":
-            return False
-        if animation.repeat_count not in (None, 1, "1"):
-            return False
-        triggers = animation.begin_triggers
-        if triggers:
-            if len(triggers) > 1:
-                return False
-            if triggers[0].trigger_type != BeginTriggerType.TIME_OFFSET:
-                return False
-        return True
+        return AnimationHandler._simple_oracle_gate(animation)
 
     @staticmethod
     def _should_segment(animation: AnimationDefinition) -> bool:

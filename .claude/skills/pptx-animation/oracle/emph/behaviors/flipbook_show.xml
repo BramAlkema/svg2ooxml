@@ -1,0 +1,20 @@
+<fragment>
+    <p:set>
+        <p:cBhvr>
+            <p:cTn id="{SHOW_ID}" dur="1" fill="hold">
+                <p:stCondLst>
+                    <p:cond delay="{SHOW_DELAY_MS}"/>
+                </p:stCondLst>
+            </p:cTn>
+            <p:tgtEl>
+                <p:spTgt spid="{FRAME_SHAPE_ID}"/>
+            </p:tgtEl>
+            <p:attrNameLst>
+                <p:attrName>style.visibility</p:attrName>
+            </p:attrNameLst>
+        </p:cBhvr>
+        <p:to>
+            <p:strVal val="visible"/>
+        </p:to>
+    </p:set>
+</fragment>

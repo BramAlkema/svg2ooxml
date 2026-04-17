@@ -556,3 +556,165 @@ Only when the visual result fundamentally requires pixel composition:
 - Complex filter chains with pixel operations (`feDisplacementMap`, `feMorphology`, `feConvolveMatrix`)
 - `feTurbulence` (pure noise, unless hybrid EMF per ADR-018)
 - Nested `<image>` SVG when recursive conversion fails
+
+---
+
+## 8. Animation (SMIL → PresentationML)
+
+Animation maps SVG/SMIL elements to `<p:timing>` XML inside the slide.
+PowerPoint's playback engine walks `<p:cTn>` children directly — preset IDs
+are cosmetic Animation-Pane metadata, not runtime input. The oracle at
+`src/svg2ooxml/assets/animation_oracle/` carries empirically verified XML
+shapes; the compound slot (`emph/compound` + `emph/behaviors/*`) is the
+universal mapping target for stacked SMIL animations on one element.
+
+See also: `docs/specs/svg-animation-native-mapping-spec.md` for full
+match-level taxonomy; `docs/specs/animation-fidelity.md` for known playback
+bugs; `docs/research/powerpoint-animation-oracle-ssot.md` for the oracle
+methodology.
+
+### 8.1 Animation Elements
+
+| SVG Element | DrawingML | Oracle Slot | Status | Notes |
+|---|---|---|---|---|
+| `<animate>` opacity 0→1 | `<p:animEffect filter="fade" transition="in">` | `entr/fade` | Done | Entrance fade, visually verified. Handler gated. |
+| `<animate>` opacity 1→0 | `<p:animEffect filter="fade" transition="out">` | `exit/fade` | Done | Exit fade, visually verified. Handler gated. |
+| `<animate>` opacity partial | `<p:animEffect filter="image" prLst="opacity:X">` | `emph/transparency` | Done | Emphasis transparency, visually verified. Handler gated. |
+| `<animate>` fill/stroke color | `<p:animClr>` on `fillcolor`/`stroke.color` | `emph/color`, `emph/shape_fill_color`, `emph/stroke_color` | Done | Three oracle slots by target scope. Handler partially gated. |
+| `<animate>` text color | `<p:animClr>` on `style.color` | `emph/text_color` | Done | Visually verified. Not yet wired from SMIL routing. |
+| `<animate>` x/y position | `<p:animMotion path="M 0 0 L dx dy E">` | `path/motion` | Partial | Oracle slot verified. Coordinate normalization has gaps. |
+| `<animate>` width/height | `<p:animScale>` + anchor `<p:animMotion>` | `emph/scale` (+ `path/motion`) | Partial | Oracle verified individually. Anchor compensation not composed. |
+| `<animate>` visibility | `<p:set>` on `style.visibility` | `entr/appear` | Done | Visually verified. Handler gated. |
+| `<animate>` display | Compiled to descendant `style.visibility` sets | — | Partial | Parser handles; writer compilation incomplete. |
+| `<animate>` stroke-width | `<p:anim>` on `stroke.weight` — **dead path** | dead: `anim-stroke-weight` → flipbook | Partial | PPT silently drops native. Flipbook fallback available. |
+| `<animate>` font-size | `<p:anim>` on `style.fontSize` (scalar multiplier) | compound (preset 28 recipe) | Partial | Works ONLY inside full preset 28 compound with color siblings. Isolated `style.fontSize` is a dead path. Needs oracle slot. |
+| `<animate>` font-weight | `<p:set>` on `style.fontWeight` | `emph/bold` | Done | Visually verified. Not yet wired from SMIL routing. |
+| `<animate>` text-decoration | `<p:set>` on `style.textDecorationUnderline` | `emph/underline` | Done | Visually verified. Not yet wired from SMIL routing. |
+| `<animate>` path `d`/`points` | No shape-morph primitive | flipbook | Partial | Flipbook with pre-rendered custGeom keyframes. |
+| `<animateColor>` | Same as `<animate>` color | Same color slots | Done | Deprecated SVG element; parser routes to same IR. |
+| `<animateTransform type="translate">` | `<p:animMotion>` | `path/motion` | Partial | Oracle verified. Multi-keyframe needs expand. |
+| `<animateTransform type="scale">` | `<p:animScale>` + origin compensation | `emph/scale` (compound `scale` fragment) | Partial | Oracle verified. Origin compensation gap for off-center transforms. |
+| `<animateTransform type="rotate">` | `<p:animRot>` (+ orbital `<p:animMotion>` if cx/cy) | `emph/rotate` (compound `rotate` fragment) | Partial | Oracle verified. cx/cy orbit composition incomplete. |
+| `<animateTransform type="skewX/Y">` | No native skew animation | morph-transition or flipbook | Partial | Morph: smooth vertex interpolation via slide duplication (sole animation only). Flipbook: discrete frames (mixed animations). Both verified. |
+| `<animateTransform type="matrix">` | Decompose → translate + scale + rotate | compound fragments | Gap | Decomposition exists in handler; not oracle-wired. |
+| `<animateMotion>` path | `<p:animMotion path="...">` | `path/motion` | Partial | Oracle verified. SVG→PPT coordinate normalization has gaps. |
+| `<animateMotion>` mpath | Resolve `<mpath href>` → `<p:animMotion>` | `path/motion` | Partial | Parser resolves mpath; writer partially wired. |
+| `<animateMotion>` rotate=auto | `rAng` for fixed; sampled for tangent | — | Gap | No oracle slot for auto-rotate yet. |
+| `<set>` visibility/display | `<p:set>` on `style.visibility` | `entr/appear` | Done | Visually verified. |
+| `<set>` numeric/color | `<p:set>` with appropriate target | — | Partial | Handler exists; oracle routing only for visibility. |
+
+### 8.2 Entrance & Exit Effects (Filter Vocabulary)
+
+| SVG Pattern | PPT Filter | Oracle Slot | Status |
+|---|---|---|---|
+| Opacity 0→1 | `fade` | `entr/filter_effect` | Done (verified) |
+| Opacity 1→0 | `fade` | `exit/filter_effect` | Done (verified) |
+| Generic entrance | `dissolve`, `wipe(dir)`, `wedge`, `wheel(n)`, `circle(in\|out)`, `strips(dir)`, `blinds(dir)`, `checkerboard(dir)`, `barn(dir)`, `randombar(dir)` | `entr/filter_effect` | Done (17 verified, 12 derived) |
+| Generic exit | Same vocabulary, `transition="out"` | `exit/filter_effect` | Done (structurally equivalent) |
+| Stroke-dashoffset reveal | `wipe(dir)` mimic | `entr/filter_effect` | Partial | Line-drawing effect approximated via directional wipe. |
+
+### 8.3 Emphasis Effects (Compound Behaviors)
+
+| SVG Pattern | Behavior Fragment | Oracle Slot | Status |
+|---|---|---|---|
+| Partial opacity change | `transparency` | `emph/transparency` or compound | Done (verified) |
+| Fill color change on shape | `fill_color` | `emph/shape_fill_color` or compound | Done (verified) |
+| Text color change | `text_color` | `emph/text_color` or compound | Done (verified) |
+| Stroke color change | `stroke_color` | `emph/stroke_color` or compound | Done (verified) |
+| Color pulse (autoReverse) | — | `emph/color_pulse` | Done (verified) |
+| Rotation | `rotate` | `emph/rotate` or compound | Done (verified) |
+| Scale | `scale` | `emph/scale` or compound | Done (verified) |
+| Motion | `motion` | `path/motion` or compound | Done (verified) |
+| Bold toggle | `bold` | `emph/bold` or compound | Done (verified) |
+| Underline toggle | `underline` | `emph/underline` or compound | Done (verified) |
+| Blink (visibility toggle) | `blink` | `emph/blink` or compound | Done (verified) |
+| Stacked multi-behavior | N behaviors composed | `emph/compound` | Done (verified) |
+
+### 8.4 Timing & Scheduling
+
+| SVG | DrawingML | Status | Notes |
+|---|---|---|---|
+| `begin="0s"` / offset | `<p:stCondLst><p:cond delay="X">` | Done | |
+| `begin="click"` | `evt="onClick"` condition | Done | |
+| `begin="element.click"` | `evt="onClick"` + target shape | Done | When target maps to a shape ID. |
+| `begin="element.begin"` | `evt="onBegin"` condition | Partial | Needs oracle verification. |
+| `begin="element.end"` | `evt="onEnd"` condition | Partial | Needs oracle verification. |
+| `begin="indefinite"` | Remap to click in bookmark cases | Partial | Composed-native for bookmark case only. |
+| `begin="element.repeat(n)"` | No confirmed PPT equivalent | Gap | Parsed, skipped by policy. |
+| `begin="accessKey()"` | No PPT keyboard trigger | Unsupported | Parsed, skipped by policy. |
+| `begin="wallclock()"` | No PPT equivalent | Unsupported | Parsed, skipped by policy. |
+| `dur="Xs"` | `<p:cTn dur="X">` | Done | |
+| `dur="indefinite"` | Long duration / wait-state mimic | Partial | No exact finite-slide equivalent. |
+| `end` offset | `<p:endCondLst>` | Partial | Wired, needs oracle verification. |
+| `end` event refs | `<p:endCondLst>` event conditions | Partial | Wired, needs oracle verification. |
+| `repeatCount="n"` | `<p:cTn repeatCount="n*1000">` | Done | Thousandths encoding. |
+| `repeatCount="indefinite"` | `repeatCount="indefinite"` | Done | |
+| `repeatDur` | `repeatDur` on `<p:cTn>` | Partial | Wired, needs oracle verification. |
+| `fill="freeze"` | `fill="hold"` | Partial | Inconsistent across handlers; oracle tokens have `INNER_FILL`. |
+| `fill="remove"` | `fill="remove"` | Partial | Same inconsistency. |
+| `restart` | `restart` on outer `<p:cTn>` | Partial | Wired, needs oracle verification. |
+| `min` / `max` | — | Gap | Parser only; no PPT emission. |
+
+### 8.5 Interpolation
+
+| SVG | DrawingML | Status | Notes |
+|---|---|---|---|
+| `calcMode="linear"` | Native from/to, TAV linear | Done | Default and preferred. |
+| `calcMode="paced"` numeric | Pre-computed paced keyTimes → TAV | Partial | Scalar pacing works; vector pacing incomplete. |
+| `calcMode="paced"` motion | Path-distance keyTimes | Partial | Depends on path-length approximation. |
+| `calcMode="discrete"` | `<p:set>` segments or discrete TAV | Gap | TAV builder always interpolates linearly. Oracle `emph/blink` shows the pattern. |
+| `calcMode="spline"` | Sampled cubic → dense linear TAVs | Gap | PPT has accel/decel but not arbitrary cubic per segment. |
+| `keyTimes` | TAV `tm` values | Done | Preserved as non-uniform segment timing. |
+| `keySplines` | Sampled into TAV segments | Gap | Raw spline metadata preserved in IR. |
+| `keyPoints` (motion) | Retimed motion path samples | Gap | Needs path-progress conversion. |
+
+### 8.6 Additive & Accumulate
+
+| SVG | DrawingML | Status | Notes |
+|---|---|---|---|
+| `additive="replace"` | Default (omit attr) | Done | |
+| `additive="sum"` simple motion | Native composition for limited cases | Gap | Needs pre-computed absolute values. |
+| `additive="sum"` generic numeric | Pre-compute absolute values | Gap | Requires animation composition solver. |
+| `additive="sum"` color | No semantic color addition | Gap | Skip unless explicit policy. |
+| `accumulate="none"` | Default (omit attr) | Done | |
+| `accumulate="sum"` finite | Expand repeats into sequenced segments | Gap | Timeline grows with repeat count. |
+| `accumulate="sum"` indefinite | No finite equivalent | Unsupported | Needs bounded cap if mimicked. |
+
+### 8.7 Attribute Targets
+
+| SVG Attribute | PPT `attrName` | Oracle Verified | Notes |
+|---|---|---|---|
+| `opacity` | `style.opacity` | Yes (vocabulary) | Via `emph/transparency` or `entr/fade`/`exit/fade`. |
+| `fill` (color) | `fillcolor` | Yes (vocabulary) | Via `emph/color` or `emph/shape_fill_color`. |
+| `stroke` (color) | `stroke.color` | Yes (vocabulary) | Via `emph/stroke_color`. |
+| `color` (text) | `style.color` | Yes (vocabulary) | Via `emph/text_color`. |
+| `visibility` | `style.visibility` | Yes (vocabulary) | Via `<p:set>` / `entr/appear`. |
+| `x` / `cx` | `ppt_x` | Yes (vocabulary) | Via `<p:animMotion>`. |
+| `y` / `cy` | `ppt_y` | Yes (vocabulary) | Via `<p:animMotion>`. |
+| `width` | `ppt_w` | Yes (vocabulary) | Via `<p:animScale>`. |
+| `height` | `ppt_h` | Yes (vocabulary) | Via `<p:animScale>`. |
+| `transform: rotate` | `r` / `style.rotation` | Yes (vocabulary) | Via `<p:animRot>`. |
+| `font-weight` | `style.fontWeight` | Yes (vocabulary) | Via `<p:set>` bold. |
+| `text-decoration` | `style.textDecorationUnderline` | Yes (vocabulary) | Via `<p:set>` underline. |
+| `font-size` | `style.fontSize` | Dead (requires compound) | Isolated `<p:anim>` silently dropped. |
+| `fill-opacity` | — | Dead (`anim-fill-opacity`) | Use `emph/transparency` instead. |
+| `stroke-opacity` | — | Dead (`anim-stroke-opacity`) | No native path; EMF fallback only. |
+| `stroke-width` | — | Dead (`anim-stroke-weight`) | No native path; EMF fallback only. |
+| `fill.type` | `fill.type` | Yes (vocabulary, primer) | Primer for fill color change. |
+| `fill.on` | `fill.on` | Yes (vocabulary, primer) | Primer for fill color change. |
+| `stroke.on` | `stroke.on` | Yes (vocabulary, primer) | Primer for stroke color change. |
+
+### 8.8 Known Dead Paths (silently dropped by PPT)
+
+These XML shapes parse validly but produce no animation at slideshow runtime.
+SSOT: `animation_oracle/dead_paths.xml`.
+
+| Dead Path ID | Element + Attr | Verdict | Verified Replacement |
+|---|---|---|---|
+| `anim-fill-opacity` | `<p:anim>` on `fill.opacity` | silently-dropped | `emph/transparency` |
+| `anim-stroke-opacity` | `<p:anim>` on `stroke.opacity` | silently-dropped | flipbook (pre-rendered keyframes) |
+| `anim-stroke-weight` | `<p:anim>` on `stroke.weight` | silently-dropped | flipbook (pre-rendered keyframes) |
+| `anim-line-weight` | `<p:anim>` on `line.weight` | silently-dropped | flipbook (pre-rendered keyframes) |
+| `anim-style-fontsize-isolated` | `<p:anim>` on `style.fontSize` alone | requires-compound | Preset 28 compound: `animClr style.color` + `animClr fillcolor` + `set fill.type` + `anim style.fontSize` as siblings in one `cTn`. Works with `override="childStyle"` + `bldP build="p"`. Needs oracle slot. |
+| `animeffect-image-isolated` | `<p:animEffect filter="image">` alone | requires-compound | `emph/transparency` (pair with `<p:set>`) |
+| `anim-style-opacity-tavlst` | `<p:anim>` on `style.opacity` via TAV | silently-dropped | `emph/transparency` or `entr/fade`/`exit/fade` |

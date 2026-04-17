@@ -25,7 +25,7 @@ from svg2ooxml.drawingml.animation.timing_utils import (
     sample_spline_keyframes,
 )
 from svg2ooxml.drawingml.animation.value_formatters import format_numeric_value
-from svg2ooxml.drawingml.xml_builder import p_elem, p_sub
+from svg2ooxml.drawingml.xml_builder import NS_P, p_elem, p_sub
 from svg2ooxml.ir.animation import AnimationType, BeginTriggerType, CalcMode
 
 if TYPE_CHECKING:
@@ -71,6 +71,16 @@ class NumericAnimationHandler(AnimationHandler):
             return self._build_wipe_entrance(animation, par_id, behavior_id)
 
         ppt_attribute = self._map_attribute_name(animation.target_attribute)
+
+        if (
+            animation.calc_mode == CalcMode.DISCRETE
+            and ppt_attribute != "style.visibility"
+            and len(animation.values) > 1
+        ):
+            return self._build_discrete_set_segments(
+                animation, par_id, behavior_id, ppt_attribute
+            )
+
         has_non_linear_timing = (
             animation.calc_mode in {CalcMode.DISCRETE, CalcMode.SPLINE}
             or bool(animation.key_splines)
@@ -658,6 +668,20 @@ class NumericAnimationHandler(AnimationHandler):
             return (dx, dy)
         a, b, c, d, _e, _f = matrix
         return (a * dx + c * dy, b * dx + d * dy)
+
+    def _build_discrete_set_segments(
+        self,
+        animation: AnimationDefinition,
+        par_id: int,
+        behavior_id: int,
+        ppt_attribute: str,
+    ) -> etree._Element:
+        formatted = [
+            self._normalize_value(ppt_attribute, v) for v in animation.values
+        ]
+        return self._build_discrete_set_sequence(
+            animation, par_id, behavior_id, ppt_attribute, formatted
+        )
 
     def _build_wipe_entrance(
         self,

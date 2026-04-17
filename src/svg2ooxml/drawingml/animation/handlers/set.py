@@ -17,7 +17,7 @@ from svg2ooxml.drawingml.animation.constants import (
 from svg2ooxml.drawingml.animation.handlers.base import AnimationHandler
 from svg2ooxml.drawingml.animation.oracle import default_oracle
 from svg2ooxml.drawingml.xml_builder import NS_P, a_sub, p_elem, p_sub
-from svg2ooxml.ir.animation import AnimationType, BeginTriggerType
+from svg2ooxml.ir.animation import AnimationDefinition, AnimationType
 
 if TYPE_CHECKING:
     from svg2ooxml.ir.animation import AnimationDefinition
@@ -52,6 +52,26 @@ class SetAnimationHandler(AnimationHandler):
                 par_id=par_id,
                 behavior_id=behavior_id,
                 target_value=str(target_value).strip().lower(),
+            )
+
+        if ppt_attribute == "style.fontWeight" and self._visibility_uses_oracle(animation):
+            return default_oracle().instantiate(
+                "emph/bold",
+                shape_id=animation.element_id,
+                par_id=par_id,
+                duration_ms=animation.duration_ms,
+                delay_ms=animation.begin_ms,
+                BEHAVIOR_ID=behavior_id,
+            )
+
+        if ppt_attribute == "style.textDecorationUnderline" and self._visibility_uses_oracle(animation):
+            return default_oracle().instantiate(
+                "emph/underline",
+                shape_id=animation.element_id,
+                par_id=par_id,
+                duration_ms=animation.duration_ms,
+                delay_ms=animation.begin_ms,
+                BEHAVIOR_ID=behavior_id,
             )
 
         # Build <p:set> with behavior core and target value
@@ -104,24 +124,7 @@ class SetAnimationHandler(AnimationHandler):
 
     @staticmethod
     def _visibility_uses_oracle(animation: AnimationDefinition) -> bool:
-        """Gate the ``entr/appear`` oracle path to simple start conditions.
-
-        The template only emits a single time-offset ``<p:cond>`` and no
-        additive / repeat modifiers. Anything more complex falls through to
-        the imperative ``<p:animEffect>`` path so the full trigger grammar
-        stays available.
-        """
-        if (animation.additive or "replace").lower() == "sum":
-            return False
-        if animation.repeat_count not in (None, 1, "1"):
-            return False
-        triggers = animation.begin_triggers
-        if triggers:
-            if len(triggers) > 1:
-                return False
-            if triggers[0].trigger_type != BeginTriggerType.TIME_OFFSET:
-                return False
-        return True
+        return AnimationHandler._simple_oracle_gate(animation)
 
     def _build_visibility_effect(
         self,

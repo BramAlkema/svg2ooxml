@@ -50,6 +50,31 @@ class OpacityAnimationHandler(AnimationHandler):
         if fade_effect is not None:
             return fade_effect
 
+        # For partial opacity (not 0→1 or 1→0 fades), route through the
+        # verified emph/transparency oracle slot. The <p:anim> on
+        # style.opacity via TAV is a dead path (anim-style-opacity-tavlst).
+        if (
+            animation.target_attribute == "opacity"
+            and len(animation.values) >= 2
+            and animation.repeat_count in (None, 1, "1")
+            and not animation.end_triggers
+            and self._authored_fade_begin_triggers_are_simple(animation)
+            and animation.calc_mode not in {CalcMode.DISCRETE, CalcMode.SPLINE}
+            and not animation.key_splines
+        ):
+            target_opacity = self._processor.parse_opacity(animation.values[-1])
+            return default_oracle().instantiate(
+                "emph/transparency",
+                shape_id=animation.element_id,
+                par_id=par_id,
+                duration_ms=animation.duration_ms,
+                delay_ms=animation.begin_ms,
+                SET_BEHAVIOR_ID=behavior_id,
+                EFFECT_BEHAVIOR_ID=behavior_id * 10 + 1,
+                TARGET_OPACITY=target_opacity,
+                INNER_FILL=("hold" if animation.fill_mode == "freeze" else "remove"),
+            )
+
         return self._build_property_animation(animation, par_id, behavior_id)
 
     def _build_authored_fade_effect(

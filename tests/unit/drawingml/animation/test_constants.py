@@ -57,7 +57,7 @@ class TestColorAttributes:
         assert "lighting-color" in COLOR_ATTRIBUTES
 
     def test_count(self):
-        assert len(COLOR_ATTRIBUTES) == 6
+        assert len(COLOR_ATTRIBUTES) == 7
 
 
 class TestAngleAttributes:

@@ -599,7 +599,10 @@ class TestBuildBehaviorCoreElem:
         assert ctn is not None
         assert ctn.get("autoRev") == "1"
 
-    def test_additive_sum(self):
+    def test_additive_sum_not_emitted(self):
+        """additive='sum' must NOT be emitted — PPT concurrent animations
+        stack additively by default, and emitting additive='sum' causes
+        broken composition (shape jumps to slide origin). Verified 2026-04-16."""
         builder = AnimationXMLBuilder()
         elem = builder.build_behavior_core_elem(
             behavior_id=5,
@@ -607,7 +610,7 @@ class TestBuildBehaviorCoreElem:
             target_shape="shape1",
             additive="sum",
         )
-        assert elem.get("additive") == "sum"
+        assert elem.get("additive") is None
 
     def test_additive_replace_omitted(self):
         """additive='replace' (SVG default) should not set attribute."""

@@ -624,9 +624,12 @@ class AnimationXMLBuilder:
         if override:
             cBhvr.set("override", override)
 
-        # Additive attribute on <p:cBhvr> itself (not on cTn)
-        if additive == "sum":
-            cBhvr.set("additive", "sum")
+        # PPT concurrent animations on the same target stack additively
+        # by default — emitting additive="sum" on cBhvr causes broken
+        # composition (shape jumps to slide origin). Empirically verified
+        # 2026-04-16: never emit this attribute.
+        # if additive == "sum":
+        #     cBhvr.set("additive", "sum")
 
         # Map fill_mode
         ppt_fill = "hold"

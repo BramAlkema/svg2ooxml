@@ -121,6 +121,162 @@ WordArt preferred over outlines for textPath: `prefer_native_wordart=True`,
 lowered confidence threshold, fixed `prstTxWarp` schema (child element, not
 attribute). Classifier relaxed for arch detection.
 
+### Comprehensive OpenType Feature Support (ADR-030, proposed)
+
+**Context.** svg2ooxml's stated goal is a comprehensive SVG→PPTX converter,
+not an 80/20 tool. CSS (and therefore SVG 2 text) carries substantial
+typography signals through `font-variant-caps`, `font-variant-numeric`,
+`font-variant-ligatures`, `font-variant-position`, `font-variant-alternates`,
+and the `font-feature-settings` escape hatch. PowerPoint's DrawingML text
+schema exposes a few of these directly as run properties — `cap="small|all"`,
+`baseline=` for sub/sup, `lang=` for locale-specific features, and GPOS
+kerning survives automatically inside the EOT-wrapped font — but has no
+runtime selector for the rest. For unmapped features, the rasteriser renders
+whatever the font's default `cmap` points at, and dropping them silently is
+a fidelity loss that compounds across editorial, data viz, and hand-authored
+SVG inputs.
+
+**Prior art in this repo.**
+
+- `docs/research/svg-to-drawingml-feature-map.md:320` — `font-variant:
+  small-caps` is already implemented natively via `cap="small"` on
+  `<a:rPr>`, validated against the .NET SDK. Small caps and all-small-caps
+  are **not** candidates for baking because the native path is better:
+  PowerPoint handles the cap synthesis itself with correct metrics.
+- `docs/research/svg-to-drawingml-feature-map.md:338–339` — `baseline-shift:
+  super` / `baseline-shift: sub` already emit the `baseline` attribute on
+  `<a:rPr>`, so `font-variant-position: sub|super` will share that path and
+  also **not** need baking.
+- `docs/research/svg-to-drawingml-feature-map.md:363` — `xml:lang` / `lang`
+  already flows to `<a:rPr lang="…"/>`, which triggers PowerPoint's
+  locale-specific OT features (localised forms, required ligatures) at
+  render time.
+- `services/fonts/embedding.py:419–598` — `_select_ligature_glyphs` and
+  `_glyph_ligature_sequences` already walk FontForge `getPosSub("*")`
+  entries and keep `ligature`-kind glyphs through subsetting. This is
+  subset-correctness, not baking: ligatures already reachable via the
+  font's default `cmap` survive and render natively, so `liga` (common
+  ligatures, enabled by default in most fonts) is **not** a baking target
+  either.
+- `docs/specs/FONT_EMBEDDING_ANALYSIS.md` +
+  `FONT_INJECTION_QUICK_REFERENCE.md` + `FONT_DATA_FLOW_VISUAL.txt` — a
+  2025-11-03 exploration pass mapping the entire font-embedding data flow
+  across five injection points (WebFontProvider → TextPipeline →
+  EmbeddingEngine → DrawingMLWriter → PPTXPackageBuilder). Any work
+  touching the embedding pipeline should read these first. Notably flags a
+  "metadata flow gap" at `text_pipeline.py:233–248` where `FontMatch`
+  metadata is not explicitly merged into `FontEmbeddingRequest` metadata.
+- `docs/architecture/pipeline-analysis.md:364–368` — Known-gap list
+  explicitly calls out `font-feature-settings` and `font-variation-settings`
+  as unsupported. The adjacent bullet claiming `font-variant` is "stored but
+  not applied" is **stale**: the feature map confirms small-caps is applied.
+  Correcting that bullet is a docs-drift follow-up, out of scope for this
+  ADR.
+- `docs/architecture/webfont-provider.md:491–492` — `font-feature-settings`
+  and `font-variation-settings` listed under "Future", confirming the gap
+  this ADR addresses.
+
+**Decision.** Support the unmapped OT features by **baking** them into
+synthetic embedded font variants at conversion time, rather than waiting
+for a DrawingML schema change that is not coming. For each unique
+`(family, sorted(feature_tags))` combination reached during IR conversion,
+produce a baked font whose `cmap` and `glyf` tables reflect the
+substitutions the requested GSUB features would have performed, save it
+under a deterministic synthetic family name, embed it as a separate EOT
+part in the PPTX, and rewrite the affected DrawingML text runs to reference
+the synthetic name via `<a:latin typeface="…"/>`.
+
+**Scope — in.** GSUB-driven features with no native DrawingML path:
+figure styles (`onum`/`lnum`/`tnum`/`pnum`), fractions (`frac`/`afrc`),
+ordinals (`ordn`), slashed zero (`zero`), discretionary ligatures (`dlig`),
+historical ligatures (`hlig`), contextual alternates (`calt`), stylistic
+alternates (`salt`), stylistic sets (`ss01`–`ss20`), character variants
+(`cv01`–`cv99`), titling caps (`titl`), unicase (`unic`), and the raw
+`font-feature-settings` escape hatch for anything else a user writes
+explicitly. The high-value real-world subset is figure styles (data viz
+needs `tnum`, editorial typography wants `onum`), fractions, and stylistic
+sets; everything else is long tail but cheap once the pipeline exists.
+
+**Scope — out.** `font-variant-caps` (all values): native via `cap="none|
+small|all"`, existing code path, do not touch. `font-variant-position: sub|
+super`: native via `baseline=`, existing code path. Default-on ligatures
+(`liga`, `rlig`, `clig`): render via the source font's `cmap` plus existing
+subset-time preservation in `_select_ligature_glyphs`. Kerning (`kern` /
+GPOS): survives inside the EOT-wrapped font and PowerPoint honours it at
+render time. Locale-dependent features: triggered by `lang=` on `<a:rPr>`.
+`font-variation-settings` and variable fonts generally: a separate code
+path via `fontTools.varLib.instancer` producing static instances at the
+requested axis values — handled in a future ADR, not this one.
+
+**Preconditions.** The OTF (CFF) → TTF (`glyf`) converter at
+`services/fonts/otf2ttf.py` is a hard prerequisite because baking operates on
+`glyf` outlines, and any CFF-flavoured source font must be rebuilt in TT form
+before the bake step. That converter landed in the same session as this ADR
+and is already wired into the embedding engine.
+
+**Implementation order.**
+
+1. Port `glyph_baking.py` from tokenmoulds under
+   `services/fonts/glyph_baking.py`: runs GSUB substitutions in-process via
+   `fontTools.subset` / manual `cmap` rewriting, preserves horizontal metrics
+   and line metrics so layout does not shift, returns baked bytes.
+2. Introduce a `BakedFontRegistry` keyed on `(family, frozenset(feature_tags))`
+   with memoisation so each unique combination is baked at most once per
+   conversion. Deterministic synthetic naming: `"<family> [<tag>,<tag>]"` with
+   tags sorted, truncated and hash-suffixed if the PPTX font-name length
+   budget is exceeded.
+3. Extend `core/styling/style_extractor.py` to parse only the
+   `font-variant-*` properties whose feature tags are in the baking scope
+   (numeric, ligatures excluding `liga`, alternates, East Asian), plus the
+   raw `font-feature-settings` escape hatch. `font-variant-caps`,
+   `font-variant-position`, and the default-on ligature classes continue
+   to flow through their existing native DrawingML paths and must **not**
+   be routed into the baking registry. Normalise each text run to a
+   canonical sorted tuple of OT feature tags so identical requests
+   collapse on lookup.
+4. Thread the registry through `core/ir/text_converter.py` and
+   `drawingml/writer.py`: text runs gain a resolved `typeface` property that
+   may differ from the source `font-family` when a baked variant is needed,
+   and the DrawingML text renderer emits `<a:latin typeface="…"/>`
+   accordingly.
+5. Extend `FontEmbeddingEngine` so baked variants flow through the same EOT
+   packaging path as regular embedded fonts, each with their own relationship
+   and content-type entry.
+6. Specimen corpus under `tests/corpus/font_variants/` with one SVG per
+   feature value. Each test asserts that the generated PPTX contains the
+   expected baked family, that the expected text run references it, and that
+   the OpenXML audit still passes.
+
+**Trade-offs.** PPTX size grows roughly linearly with the number of distinct
+feature combinations used in the input SVG — the common case is one or two
+baked variants per family. Baking adds fontTools work at conversion time,
+but the registry makes it O(unique combinations) rather than O(text runs).
+Synthetic family names are visible to PowerPoint users if they click into
+the font picker, which is ugly but acceptable for fidelity wins.
+
+**Interaction with the large-file refactor.** `style_extractor.py` (1130 LOC)
+and `text_converter.py` (1309 LOC) are both on the split list in
+`docs/specs/refactor-large-files.md`. Font-variant parsing should land on top
+of the split, not underneath it: either wait for those PRs, or extract the
+font-variant parsing into a new self-contained module under
+`core/styling/paint/` that the refactor can integrate without rewriting.
+
+**Open questions.**
+
+- Cap on baked variants per family before we warn and degrade to the
+  unbaked default? Proposal: soft limit of 8, logged at INFO level.
+- Behaviour when the source font lacks a requested GSUB feature (e.g.
+  `small-caps` on a font with no `smcp` lookup)? Proposal: log at DEBUG,
+  fall through to the default cmap, do not synthesise small caps from
+  scaled capitals.
+- Should `font-variant-alternates: styleset(3)` produce a baked variant per
+  invoked `ssNN` tag, or group them? Proposal: group, because real-world
+  usage combines stylistic sets with other features.
+- How to surface baking failures (corrupt source font, unsupported feature)
+  without aborting the whole conversion? Proposal: per-run fallback plus a
+  diagnostic in the asset registry, following the pattern already used for
+  filter and mask fallbacks.
+
 ---
 
 ## Quality & Testing

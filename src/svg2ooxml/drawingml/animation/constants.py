@@ -33,6 +33,7 @@ FADE_ATTRIBUTES: frozenset[str] = frozenset({
 COLOR_ATTRIBUTES: frozenset[str] = frozenset({
     "fill",
     "stroke",
+    "color",
     "stop-color",
     "stopcolor",
     "flood-color",
@@ -106,6 +107,12 @@ ATTRIBUTE_NAME_MAP: dict[str, str] = {
 
     # Visibility → PowerPoint visibility property
     "visibility": "style.visibility",
+
+    # Text formatting → PowerPoint text properties
+    "font-weight": "style.fontWeight",
+    "font-style": "style.fontWeight",
+    "text-decoration": "style.textDecorationUnderline",
+    "text-decoration-line": "style.textDecorationUnderline",
 }
 
 # Attributes that should use Wipe entrance animation instead of <p:anim>
@@ -122,6 +129,7 @@ PowerPoint's coordinate system. This mapping normalizes them for animation.
 COLOR_ATTRIBUTE_NAME_MAP: dict[str, str] = {
     "fill": "fill.color",
     "stroke": "stroke.color",
+    "color": "style.color",
     "stop-color": "fill.color",
     "stopcolor": "fill.color",
     "flood-color": "fill.color",

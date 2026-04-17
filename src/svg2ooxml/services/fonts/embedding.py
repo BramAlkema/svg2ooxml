@@ -23,6 +23,33 @@ from svg2ooxml.services.fonts.opentype_utils import parse_os2_table
 logger = logging.getLogger(__name__)
 
 
+def _ensure_truetype_outlines(data: bytes, source: str) -> bytes:
+    """Convert CFF-flavoured OpenType bytes to TrueType outlines.
+
+    Office will not embed CFF fonts reliably, so OTF payloads need their
+    glyphs re-expressed as ``glyf`` quadratics before EOT wrapping. Bytes
+    that are already TTF are returned unchanged. If fontTools is missing we
+    log a warning and return the original bytes so the legacy path still
+    works (the downstream EOT step may then produce an unusable font, but
+    that matches pre-patch behaviour).
+    """
+    try:
+        from svg2ooxml.services.fonts.otf2ttf import convert_font_bytes_for_embedding
+    except ImportError:
+        logger.warning(
+            "fontTools unavailable; cannot convert %s to TrueType for embedding. "
+            "Install the 'slides' extra to enable OTF→TTF conversion.",
+            source,
+        )
+        return data
+
+    try:
+        return convert_font_bytes_for_embedding(data)
+    except Exception as exc:
+        logger.warning("OTF→TTF conversion failed for %s: %s", source, exc)
+        return data
+
+
 class EmbeddingPermission(Enum):
     """Embedding permissions derived from the OpenType ``fsType`` flags."""
 
@@ -213,6 +240,11 @@ class FontEmbeddingEngine:
                 logger.debug("Failed to read font for direct embedding: %s", exc)
                 return None
 
+        # FontForge is unavailable on this path, so CFF-flavoured OpenType
+        # bytes would reach Office untouched and fail to embed. Convert to
+        # TrueType outlines here so the EOT wrap downstream is usable.
+        data = _ensure_truetype_outlines(data, request.font_path)
+
         metadata = {
             "subset_strategy": request.subset_strategy,
             "preserve_hinting": request.preserve_hinting,
@@ -265,6 +297,11 @@ class FontEmbeddingEngine:
 
         if subset_bytes is None:
             return None
+
+        # Safety net: FontForge normally emits TrueType outlines when asked
+        # to, but if it produced CFF, funnel the bytes through the converter
+        # before EOT wrapping.
+        subset_bytes = _ensure_truetype_outlines(subset_bytes, request.font_path)
 
         try:
             payload = self._build_eot_payload(subset_bytes, request)
