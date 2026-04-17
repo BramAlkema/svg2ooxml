@@ -102,6 +102,84 @@ segments. Rotation with cx/cy center emits companion `<p:animMotion>` orbital
 arc. stroke-dashoffset animation maps to Wipe entrance effect. SMIL
 min/max/restart/accumulate parsed and applied.
 
+### Four-Layer Animation Fallback Architecture (ADR-031)
+
+Comprehensive SMIL→PresentationML mapping with empirically verified
+fallback layers for animations PowerPoint cannot play natively.
+
+**Layer 1 — Preset slots (15 verified templates).** Each slot is a
+parameterised `<p:par>` carrying a PowerPoint-recognised `presetID` /
+`presetSubtype`. Handlers load a slot by name and substitute runtime
+tokens. Covers: fade in/out, appear, color change, shape fill color,
+stroke color, text color, bold, underline, blink, transparency, rotate,
+scale, motion path, entrance/exit filter effects (29 filter values).
+
+**Layer 2 — Compound slot (universal stacking).** Any combination of
+behaviour fragments composed inside one `<p:cTn>`. PPT's rendering
+engine walks `childTnLst` directly — preset IDs are cosmetic. One click
+fires all behaviours simultaneously. Verified with 8 heterogeneous
+effects (transparency + fill color + text color + bold + underline +
+rotate + scale + motion) stacked in a single compound call.
+
+**Layer 3 — Flipbook (discrete frame cycling).** Pre-render N keyframes
+as stacked shapes, sequence with timed `<p:set>` on `style.visibility`.
+Universal fallback for every dead-path animation: skew, path morph,
+stroke-width, per-layer opacity, complex filter params. Verified with
+8-frame color cycling. Critical: `grpId` in `<p:bldP>` must match the
+animation `<p:cTn>` group — mismatches cause silent failure.
+
+**Layer 4 — Morph transition (smooth vertex interpolation).** Duplicate
+the slide with Morph transition for continuous geometry deformation.
+PPT interpolates custGeom vertices between slides. Verified: rectangle
+morphs smoothly into parallelogram (skewX 30°). Requires
+`mc:AlternateContent` wrapper with `p159` namespace
+(`/2015/09/main`), inline namespace declarations — hoisting to
+`<p:sld>` root triggers PPT repair dialog. Use only when the dead-path
+animation is the sole animation on the slide.
+
+**Policy rule:** Oracle-native → compound → flipbook (mixed animations
+or complex keyframes) → morph (sole animation, smooth interpolation).
+
+**Empirical findings (2026-04-16/17):**
+- `additive="sum"` on `<p:cBhvr>`: broken for motion (shape jumps to
+  origin). Never emit. Concurrent `<p:animMotion>` siblings stack
+  additively by default.
+- `calcMode="discrete"` on non-visibility attrNames: silently dropped.
+  Use `<p:set>` segments instead.
+- Sequenced `animScale` + `animRot`: scale applies in rotated frame.
+  Cannot decompose skew via native primitives on 2D shapes.
+- Partial opacity: `<p:anim>` on `style.opacity` via TAV is a dead
+  path. Use `emph/transparency` (`<p:animEffect filter="image">`).
+
+**Feature map:** 252 SVG features mapped across 15 sections
+(`docs/research/svg-to-drawingml-feature-map.md`). 82% done, 10%
+partial, 2% dead→fallback, 5% gap, 1% unsupported.
+
+### Large-File Refactor (ADR-032, completed)
+
+All 11 Python files over 1000 lines split into sub-modules per
+`docs/specs/refactor-large-files.md`. Pure moves, no behaviour changes.
+One file per commit, 2412 tests green throughout.
+
+| File | Before | After |
+| --- | ---: | ---: |
+| `core/pptx_exporter.py` | 2823 | 662 |
+| `filters/renderer.py` | 1756 | 622 |
+| `drawingml/raster_adapter.py` | 1557 | 1058 |
+| `core/ir/text_converter.py` | 1309 | 778 |
+| `elements/pattern_processor.py` | 1248 | 655 |
+| `drawingml/animation/handlers/transform.py` | 1146 | 796 |
+| `core/styling/style_extractor.py` | 1130 | 453 |
+| `core/ir/shape_converters.py` | 1122 | 530 |
+| `drawingml/writer.py` | 1101 | 738 |
+| `core/traversal/hooks.py` | 1033 | 342 |
+| `core/animation/parser.py` | 1032 | 612 |
+
+Shared infrastructure extracted to base classes (`_simple_oracle_gate`,
+`_build_discrete_set_sequence` in `AnimationHandler`). New sub-packages:
+`core/export/`, `core/ir/text/`, `core/ir/shape/`, `core/styling/paint/`,
+`elements/patterns/`, `filters/strategies/`, `drawingml/pipelines/`.
+
 ---
 
 ## Text Rendering Strategy
