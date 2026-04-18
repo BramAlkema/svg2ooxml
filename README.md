@@ -5,7 +5,7 @@
 <h1 align="center">svg2ooxml</h1>
 
 <p align="center">
-  <strong>Convert SVG to PowerPoint with native DrawingML fidelity.</strong>
+  <strong>SVG-to-PowerPoint converter with native, editable PresentationML output.</strong>
 </p>
 
 <p align="center">
