@@ -1,11 +1,17 @@
-"""Service modules."""
+"""Compatibility re-exports for frame conversion helpers."""
 
-from .converter import ConversionArtifacts, FontDiagnostics, render_pptx_for_frames
-from .slides_publisher import upload_to_google_slides
+from svg2ooxml.export import (
+    ConversionArtifacts,
+    FontDiagnostics,
+    collect_font_diagnostics,
+    render_pptx_for_frames,
+    render_pptx_for_frames_parallel,
+)
 
 __all__ = [
     "ConversionArtifacts",
     "FontDiagnostics",
+    "collect_font_diagnostics",
     "render_pptx_for_frames",
-    "upload_to_google_slides",
+    "render_pptx_for_frames_parallel",
 ]

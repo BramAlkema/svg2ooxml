@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from svg2ooxml.api.middleware.rate_limit import RateLimiter
+from figma2gslides.api.middleware.rate_limit import RateLimiter
 
 
 def test_rate_limiter_enforces_limit() -> None:

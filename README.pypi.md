@@ -19,6 +19,12 @@
 
 svg2ooxml parses SVG markup, builds a typed intermediate representation, renders native DrawingML XML fragments, and packages them into valid `.pptx` files. Shapes, text, gradients, filters, masks, clipping paths, and SMIL animations are converted to editable PowerPoint objects — not rasterized images.
 
+svg2ooxml is the converter package. PowerPoint behavior research, authored control decks, and durable oracle evidence are maintained in the companion repository `openxml-audit` so the package documentation can stay focused on conversion.
+
+The same Git repository currently also carries an extracted `figma2gslides`
+app surface for local development, but that app code is not part of the
+supported `svg2ooxml` converter API.
+
 ## Features
 
 - **Native DrawingML output** — shapes, text, and paths render as editable PowerPoint objects
@@ -27,7 +33,6 @@ svg2ooxml parses SVG markup, builds a typed intermediate representation, renders
 - **Gradients & patterns** — linear, radial, and pattern fills with correct coordinate transforms
 - **Masks & clipping** — SVG clip paths and masks mapped to OOXML equivalents
 - **Multi-slide export** — split multi-page SVGs into separate slides
-- **Figma plugin** — browser-based export from Figma to Google Slides
 - **Extensible pipeline** — service registry with dependency injection for custom providers
 
 ## Installation
@@ -41,10 +46,10 @@ Optional extras:
 ```bash
 pip install svg2ooxml[render]    # Skia rendering + visual comparison
 pip install svg2ooxml[color]     # Advanced color space support
-pip install svg2ooxml[slides]    # Google Slides integration
-pip install svg2ooxml[api]       # FastAPI service
-pip install svg2ooxml[cloud]     # Google Drive/Slides API client
 ```
+
+Figma and Google Slides product integrations are intentionally kept out of the
+published converter surface.
 
 ## Quick Start
 
@@ -74,8 +79,11 @@ SVG text
 ## Links
 
 - [GitHub](https://github.com/BramAlkema/svg2ooxml)
-- [Documentation](https://github.com/BramAlkema/svg2ooxml/tree/main/docs)
+- [Documentation guide](https://github.com/BramAlkema/svg2ooxml/blob/main/docs/README.md)
+- [Testing guide](https://github.com/BramAlkema/svg2ooxml/blob/main/docs/testing.md)
+- [Animation documentation map](https://github.com/BramAlkema/svg2ooxml/blob/main/docs/internals/animation-documentation-map.md)
 - [Changelog](https://github.com/BramAlkema/svg2ooxml/releases)
+- [openxml-audit](https://github.com/BramAlkema/openxml-audit)
 
 ## License
 

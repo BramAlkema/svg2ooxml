@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from svg2ooxml.api.models import RequestedFont
-from svg2ooxml.api.services.converter import collect_font_diagnostics
+from svg2ooxml.export import RequestedFont
+from svg2ooxml.export import collect_font_diagnostics
 from svg2ooxml.services.fonts import FontMatch
 
 

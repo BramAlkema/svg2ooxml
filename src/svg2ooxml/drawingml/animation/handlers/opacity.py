@@ -19,6 +19,7 @@ from svg2ooxml.drawingml.xml_builder import p_elem, p_sub
 from svg2ooxml.ir.animation import AnimationType, BeginTriggerType, CalcMode
 
 if TYPE_CHECKING:
+    from svg2ooxml.drawingml.animation.native_fragment import NativeFragment
     from svg2ooxml.ir.animation import AnimationDefinition
 
 __all__ = ["OpacityAnimationHandler"]
@@ -37,18 +38,29 @@ class OpacityAnimationHandler(AnimationHandler):
         animation: AnimationDefinition,
         par_id: int,
         behavior_id: int,
-    ) -> etree._Element | None:
+    ) -> NativeFragment | None:
         """Build opacity animation using fade or generic property animation."""
         if self._is_symmetric_opacity_pulse(animation):
-            return self._build_transparency_pulse_animation(
-                animation, par_id, behavior_id
+            return self._native_fragment(
+                self._build_transparency_pulse_animation(
+                    animation, par_id, behavior_id
+                ),
+                source="builder",
+                strategy="opacity-pulse-transparency-effect",
+                oracle_family="emph/transparency",
             )
 
         fade_effect = self._build_authored_fade_effect(
             animation, par_id, behavior_id
         )
         if fade_effect is not None:
-            return fade_effect
+            par, oracle_slot = fade_effect
+            return self._native_fragment(
+                par,
+                source="oracle",
+                strategy="opacity-authored-fade",
+                oracle_slot=oracle_slot,
+            )
 
         # For partial opacity (not 0→1 or 1→0 fades), route through the
         # verified emph/transparency oracle slot. The <p:anim> on
@@ -63,26 +75,38 @@ class OpacityAnimationHandler(AnimationHandler):
             and not animation.key_splines
         ):
             target_opacity = self._processor.parse_opacity(animation.values[-1])
-            return default_oracle().instantiate(
-                "emph/transparency",
-                shape_id=animation.element_id,
-                par_id=par_id,
-                duration_ms=animation.duration_ms,
-                delay_ms=animation.begin_ms,
-                SET_BEHAVIOR_ID=behavior_id,
-                EFFECT_BEHAVIOR_ID=behavior_id * 10 + 1,
-                TARGET_OPACITY=target_opacity,
-                INNER_FILL=("hold" if animation.fill_mode == "freeze" else "remove"),
+            return self._native_fragment(
+                default_oracle().instantiate(
+                    "emph/transparency",
+                    shape_id=animation.element_id,
+                    par_id=par_id,
+                    duration_ms=animation.duration_ms,
+                    delay_ms=animation.begin_ms,
+                    SET_BEHAVIOR_ID=behavior_id,
+                    EFFECT_BEHAVIOR_ID=behavior_id * 10 + 1,
+                    TARGET_OPACITY=target_opacity,
+                    INNER_FILL=(
+                        "hold" if animation.fill_mode == "freeze" else "remove"
+                    ),
+                ),
+                source="oracle",
+                strategy="opacity-partial-transparency",
+                oracle_slot="emph/transparency",
             )
 
-        return self._build_property_animation(animation, par_id, behavior_id)
+        return self._native_fragment(
+            self._build_property_animation(animation, par_id, behavior_id),
+            source="builder",
+            strategy="opacity-property-animation",
+            target_attribute=animation.target_attribute,
+        )
 
     def _build_authored_fade_effect(
         self,
         animation: AnimationDefinition,
         par_id: int,
         behavior_id: int,
-    ) -> etree._Element | None:
+    ) -> tuple[etree._Element, str] | None:
         if animation.calc_mode in {CalcMode.DISCRETE, CalcMode.SPLINE}:
             return None
         if animation.key_splines:
@@ -93,26 +117,32 @@ class OpacityAnimationHandler(AnimationHandler):
         if fade_params is None:
             return None
 
-        transition, preset_class = fade_params
+        transition, _ = fade_params
         if transition == "in":
-            return default_oracle().instantiate(
+            return (
+                default_oracle().instantiate(
+                    "entr/fade",
+                    shape_id=animation.element_id,
+                    par_id=par_id,
+                    duration_ms=animation.duration_ms,
+                    delay_ms=animation.begin_ms,
+                    SET_BEHAVIOR_ID=behavior_id,
+                    EFFECT_BEHAVIOR_ID=behavior_id * 10 + 1,
+                ),
                 "entr/fade",
+            )
+        return (
+            default_oracle().instantiate(
+                "exit/fade",
                 shape_id=animation.element_id,
                 par_id=par_id,
                 duration_ms=animation.duration_ms,
                 delay_ms=animation.begin_ms,
                 SET_BEHAVIOR_ID=behavior_id,
                 EFFECT_BEHAVIOR_ID=behavior_id * 10 + 1,
-            )
-        return default_oracle().instantiate(
+                SET_DELAY_MS=max(1, animation.duration_ms - 1),
+            ),
             "exit/fade",
-            shape_id=animation.element_id,
-            par_id=par_id,
-            duration_ms=animation.duration_ms,
-            delay_ms=animation.begin_ms,
-            SET_BEHAVIOR_ID=behavior_id,
-            EFFECT_BEHAVIOR_ID=behavior_id * 10 + 1,
-            SET_DELAY_MS=max(1, animation.duration_ms - 1),
         )
 
     @staticmethod

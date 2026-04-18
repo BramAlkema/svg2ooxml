@@ -1,8 +1,5 @@
-"""Pydantic models for the API."""
+"""Compatibility re-exports for frame conversion models."""
 
-from .export import RequestedFont, SVGFrame
+from svg2ooxml.export import RequestedFont, SVGFrame
 
-__all__ = [
-    "RequestedFont",
-    "SVGFrame",
-]
+__all__ = ["RequestedFont", "SVGFrame"]

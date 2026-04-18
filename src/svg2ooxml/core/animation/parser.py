@@ -137,6 +137,7 @@ class SMILParser:
         element_id = self._get_target_element_id(element)
         if not element_id:
             raise SMILParsingError("Animation missing target element")
+        target_element = self._resolve_target_element(element)
 
         if animation_type == AnimationType.ANIMATE_MOTION:
             target_attribute = "position"
@@ -231,7 +232,10 @@ class SMILParser:
             restart=restart if restart in ("always", "whenNotActive", "never") else None,
             min_ms=min_ms,
             max_ms=max_ms,
-            raw_attributes=self._extract_raw_attributes(element),
+            raw_attributes=self._extract_raw_attributes(
+                element,
+                target_element=target_element,
+            ),
         )
 
     def _sanitize_interpolation_inputs(
@@ -330,7 +334,11 @@ class SMILParser:
         return mapping.get(tag_name)
 
     @staticmethod
-    def _extract_raw_attributes(element: etree._Element) -> dict[str, str]:
+    def _extract_raw_attributes(
+        element: etree._Element,
+        *,
+        target_element: etree._Element | None = None,
+    ) -> dict[str, str]:
         attrs: dict[str, str] = {}
         for raw_name, value in element.attrib.items():
             qname = etree.QName(raw_name)
@@ -339,6 +347,8 @@ class SMILParser:
             else:
                 key = qname.localname
             attrs[key] = value
+        if target_element is not None:
+            attrs["svg2ooxml_target_tag"] = etree.QName(target_element).localname
         return attrs
 
     def _ensure_target_ids(self, elements: list[etree._Element]) -> None:

@@ -2,7 +2,7 @@
 
 - **Status:** Active
 - **Date:** 2026-03-21 (revised)
-- **Relates to:** `docs/research/svg-to-drawingml-feature-map.md`
+- **Relates to:** `docs/reference/research/svg-to-drawingml-feature-map.md`
 - **Roadmap item:** "Fill remaining DrawingML writer gaps" (v0.5.0)
 
 ## Current State

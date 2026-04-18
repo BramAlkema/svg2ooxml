@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>figma2gslides</title>
+    <link rel="stylesheet" href="site.css">
+</head>
+<body>
+    <div class="topbar">
+        <div class="shell topbar-inner">
+            <a class="brand" href="index.html">
+                <span>figma2gslides</span>
+            </a>
+            <nav class="nav">
+                <a href="#surface">Surface</a>
+                <a href="#docs">Docs</a>
+                <a href="#legal">Legal</a>
+            </nav>
+        </div>
+    </div>
+
+    <main>
+        <section class="hero">
+            <div class="shell hero-grid">
+                <div>
+                    <div class="eyebrow">Figma To Google Slides</div>
+                    <h1>App-layer surface built on svg2ooxml.</h1>
+                    <p class="lead">
+                        Plugin assets, local API workflows, auth notes, and
+                        hosted legal pages for the extracted app live here.
+                    </p>
+                    <div class="actions">
+                        <a class="button" href="../README.md">App README</a>
+                        <a class="button-secondary" href="https://github.com/BramAlkema/svg2ooxml/tree/main/src/figma2gslides">Python package</a>
+                    </div>
+                </div>
+                <aside class="panel hero-panel">
+                    <h2>Current split</h2>
+                    <ul class="compact-list">
+                        <li><code>svg2ooxml</code> stays the converter library</li>
+                        <li><code>figma2gslides</code> owns app runtime and integrations</li>
+                        <li>hosted website and OAuth docs are app-specific</li>
+                    </ul>
+                </aside>
+            </div>
+        </section>
+
+        <section class="section" id="surface">
+            <div class="shell">
+                <div class="section-heading">
+                    <h2>Surface</h2>
+                    <p>Use the extracted app package and assets through the path that matches the work.</p>
+                </div>
+                <div class="grid grid-3">
+                    <div class="tile">
+                        <h3>Runtime</h3>
+                        <p><a href="https://github.com/BramAlkema/svg2ooxml/tree/main/src/figma2gslides">src/figma2gslides</a> contains the FastAPI app, publishing services, and OAuth helpers.</p>
+                    </div>
+                    <div class="tile">
+                        <h3>Plugin</h3>
+                        <p><a href="https://github.com/BramAlkema/svg2ooxml/tree/main/apps/figma2gslides/figma-plugin">figma-plugin</a> contains the plugin UI and sandbox code.</p>
+                    </div>
+                    <div class="tile">
+                        <h3>Workspace</h3>
+                        <p><a href="https://github.com/BramAlkema/svg2ooxml/tree/main/apps/figma2gslides/google-workspace">google-workspace</a> contains the Google Apps Script side.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="section" id="docs">
+            <div class="shell split">
+                <div class="detail">
+                    <h2>Docs</h2>
+                    <p><a href="../README.md">App README</a></p>
+                    <p><a href="../docs/local-api-testing.md">Local API testing</a></p>
+                    <p><a href="../docs/update-website.md">Website update guide</a></p>
+                    <p><a href="../figma-plugin-firebase-auth.md">Plugin auth notes</a></p>
+                </div>
+                <div class="detail" id="legal">
+                    <h2>Legal</h2>
+                    <p><a href="privacy.html">Privacy Policy</a></p>
+                    <p><a href="terms.html">Terms of Service</a></p>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer class="footer">
+        <div class="shell footer-inner">
+            <div class="muted">figma2gslides</div>
+            <div class="footer-links">
+                <a href="../README.md">README</a>
+                <a href="privacy.html">Privacy</a>
+                <a href="terms.html">Terms</a>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

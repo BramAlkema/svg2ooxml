@@ -388,7 +388,7 @@ def test_parse_translation_pair():
 - Examples work and are helpful
 
 **Files**:
-- `docs/architecture/conversions.md` (new)
+- `docs/internals/conversions.md` (new)
 - `CHANGELOG.md`
 - Module docstrings
 

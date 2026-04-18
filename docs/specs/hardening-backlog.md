@@ -7,7 +7,7 @@ addressed before high-traffic use.
 
 ## 1. Unbounded `_pending_auth` dict
 
-**File:** `main.py:73`
+**File:** `src/figma2gslides/app.py`
 
 **Current:** In-memory dict stores auth tokens with 2-min TTL. Cleanup only
 runs when `store_auth()` or `poll_auth()` is called. Abandoned auth flows
@@ -44,7 +44,7 @@ the `api` extra.
 
 ## 2. Unbounded rate limiter store
 
-**File:** `src/svg2ooxml/api/middleware/rate_limit.py:17`
+**File:** `src/figma2gslides/api/middleware/rate_limit.py`
 
 **Current:** `RateLimiter._store` is a dict keyed by client IP. Entries are
 overwritten on each request but never removed. After the rate window expires,
@@ -73,7 +73,7 @@ as the backing store.
 
 ## 3. Hardcoded URLs in Figma plugin
 
-**File:** `figma-plugin/ui-v2.html:218-221`
+**File:** `apps/figma2gslides/figma-plugin/ui-v2.html:218-221`
 
 **Current:**
 ```javascript
@@ -108,7 +108,7 @@ For dev, add `http://localhost:*` to the allowlist.
 
 ## 4. Session key duplication in code.js
 
-**File:** `figma-plugin/code.js:29-47`
+**File:** `apps/figma2gslides/figma-plugin/code.js:29-47`
 
 **Current:** Four storage keys (`supabase_jwt`, `google_access_token`,
 `google_refresh_token`, `email`) are repeated in `save-session`,

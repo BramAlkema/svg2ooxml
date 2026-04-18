@@ -4,15 +4,32 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "svg2ooxml"
-version = "0.6.8"
-description = "SVG to Office Open XML conversion toolkit."
+version = "1.0.0"
+description = "SVG-to-PowerPoint converter with native DrawingML output."
 readme = "README.pypi.md"
-requires-python = ">=3.13"
-dependencies = [ "tinycss2>=1.2", "click>=8.1", "lxml>=4.9.0",]
+requires-python = ">=3.14"
+dependencies = [ "tinycss2>=1.2", "click>=8.1", "lxml>=4.9.0", "pydantic>=2.5.3",]
 license = "AGPL-3.0-only"
-classifiers = []
+keywords = [ "svg", "pptx", "powerpoint", "ooxml", "drawingml",]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.14",
+  "Topic :: Multimedia :: Graphics :: Graphics Conversion",
+  "Topic :: Office/Business :: Office Suites",
+  "Topic :: Software Development :: Libraries :: Python Modules",
+]
 [[project.authors]]
 name = "SVG2OOXML Contributors"
+
+[project.urls]
+Homepage = "https://github.com/BramAlkema/svg2ooxml"
+Documentation = "https://github.com/BramAlkema/svg2ooxml/blob/main/docs/README.md"
+Repository = "https://github.com/BramAlkema/svg2ooxml"
+Issues = "https://github.com/BramAlkema/svg2ooxml/issues"
+Changelog = "https://github.com/BramAlkema/svg2ooxml/releases"
+"Commercial Licensing" = "https://github.com/BramAlkema/svg2ooxml/blob/main/LICENSE-COMMERCIAL.md"
 
 [project.scripts]
 svg2ooxml = "cli.main:run_cli"
@@ -39,7 +56,7 @@ visual-testing = [ "scikit-image>=0.21.0", "Pillow>=10.0.0",]
 
 [tool.black]
 line-length = 88
-target-version = [ "py313",]
+target-version = [ "py314",]
 
 [tool.isort]
 profile = "black"
@@ -47,7 +64,7 @@ line_length = 88
 src_paths = [ "src", "tests",]
 
 [tool.ruff]
-target-version = "py313"
+target-version = "py314"
 line-length = 88
 src = [ "src", "tests",]
 exclude = [ "venv",]
@@ -61,7 +78,7 @@ ignore = [ "B008", "E203", "E501", "N802", "N803", "N806", "N812",]
 "xml.etree.ElementTree".msg = "Use lxml.etree as ET instead of xml.etree.ElementTree."
 
 [tool.mypy]
-python_version = "3.13"
+python_version = "3.14"
 warn_unused_configs = true
 warn_redundant_casts = true
 warn_unused_ignores = true
@@ -92,5 +109,7 @@ svg2ooxml = ["assets/pptx_scaffold/**/*"]
 
 [tool.setuptools.packages.find]
 where = [ "src", ".",]
-include = [ "svg2ooxml*", "cli*",]
+# `figma2gslides` stays installable from this repo for local app work, but the
+# supported public package surface remains `svg2ooxml`.
+include = [ "svg2ooxml*", "figma2gslides*", "cli*",]
 namespaces = false

@@ -43,6 +43,9 @@ _ANIMATION_TAGS = frozenset({
 _SYNTHETIC_PREFIX = "svg2ooxml-auto"
 _SYNTHETIC_SET_DURATION = 0.001
 _TIME_PRECISION = 6
+_VISIBILITY_EFFECT_ATTR = "svg2ooxml_visibility_effect"
+_BLINK_EFFECT = "blink"
+_NOOP_ANCHOR_EFFECT = "noop_anchor"
 
 
 @dataclass(frozen=True, slots=True)
@@ -109,15 +112,36 @@ def rewrite_visibility_animations(
     if svg_root is None:
         return animations
 
+    xml_lookup = _build_xml_lookup(svg_root)
+    scene_targets = _resolve_scene_targets(scene, xml_lookup)
     plans = compile_visibility_plans(animations, scene, svg_root)
-    if not plans:
-        return animations
+    visibility_animations = [
+        animation for animation in animations if _is_visibility_animation(animation)
+    ]
 
     rewritten = [
         animation for animation in animations if not _is_visibility_animation(animation)
     ]
     for plan in plans:
+        blink = _plan_to_blink_animation(
+            plan,
+            visibility_animations=visibility_animations,
+            xml_lookup=xml_lookup,
+        )
+        if blink is not None:
+            rewritten.append(blink)
+            continue
         rewritten.extend(_plan_to_set_animations(plan))
+    rewritten.extend(
+        _plan_to_noop_anchor_animations(
+            visibility_animations=visibility_animations,
+            plans=plans,
+            scene_targets=scene_targets,
+            xml_lookup=xml_lookup,
+        )
+    )
+    if rewritten:
+        return rewritten
     return rewritten
 
 
@@ -548,6 +572,229 @@ def _plan_to_set_animations(plan: CompiledVisibilityPlan) -> list[AnimationDefin
     return compiled
 
 
+def _plan_to_noop_anchor_animations(
+    *,
+    visibility_animations: list[AnimationDefinition],
+    plans: list[CompiledVisibilityPlan],
+    scene_targets: list[tuple[str, etree._Element]],
+    xml_lookup: dict[str, etree._Element],
+) -> list[AnimationDefinition]:
+    planned_target_ids = {plan.target_id for plan in plans}
+    anchors: list[AnimationDefinition] = []
+    seen_animation_ids: set[str] = set()
+
+    for animation in visibility_animations:
+        animation_id = animation.animation_id
+        if not isinstance(animation_id, str) or not animation_id:
+            continue
+        if animation_id in seen_animation_ids:
+            continue
+        if not _is_noop_visibility_set(animation, xml_lookup=xml_lookup):
+            continue
+
+        target_id = _select_noop_anchor_target_id(
+            source_element_id=animation.element_id,
+            scene_targets=scene_targets,
+        )
+        if target_id is None:
+            continue
+        if target_id in planned_target_ids:
+            continue
+
+        normalized_attr = _normalized_visibility_attribute(animation.target_attribute)
+        if normalized_attr == "display":
+            target_value = _coerce_display(animation.values[-1], "inline")
+            visible = target_value != "none"
+        else:
+            target_value = _coerce_visibility(animation.values[-1], "visible")
+            visible = target_value == "visible"
+
+        anchors.append(
+            AnimationDefinition(
+                element_id=target_id,
+                animation_type=AnimationType.SET,
+                target_attribute="style.visibility",
+                values=["visible" if visible else "hidden"],
+                timing=AnimationTiming(
+                    begin=max(float(animation.timing.begin), 0.0),
+                    duration=max(float(animation.timing.duration), _SYNTHETIC_SET_DURATION),
+                    repeat_count=animation.timing.repeat_count,
+                    repeat_duration=animation.timing.repeat_duration,
+                    fill_mode=animation.timing.fill_mode,
+                    begin_triggers=animation.timing.begin_triggers,
+                    end_triggers=animation.timing.end_triggers,
+                ),
+                animation_id=animation_id,
+                additive=animation.additive,
+                accumulate=animation.accumulate,
+                restart=animation.restart,
+                raw_attributes={
+                    **animation.raw_attributes,
+                    _VISIBILITY_EFFECT_ATTR: _NOOP_ANCHOR_EFFECT,
+                },
+            )
+        )
+        seen_animation_ids.add(animation_id)
+
+    return anchors
+
+
+def _plan_to_blink_animation(
+    plan: CompiledVisibilityPlan,
+    *,
+    visibility_animations: list[AnimationDefinition],
+    xml_lookup: dict[str, etree._Element],
+) -> AnimationDefinition | None:
+    target_element = xml_lookup.get(plan.target_id)
+    if target_element is None:
+        return None
+    ancestry = _element_ancestry(target_element)
+    static_visible = _is_visible_at_time(
+        ancestry=ancestry,
+        animation_map={},
+        time=0.0,
+    )
+    if not static_visible:
+        return None
+
+    candidates = [
+        animation
+        for animation in visibility_animations
+        if _is_simple_blink_candidate(animation, target_id=plan.target_id)
+        and _plan_matches_blink(plan.intervals, animation)
+    ]
+    if len(candidates) != 1:
+        return None
+
+    candidate = candidates[0]
+    return AnimationDefinition(
+        element_id=plan.target_id,
+        animation_type=AnimationType.SET,
+        target_attribute="style.visibility",
+        values=["visible"],
+        timing=AnimationTiming(
+            begin=max(float(candidate.timing.begin), 0.0),
+            duration=max(float(candidate.timing.duration), _SYNTHETIC_SET_DURATION),
+            repeat_count=candidate.timing.repeat_count,
+            repeat_duration=candidate.timing.repeat_duration,
+            fill_mode=FillMode.FREEZE,
+            begin_triggers=candidate.timing.begin_triggers,
+            end_triggers=candidate.timing.end_triggers,
+        ),
+        animation_id=f"svg2ooxml-vis-{plan.target_id}-blink",
+        additive=candidate.additive,
+        accumulate=candidate.accumulate,
+        restart=candidate.restart,
+        raw_attributes={
+            **candidate.raw_attributes,
+            _VISIBILITY_EFFECT_ATTR: _BLINK_EFFECT,
+        },
+    )
+
+
+def _is_noop_visibility_set(
+    animation: AnimationDefinition,
+    *,
+    xml_lookup: dict[str, etree._Element],
+) -> bool:
+    if animation.animation_type != AnimationType.SET:
+        return False
+    if not animation.values:
+        return False
+    normalized_attr = _normalized_visibility_attribute(animation.target_attribute)
+    if normalized_attr is None:
+        return False
+    element = xml_lookup.get(animation.element_id)
+    if element is None:
+        return False
+
+    if normalized_attr == "display":
+        static_value = _coerce_display(_static_property_value(element, "display"), "inline")
+        target_value = _coerce_display(animation.values[-1], "inline")
+    else:
+        static_value = _coerce_visibility(
+            _static_property_value(element, "visibility"),
+            "visible",
+        )
+        target_value = _coerce_visibility(animation.values[-1], "visible")
+    return static_value == target_value
+
+
+def _select_noop_anchor_target_id(
+    *,
+    source_element_id: str,
+    scene_targets: list[tuple[str, etree._Element]],
+) -> str | None:
+    for target_id, target_element in scene_targets:
+        if any(
+            element_id == source_element_id
+            for ancestor in _element_ancestry(target_element)
+            for element_id in _xml_identifiers(ancestor)
+        ):
+            return target_id
+    return None
+
+
+def _is_simple_blink_candidate(
+    animation: AnimationDefinition,
+    *,
+    target_id: str,
+) -> bool:
+    if animation.animation_type != AnimationType.ANIMATE:
+        return False
+    if animation.element_id != target_id:
+        return False
+    if animation.target_attribute not in VISIBILITY_ATTRIBUTES:
+        return False
+    if len(animation.values) != 2:
+        return False
+    values = [str(value).strip().lower() for value in animation.values]
+    if values[0] not in {"hidden", "collapse"} or values[1] != "visible":
+        return False
+    if animation.repeat_count not in (None, 1, "1"):
+        return False
+    if animation.additive.lower() == "sum":
+        return False
+    triggers = animation.begin_triggers or []
+    if len(triggers) > 1:
+        return False
+    if triggers and triggers[0].trigger_type.value != "time_offset":
+        return False
+    return animation.duration_ms > 0
+
+
+def _plan_matches_blink(
+    intervals: tuple[VisibilityInterval, ...],
+    animation: AnimationDefinition,
+) -> bool:
+    begin = _round_time(max(float(animation.timing.begin), 0.0))
+    half = _round_time(begin + (max(float(animation.timing.duration), 0.0) / 2.0))
+    if half <= begin:
+        return False
+
+    idx = 0
+    if (
+        len(intervals) >= 3
+        and intervals[0].visible
+        and _times_match(intervals[0].start, 0.0)
+        and _times_match(intervals[0].end, begin)
+    ):
+        idx = 1
+
+    remaining = intervals[idx:]
+    if len(remaining) != 2:
+        return False
+    hidden, visible = remaining
+    return (
+        not hidden.visible
+        and visible.visible
+        and _times_match(hidden.start, begin)
+        and _times_match(hidden.end, half)
+        and _times_match(visible.start, half)
+        and visible.end is None
+    )
+
+
 def _element_ancestry(element: etree._Element) -> list[etree._Element]:
     ancestry: list[etree._Element] = []
     current: etree._Element | None = element
@@ -584,3 +831,9 @@ def _normalized_visibility_attribute(attribute: str) -> str | None:
 
 def _round_time(value: float) -> float:
     return round(float(value), _TIME_PRECISION)
+
+
+def _times_match(left: float | None, right: float | None) -> bool:
+    if left is None or right is None:
+        return left is None and right is None
+    return math.isclose(left, right, abs_tol=10 ** (-_TIME_PRECISION))

@@ -1,1 +1,1 @@
-"""Placeholder module."""
+"""Compatibility namespace for older api imports."""

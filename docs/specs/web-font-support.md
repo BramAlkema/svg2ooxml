@@ -850,7 +850,7 @@ converter = Converter(parser_config=config)
 4. Adding new font formats
 5. Debugging tips
 
-**Location**: `docs/architecture/web-fonts-impl.md`
+**Location**: `docs/internals/web-fonts-impl.md`
 
 ---
 

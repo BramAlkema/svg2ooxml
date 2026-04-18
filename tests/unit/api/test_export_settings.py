@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from svg2ooxml.api.services.export_settings import ParallelExportSettings
+from figma2gslides.api.services.export_settings import ParallelExportSettings
 
 
 def test_enable_parses_non_false(monkeypatch, tmp_path: Path) -> None:

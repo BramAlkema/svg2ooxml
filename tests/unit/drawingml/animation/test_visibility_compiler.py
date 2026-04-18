@@ -157,3 +157,60 @@ def test_rewrite_visibility_animations_preserves_unrelated_effects() -> None:
     ]
     assert len(visibility_events) == 1
     assert visibility_events[0].values == ["visible"]
+
+
+def test_rewrite_visibility_animations_synthesizes_blink_for_simple_pulse() -> None:
+    svg_root, scene, target_id = _make_scene(
+        """
+        <svg xmlns="http://www.w3.org/2000/svg">
+          <circle id="dot" cx="10" cy="10" r="5"/>
+        </svg>
+        """
+    )
+    animations = [
+        AnimationDefinition(
+            element_id=target_id,
+            animation_type=AnimationType.ANIMATE,
+            target_attribute="visibility",
+            values=["hidden", "visible"],
+            timing=AnimationTiming(begin=0.0, duration=2.0, fill_mode=FillMode.REMOVE),
+        )
+    ]
+
+    rewritten = rewrite_visibility_animations(animations, scene, svg_root)
+
+    assert len(rewritten) == 1
+    blink = rewritten[0]
+    assert blink.animation_type == AnimationType.SET
+    assert blink.target_attribute == "style.visibility"
+    assert blink.values == ["visible"]
+    assert blink.timing.begin == 0.0
+    assert blink.timing.duration == 2.0
+    assert blink.raw_attributes["svg2ooxml_visibility_effect"] == "blink"
+
+
+def test_rewrite_visibility_animations_does_not_blink_exit_hide() -> None:
+    svg_root, scene, target_id = _make_scene(
+        """
+        <svg xmlns="http://www.w3.org/2000/svg">
+          <circle id="dot" cx="10" cy="10" r="5"/>
+        </svg>
+        """
+    )
+    animations = [
+        AnimationDefinition(
+            element_id=target_id,
+            animation_type=AnimationType.ANIMATE,
+            target_attribute="visibility",
+            values=["visible", "hidden"],
+            timing=AnimationTiming(begin=0.0, duration=2.0, fill_mode=FillMode.FREEZE),
+        )
+    ]
+
+    rewritten = rewrite_visibility_animations(animations, scene, svg_root)
+
+    assert len(rewritten) == 1
+    visibility_event = rewritten[0]
+    assert visibility_event.target_attribute == "style.visibility"
+    assert visibility_event.values == ["hidden"]
+    assert "svg2ooxml_visibility_effect" not in visibility_event.raw_attributes

@@ -2,7 +2,8 @@
 
 - **Status:** Draft
 - **Date:** 2026-02-21
-- **ADR:** `docs/adr/ADR-027-animation-smil-parity-and-w3c-gating.md`
+- **ADR:** `docs/adr/README.md` (`SMIL Parity & W3C Gating`)
+- **Documentation map:** `docs/internals/animation-documentation-map.md`
 - **Primary Modules:**
   - `src/svg2ooxml/core/animation/parser.py`
   - `src/svg2ooxml/ir/animation.py`

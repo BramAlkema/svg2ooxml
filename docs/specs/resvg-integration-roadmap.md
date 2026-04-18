@@ -618,7 +618,7 @@ GROUP BY day
 ORDER BY day DESC;
 ```
 
-**Location**: `docs/telemetry/resvg_metrics.md` (dashboard wiring pending)
+**Location**: `docs/reference/telemetry/resvg_metrics.md` (dashboard wiring pending)
 
 #### 3.6.3 Legacy Code Retirement
 
@@ -835,7 +835,7 @@ src/svg2ooxml/core/text/legacy_shaping.py
    - Add rollout percentage mechanism
 
 2. **Deploy Monitoring**
-   - File: `docs/telemetry/resvg_metrics.md` (dashboard wiring pending)
+   - File: `docs/reference/telemetry/resvg_metrics.md` (dashboard wiring pending)
    - Database schema for metrics
    - Dashboard queries
    - Alerting thresholds

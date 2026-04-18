@@ -32,6 +32,7 @@ from svg2ooxml.services import configure_services
 from svg2ooxml.core.export.animation_processor import (
     _build_animation_metadata,
     _compose_sampled_center_motions,
+    _expand_deterministic_repeat_triggers,
     _enrich_animations_with_element_centers,
 )
 from svg2ooxml.core.export.motion_geometry import _apply_immediate_motion_starts
@@ -473,6 +474,7 @@ class SvgToPptxExporter:
             policy_meta = scene.metadata.setdefault("policy", {})
             policy_meta["animation"] = dict(animation_policy_options)
         if animations:
+            animations = _expand_deterministic_repeat_triggers(animations)
             animations = rewrite_visibility_animations(
                 animations,
                 scene,

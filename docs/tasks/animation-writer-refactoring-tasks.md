@@ -586,7 +586,7 @@
 - Examples work
 
 **Files**:
-- `docs/architecture/animation-system.md`
+- `docs/internals/animation-system.md`
 - `README.md` (if needed)
 
 ---
@@ -608,7 +608,7 @@
 
 **Files**:
 - `benchmarks/animation_writer_benchmark.py`
-- `docs/benchmarks/animation-writer-results.md`
+- `docs/reference/benchmarks/animation-writer-results.md`
 
 ---
 

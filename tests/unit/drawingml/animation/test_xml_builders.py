@@ -3,6 +3,7 @@
 from lxml import etree
 
 from svg2ooxml.drawingml.animation.id_allocator import TimingIDAllocator
+from svg2ooxml.drawingml.animation.oracle import default_oracle
 from svg2ooxml.drawingml.animation.xml_builders import AnimationXMLBuilder
 from svg2ooxml.drawingml.xml_builder import NS_P, p_elem, p_sub
 from svg2ooxml.ir.animation import BeginTrigger, BeginTriggerType
@@ -332,6 +333,63 @@ class TestBuildTimingTree:
         assert bld_ps[1].get("grpId") == "4"
         assert bld_ps[1].get("animBg") == "1"
 
+    def test_shape_fill_color_effect_uses_all_at_once_build_mode(self):
+        builder = AnimationXMLBuilder()
+        ids = TimingIDAllocator().allocate(1)
+        par = default_oracle().instantiate(
+            "emph/shape_fill_color",
+            shape_id="42",
+            par_id=4,
+            duration_ms=1000,
+            STYLE_CLR_BEHAVIOR_ID=5,
+            FILL_CLR_BEHAVIOR_ID=6,
+            FILL_TYPE_BEHAVIOR_ID=7,
+            FILL_ON_BEHAVIOR_ID=8,
+            TO_COLOR="FF0000",
+            INNER_FILL="hold",
+        )
+
+        tree = builder.build_timing_tree(
+            ids=ids,
+            animation_elements=[par],
+            animated_shape_ids=["42"],
+        )
+
+        bld_ps = tree.findall(f".//{{{NS_P}}}bldP")
+        assert len(bld_ps) == 2
+        assert bld_ps[1].get("build") == "allAtOnce"
+        assert bld_ps[1].get("animBg") == "1"
+        assert "svg2:bldMode" not in etree.tostring(tree, encoding="unicode")
+
+    def test_color_pulse_effect_uses_paragraph_build_mode(self):
+        builder = AnimationXMLBuilder()
+        ids = TimingIDAllocator().allocate(1)
+        par = default_oracle().instantiate(
+            "emph/color_pulse",
+            shape_id="42",
+            par_id=4,
+            duration_ms=500,
+            STYLE_CLR_BEHAVIOR_ID=5,
+            FILL_CLR_BEHAVIOR_ID=6,
+            FILL_TYPE_BEHAVIOR_ID=7,
+            FILL_ON_BEHAVIOR_ID=8,
+            TO_COLOR="FF0000",
+            INNER_FILL="remove",
+        )
+
+        tree = builder.build_timing_tree(
+            ids=ids,
+            animation_elements=[par],
+            animated_shape_ids=["42"],
+        )
+
+        bld_ps = tree.findall(f".//{{{NS_P}}}bldP")
+        assert len(bld_ps) == 2
+        assert bld_ps[1].get("build") == "p"
+        assert bld_ps[1].get("rev") == "1"
+        assert bld_ps[1].get("animBg") is None
+        assert "svg2:bldMode" not in etree.tostring(tree, encoding="unicode")
+
     def test_no_bld_lst_when_empty(self):
         builder = AnimationXMLBuilder()
         ids = TimingIDAllocator().allocate(0)
@@ -529,6 +587,17 @@ class TestBuildBehaviorCoreElem:
         assert ctn.get("id") == "5"
         assert ctn.get("dur") == "2000"
         assert ctn.get("fill") == "hold"
+
+    def test_behavior_core_omits_inner_start_conditions(self):
+        builder = AnimationXMLBuilder()
+        elem = builder.build_behavior_core_elem(
+            behavior_id=5,
+            duration_ms=2000,
+            target_shape="shape1",
+        )
+        ctn = elem.find(f"{{{NS_P}}}cTn")
+        assert ctn is not None
+        assert ctn.find(f"{{{NS_P}}}stCondLst") is None
 
     def test_target_shape(self):
         builder = AnimationXMLBuilder()

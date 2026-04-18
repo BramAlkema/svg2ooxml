@@ -549,7 +549,7 @@ tasks:
   - id: CSS-9
     title: Documentation
     files:
-      - docs/architecture/css-cascade.md
+      - docs/internals/css-cascade.md
       - docs/specs/css-cascade-use-elements.md
     effort: 3h
     dependencies: [CSS-8]

@@ -2,6 +2,7 @@
 
 - **Status:** Draft
 - **Date:** 2026-04-14
+- **Documentation map:** `docs/internals/animation-documentation-map.md`
 - **Scope:** native-only SVG/SMIL animation mapping into PowerPoint timing XML
 - **Primary Fixtures:** `tests/svg/animate-*.svg`, `tests/svg/color-prop-*.svg`, `tests/svg/coords-transformattr-*.svg`
 - **Primary Modules:**
@@ -21,6 +22,11 @@ parser degradations.
 
 This spec defines how much of that IR can be matched to editable native
 PowerPoint timing XML, and which remaining SVG features may only be mimicked.
+
+This document owns the mapping contract: match levels, primitive selection,
+policy rules, and verification expectations for native emission claims. It does
+not own the broader fidelity program (`docs/specs/powerpoint-fidelity-phase-2.md`)
+or the structural cleanup direction (`docs/specs/animation-cleanup-rigour-spec.md`).
 
 Rasterization, frame fallback, movie export, and non-native fallback are out of
 scope for this spec.
@@ -121,23 +127,23 @@ Visually verified with rectangle → parallelogram skew morph.
 | `begin="anim.begin"` | `evt="onBegin"` condition. | `exact-native` if PPT references work reliably | no | partial |
 | `begin="anim.end"` | `evt="onEnd"` condition. | `exact-native` if PPT references work reliably | no | partial |
 | `begin="indefinite"` | No direct free-standing equivalent; bookmark click can remap to click. | `composed-native` for bookmark case | yes outside bookmark case | partial |
-| `begin="base.repeat(n)"` | No confirmed native repeat-event condition. | `metadata-only` | maybe with timeline expansion | parsed and explicitly skipped by policy |
+| `begin="base.repeat(n)"` | Rewrite deterministic integer repeat events to absolute time offsets when the base timing is resolvable. | `expand-native` for integer `n`, otherwise `metadata-only` | maybe outside deterministic subset | partial |
 | `begin="accessKey(a)"` | No PowerPoint keyboard trigger equivalent in normal slideshow XML. | `unsupported-native` | no | parsed and explicitly skipped by policy |
 | `begin="wallclock(...)"` | No useful deck-local runtime equivalent. | `unsupported-native` | no | parsed and explicitly skipped by policy |
 | generic DOM events | No PowerPoint DOM event model. | `unsupported-native` | no | parsed and explicitly skipped by policy |
 | multiple begin tokens | Emit multiple start conditions where native-compatible. | `exact-native` / `metadata-only` mixed | maybe | partial |
 | `dur` | `<p:cTn dur="...">`. | `exact-native` | no | implemented |
 | `dur="indefinite"` | Long duration or wait-state; no exact finite slide behavior. | `mimic-native` | yes | partial |
-| `end` time offset | `<p:endCondLst>`. | `exact-native` | no | wired, needs visual/oracle confirmation |
-| `end` click/element refs | `<p:endCondLst>` event conditions. | `exact-native` | no | wired, needs visual/oracle confirmation |
-| `repeatCount="n"` | `<p:cTn repeatCount="{n * 1000}">`. | `exact-native` | no | implemented in handlers |
+| `end` time offset | `<p:endCondLst>`. | `exact-native` | no | wired; probe with `openxml_audit.pptx.timing_oracle_deck` / `openxml-audit-pptx-timing-oracle` |
+| `end` click/element refs | `<p:endCondLst>` event conditions. | `exact-native` | no | wired; probe with `openxml_audit.pptx.timing_oracle_deck` / `openxml-audit-pptx-timing-oracle` |
+| `repeatCount="n"` | `<p:cTn repeatCount="{n * 1000}">`; fractional counts are lowered to a repeat-duration cap. | `exact-native` for integer `n`, `expand-native` for fractional `n` | no | implemented |
 | `repeatCount="indefinite"` | `repeatCount="indefinite"`. | `exact-native` | no | implemented where passed through |
-| `repeatDur` | `repeatDur` on repeating `<p:cTn>` nodes. | `exact-native` candidate | maybe | wired, needs visual/oracle confirmation |
+| `repeatDur` | `repeatDur` on repeating `<p:cTn>` nodes. | `exact-native` candidate | maybe | wired; probe with `openxml_audit.pptx.timing_oracle_deck` / `openxml-audit-pptx-timing-oracle` |
 | `fill="freeze"` | `fill="hold"` / final segment hold. | `exact-native` | no | partially implemented |
 | `fill="remove"` | `fill="remove"` / omit final hold. | `exact-native` | no | partially implemented |
-| `restart="always"` | `restart` attr on outer `<p:cTn>`. | `exact-native` candidate | maybe | wired, needs visual/oracle confirmation |
-| `restart="whenNotActive"` | `restart` attr on outer `<p:cTn>`. | `exact-native` candidate | maybe | wired, needs visual/oracle confirmation |
-| `restart="never"` | `restart` attr on outer `<p:cTn>`. | `exact-native` candidate | maybe | wired, needs visual/oracle confirmation |
+| `restart="always"` | `restart` attr on outer `<p:cTn>`. | `exact-native` candidate | maybe | wired; probe with `openxml_audit.pptx.timing_oracle_deck` / `openxml-audit-pptx-timing-oracle` |
+| `restart="whenNotActive"` | `restart` attr on outer `<p:cTn>`. | `exact-native` candidate | maybe | wired; probe with `openxml_audit.pptx.timing_oracle_deck` / `openxml-audit-pptx-timing-oracle` |
+| `restart="never"` | `restart` attr on outer `<p:cTn>`. | `exact-native` candidate | maybe | wired; probe with `openxml_audit.pptx.timing_oracle_deck` / `openxml-audit-pptx-timing-oracle` |
 | `min`, `max` | Possible timing attrs but not validated. | `metadata-only` | maybe with clamping | parser only |
 
 ## 7. Interpolation Mapping
@@ -284,13 +290,33 @@ Minimum fields:
 | Visual support | PowerPoint slideshow capture across relevant timestamps. |
 | Mimic support | Side-by-side W3C visual capture with documented acceptable deltas. |
 
-## 13. Immediate Implementation Slices
+## 13. Closure Decisions
 
-1. Done: add `NativeAnimationMatch` classification and metadata output.
-2. Done: cover all 646 W3C animation definitions with a declared match level.
-3. Done: wire native-compatible `end`, `repeatDur`, and `restart` into
-   `<p:cTn>` / condition XML as candidate native timing.
-4. Done: move unsupported event triggers (`accessKey`, `wallclock`, generic DOM
-   event, repeat events) from silent fallback to explicit policy skips.
-5. Next: finish native visual validation for linear, paced, discrete, spline, and
-   keyPoints cases with a proof deck that records exact/mimic status per slide.
+Every unresolved native-animation row must carry one of these decision labels in
+the feature map closure ledger:
+
+| Decision | Meaning |
+| --- | --- |
+| `wire` | Implement the native path directly. The runtime semantics are already close enough to SMIL that no special predicate is required beyond ordinary handler guards. |
+| `gate` | Implement the native path only behind a documented semantic predicate. The predicate must be narrow enough that the emitted preset still means the same thing as the authored SMIL. |
+| `mimic` | Emit a deliberate native approximation. The semantic loss must be named in docs/tests, and the matcher must mark the result as approximate. |
+| `dead` | Never emit the candidate XML shape. PowerPoint accepts it syntactically but drops it or misplays it at runtime. |
+| `fallback` | Do not force native timing XML for this case. Route to another supported tier such as compiled visibility, flipbook, morph, or static resolution. |
+
+The row-by-row closure ledger lives in
+`docs/reference/research/svg-to-drawingml-feature-map.md` section 8.9.
+
+## 14. Current Validation Focus
+
+The remaining high-signal open work for this mapping contract is visual/runtime
+proof on the timing-heavy cases:
+
+- `linear`, `paced`, `discrete`, `spline`, and `keyPoints`
+- event-linked `end`, `repeatDur`, and `restart`
+- limited concurrent motion under `additive="sum"`
+
+Track implementation slices and blocker ownership in:
+
+- `docs/tasks/animation-smil-parity-tasks.md`
+- `docs/tasks/animation-w3c-sample-blocker-matrix.md`
+- `docs/internals/animation-documentation-map.md`

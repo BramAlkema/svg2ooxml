@@ -32,7 +32,7 @@ When a file approaches the soft limit:
 2. Extract IO/provider code into dedicated modules.
 3. Keep the original facade/class/API stable.
 4. Add targeted tests for extracted seams.
-5. Confirm parity in `.venv313` and Orbstack.
+5. Confirm parity in the canonical `.venv` and the containerised render lane.
 
 ## Project Split Roadmap
 

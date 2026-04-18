@@ -452,7 +452,8 @@ Each slot in `index.json` carries a `verification` field:
 - `derived-from-handler` — extracted from an existing golden master;
   reflects what current handlers emit. Starting point.
 - `oracle-matched` — structurally equivalent (same `family_signature`) to a
-  fragment found in `docs/research/powerpoint_oracle/`. Trusted.
+  fragment found in the sibling `openxml-audit/docs/pptx_oracle/` corpus.
+  Trusted.
 - `visually-verified` — confirmed to play correctly in Microsoft PowerPoint
   via `tools/visual/animation_tune.py`. Highest confidence.
 
@@ -547,11 +548,11 @@ rotate, scale, motion): omit both children.
 ## Methodology references
 
 - Tune loop: `tools/visual/animation_tune.py` + `tools/visual/pptx_session.py`
-- Reference files: `tmp/example{3,4,5,6}.pptx`, `.visual_tmp/samples/experiment 6.pptx`,
-  `.visual_tmp/samples/attrsearch example.pptx`
-- Oracle corpus (pre-extracted research): `docs/research/powerpoint_oracle/`
-- End-to-end stack tests: `.visual_tmp/xmas_tree_v{1,2,3}*.py` (2-par nested,
-  1-cTn flat, compound-API flat — all three produce identical animation)
+- Durable oracle corpus: sibling `openxml-audit/docs/pptx_oracle/`
+- Scratch PPTX decks, frame captures, and roundtrip artifacts live under
+  ignored `tmp/`, `.visual_tmp/`, or CI artifacts when regenerated
+- Starter/oracle deck generators: `tools/visual/powerpoint_oracle_starter_deck.py`
+  and `tools/visual/powerpoint_timing_oracle_deck.py`
 
 See the commit history under
 `git log src/svg2ooxml/assets/animation_oracle/` for the provenance of each

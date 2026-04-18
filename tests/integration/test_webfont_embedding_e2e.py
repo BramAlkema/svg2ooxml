@@ -10,8 +10,8 @@ from pathlib import Path
 
 import pytest
 
-from svg2ooxml.api.models import SVGFrame
-from svg2ooxml.api.services.converter import render_pptx_for_frames
+from svg2ooxml.export import SVGFrame
+from svg2ooxml.export import render_pptx_for_frames
 
 
 def _create_frame(svg_content: str, name: str = "Test") -> SVGFrame:

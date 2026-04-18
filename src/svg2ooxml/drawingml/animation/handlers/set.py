@@ -24,6 +24,10 @@ if TYPE_CHECKING:
 
 __all__ = ["SetAnimationHandler"]
 
+_VISIBILITY_EFFECT_ATTR = "svg2ooxml_visibility_effect"
+_BLINK_EFFECT = "blink"
+_NOOP_ANCHOR_EFFECT = "noop_anchor"
+
 
 class SetAnimationHandler(AnimationHandler):
     """Handler for set animations (discrete attribute changes)."""
@@ -134,6 +138,24 @@ class SetAnimationHandler(AnimationHandler):
         behavior_id: int,
         target_value: str,
     ) -> etree._Element:
+        if self._uses_visibility_noop_anchor(animation):
+            return self._build_visibility_noop_anchor(
+                animation=animation,
+                par_id=par_id,
+                behavior_id=behavior_id,
+                target_value=target_value,
+            )
+
+        if self._uses_blink_oracle(animation):
+            return default_oracle().instantiate(
+                "emph/blink",
+                shape_id=animation.element_id,
+                par_id=par_id,
+                duration_ms=max(1, animation.duration_ms),
+                delay_ms=animation.begin_ms,
+                BEHAVIOR_ID=behavior_id,
+            )
+
         transition = "in" if target_value == "visible" else "out"
         preset_id = 1 if transition == "in" else 10
         preset_class = "entr" if transition == "in" else "exit"
@@ -179,10 +201,13 @@ class SetAnimationHandler(AnimationHandler):
             fill_mode="freeze",
             repeat_count=1,
         )
-        cond = set_elem.find(f".//{{{NS_P}}}cond")
-        if cond is not None:
-            set_delay = 0 if transition == "in" else max(duration_ms - 1, 0)
-            cond.set("delay", str(set_delay))
+        set_delay = 0 if transition == "in" else max(duration_ms - 1, 0)
+        delayed_set = self._xml.build_delayed_child_par(
+            par_id=behavior_id + 2,
+            delay_ms=set_delay,
+            duration_ms=1,
+            child_element=set_elem,
+        )
         to_elem = p_sub(set_elem, "to")
         p_sub(to_elem, "strVal", val=target_value)
 
@@ -190,7 +215,7 @@ class SetAnimationHandler(AnimationHandler):
             par_id=effect_ctn_id,
             duration_ms=duration_ms,
             delay_ms=0,
-            child_elements=[set_elem, anim_effect],
+            child_elements=[delayed_set, anim_effect],
             preset_id=preset_id,
             preset_class=preset_class,
             preset_subtype=0,
@@ -216,3 +241,46 @@ class SetAnimationHandler(AnimationHandler):
             duration_ms=duration_ms,
             child_element=effect_par,
         )
+
+    def _build_visibility_noop_anchor(
+        self,
+        *,
+        animation: AnimationDefinition,
+        par_id: int,
+        behavior_id: int,
+        target_value: str,
+    ) -> etree._Element:
+        set_elem = self._xml.build_set_elem(
+            behavior_id=behavior_id,
+            duration_ms=max(1, animation.duration_ms),
+            target_shape=animation.element_id,
+            ppt_attribute="style.visibility",
+            additive=animation.additive,
+            fill_mode=animation.fill_mode,
+            repeat_count=animation.repeat_count,
+        )
+        to_elem = p_sub(set_elem, "to")
+        p_sub(to_elem, "strVal", val=target_value)
+        return self._xml.build_par_container_elem(
+            par_id=par_id,
+            duration_ms=max(1, animation.duration_ms),
+            delay_ms=animation.begin_ms,
+            child_element=set_elem,
+            preset_id=1 if target_value == "visible" else 10,
+            preset_class="entr" if target_value == "visible" else "exit",
+            begin_triggers=animation.begin_triggers,
+            default_target_shape=animation.element_id,
+            effect_group_id=par_id,
+            repeat_count=animation.repeat_count,
+        )
+
+    @classmethod
+    def _uses_blink_oracle(cls, animation: AnimationDefinition) -> bool:
+        return (
+            animation.raw_attributes.get(_VISIBILITY_EFFECT_ATTR) == _BLINK_EFFECT
+            and cls._visibility_uses_oracle(animation)
+        )
+
+    @staticmethod
+    def _uses_visibility_noop_anchor(animation: AnimationDefinition) -> bool:
+        return animation.raw_attributes.get(_VISIBILITY_EFFECT_ATTR) == _NOOP_ANCHOR_EFFECT

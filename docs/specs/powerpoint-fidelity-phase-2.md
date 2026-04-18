@@ -8,10 +8,17 @@
   - [Animation SMIL Parity Specification](./animation-smil-parity-spec.md)
   - [Visual Fidelity Gaps Specification](./visual-fidelity-gaps.md)
   - [Animation W3C Suite Execution Specification](./animation-w3c-suite-execution-spec.md)
+  - [Animation Cleanup Rigour Specification](./animation-cleanup-rigour-spec.md)
+  - [Animation Documentation Map](../internals/animation-documentation-map.md)
 
 ## 1. Purpose
 
 This spec defines the next major phase of `svg2ooxml`: move from "valid PPTX that PowerPoint can open" to "PowerPoint output that behaves and looks like the SVG on purpose."
+
+This document owns the fidelity program: why this phase exists, what gets
+prioritized, and how success is judged. It does not restate the durable
+animation decisions from `docs/adr/README.md` or the structural cleanup
+contracts from `docs/specs/animation-cleanup-rigour-spec.md`.
 
 We now have three enabling capabilities:
 
@@ -56,64 +63,19 @@ Phase 2 therefore treats:
 - PowerPoint slideshow output as the Office runtime truth
 - build validity as a floor, not the finish line
 
-## 3. Research Findings
+## 3. Program Assumptions
 
-### 3.1 SVG animation semantics are SMIL-driven
+This phase works from four assumptions that are already established elsewhere:
 
-SVG 1.1 animation is a host-language integration of SMIL animation. That means `begin`, `dur`, `repeatCount`, `repeatDur`, `fill`, `additive`, `accumulate`, `set`, `animate`, `animateMotion`, and `animateTransform` are not optional presentation hints; they are the semantics we are trying to preserve.
+1. SVG animation semantics are SMIL-driven and should stay explicit through IR.
+2. Slideshow behavior matters more than bare schema legality or pane visibility.
+3. W3C export success is a gate, not a fidelity claim.
+4. Filter and lighting fidelity depend first on correct source-surface
+   semantics.
 
-Implication:
-
-- parser and IR work must stay faithful to SMIL semantics
-- but PowerPoint output cannot stop at schema-valid `<p:timing>` if the authored behavior still does not play
-
-### 3.2 PresentationML animation is SMIL-shaped but PowerPoint-authored behavior matters
-
-Microsoft's PresentationML animation model is explicitly described as loosely based on SMIL. The generic `<p:anim>` model is valid and useful, and the allowed `tav` attribute set includes `ppt_x`, `ppt_y`, `ppt_w`, `ppt_h`, `ScaleX`, `ScaleY`, `style.opacity`, and `style.visibility`.
-
-However, our recent debugging showed a practical distinction:
-
-- schema-valid generic `<p:anim>` is not always enough to make PowerPoint actually play the effect
-- PowerPoint-authored structures such as proper build groups, `mainSeq` wiring, effect families, and runtime context can be the difference between "visible in the pane" and "actually runs"
-
-Implication:
-
-- Phase 2 must prefer PowerPoint-authored effect structures over merely legal PresentationML where behavior diverges
-
-### 3.3 PowerPoint has authored effect families that map better than raw property tweens
-
-PowerPoint exposes named authored effect families such as `Grow/Shrink` and `Transparency`, plus timing controls like `AutoReverse`, `RepeatCount`, `RepeatDuration`, and show types such as `Window` and `Kiosk`.
-
-Implication:
-
-- symmetric pulse effects should prefer authored scale/effect families over ad hoc width/height property tweens
-- opacity pulses should prefer authored transparency semantics over entrance-fade misuse
-- slideshow validation must use actual slideshow output, not edit-canvas screenshots
-
-### 3.4 SVG filter lighting depends on source-surface correctness
-
-The SVG filter model distinguishes:
-
-- `SourceGraphic`: the original RGBA source
-- `SourceAlpha`: the same source alpha with black RGB
-- `feDiffuseLighting`: opaque light map from the alpha bump map, intended to be multiplied with a texture
-- `feSpecularLighting`: non-opaque highlight map intended to be added to the textured image
-
-Implication:
-
-- lighting fidelity is primarily a source-surface correctness problem
-- if the source surface loses alpha, luminance, or composition boundaries, the lighting pass is already wrong before any PowerPoint export decision is made
-
-### 3.5 W3C is still useful, but must be interpreted correctly
-
-The old W3C SVG test suite is explicitly described as testing the specification rather than certifying browser conformance, and the W3C notes that testing is moving toward `web-platform-tests`.
-
-Implication:
-
-- W3C remains a strong spec-facing regression corpus for `svg2ooxml`
-- but Phase 2 should treat W3C and WPT as complementary:
-  - W3C for legacy SVG 1.1 coverage and known fixture names
-  - WPT for modern spec-facing additions and browser-grounded behavior
+Those assumptions drive program priorities here. The structural consequences of
+those assumptions live in the ADR and cleanup documents, not in this phase
+plan.
 
 ## 4. Goals
 

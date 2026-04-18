@@ -183,3 +183,44 @@ class TestBuild:
         ctn = par.find(f".//{{{NS_P}}}cTn[@presetClass='entr']")
         assert ctn.get("presetClass") == "entr"
         assert ctn.get("presetID") == "1"
+
+    def test_blink_hint_uses_blink_oracle(self, handler: SetAnimationHandler):
+        anim = make_set_animation(
+            target_attribute="style.visibility",
+            values=["visible"],
+            timing=AnimationTiming(begin=0.0, duration=1.0),
+            raw_attributes={"svg2ooxml_visibility_effect": "blink"},
+        )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        ctn = par.find(f"{{{NS_P}}}cTn")
+        assert ctn is not None
+        assert ctn.get("presetClass") == "emph"
+        assert ctn.get("presetID") == "35"
+        anim_elem = par.find(f".//{{{NS_P}}}anim")
+        assert anim_elem is not None
+        assert anim_elem.get("calcmode") == "discrete"
+        assert anim_elem.get("valueType") == "str"
+        tavs = anim_elem.findall(f".//{{{NS_P}}}tav")
+        assert [(tav.get("tm"), tav.find(f'.//{{{NS_P}}}strVal').get('val')) for tav in tavs] == [
+            ("0", "hidden"),
+            ("50000", "visible"),
+        ]
+
+    def test_noop_visibility_anchor_uses_plain_set(self, handler: SetAnimationHandler):
+        anim = make_set_animation(
+            target_attribute="style.visibility",
+            values=["visible"],
+            timing=AnimationTiming(begin=0.0, duration=2.0),
+            raw_attributes={"svg2ooxml_visibility_effect": "noop_anchor"},
+        )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        ctn = par.find(f"{{{NS_P}}}cTn")
+        assert ctn is not None
+        assert ctn.get("dur") == "2000"
+        set_elem = par.find(f".//{{{NS_P}}}set")
+        assert set_elem is not None
+        anim_effect = par.find(f".//{{{NS_P}}}animEffect")
+        assert anim_effect is None
+        attr_name = par.find(f".//{{{NS_P}}}attrName")
+        assert attr_name is not None
+        assert attr_name.text == "style.visibility"

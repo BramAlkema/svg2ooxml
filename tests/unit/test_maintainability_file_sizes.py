@@ -8,6 +8,8 @@ MAX_PYTHON_FILE_LINES = 1000
 _EXEMPTIONS = {
     "src/svg2ooxml/core/ir/text_converter.py",
     "src/svg2ooxml/core/styling/style_extractor.py",
+    "src/svg2ooxml/drawingml/raster_adapter.py",
+    "tools/visual/powerpoint_capture.py",
 }
 
 

@@ -1,8 +1,9 @@
 """DrawingML animation writer using handler architecture.
 
 Orchestrates all animation handlers to convert SVG animations into
-PowerPoint timing XML.  All handlers return ``etree._Element`` and the
-writer calls ``to_string()`` exactly once at the end.
+PowerPoint timing XML. Handlers may return either legacy ``<p:par>``
+elements or typed :class:`NativeFragment` instances; the writer normalizes
+both to a single planning surface before serializing once at the end.
 """
 
 from __future__ import annotations
@@ -34,6 +35,7 @@ from .handlers import (
     TransformAnimationHandler,
 )
 from .id_allocator import TimingIDAllocator
+from .native_fragment import NativeFragment
 from .policy import AnimationPolicy
 from .tav_builder import TAVBuilder
 from .value_processors import ValueProcessor
@@ -201,7 +203,7 @@ def _extract_simple_motion_fragment(
         ),
         behavior_signature=(
             _attrs_signature(behavior, ignore={"rctx", "additive"}),
-            _timing_signature(behavior_ctn, ignore_attrs={"id"}),
+            _behavior_ctn_signature(behavior_ctn),
         ),
     )
 
@@ -344,12 +346,13 @@ def _merged_rotation_angle(records: list[_MotionFragmentRecord]) -> str | None:
 
 
 def _renumber_generated_timing_ids(
-    records: list[tuple[etree._Element, Any]],
+    records: list[tuple[NativeFragment, Any]],
     *,
     reserved_ids: set[int],
 ) -> None:
     existing_ids = set(reserved_ids)
-    for par, _anim_ids in records:
+    for fragment, _anim_ids in records:
+        par = fragment.par
         for ctn in par.iter(_CTN_TAG):
             parsed = _parse_timing_id(ctn.get("id"))
             if parsed is not None:
@@ -367,7 +370,8 @@ def _renumber_generated_timing_ids(
         next_id += 1
         return value
 
-    for par, anim_ids in records:
+    for fragment, anim_ids in records:
+        par = fragment.par
         expected_ids = {int(anim_ids.par), int(anim_ids.behavior)}
         preserved_expected: set[int] = set()
         for ctn in par.iter(_CTN_TAG):
@@ -431,11 +435,33 @@ def _timing_signature(
     )
 
 
+def _behavior_ctn_signature(elem: etree._Element) -> tuple[Any, ...]:
+    """Normalize behavior cTn signatures for merge compatibility.
+
+    Inner behavior ``<p:cTn>`` nodes sometimes carry a redundant
+    ``<p:stCondLst><p:cond delay="0"/></p:stCondLst>`` and sometimes omit it.
+    That difference should not block merging equivalent concurrent motion
+    fragments.
+    """
+    return (
+        _attrs_signature(elem, ignore={"id"}),
+        _child_xml(elem, "endCondLst"),
+        _child_xml(elem, "endSync"),
+    )
+
+
 def _child_xml(elem: etree._Element, child_name: str) -> str:
     child = elem.find(f"./p:{child_name}", namespaces=_PRESENTATION_NS)
     if child is None:
         return ""
-    return etree.tostring(child, encoding="unicode")
+    # Normalize away inherited namespace declarations from internal metadata
+    # so structurally identical timing fragments compare equal.
+    return etree.tostring(
+        child,
+        method="c14n",
+        exclusive=True,
+        with_comments=False,
+    ).decode("utf-8")
 
 
 def _format_motion_path(dx: float, dy: float) -> str:
@@ -505,15 +531,15 @@ class DrawingMLAnimationWriter:
         # Pre-allocate IDs for the complete timing tree, starting after shape IDs
         ids = self._id_allocator.allocate(n_animations=len(animations), start_id=start_id)
 
-        animation_elements: list[etree._Element] = []
-        animation_element_records: list[tuple[etree._Element, Any]] = []
+        native_fragments: list[NativeFragment] = []
+        animation_element_records: list[tuple[NativeFragment, Any]] = []
         id_index = 0
 
         for animation in animations:
             anim_ids = ids.animations[id_index]
             id_index += 1
 
-            elem, meta = self._build_animation(
+            fragment, meta = self._build_animation(
                 animation, options, anim_ids.par, anim_ids.behavior
             )
 
@@ -521,12 +547,12 @@ class DrawingMLAnimationWriter:
                 "Animation fragment for %s (%s): %s",
                 animation.element_id,
                 animation.target_attribute,
-                "SUCCESS" if elem is not None else f"SKIPPED ({meta.get('reason') if meta else 'unknown'})",
+                "SUCCESS" if fragment is not None else f"SKIPPED ({meta.get('reason') if meta else 'unknown'})",
             )
 
-            if elem is not None:
-                animation_elements.append(elem)
-                animation_element_records.append((elem, anim_ids))
+            if fragment is not None:
+                native_fragments.append(fragment)
+                animation_element_records.append((fragment, anim_ids))
                 if tracer is not None:
                     emitted_metadata: dict[str, Any] = {
                         "element_id": animation.element_id,
@@ -537,6 +563,8 @@ class DrawingMLAnimationWriter:
                         ),
                         "attribute": animation.target_attribute,
                         "fallback_mode": options.get("fallback_mode", "native"),
+                        "fragment_source": fragment.source,
+                        "fragment_strategy": fragment.strategy,
                     }
                     tracer.record_stage_event(
                         stage="animation",
@@ -573,7 +601,7 @@ class DrawingMLAnimationWriter:
                     metadata=metadata,
                 )
 
-        if not animation_elements:
+        if not native_fragments:
             return ""
 
         # Check if timing should be globally suppressed by policy.
@@ -600,6 +628,7 @@ class DrawingMLAnimationWriter:
             reserved_ids=reserved_ids,
         )
 
+        animation_elements = [fragment.par for fragment in native_fragments]
         animation_elements = _merge_concurrent_simple_motion_fragments(
             animation_elements
         )
@@ -618,8 +647,8 @@ class DrawingMLAnimationWriter:
         options: Mapping[str, Any],
         par_id: int,
         behavior_id: int,
-    ) -> tuple[etree._Element | None, dict[str, Any] | None]:
-        """Build element for a single animation."""
+    ) -> tuple[NativeFragment | None, dict[str, Any] | None]:
+        """Build a normalized native fragment for a single animation."""
         if self._policy is None:
             self._policy = AnimationPolicy(options)
 
@@ -639,16 +668,26 @@ class DrawingMLAnimationWriter:
             result = handler.build(animation, par_id, behavior_id)
             if result is None:
                 return None, {"reason": "handler_returned_empty"}
+            fragment = self._coerce_native_fragment(result)
             self._xml_builder.apply_native_timing_overrides(
-                par=result,
+                par=fragment.par,
                 repeat_duration_ms=animation.repeat_duration_ms,
                 restart=animation.restart,
                 end_triggers=animation.end_triggers,
                 default_target_shape=animation.element_id,
             )
-            return result, None
+            return fragment, None
         except Exception as e:
             return None, {"reason": f"handler_error: {str(e)}"}
+
+    @staticmethod
+    def _coerce_native_fragment(
+        result: etree._Element | NativeFragment,
+    ) -> NativeFragment:
+        """Normalize handler output into a typed native fragment."""
+        if isinstance(result, NativeFragment):
+            return result
+        return NativeFragment.from_legacy_par(result)
 
     @staticmethod
     def _unsupported_reason(animation: AnimationDefinition) -> str:

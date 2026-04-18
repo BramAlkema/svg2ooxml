@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import re
 
 from svg2ooxml.common.time import parse_time_value
@@ -73,9 +74,23 @@ def parse_timing(
         repeat_count: int | str = "indefinite"
     else:
         try:
-            repeat_count = int(float(repeat_attr))
+            repeat_value = float(repeat_attr)
         except (ValueError, TypeError):
             repeat_count = 1
+        else:
+            if repeat_value <= 0:
+                repeat_count = 1
+                repeat_duration = 0.0
+            elif repeat_value.is_integer():
+                repeat_count = int(repeat_value)
+            else:
+                repeat_count = max(1, math.ceil(repeat_value))
+                fractional_repeat_duration = duration * repeat_value
+                if math.isfinite(fractional_repeat_duration):
+                    if repeat_duration is None:
+                        repeat_duration = fractional_repeat_duration
+                    else:
+                        repeat_duration = min(repeat_duration, fractional_repeat_duration)
 
     fill_attr = element.get("fill", "remove")
     fill_mode = FillMode.FREEZE if fill_attr == "freeze" else FillMode.REMOVE

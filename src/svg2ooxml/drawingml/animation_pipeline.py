@@ -134,7 +134,7 @@ class AnimationPipeline:
                 )
                 continue
             remapped_definition = replace(definition, element_id=shape_id)
-            remapped_definition = self._remap_begin_trigger_targets(remapped_definition, shape_id=shape_id)
+            remapped_definition = self._remap_trigger_targets(remapped_definition, shape_id=shape_id)
             remapped.append(remapped_definition)
             animated_shape_ids.add(shape_id)
             self._trace(
@@ -185,23 +185,58 @@ class AnimationPipeline:
             )
         return animation_xml
 
-    def _remap_begin_trigger_targets(
+    def _remap_trigger_targets(
         self,
         definition: AnimationDefinition,
         *,
         shape_id: str,
     ) -> AnimationDefinition:
-        """Remap begin trigger target element IDs to slide shape IDs."""
+        """Remap trigger target element IDs to slide shape IDs."""
         timing = getattr(definition, "timing", None)
-        begin_triggers = getattr(timing, "begin_triggers", None)
-        if not begin_triggers:
+        if timing is None:
             return definition
+
+        begin_triggers, begin_changed = self._remap_trigger_list(
+            getattr(timing, "begin_triggers", None),
+            definition=definition,
+            shape_id=shape_id,
+            unmapped_trace_action="unmapped_begin_trigger_target",
+            remap_indefinite_bookmark=True,
+        )
+        end_triggers, end_changed = self._remap_trigger_list(
+            getattr(timing, "end_triggers", None),
+            definition=definition,
+            shape_id=shape_id,
+            unmapped_trace_action="unmapped_end_trigger_target",
+            remap_indefinite_bookmark=False,
+        )
+        if not begin_changed and not end_changed:
+            return definition
+
+        remapped_timing = replace(
+            timing,
+            begin_triggers=begin_triggers,
+            end_triggers=end_triggers,
+        )
+        return replace(definition, timing=remapped_timing)
+
+    def _remap_trigger_list(
+        self,
+        triggers,
+        *,
+        definition: AnimationDefinition,
+        shape_id: str,
+        unmapped_trace_action: str,
+        remap_indefinite_bookmark: bool,
+    ) -> tuple[list, bool]:
+        if not triggers:
+            return triggers, False
 
         remapped_triggers = []
         changed = False
-        for trigger in begin_triggers:
+        for trigger in triggers:
             trigger_type_enum = getattr(trigger, "trigger_type", None)
-            if trigger_type_enum == BeginTriggerType.INDEFINITE:
+            if remap_indefinite_bookmark and trigger_type_enum == BeginTriggerType.INDEFINITE:
                 mapped_click_shape = None
                 animation_id = getattr(definition, "animation_id", None)
                 if isinstance(animation_id, str):
@@ -219,7 +254,6 @@ class AnimationPipeline:
                 else:
                     remapped_triggers.append(trigger)
                 continue
-
             target_id = getattr(trigger, "target_element_id", None)
             if not target_id:
                 remapped_triggers.append(trigger)
@@ -236,7 +270,7 @@ class AnimationPipeline:
                 else:
                     mapped = None
                     self._trace(
-                        "unmapped_begin_trigger_target",
+                        unmapped_trace_action,
                         metadata={
                             "element_id": getattr(definition, "element_id", None),
                             "target_element_id": target_id,
@@ -249,12 +283,7 @@ class AnimationPipeline:
                 remapped_triggers.append(replace(trigger, target_element_id=mapped))
             else:
                 remapped_triggers.append(trigger)
-
-        if not changed:
-            return definition
-
-        remapped_timing = replace(timing, begin_triggers=remapped_triggers)
-        return replace(definition, timing=remapped_timing)
+        return remapped_triggers, changed
 
     def _trace(self, action: str, *, metadata: dict[str, object] | None = None) -> None:
         if self._trace_writer is None:

@@ -13,6 +13,8 @@ from svg2ooxml.drawingml.animation.xml_builders import AnimationXMLBuilder
 from svg2ooxml.drawingml.xml_builder import NS_P
 from svg2ooxml.ir.animation import (
     AnimationDefinition,
+    BeginTrigger,
+    BeginTriggerType,
     AnimationTiming,
     AnimationType,
     CalcMode,
@@ -240,6 +242,69 @@ class TestBuild:
         ctn = par.find(f"{{{NS_P}}}cTn")
         assert ctn.get("presetClass") == "emph"
         assert ctn.get("presetID") == "32"
+
+    def test_stroke_dashoffset_uses_wipe_filter_oracle(
+        self, handler: NumericAnimationHandler
+    ):
+        anim = make_numeric_animation(
+            target_attribute="stroke-dashoffset",
+            values=["100", "0"],
+        )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        ctn = par.find(f"{{{NS_P}}}cTn")
+        assert ctn is not None
+        assert ctn.get("presetClass") == "entr"
+        assert ctn.get("presetID") == "22"
+        assert ctn.get("presetSubtype") == "2"
+
+        children = par.findall(f"./{{{NS_P}}}cTn/{{{NS_P}}}childTnLst/*")
+        assert [etree.QName(child).localname for child in children] == [
+            "set",
+            "animEffect",
+        ]
+
+        set_ctn = par.find(f".//{{{NS_P}}}set/{{{NS_P}}}cBhvr/{{{NS_P}}}cTn")
+        effect_ctn = par.find(
+            f".//{{{NS_P}}}animEffect/{{{NS_P}}}cBhvr/{{{NS_P}}}cTn"
+        )
+        assert set_ctn is not None
+        assert effect_ctn is not None
+        assert set_ctn.get("id") == "5"
+        assert effect_ctn.get("id") == "6"
+
+        anim_effect = par.find(f".//{{{NS_P}}}animEffect")
+        assert anim_effect is not None
+        assert anim_effect.get("transition") == "in"
+        assert anim_effect.get("filter") == "wipe(right)"
+
+    def test_stroke_dashoffset_wipe_preserves_begin_triggers(
+        self, handler: NumericAnimationHandler
+    ):
+        anim = make_numeric_animation(
+            target_attribute="stroke-dashoffset",
+            values=["100", "0"],
+            timing=AnimationTiming(
+                begin=0.0,
+                duration=1.0,
+                begin_triggers=[
+                    BeginTrigger(
+                        trigger_type=BeginTriggerType.CLICK,
+                        target_element_id="button42",
+                    )
+                ],
+            ),
+        )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        outer_ctn = par.find(f"{{{NS_P}}}cTn")
+        assert outer_ctn is not None
+        st_cond_lst = outer_ctn.find(f"{{{NS_P}}}stCondLst")
+        assert st_cond_lst is not None
+        conds = st_cond_lst.findall(f"{{{NS_P}}}cond")
+        assert len(conds) == 1
+        assert conds[0].get("evt") == "onClick"
+        tgt = conds[0].find(f"./{{{NS_P}}}tgtEl/{{{NS_P}}}spTgt")
+        assert tgt is not None
+        assert tgt.get("spid") == "button42"
 
     def test_simple_width_animation_uses_authored_by_scale(
         self, handler: NumericAnimationHandler

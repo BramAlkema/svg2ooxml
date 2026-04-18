@@ -7,6 +7,7 @@ from lxml import etree
 
 from svg2ooxml.common.units import UnitConverter
 from svg2ooxml.drawingml.animation.handlers.opacity import OpacityAnimationHandler
+from svg2ooxml.drawingml.animation.native_fragment import NativeFragment
 from svg2ooxml.drawingml.animation.tav_builder import TAVBuilder
 from svg2ooxml.drawingml.animation.value_processors import ValueProcessor
 from svg2ooxml.drawingml.animation.xml_builders import AnimationXMLBuilder
@@ -30,6 +31,16 @@ def make_opacity_animation(**overrides) -> AnimationDefinition:
     )
     defaults.update(overrides)
     return AnimationDefinition(**defaults)
+
+
+def _fragment(result: NativeFragment | None) -> NativeFragment:
+    assert result is not None
+    assert isinstance(result, NativeFragment)
+    return result
+
+
+def _par(result: NativeFragment | None) -> etree._Element:
+    return _fragment(result).par
 
 
 @pytest.fixture
@@ -77,44 +88,46 @@ class TestCanHandle:
 
 
 # ------------------------------------------------------------------ #
-# build — returns etree._Element                                      #
+# build — returns NativeFragment                                      #
 # ------------------------------------------------------------------ #
 
 
 class TestBuild:
-    def test_returns_element(self, handler: OpacityAnimationHandler):
+    def test_returns_native_fragment(self, handler: OpacityAnimationHandler):
         anim = make_opacity_animation()
-        result = handler.build(anim, par_id=4, behavior_id=5)
-        assert isinstance(result, etree._Element)
-        assert result.tag == f"{{{NS_P}}}par"
+        fragment = _fragment(handler.build(anim, par_id=4, behavior_id=5))
+        assert fragment.par.tag == f"{{{NS_P}}}par"
+        assert fragment.source == "oracle"
+        assert fragment.strategy == "opacity-authored-fade"
+        assert fragment.metadata["oracle_slot"] == "entr/fade"
 
     def test_ctn_has_correct_id(self, handler: OpacityAnimationHandler):
         anim = make_opacity_animation()
-        par = handler.build(anim, par_id=4, behavior_id=5)
+        par = _par(handler.build(anim, par_id=4, behavior_id=5))
         ctn = par.find(f"{{{NS_P}}}cTn")
         assert ctn.get("id") == "4"
 
     def test_anim_effect_present(self, handler: OpacityAnimationHandler):
         anim = make_opacity_animation()
-        par = handler.build(anim, par_id=4, behavior_id=5)
+        par = _par(handler.build(anim, par_id=4, behavior_id=5))
         anim_effect = par.find(f".//{{{NS_P}}}animEffect")
         assert anim_effect is not None
 
     def test_behavior_id(self, handler: OpacityAnimationHandler):
         anim = make_opacity_animation()
-        par = handler.build(anim, par_id=4, behavior_id=5)
+        par = _par(handler.build(anim, par_id=4, behavior_id=5))
         bhvr_ctn = par.find(f".//{{{NS_P}}}cBhvr/{{{NS_P}}}cTn")
         assert bhvr_ctn.get("id") == "5"
 
     def test_target_shape(self, handler: OpacityAnimationHandler):
         anim = make_opacity_animation(element_id="shape42")
-        par = handler.build(anim, par_id=4, behavior_id=5)
+        par = _par(handler.build(anim, par_id=4, behavior_id=5))
         sp_tgt = par.find(f".//{{{NS_P}}}spTgt")
         assert sp_tgt.get("spid") == "shape42"
 
     def test_transition_attribute(self, handler: OpacityAnimationHandler):
         anim = make_opacity_animation()
-        par = handler.build(anim, par_id=4, behavior_id=5)
+        par = _par(handler.build(anim, par_id=4, behavior_id=5))
         anim_effect = par.find(f".//{{{NS_P}}}animEffect")
         assert anim_effect.get("transition") == "in"
 
@@ -123,41 +136,49 @@ class TestBuild:
         emph/transparency oracle slot instead of the dead <p:anim> on
         style.opacity TAV path. Verified 2026-04-16."""
         anim = make_opacity_animation(values=["0", "0.75"])
-        par = handler.build(anim, par_id=4, behavior_id=5)
+        fragment = _fragment(handler.build(anim, par_id=4, behavior_id=5))
+        par = fragment.par
         anim_effect = par.find(f".//{{{NS_P}}}animEffect")
         assert anim_effect is not None
         assert "image" in (anim_effect.get("filter") or "")
         attr_name = par.find(f".//{{{NS_P}}}attrName")
         assert attr_name is not None
         assert attr_name.text == "style.opacity"
+        assert fragment.source == "oracle"
+        assert fragment.strategy == "opacity-partial-transparency"
+        assert fragment.metadata["oracle_slot"] == "emph/transparency"
 
     def test_fill_opacity_maps_to_fill_opacity_property(
         self, handler: OpacityAnimationHandler
     ):
         anim = make_opacity_animation(target_attribute="fill-opacity")
-        par = handler.build(anim, par_id=4, behavior_id=5)
+        fragment = _fragment(handler.build(anim, par_id=4, behavior_id=5))
+        par = fragment.par
         attr_name = par.find(f".//{{{NS_P}}}attrName")
         assert attr_name is not None
         assert attr_name.text == "fill.opacity"
+        assert fragment.source == "builder"
+        assert fragment.strategy == "opacity-property-animation"
 
     def test_stroke_opacity_maps_to_stroke_opacity_property(
         self, handler: OpacityAnimationHandler
     ):
         anim = make_opacity_animation(target_attribute="stroke-opacity")
-        par = handler.build(anim, par_id=4, behavior_id=5)
+        par = _par(handler.build(anim, par_id=4, behavior_id=5))
         attr_name = par.find(f".//{{{NS_P}}}attrName")
         assert attr_name is not None
         assert attr_name.text == "stroke.opacity"
 
     def test_fade_in(self, handler: OpacityAnimationHandler):
         anim = make_opacity_animation(values=["0", "1"])
-        par = handler.build(anim, par_id=4, behavior_id=5)
+        par = _par(handler.build(anim, par_id=4, behavior_id=5))
         anim_effect = par.find(f".//{{{NS_P}}}animEffect")
         assert anim_effect.get("filter") == "fade"
 
     def test_fade_out(self, handler: OpacityAnimationHandler):
         anim = make_opacity_animation(values=["1", "0"])
-        par = handler.build(anim, par_id=4, behavior_id=5)
+        fragment = _fragment(handler.build(anim, par_id=4, behavior_id=5))
+        par = fragment.par
         anim_effect = par.find(f".//{{{NS_P}}}animEffect")
         assert anim_effect is not None
         assert anim_effect.get("transition") == "out"
@@ -166,12 +187,13 @@ class TestBuild:
         ctn = par.find(f"{{{NS_P}}}cTn")
         assert ctn is not None
         assert ctn.get("presetClass") == "exit"
+        assert fragment.metadata["oracle_slot"] == "exit/fade"
 
     def test_delay_from_begin(self, handler: OpacityAnimationHandler):
         anim = make_opacity_animation(
             timing=AnimationTiming(begin=0.5, duration=1.0),
         )
-        par = handler.build(anim, par_id=4, behavior_id=5)
+        par = _par(handler.build(anim, par_id=4, behavior_id=5))
         cond = par.find(f".//{{{NS_P}}}cTn/{{{NS_P}}}stCondLst/{{{NS_P}}}cond")
         assert cond.get("delay") == "500"
 
@@ -179,13 +201,13 @@ class TestBuild:
         anim = make_opacity_animation(
             timing=AnimationTiming(begin=0.0, duration=2.5),
         )
-        par = handler.build(anim, par_id=4, behavior_id=5)
+        par = _par(handler.build(anim, par_id=4, behavior_id=5))
         ctn = par.find(f"{{{NS_P}}}cTn")
         assert ctn.get("dur") == "2500"
 
     def test_preset_class(self, handler: OpacityAnimationHandler):
         anim = make_opacity_animation()
-        par = handler.build(anim, par_id=4, behavior_id=5)
+        par = _par(handler.build(anim, par_id=4, behavior_id=5))
         ctn = par.find(f"{{{NS_P}}}cTn")
         assert ctn.get("presetClass") == "entr"
 
@@ -195,7 +217,7 @@ class TestBuild:
         """Non-0→1 partial opacity routes through emph/transparency oracle
         (verified path) instead of the dead <p:anim> style.opacity TAV."""
         anim = make_opacity_animation(values=["0.1", "1"])
-        par = handler.build(anim, par_id=4, behavior_id=5)
+        par = _par(handler.build(anim, par_id=4, behavior_id=5))
         anim_effect = par.find(f".//{{{NS_P}}}animEffect")
         assert anim_effect is not None
         assert "image" in (anim_effect.get("filter") or "")
@@ -204,7 +226,8 @@ class TestBuild:
         self, handler: OpacityAnimationHandler
     ):
         anim = make_opacity_animation(values=["0.1", "1", "0.1"])
-        par = handler.build(anim, par_id=4, behavior_id=5)
+        fragment = _fragment(handler.build(anim, par_id=4, behavior_id=5))
+        par = fragment.par
         anim_effect = par.find(f".//{{{NS_P}}}animEffect")
         assert anim_effect is not None
         assert anim_effect.get("filter") == "image"
@@ -225,12 +248,14 @@ class TestBuild:
         effect_ctn = effect_cbhvr.find(f"{{{NS_P}}}cTn")
         assert effect_ctn is not None
         assert effect_ctn.get("autoRev") == "1"
+        assert fragment.source == "builder"
+        assert fragment.strategy == "opacity-pulse-transparency-effect"
 
     def test_opacity_pulse_preserves_authored_direction(
         self, handler: OpacityAnimationHandler
     ):
         anim = make_opacity_animation(values=["1", "0", "1"])
-        par = handler.build(anim, par_id=4, behavior_id=5)
+        par = _par(handler.build(anim, par_id=4, behavior_id=5))
         anim_effect = par.find(f".//{{{NS_P}}}animEffect")
         assert anim_effect is not None
         assert anim_effect.get("prLst") == "opacity: 0"
@@ -247,9 +272,12 @@ class TestBuild:
             values=["0", "1"],
             timing=AnimationTiming(begin=0.0, duration=1.0, repeat_count="indefinite"),
         )
-        par = handler.build(anim, par_id=4, behavior_id=5)
+        fragment = _fragment(handler.build(anim, par_id=4, behavior_id=5))
+        par = fragment.par
         assert par.find(f".//{{{NS_P}}}animEffect") is None
         assert par.find(f".//{{{NS_P}}}anim") is not None
+        assert fragment.source == "builder"
+        assert fragment.strategy == "opacity-property-animation"
 
     def test_spline_opacity_uses_property_animation_and_dense_tavs(
         self, handler: OpacityAnimationHandler
@@ -259,7 +287,7 @@ class TestBuild:
             calc_mode=CalcMode.SPLINE,
             key_splines=[[0.75, 0.0, 0.25, 1.0]],
         )
-        par = handler.build(anim, par_id=4, behavior_id=5)
+        par = _par(handler.build(anim, par_id=4, behavior_id=5))
         assert par.find(f".//{{{NS_P}}}animEffect") is None
         anim_elem = par.find(f".//{{{NS_P}}}anim")
         assert anim_elem is not None

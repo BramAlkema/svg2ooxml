@@ -4,7 +4,7 @@ import os
 from collections.abc import Generator
 
 import pytest
-from src.svg2ooxml.api.testing import LocalAPIConfig, LocalAPIServer
+from figma2gslides.api.testing import LocalAPIConfig, LocalAPIServer
 
 pytestmark = pytest.mark.integration
 

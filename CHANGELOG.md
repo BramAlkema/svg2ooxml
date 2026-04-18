@@ -1,33 +1,115 @@
 # Changelog
 
+Release notes for the `svg2ooxml` converter package live here.
+Empirical PowerPoint behavior research, authored control decks, and durable
+oracle evidence live in the companion repository
+[`openxml-audit`](https://github.com/BramAlkema/openxml-audit).
+
+## 1.0.0 - 2026-04-18
+
+Release focus: package boundary cleanup, Python 3.14 standardization, and a
+more explicit split between converter code and PowerPoint evidence tooling.
+
+### Added
+
+- first-class container render lane with Python 3.14 parity, pinned upstream
+  FontForge source builds, and stable wrapper scripts for reproducible Linux
+  raster/font checks
+- clearer converter documentation surface, including a repository-boundary doc,
+  animation documentation map, and container workflow guide
+- stronger animation regression coverage around repeat-trigger expansion,
+  visibility rewrite timing, and compatibility lazy imports
+
+### Changed
+
+- standardized local and container development on Python 3.14
+- extracted Figma and Google Slides app/runtime work into a clearly separated
+  `apps/figma2gslides` surface while keeping `svg2ooxml` as the converter
+  package and public CLI
+- moved empirical PowerPoint research ownership out of the converter docs path
+  and into the companion `openxml-audit` project
+- tightened repeat-trigger handling so deterministic `repeat(n)` syncbases are
+  expanded before visibility planning and end triggers are emitted on the
+  correct relative basis
+
+### Removed
+
+- stale OrbStack-specific container image definitions in favor of one shared
+  Docker render lane
+- obsolete in-repo PowerPoint oracle research copies that now belong in
+  `openxml-audit`
+
 ## 0.6.8 - 2026-04-15
 
-- expanded the animation oracle from 7 to 18 slots covering every PowerPoint emphasis, entrance, exit, and motion-path primitive, all empirically verified to play in Microsoft PowerPoint via the tune-loop harness
-- introduced the universal `emph/compound` slot plus a 10-item behavior fragment library (`transparency`, `fill_color`, `text_color`, `stroke_color`, `bold`, `underline`, `blink`, `rotate`, `scale`, `motion`) — one `<p:cTn>` holds any combination of behaviors that fire simultaneously, replacing the preset-per-slot model for stacked effects
-- added `AnimationOracle.instantiate_compound(behaviors=...)` and `BehaviorFragment` dataclass as the primary multi-effect authoring API, plus `AnimationXMLBuilder.build_compound_par()` as the writer-level entry point for handlers
-- collapsed 40+ entrance/exit presets into two universal filter-parameterised slots (`entr/filter_effect`, `exit/filter_effect`) covering 16 empirically verified `<p:animEffect filter>` values (fade, dissolve, wipe, wedge, wheel, circle, strips, blinds, checkerboard, barn, randombar) plus direction subparameters
-- promoted the animation vocabulary to three structured XML SSOT files: `filter_vocabulary.xml` (29 filter entries), `attrname_vocabulary.xml` (17 valid `<p:attrName>` values confirmed complete), and `dead_paths.xml` (7 empirically falsified shapes with replacement guidance)
-- added typed loaders for the SSOT files: `AnimationOracle.filter_vocabulary()`, `attrname_vocabulary()`, `dead_paths()` with by-value and by-id lookups, plus negative-test invariants that assert dead-path attrNames never appear in the valid vocabulary
-- documented empirically falsified paths: `<p:anim>` on `fill.opacity`, `stroke.opacity`, `stroke.weight`, `line.weight`, and isolated `style.fontSize` all parse as valid OOXML but are silently dropped by PowerPoint's playback engine; `<p:animEffect filter="image">` only fires when paired with a `<p:set>` on `style.opacity` inside a preset 9 wrapper
-- added the **pptx-animation Claude skill** at `.claude/skills/pptx-animation/` — CLI scripts for entrance/exit/compound/motion emission plus a validator that walks XML and flags dead-path matches against the `dead_paths.xml` SSOT; fully self-contained with vendored oracle SSOT files and auto-generated markdown references
-- added `tools/build_skill.py` with `--check` drift detection for CI so the in-tree skill cannot diverge from the oracle SSOT
-- expanded the oracle README from 68 to 330+ lines covering both layer-1 (preset-specific) and layer-2 (compound + fragments) APIs, build-mode matrix, targeting wrapper semantics, and empirical methodology
-- session totals: 10 new commits, ~8,500+ lines added, 693 unit tests passing (up from 663), including the universal compound slot, three vocabulary SSOTs, the Claude skill package, and the writer-level compound helper
+Release focus: animation oracle normalization and compound native effects.
+
+### Added
+
+- expanded the animation oracle from 7 to 18 slots covering emphasis,
+  entrance, exit, and motion-path primitives that were empirically verified to
+  play in Microsoft PowerPoint
+- introduced the universal `emph/compound` slot plus a 10-item behavior
+  fragment library for simultaneous transparency, fill, text/stroke color,
+  bold, underline, blink, rotate, scale, and motion effects
+- added `AnimationOracle.instantiate_compound(behaviors=...)`,
+  `BehaviorFragment`, and `AnimationXMLBuilder.build_compound_par()` as the
+  primary multi-effect authoring path
+- promoted the animation vocabulary to structured SSOT XML files:
+  `filter_vocabulary.xml`, `attrname_vocabulary.xml`, and `dead_paths.xml`
+- added typed loaders for the SSOT files together with negative-path
+  invariants
+
+### Changed
+
+- collapsed 40+ entrance/exit presets into two universal filter-parameterized
+  slots, `entr/filter_effect` and `exit/filter_effect`, covering 16 verified
+  `<p:animEffect filter>` values and their direction parameters
+- documented falsified XML paths that parse as valid OOXML but are silently
+  dropped by PowerPoint playback, including unsupported `<p:anim>` targets and
+  the `filter="image"` wrapper requirement
+
+### Tooling And Docs
+
+- added the `pptx-animation` Claude skill with vendored oracle SSOT files and
+  dead-path validation
+- added `tools/build_skill.py --check` drift detection so the in-tree skill
+  stays aligned with the oracle SSOT
+- expanded the oracle README with API shape, build modes, targeting semantics,
+  and empirical methodology
 
 ## 0.6.7 - 2026-04-14
 
-- expanded SVG animation plumbing for SMIL timing, from/to/by values, repeat/end/restart handling, keyPoints, native-match metadata, and unsupported-trigger policy decisions
-- improved PowerPoint animation fidelity for fade in/out, calcMode linear/paced path retiming, motion keyPoints, opacity pulses, scale transforms, and display/visibility fill behavior
-- added a native animation mapping spec plus oracle/proof-deck tooling for matching SVG animation features to PresentationML structures
-- updated animation golden fixtures and regression coverage, including the duplicate drawingml image test module collection fix
+Release focus: SMIL timing plumbing and PowerPoint timing fidelity.
+
+- expanded SVG animation plumbing for SMIL timing, from/to/by values,
+  repeat/end/restart handling, keyPoints, native-match metadata, and
+  unsupported-trigger policy decisions
+- improved PowerPoint animation fidelity for fade in/out, calcMode
+  linear/paced retiming, motion keyPoints, opacity pulses, scale transforms,
+  and display/visibility fill behavior
+- added a native animation mapping spec plus oracle/proof-deck tooling for
+  matching SVG animation features to PresentationML structures
+- updated animation golden fixtures and regression coverage, including the
+  duplicate drawingml image test-module collection fix
 
 ## 0.6.6 - 2026-04-12
 
-- improved PowerPoint animation fidelity across motion, rotate, opacity, and line endpoint handling, including safer composition of sampled motion stacks and clearer unsupported-case tracing
-- fixed editable line and polyline animation export by materializing simple animated lines as native connector lines and splitting stroked animated polylines into per-segment editable lines, including fade-compatible segment targeting
-- corrected image layout and visual sizing for converted decks by honoring painted image content bounds and `preserveAspectRatio` when resolving embedded image geometry
-- hardened PowerPoint visual tooling with slideshow/window capture fixes plus new motion-lab and W3C proof-deck utilities for end-to-end fidelity checks
-- expanded parser, exporter, animation-handler, paint, capture, and visual regression coverage around the new animation and rendering paths
+Release focus: editable animated lines and proof-deck tooling.
+
+- improved PowerPoint animation fidelity across motion, rotate, opacity, and
+  line-endpoint handling, including safer composition of sampled motion stacks
+  and clearer unsupported-case tracing
+- fixed editable line and polyline animation export by materializing simple
+  animated lines as native connector lines and splitting stroked animated
+  polylines into per-segment editable lines, including fade-compatible segment
+  targeting
+- corrected image layout and visual sizing for converted decks by honoring
+  painted image content bounds and `preserveAspectRatio` when resolving
+  embedded image geometry
+- hardened PowerPoint visual tooling with slideshow/window capture fixes plus
+  new motion-lab and W3C proof-deck utilities for end-to-end fidelity checks
+- expanded parser, exporter, animation-handler, paint, capture, and visual
+  regression coverage around the new animation and rendering paths
 
 ## 0.6.5 - 2026-04-11
 

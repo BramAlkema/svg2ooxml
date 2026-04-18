@@ -49,15 +49,22 @@ from typing import Any, Iterable, Mapping, Sequence
 
 from lxml import etree
 
+from svg2ooxml.drawingml.animation.constants import SVG2_ANIMATION_NS
+from svg2ooxml.drawingml.animation.evidence import (
+    EvidenceTier,
+    evidence_tiers_for_oracle_verification,
+)
 from svg2ooxml.drawingml.xml_builder import NS_P
 
 NS_A = "http://schemas.openxmlformats.org/drawingml/2006/main"
+_BUILD_MODE_ATTR = f"{{{SVG2_ANIMATION_NS}}}bldMode"
 
 __all__ = [
     "AnimationOracle",
     "AttrNameEntry",
     "BehaviorFragment",
     "DeadPath",
+    "EvidenceTier",
     "FilterEntry",
     "OracleSlotError",
     "PresetSlot",
@@ -78,6 +85,7 @@ class PresetSlot:
     preset_class: str
     preset_id: int | None
     preset_subtype: int | None
+    bld_mode: str
     family_signature: str
     content_tokens: tuple[str, ...]
     behavior_tokens: tuple[str, ...]
@@ -85,6 +93,10 @@ class PresetSlot:
     source: str
     verification: str
     notes: str = ""
+
+    @property
+    def evidence_tiers(self) -> tuple[EvidenceTier, ...]:
+        return evidence_tiers_for_oracle_verification(self.verification)
 
 
 @dataclass(frozen=True, slots=True)
@@ -104,6 +116,10 @@ class FilterEntry:
     exit_preset_subtype: int | None
     verification: str
     source: str
+
+    @property
+    def evidence_tiers(self) -> tuple[EvidenceTier, ...]:
+        return evidence_tiers_for_oracle_verification(self.verification)
 
     @property
     def is_entrance_only(self) -> bool:
@@ -141,6 +157,10 @@ class AttrNameEntry:
     used_by: str
     verification: str
     source: str
+
+    @property
+    def evidence_tiers(self) -> tuple[EvidenceTier, ...]:
+        return evidence_tiers_for_oracle_verification(self.verification)
 
 
 @dataclass(frozen=True, slots=True)
@@ -222,6 +242,7 @@ class AnimationOracle:
                 preset_class=entry["preset_class"],
                 preset_id=entry.get("preset_id"),
                 preset_subtype=entry.get("preset_subtype"),
+                bld_mode=entry.get("bld_mode", "animBg"),
                 family_signature=entry["family_signature"],
                 content_tokens=tuple(entry.get("content_tokens", [])),
                 behavior_tokens=tuple(entry.get("behavior_tokens", [])),
@@ -478,6 +499,7 @@ class AnimationOracle:
         parser = etree.XMLParser(remove_blank_text=True)
         root = etree.fromstring(wrapped.encode("utf-8"), parser)
         par = root[0]
+        par.set(_BUILD_MODE_ATTR, slot.bld_mode)
         # Detach from the synthetic root so the caller owns the element.
         root.remove(par)
         return par

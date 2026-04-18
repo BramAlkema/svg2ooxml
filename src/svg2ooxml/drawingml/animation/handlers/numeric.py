@@ -692,38 +692,39 @@ class NumericAnimationHandler(AnimationHandler):
         """Build Wipe entrance animation for stroke-dashoffset (line drawing).
 
         SVG line-drawing effect animates stroke-dashoffset from path length
-        to 0. PowerPoint Wipe (presetID=22) entrance with direction subtype
-        produces a similar reveal effect.
+        to 0. PowerPoint's directional Wipe entrance is the closest native
+        reveal effect we can express without dropping into dead-path prLst
+        parameters.
         """
-        # Determine wipe direction: dashoffset going to 0 = left-to-right wipe
-        # Subtype 1=left, 2=top, 3=right, 4=bottom
-        subtype = 1
-
-        # Build a <p:set> to make shape visible + Wipe entrance
-        set_elem = p_elem("set")
-        cBhvr = self._xml.build_behavior_core_elem(
-            behavior_id=behavior_id,
-            duration_ms=1,
-            target_shape=animation.element_id,
-            attr_name_list=["style.visibility"],
-        )
-        set_elem.append(cBhvr)
-        to_elem = p_sub(set_elem, "to")
-        p_sub(to_elem, "strVal", val="visible")
-
-        return self._xml.build_par_container_elem(
+        oracle = default_oracle()
+        filter_entry = oracle.filter_entry("wipe(right)")
+        par = oracle.instantiate(
+            "entr/filter_effect",
+            shape_id=animation.element_id,
             par_id=par_id,
             duration_ms=animation.duration_ms,
             delay_ms=animation.begin_ms,
-            child_element=set_elem,
-            preset_id=22,  # Wipe
-            preset_class="entr",
-            preset_subtype=subtype,
-            node_type="withEffect",
-            begin_triggers=animation.begin_triggers,
-            default_target_shape=animation.element_id,
-            effect_group_id=par_id,
+            PRESET_ID=filter_entry.entrance_preset_id,
+            PRESET_SUBTYPE=filter_entry.entrance_preset_subtype,
+            FILTER=filter_entry.value,
+            SET_BEHAVIOR_ID=behavior_id,
+            EFFECT_BEHAVIOR_ID=behavior_id + 1,
         )
+        if animation.begin_triggers:
+            outer_ctn = par.find(f"{{{NS_P}}}cTn")
+            if outer_ctn is not None:
+                existing = outer_ctn.find(f"{{{NS_P}}}stCondLst")
+                if existing is not None:
+                    outer_ctn.remove(existing)
+                st_cond_lst = p_elem("stCondLst")
+                outer_ctn.insert(0, st_cond_lst)
+                self._xml._append_begin_conditions(
+                    st_cond_lst=st_cond_lst,
+                    begin_triggers=animation.begin_triggers,
+                    fallback_delay_ms=animation.begin_ms,
+                    default_target_shape=animation.element_id,
+                )
+        return par
 
     def _map_attribute_name(self, attribute: str) -> str:
         """Map SVG attribute name to PowerPoint attribute name."""

@@ -20,6 +20,7 @@ from .constants import SVG2_ANIMATION_NS
 
 # Register custom namespace for stable prefix in serialization
 etree.register_namespace("svg2", SVG2_ANIMATION_NS)
+_BUILD_MODE_ATTR = f"{{{SVG2_ANIMATION_NS}}}bldMode"
 
 if TYPE_CHECKING:
     from svg2ooxml.drawingml.animation.id_allocator import TimingIDs
@@ -203,19 +204,28 @@ class AnimationXMLBuilder:
             bld_lst = p_sub(timing, "bldLst")
             for shape_id in animated_shape_ids:
                 p_sub(bld_lst, "bldP", spid=shape_id, grpId="0", animBg="1")
-            for shape_id, grp_id in effect_build_entries:
-                p_sub(bld_lst, "bldP", spid=shape_id, grpId=grp_id, animBg="1")
+            for shape_id, grp_id, build_mode in effect_build_entries:
+                p_sub(
+                    bld_lst,
+                    "bldP",
+                    spid=shape_id,
+                    grpId=grp_id,
+                    **self._build_list_attrs(build_mode),
+                )
+
+        self._strip_internal_metadata(timing)
 
         return timing
 
     def _collect_effect_build_entries(
         self,
         animation_elements: list[etree._Element],
-    ) -> list[tuple[str, str]]:
-        entries: list[tuple[str, str]] = []
+    ) -> list[tuple[str, str, str]]:
+        entries: list[tuple[str, str, str]] = []
         seen: set[tuple[str, str]] = set()
 
         for par in animation_elements:
+            build_mode = par.get(_BUILD_MODE_ATTR, "animBg")
             for elem in par.iter():
                 if elem.tag != f"{{{NS_P}}}cTn":
                     continue
@@ -234,9 +244,26 @@ class AnimationXMLBuilder:
                 if key in seen:
                     continue
                 seen.add(key)
-                entries.append(key)
+                entries.append((shape_id, entry_id, build_mode))
 
         return entries
+
+    @staticmethod
+    def _build_list_attrs(build_mode: str) -> dict[str, str]:
+        if build_mode == "paragraph":
+            return {"build": "p", "rev": "1"}
+        if build_mode == "allAtOnce":
+            return {"build": "allAtOnce", "animBg": "1"}
+        return {"animBg": "1"}
+
+    @staticmethod
+    def _strip_internal_metadata(root: etree._Element) -> None:
+        for elem in root.iter():
+            internal_attrs = [
+                name for name in elem.attrib if etree.QName(name).namespace == SVG2_ANIMATION_NS
+            ]
+            for name in internal_attrs:
+                del elem.attrib[name]
 
     def build_par_container_elem(
         self,
@@ -654,10 +681,7 @@ class AnimationXMLBuilder:
         if auto_reverse:
             ctn_attrs["autoRev"] = "1"
 
-        cTn = p_sub(cBhvr, "cTn", **ctn_attrs)
-
-        st_cond_lst = p_sub(cTn, "stCondLst")
-        p_sub(st_cond_lst, "cond", delay="0")
+        p_sub(cBhvr, "cTn", **ctn_attrs)
 
         tgt_el = p_sub(cBhvr, "tgtEl")
         p_sub(tgt_el, "spTgt", spid=target_shape)
@@ -708,7 +732,8 @@ class AnimationXMLBuilder:
         """Build ``<p:set>`` element with behavior core.
 
         The caller is responsible for appending ``<p:to>`` with the target
-        value after this method returns.
+        value after this method returns. Start conditions belong on an outer
+        timing container, not on the inner ``<p:cBhvr>/<p:cTn>`` behavior core.
         """
         set_elem = p_elem("set")
         cBhvr = self.build_behavior_core_elem(

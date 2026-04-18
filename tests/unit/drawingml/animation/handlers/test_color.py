@@ -158,7 +158,10 @@ class TestBuild:
         assert sp_tgt.get("spid") == "shape42"
 
     def test_from_color(self, handler: ColorAnimationHandler):
-        anim = make_color_animation(values=["#FF0000", "#00FF00"])
+        anim = make_color_animation(
+            values=["#FF0000", "#00FF00"],
+            timing=AnimationTiming(begin=0.0, duration=1.0, repeat_count=2),
+        )
         par = handler.build(anim, par_id=4, behavior_id=5)
         from_elem = par.find(f".//{{{NS_P}}}from")
         assert from_elem is not None
@@ -167,7 +170,10 @@ class TestBuild:
         assert srgb.get("val") == "FF0000"
 
     def test_to_color(self, handler: ColorAnimationHandler):
-        anim = make_color_animation(values=["#FF0000", "#00FF00"])
+        anim = make_color_animation(
+            values=["#FF0000", "#00FF00"],
+            timing=AnimationTiming(begin=0.0, duration=1.0, repeat_count=2),
+        )
         par = handler.build(anim, par_id=4, behavior_id=5)
         to_elem = par.find(f".//{{{NS_P}}}to")
         assert to_elem is not None
@@ -178,17 +184,111 @@ class TestBuild:
     def test_single_value_uses_same_for_from_and_to(
         self, handler: ColorAnimationHandler
     ):
-        anim = make_color_animation(values=["#FF0000"])
+        anim = make_color_animation(
+            values=["#FF0000"],
+            timing=AnimationTiming(begin=0.0, duration=1.0, repeat_count=2),
+        )
         par = handler.build(anim, par_id=4, behavior_id=5)
         from_srgb = par.find(f".//{{{NS_P}}}from/{{{NS_A}}}srgbClr")
         to_srgb = par.find(f".//{{{NS_P}}}to/{{{NS_A}}}srgbClr")
         assert from_srgb.get("val") == to_srgb.get("val")
 
-    def test_attribute_name_mapped_fill(self, handler: ColorAnimationHandler):
+    def test_simple_fill_color_uses_shape_fill_color_oracle(
+        self, handler: ColorAnimationHandler
+    ):
         anim = make_color_animation(target_attribute="fill")
         par = handler.build(anim, par_id=4, behavior_id=5)
-        attr_name = par.find(f".//{{{NS_P}}}attrName")
-        assert attr_name.text == "fill.color"
+        ctn = par.find(f"{{{NS_P}}}cTn")
+        assert ctn is not None
+        assert ctn.get("presetID") == "19"
+        children = par.findall(f"./{{{NS_P}}}cTn/{{{NS_P}}}childTnLst/*")
+        assert [etree.QName(child).localname for child in children] == [
+            "animClr",
+            "animClr",
+            "set",
+            "set",
+        ]
+        attr_names = [node.text for node in par.findall(f".//{{{NS_P}}}attrName")]
+        assert attr_names == ["style.color", "fillcolor", "fill.type", "fill.on"]
+        assert len(par.findall(f".//{{{NS_P}}}bg")) == 4
+
+    def test_text_fill_color_uses_text_color_oracle(
+        self, handler: ColorAnimationHandler
+    ):
+        anim = make_color_animation(
+            target_attribute="fill",
+            raw_attributes={"svg2ooxml_target_tag": "text"},
+        )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        ctn = par.find(f"{{{NS_P}}}cTn")
+        assert ctn is not None
+        assert ctn.get("presetID") == "3"
+        assert ctn.get("presetSubtype") == "2"
+        assert par.find(f".//{{{NS_P}}}iterate") is not None
+        assert par.find(f".//{{{NS_P}}}bg") is None
+        attr_names = [node.text for node in par.findall(f".//{{{NS_P}}}attrName")]
+        assert attr_names == ["style.color"]
+
+    def test_text_round_trip_fill_uses_color_pulse_oracle(
+        self, handler: ColorAnimationHandler
+    ):
+        anim = make_color_animation(
+            target_attribute="fill",
+            values=["#000000", "#FF0000", "#000000"],
+            timing=AnimationTiming(begin=0.25, duration=2.0),
+            raw_attributes={"svg2ooxml_target_tag": "text"},
+        )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        ctn = par.find(f"{{{NS_P}}}cTn")
+        assert ctn is not None
+        assert ctn.get("presetID") == "27"
+        assert ctn.get("presetClass") == "emph"
+        assert ctn.get("dur") == "2000"
+        assert par.find(f".//{{{NS_P}}}iterate") is not None
+        children = par.findall(f"./{{{NS_P}}}cTn/{{{NS_P}}}childTnLst/*")
+        assert [etree.QName(child).localname for child in children] == [
+            "animClr",
+            "animClr",
+            "set",
+            "set",
+        ]
+        assert len(par.findall(f".//{{{NS_P}}}txEl")) == 4
+        inner_ctns = par.findall(f".//{{{NS_P}}}cBhvr/{{{NS_P}}}cTn")
+        assert [inner.get("dur") for inner in inner_ctns] == ["1000"] * 4
+        assert all(inner.get("autoRev") == "1" for inner in inner_ctns)
+        pulse = par.find(f".//{{{NS_P}}}to//{{{NS_A}}}srgbClr")
+        assert pulse is not None
+        assert pulse.get("val") == "FF0000"
+
+    def test_discrete_text_fill_does_not_use_text_color_oracle(
+        self, handler: ColorAnimationHandler
+    ):
+        anim = make_color_animation(
+            target_attribute="fill",
+            values=["#000000", "#FF0000"],
+            calc_mode=CalcMode.DISCRETE,
+            raw_attributes={"svg2ooxml_target_tag": "text"},
+        )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        ctn = par.find(f"{{{NS_P}}}cTn")
+        assert ctn is not None
+        assert ctn.get("presetID") != "3"
+        assert par.find(f".//{{{NS_P}}}iterate") is None
+        assert par.findall(f".//{{{NS_P}}}set")
+        assert not par.findall(f".//{{{NS_P}}}animClr")
+
+    def test_non_text_color_property_does_not_use_text_color_oracle(
+        self, handler: ColorAnimationHandler
+    ):
+        anim = make_color_animation(
+            target_attribute="color",
+            raw_attributes={"svg2ooxml_target_tag": "rect"},
+        )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        ctn = par.find(f"{{{NS_P}}}cTn")
+        assert ctn is not None
+        assert ctn.get("presetID") == "7"
+        assert par.find(f".//{{{NS_P}}}txEl") is None
 
     def test_color_behavior_overrides_child_style(
         self, handler: ColorAnimationHandler
@@ -227,7 +327,7 @@ class TestBuild:
         par = handler.build(anim, par_id=4, behavior_id=5)
         ctn = par.find(f"{{{NS_P}}}cTn")
         assert ctn.get("presetClass") == "emph"
-        assert ctn.get("presetID") == "7"
+        assert ctn.get("presetID") == "19"
 
     def test_empty_values_rejected_by_ir(self):
         """AnimationDefinition validates values is non-empty at construction."""

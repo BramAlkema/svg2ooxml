@@ -3,144 +3,134 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>svg2ooxml - SVG to Google Slides Converter</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            line-height: 1.6;
-            color: #333;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-        }
-        .container {
-            max-width: 800px;
-            margin: 0 auto;
-            padding: 40px 20px;
-        }
-        header {
-            background: white;
-            padding: 40px;
-            border-radius: 12px;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
-            margin-bottom: 30px;
-            text-align: center;
-        }
-        h1 {
-            color: #667eea;
-            font-size: 2.5em;
-            margin-bottom: 10px;
-        }
-        .tagline {
-            color: #666;
-            font-size: 1.2em;
-            margin-bottom: 30px;
-        }
-        .features {
-            background: white;
-            padding: 40px;
-            border-radius: 12px;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
-            margin-bottom: 30px;
-        }
-        .feature {
-            margin-bottom: 25px;
-        }
-        .feature h3 {
-            color: #667eea;
-            margin-bottom: 10px;
-            font-size: 1.3em;
-        }
-        .feature p {
-            color: #666;
-            line-height: 1.8;
-        }
-        .cta {
-            background: #667eea;
-            color: white;
-            padding: 15px 40px;
-            border-radius: 8px;
-            text-decoration: none;
-            display: inline-block;
-            font-weight: bold;
-            transition: background 0.3s;
-        }
-        .cta:hover {
-            background: #764ba2;
-        }
-        footer {
-            background: white;
-            padding: 30px 40px;
-            border-radius: 12px;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
-            text-align: center;
-        }
-        footer a {
-            color: #667eea;
-            text-decoration: none;
-            margin: 0 15px;
-            font-weight: 500;
-        }
-        footer a:hover {
-            text-decoration: underline;
-        }
-        .logo {
-            font-weight: bold;
-            font-size: 1.2em;
-            color: #667eea;
-        }
-    </style>
+    <title>svg2ooxml - SVG to PowerPoint Converter</title>
+    <link rel="stylesheet" href="site.css">
 </head>
 <body>
-    <div class="container">
-        <header>
-            <div class="logo">svg2ooxml</div>
-            <h1>SVG to Google Slides</h1>
-            <p class="tagline">Convert your SVG designs to editable Google Slides presentations with high fidelity</p>
-            <a href="https://github.com/BramAlkema/svg2ooxml" class="cta">View on GitHub</a>
-        </header>
+    <div class="topbar">
+        <div class="shell topbar-inner">
+            <a class="brand" href="index.html">
+                <img src="../../assets/logo.png" alt="svg2ooxml logo">
+                <span>svg2ooxml</span>
+            </a>
+            <nav class="nav">
+                <a href="#start">Start Here</a>
+                <a href="#release">Release Focus</a>
+                <a href="#links">Links</a>
+            </nav>
+        </div>
+    </div>
 
-        <div class="features">
-            <div class="feature">
-                <h3>High-Fidelity Conversion</h3>
-                <p>Preserve your SVG designs with accurate shape, text, and filter rendering in Google Slides format.</p>
+    <main>
+        <section class="hero">
+            <div class="shell hero-grid">
+                <div>
+                    <div class="eyebrow">SVG to PowerPoint</div>
+                    <h1>Editable PowerPoint output from SVG.</h1>
+                    <p class="lead">
+                        Convert SVG markup into native DrawingML shapes, text,
+                        gradients, filters, and animation timing without
+                        automating Office.
+                    </p>
+                    <div class="actions">
+                        <a class="button" href="https://pypi.org/project/svg2ooxml/">PyPI</a>
+                        <a class="button-secondary" href="https://github.com/BramAlkema/svg2ooxml">GitHub</a>
+                        <a class="button-secondary" href="https://github.com/BramAlkema/svg2ooxml/blob/main/docs/README.md">Docs</a>
+                    </div>
+                    <ul class="hero-list">
+                        <li>converter package and runtime live in <code>svg2ooxml</code></li>
+                        <li>empirical PowerPoint behavior evidence lives in <a href="https://github.com/BramAlkema/openxml-audit">openxml-audit</a></li>
+                        <li>release stream is currently focused on animation fidelity, oracleization, and proof-deck tooling</li>
+                    </ul>
+                </div>
+                <aside class="panel hero-panel">
+                    <img src="../../assets/logo.png" alt="svg2ooxml mark">
+                    <h2>Current package story</h2>
+                    <ul class="compact-list">
+                        <li>published on PyPI as <code>svg2ooxml</code></li>
+                        <li>native PowerPoint output with editable-first fallbacks</li>
+                        <li>converter-only public surface with app integrations split out</li>
+                        <li>docs, tasks, and ADRs kept in the repository instead of a separate marketing site</li>
+                    </ul>
+                </aside>
             </div>
+        </section>
 
-            <div class="feature">
-                <h3>Figma Plugin Integration</h3>
-                <p>Export directly from Figma to Google Slides with our browser-based plugin. No server uploads required.</p>
+        <section class="section" id="start">
+            <div class="shell">
+                <div class="section-heading">
+                    <h2>Start Here</h2>
+                    <p>Use the package, docs, and validation corpus through the path that matches the work.</p>
+                </div>
+                <div class="grid grid-3">
+                    <div class="tile">
+                        <h3>Install</h3>
+                        <p>Use the published package for local conversion and tooling.</p>
+                        <pre class="code-block"><code>pip install svg2ooxml</code></pre>
+                    </div>
+                    <div class="tile">
+                        <h3>Read The Docs</h3>
+                        <p><a href="https://github.com/BramAlkema/svg2ooxml/blob/main/docs/README.md">Documentation guide</a> for architecture, specs, tasks, and test flows.</p>
+                    </div>
+                    <div class="tile">
+                        <h3>Check Release Notes</h3>
+                        <p><a href="https://github.com/BramAlkema/svg2ooxml/blob/main/CHANGELOG.md">Changelog</a> for converter-facing package changes.</p>
+                    </div>
+                </div>
             </div>
+        </section>
 
-            <div class="feature">
-                <h3>Secure Authentication</h3>
-                <p>Sign in with your Google account using Firebase Authentication. Your credentials are encrypted and never stored permanently.</p>
+        <section class="section" id="release">
+            <div class="shell">
+                <div class="section-heading">
+                    <h2>Recent Release Focus</h2>
+                    <p>The current release stream is centered on PowerPoint animation fidelity rather than broad new product surface area.</p>
+                </div>
+                <div class="grid grid-3">
+                    <div class="tile">
+                        <h3>1.0.0</h3>
+                        <p>converter boundary cleanup, Python 3.14 standardization, separated app surfaces, and a reproducible render lane</p>
+                    </div>
+                    <div class="tile">
+                        <h3>0.6.8</h3>
+                        <p>animation oracle normalization, compound native effects, SSOT vocabularies, and dead-path validation</p>
+                    </div>
+                    <div class="tile">
+                        <h3>0.6.7</h3>
+                        <p>SMIL timing plumbing, keyPoints handling, and tighter mapping between SVG timing semantics and PresentationML</p>
+                    </div>
+                </div>
             </div>
+        </section>
 
-            <div class="feature">
-                <h3>Advanced Filter Support</h3>
-                <p>Supporting SVG filters including drop shadows, blurs, lighting effects, and more through our resvg rendering pipeline.</p>
+        <section class="section" id="links">
+            <div class="shell split">
+                <div class="detail">
+                    <h2>Repository Links</h2>
+                    <p><a href="https://github.com/BramAlkema/svg2ooxml">GitHub repository</a></p>
+                    <p><a href="https://pypi.org/project/svg2ooxml/">PyPI package</a></p>
+                    <p><a href="https://github.com/BramAlkema/svg2ooxml/blob/main/docs/testing.md">Testing guide</a></p>
+                    <p><a href="https://github.com/BramAlkema/svg2ooxml/blob/main/docs/internals/animation-documentation-map.md">Animation documentation map</a></p>
+                    <p><a href="https://github.com/BramAlkema/svg2ooxml/blob/main/docs/ROADMAP.md">Roadmap</a></p>
+                </div>
+                <div class="detail">
+                    <h2>Boundary</h2>
+                    <p><a href="https://github.com/BramAlkema/openxml-audit">openxml-audit</a> holds authored control decks, round-tripped XML evidence, durable oracle material, and related validation research.</p>
+                    <p><a href="https://github.com/BramAlkema/svg2ooxml/tree/main/apps/figma2gslides">figma2gslides</a> holds the extracted Figma and Google Slides app surface.</p>
+                </div>
             </div>
+        </section>
+    </main>
 
-            <div class="feature">
-                <h3>Open Source</h3>
-                <p>Built with Python, FastAPI, and modern web technologies. Available on GitHub under an open source license.</p>
+    <footer class="footer">
+        <div class="shell footer-inner">
+            <div class="muted">svg2ooxml</div>
+            <div class="footer-links">
+                <a href="https://github.com/BramAlkema/svg2ooxml">GitHub</a>
+                <a href="https://pypi.org/project/svg2ooxml/">PyPI</a>
+                <a href="https://github.com/BramAlkema/svg2ooxml/blob/main/docs/README.md">Docs</a>
             </div>
         </div>
-
-        <footer>
-            <p>
-                <a href="/privacy.html">Privacy Policy</a> |
-                <a href="/terms.html">Terms of Service</a> |
-                <a href="https://github.com/BramAlkema/svg2ooxml">GitHub</a>
-            </p>
-            <p style="margin-top: 20px; color: #999; font-size: 0.9em;">
-                &copy; 2025 svg2ooxml. All rights reserved.
-            </p>
-        </footer>
-    </div>
+    </footer>
 </body>
 </html>

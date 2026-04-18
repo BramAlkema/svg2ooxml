@@ -15,7 +15,9 @@ from svg2ooxml.drawingml.animation.handlers import (
     SetAnimationHandler,
     TransformAnimationHandler,
 )
+from svg2ooxml.drawingml.animation.native_fragment import NativeFragment
 from svg2ooxml.drawingml.animation.writer import DrawingMLAnimationWriter
+from svg2ooxml.drawingml.xml_builder import NS_P, p_elem, to_string
 from svg2ooxml.ir.animation import (
     AnimationDefinition,
     AnimationTiming,
@@ -187,9 +189,10 @@ class TestFindHandler:
 class TestBuildAnimation:
     def test_returns_element_for_valid_animation(self, writer):
         anim = _opacity_anim()
-        elem, meta = writer._build_animation(anim, {}, par_id=4, behavior_id=5)
-        assert elem is not None
+        fragment, meta = writer._build_animation(anim, {}, par_id=4, behavior_id=5)
+        assert fragment is not None
         assert meta is None
+        assert isinstance(fragment, NativeFragment)
 
     def test_returns_none_for_skipped_animation(self, writer):
         # Create an animation with key_splines that would be skipped
@@ -207,11 +210,11 @@ class TestBuildAnimation:
             key_splines=[[0, 0, 1, 1]],
             calc_mode=CalcMode.SPLINE,
         )
-        elem, meta = writer._build_animation(
+        fragment, meta = writer._build_animation(
             anim, {"max_spline_error": 0.0001}, par_id=4, behavior_id=5
         )
         # May or may not skip — just verify the return types
-        if elem is None:
+        if fragment is None:
             assert meta is not None
             assert "reason" in meta
 
@@ -226,12 +229,45 @@ class TestBuildAnimation:
 
     def test_element_contains_correct_ids(self, writer):
         anim = _opacity_anim()
-        elem, _ = writer._build_animation(anim, {}, par_id=42, behavior_id=43)
-        from svg2ooxml.drawingml.xml_builder import to_string
+        fragment, _ = writer._build_animation(anim, {}, par_id=42, behavior_id=43)
 
-        xml = to_string(elem)
+        xml = to_string(fragment.par)
         assert 'id="42"' in xml
         assert 'id="43"' in xml
+
+    def test_wraps_legacy_handler_par_into_native_fragment(self, writer):
+        par = p_elem("par")
+        ctn = p_elem("cTn", id="4", dur="1000", fill="hold")
+        par.append(ctn)
+
+        fragment = writer._coerce_native_fragment(par)
+
+        assert isinstance(fragment, NativeFragment)
+        assert fragment.par is par
+        assert fragment.source == "legacy-handler"
+
+    def test_accepts_native_fragment_from_handler(self, writer):
+        anim = _opacity_anim()
+        par = p_elem("par")
+        ctn = p_elem("cTn", id="4", dur="1000", fill="hold")
+        st_cond_lst = p_elem("stCondLst")
+        st_cond_lst.append(p_elem("cond", delay="0"))
+        child_tn_lst = p_elem("childTnLst")
+        ctn.append(st_cond_lst)
+        ctn.append(child_tn_lst)
+        par.append(ctn)
+        native_fragment = NativeFragment(
+            par=par,
+            source="test-plan",
+            strategy="explicit-fragment",
+        )
+
+        with patch.object(writer._handlers[0], "build", return_value=native_fragment):
+            fragment, meta = writer._build_animation(anim, {}, par_id=4, behavior_id=5)
+
+        assert meta is None
+        assert fragment is native_fragment
+        assert fragment.source == "test-plan"
 
 
 # ------------------------------------------------------------------ #

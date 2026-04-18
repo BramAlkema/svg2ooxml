@@ -1,8 +1,15 @@
 # Python environments
 .venv/
+.venv-*/
 .venv_*/
+.venv[0-9]*/
 .venv3*/
+venv/
+ENV/
 __pycache__/
+.tox/
+.nox/
+.hypothesis/
 
 # Tooling caches and coverage
 .pytest_cache/
@@ -10,24 +17,25 @@ __pycache__/
 .coverage
 .benchmarks/
 .mypy_cache/
-
-# Claude Code agent config and memory
-.claude/agents/
-.claude/agent-memory/
+build/
+dist/
+*.egg-info/
+pip-wheel-metadata/
 
 # Editor / OS artefacts
 .DS_Store
 *.swp
 **/*.bak
+.idea/
+.vscode/
 
 # Local build and temp dirs
+.firebase/
 tmp/
 .tmp_render/
 .tmp_compare/
 .visual_server/
 .visual_tmp/
-/svg2ooxml.egg-info/
-dist/
 reports/
 working_tmp/
 tests/corpus/output/

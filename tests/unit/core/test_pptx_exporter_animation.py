@@ -123,8 +123,18 @@ def test_render_svg_emits_animation_metadata() -> None:
     assert animation_meta["definitions"][0]["element_id"] == "rect1"
     assert animation_meta["definitions"][0]["native_match"]["level"] == "exact-native"
     assert animation_meta["definitions"][0]["native_match"]["reason"] == "opacity-authored-fade"
+    assert animation_meta["definitions"][0]["native_match"]["required_evidence_tiers"] == [
+        "schema-valid",
+        "loadable",
+        "slideshow-verified",
+    ]
     assert animation_meta["native_match_summary"]["total"] == 1
     assert animation_meta["native_match_summary"]["by_level"]["exact-native"] == 1
+    assert animation_meta["native_match_summary"]["by_required_evidence"] == {
+        "loadable": 1,
+        "schema-valid": 1,
+        "slideshow-verified": 1,
+    }
     assert animation_meta["summary"]["total_animations"] == 1
     assert animation_meta["timeline"]
 
@@ -193,6 +203,26 @@ def test_render_svg_emits_native_repeat_restart_and_end_conditions() -> None:
     assert "end-condition-native" in native_match["limitations"]
     assert "repeat-duration-native" in native_match["limitations"]
     assert "restart-native" in native_match["limitations"]
+
+
+def test_fractional_repeat_count_emits_repeat_duration_cap() -> None:
+    svg = """
+    <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">
+      <rect id="rect1" width="10" height="10" fill="#000">
+        <animate attributeName="x" values="0;10" begin="0s" dur="2s" repeatCount="2.5" fill="freeze"/>
+      </rect>
+    </svg>
+    """
+
+    render_result, scene, _ = _render(svg)
+
+    assert 'repeatCount="3000"' in render_result.slide_xml
+    assert 'repeatDur="5000"' in render_result.slide_xml
+    assert 'repeatCount="0"' not in render_result.slide_xml
+
+    timing = scene.metadata["animation"]["definitions"][0]["timing"]
+    assert timing["repeat_count"] == 3
+    assert timing["repeat_duration"] == pytest.approx(5.0)
 
 
 def test_use_inherits_defs_owned_animations() -> None:
@@ -737,6 +767,25 @@ def test_begin_animation_id_end_remaps_to_owning_shape() -> None:
     assert '<p:spTgt spid="2"/>' in render_result.slide_xml
 
 
+def test_end_animation_id_end_remaps_to_owning_shape() -> None:
+    svg = """
+    <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">
+      <rect id="rect1" width="10" height="10" fill="#000">
+        <animate id="grow" attributeName="width" values="10;20" begin="0s" dur="1s"/>
+        <animate attributeName="opacity" values="1;0" begin="0s" end="grow.end+0.5s" dur="10s"/>
+      </rect>
+    </svg>
+    """
+
+    render_result, _, _ = _render(svg)
+
+    assert "<p:endCondLst>" in render_result.slide_xml
+    assert 'evt="onEnd"' in render_result.slide_xml
+    assert 'delay="500"' in render_result.slide_xml
+    assert '<p:spTgt spid="2"/>' in render_result.slide_xml
+    assert '<p:spTgt spid="grow"/>' not in render_result.slide_xml
+
+
 def test_begin_indefinite_remaps_to_bookmark_button_click_trigger() -> None:
     svg = """
     <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="100" height="100">
@@ -818,6 +867,91 @@ def test_begin_indefinite_bookmark_trigger_preserves_chained_begin() -> None:
     assert not skipped
 
 
+@pytest.mark.parametrize(
+    ("label", "timing_attr", "trigger_expr", "expected_skip_reason", "expected_native_reason"),
+    [
+        (
+            "access_key_begin",
+            "begin",
+            "accessKey(a)",
+            "unsupported_begin_access_key",
+            "begin-access-key-unsupported",
+        ),
+        (
+            "wallclock_begin",
+            "begin",
+            "wallclock(2000-01-01T00:00:00Z)",
+            "unsupported_begin_wallclock",
+            "begin-wallclock-unsupported",
+        ),
+        (
+            "dom_event_begin",
+            "begin",
+            "r.mouseover+250ms",
+            "unsupported_begin_event",
+            "begin-dom-event-unsupported",
+        ),
+        (
+            "access_key_end",
+            "end",
+            "accessKey(a)",
+            "unsupported_end_access_key",
+            "end-access_key-unsupported",
+        ),
+        (
+            "wallclock_end",
+            "end",
+            "wallclock(2000-01-01T00:00:00Z)",
+            "unsupported_end_wallclock",
+            "end-wallclock-unsupported",
+        ),
+        (
+            "dom_event_end",
+            "end",
+            "r.mouseover+250ms",
+            "unsupported_end_event",
+            "end-event-unsupported",
+        ),
+    ],
+)
+def test_unsupported_runtime_triggers_are_explicitly_skipped(
+    label: str,
+    timing_attr: str,
+    trigger_expr: str,
+    expected_skip_reason: str,
+    expected_native_reason: str,
+) -> None:
+    if timing_attr == "begin":
+        timing_xml = f'begin="{trigger_expr}" dur="1s"'
+    else:
+        timing_xml = f'begin="0s" end="{trigger_expr}" dur="1s"'
+
+    svg = f"""
+    <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">
+      <rect id="r" width="10" height="10" fill="#000">
+        <animate attributeName="x" values="0;10" {timing_xml}/>
+      </rect>
+    </svg>
+    """
+
+    render_result, scene, tracer = _render(svg)
+
+    assert "<p:timing" not in render_result.slide_xml, label
+    skipped = [
+        event
+        for event in tracer.report().stage_events
+        if event.stage == "animation" and event.action == "fragment_skipped"
+    ]
+    assert any(
+        event.metadata.get("reason") == expected_skip_reason
+        and event.metadata.get("attribute") == "x"
+        for event in skipped
+    ), label
+
+    native_match = scene.metadata["animation"]["definitions"][0]["native_match"]
+    assert native_match["reason"] == expected_native_reason, label
+
+
 def test_skew_transform_reports_specific_reason_codes() -> None:
     svg = """
     <svg xmlns="http://www.w3.org/2000/svg" width="100" height="100">
@@ -843,27 +977,52 @@ def test_skew_transform_reports_specific_reason_codes() -> None:
     assert "no_handler_found" not in reasons
 
 
-def test_color_property_animation_routes_to_text_color() -> None:
-    """The CSS ``color`` property now routes to ``emph/text_color`` via the
-    color handler instead of being skipped as unsupported."""
+def test_text_fill_animation_routes_to_text_color() -> None:
+    """Text color animations should use the text-color oracle, not shape fill."""
     svg = """
     <svg xmlns="http://www.w3.org/2000/svg" width="100" height="100">
-      <rect id="rect1" color="black" fill="blue" x="10" y="10" width="60" height="40">
-        <animateColor attributeName="color" from="blue" to="cyan" begin="0s" dur="5s" fill="freeze"/>
-      </rect>
+      <text id="headline" x="10" y="40" fill="black">
+        Hello
+        <animateColor attributeName="fill" from="black" to="cyan" begin="0s" dur="5s" fill="freeze"/>
+      </text>
     </svg>
     """
 
-    _, _, tracer = _render(svg)
+    render_result, _, tracer = _render(svg)
 
     skipped = [
         event
         for event in tracer.report().stage_events
         if event.stage == "animation" and event.action == "fragment_skipped"
     ]
-    reasons = {event.metadata.get("reason") for event in skipped}
-    assert "unsupported_attribute_color" not in reasons
-    assert "no_handler_found" not in reasons
+    assert not skipped
+    assert 'presetID="3"' in render_result.slide_xml
+    assert "<p:attrName>style.color</p:attrName>" in render_result.slide_xml
+    assert "<p:iterate type=\"lt\">" in render_result.slide_xml
+
+
+def test_text_fill_round_trip_routes_to_color_pulse() -> None:
+    svg = """
+    <svg xmlns="http://www.w3.org/2000/svg" width="120" height="80">
+      <text id="headline" x="10" y="40" fill="black">
+        Hello
+        <animate attributeName="fill" values="black;red;black" begin="0s" dur="2s"/>
+      </text>
+    </svg>
+    """
+
+    render_result, _, tracer = _render(svg)
+
+    skipped = [
+        event
+        for event in tracer.report().stage_events
+        if event.stage == "animation" and event.action == "fragment_skipped"
+    ]
+    assert not skipped
+    assert 'presetID="27"' in render_result.slide_xml
+    assert 'build="p"' in render_result.slide_xml
+    assert 'rev="1"' in render_result.slide_xml
+    assert 'autoRev="1"' in render_result.slide_xml
 
 
 def test_numeric_attribute_animation_emits_anim() -> None:
@@ -1135,7 +1294,7 @@ def test_use_alias_x_and_y_motion_collapse_into_single_diagonal_path() -> None:
     )
 
 
-def test_color_animation_emits_animclr() -> None:
+def test_shape_fill_color_animation_uses_fill_color_oracle() -> None:
     svg = """
     <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">
       <rect id="rect1" width="10" height="10" fill="#000">
@@ -1147,8 +1306,10 @@ def test_color_animation_emits_animclr() -> None:
     render_result, _, _ = _render(svg)
 
     assert "<p:animClr" in render_result.slide_xml
-    assert 'a:srgbClr val="FF0000"' in render_result.slide_xml
+    assert 'presetID="19"' in render_result.slide_xml
     assert 'a:srgbClr val="00FF00"' in render_result.slide_xml
+    assert "<p:attrName>fillcolor</p:attrName>" in render_result.slide_xml
+    assert 'build="allAtOnce"' in render_result.slide_xml
 
 
 def test_set_animation_emits_set_element() -> None:
@@ -1207,6 +1368,242 @@ def test_animate_elem_31_t_rewrites_display_to_native_visibility() -> None:
     assert "visibility" not in targets
 
 
+def test_display_set_timing_base_rewrites_to_native_visibility_anchor() -> None:
+    svg = """
+    <svg xmlns="http://www.w3.org/2000/svg" width="100" height="100">
+      <g id="setTwo">
+        <set id="syncBase" attributeName="display" to="inline" begin="0s" dur="indefinite"/>
+        <rect id="child" x="0" y="0" width="10" height="10" fill="red">
+          <set attributeName="x" to="34" begin="syncBase.begin + 1s" dur="1s"/>
+        </rect>
+      </g>
+    </svg>
+    """
+
+    render_result, scene, tracer = _render(svg)
+
+    assert "<p:attrName>display</p:attrName>" not in render_result.slide_xml
+    assert 'evt="onBegin"' in render_result.slide_xml
+    assert 'delay="1000"' in render_result.slide_xml
+    assert "<p:attrName>style.visibility</p:attrName>" in render_result.slide_xml
+    skipped = [
+        event
+        for event in tracer.report().stage_events
+        if event.stage == "animation" and event.action == "fragment_skipped"
+    ]
+    assert not skipped
+    animation_defs = scene.metadata["animation"]["definitions"]
+    attrs = {definition["target_attribute"] for definition in animation_defs}
+    assert "display" not in attrs
+
+
+def test_display_set_repeat_timing_base_expands_integer_repeat_begin_triggers() -> None:
+    svg = """
+    <svg xmlns="http://www.w3.org/2000/svg" width="100" height="100">
+      <g id="setThree">
+        <set id="repeatBase" attributeName="display" to="inline" begin="0s" dur="1s" repeatDur="indefinite"/>
+        <rect id="child" x="0" y="0" width="10" height="10" fill="red">
+          <set attributeName="x" to="34" begin="repeatBase.repeat(1); repeatBase.repeat(4)" dur="1s"/>
+        </rect>
+      </g>
+    </svg>
+    """
+
+    render_result, scene, tracer = _render(svg)
+
+    assert "<p:attrName>display</p:attrName>" not in render_result.slide_xml
+    assert 'delay="1000"' in render_result.slide_xml
+    assert 'delay="4000"' in render_result.slide_xml
+
+    skipped = [
+        event
+        for event in tracer.report().stage_events
+        if event.stage == "animation" and event.action == "fragment_skipped"
+    ]
+    assert not any(
+        event.metadata.get("reason") == "unsupported_begin_element_repeat"
+        for event in skipped
+    )
+
+    animation_defs = scene.metadata["animation"]["definitions"]
+    x_defs = [
+        definition
+        for definition in animation_defs
+        if definition["target_attribute"] == "x"
+    ]
+    assert len(x_defs) == 1
+    timing = x_defs[0]["timing"]
+    assert timing["begin"] == pytest.approx(1.0)
+    assert [trigger["trigger_type"] for trigger in timing["begin_triggers"]] == [
+        "time_offset",
+        "time_offset",
+    ]
+    assert [trigger["delay_seconds"] for trigger in timing["begin_triggers"]] == pytest.approx([1.0, 4.0])
+    assert x_defs[0]["raw_attributes"]["svg2ooxml_repeat_trigger_expanded"] == "true"
+
+
+def test_visibility_rewrite_respects_repeat_expanded_begin_timing() -> None:
+    svg = """
+    <svg xmlns="http://www.w3.org/2000/svg" width="100" height="100">
+      <rect id="child" x="0" y="0" width="10" height="10" fill="red">
+        <animate id="repeatBase" attributeName="opacity" values="1;0.5"
+                 begin="0s" dur="1s" repeatDur="indefinite"/>
+        <set attributeName="display" to="none" begin="repeatBase.repeat(2)" dur="indefinite"/>
+      </rect>
+    </svg>
+    """
+
+    render_result, scene, tracer = _render(svg)
+
+    assert "<p:attrName>display</p:attrName>" not in render_result.slide_xml
+    assert "<p:attrName>style.visibility</p:attrName>" in render_result.slide_xml
+    assert 'delay="2000"' in render_result.slide_xml
+
+    skipped = [
+        event
+        for event in tracer.report().stage_events
+        if event.stage == "animation" and event.action == "fragment_skipped"
+    ]
+    assert not any(
+        event.metadata.get("reason") == "unsupported_begin_element_repeat"
+        for event in skipped
+    )
+
+    animation_defs = scene.metadata["animation"]["definitions"]
+    visibility_defs = [
+        definition
+        for definition in animation_defs
+        if definition["target_attribute"] == "style.visibility"
+    ]
+    assert len(visibility_defs) == 1
+    timing = visibility_defs[0]["timing"]
+    assert timing["begin"] == pytest.approx(2.0)
+    assert visibility_defs[0]["values"] == ["hidden"]
+
+
+def test_display_set_repeat_timing_base_expands_integer_repeat_end_triggers() -> None:
+    svg = """
+    <svg xmlns="http://www.w3.org/2000/svg" width="100" height="100">
+      <g id="setFour">
+        <set id="repeatBase" attributeName="display" to="inline" begin="0s" dur="1s" repeatDur="indefinite"/>
+        <rect id="child" x="0" y="0" width="10" height="10" fill="red">
+          <animate attributeName="opacity" values="1;0" begin="0s"
+                   end="repeatBase.repeat(2); repeatBase.repeat(5)"
+                   dur="10s"/>
+        </rect>
+      </g>
+    </svg>
+    """
+
+    render_result, scene, tracer = _render(svg)
+
+    assert "<p:endCondLst>" in render_result.slide_xml
+    assert 'delay="2000"' in render_result.slide_xml
+    assert 'delay="5000"' in render_result.slide_xml
+
+    skipped = [
+        event
+        for event in tracer.report().stage_events
+        if event.stage == "animation" and event.action == "fragment_skipped"
+    ]
+    assert not any(
+        event.metadata.get("reason") == "unsupported_end_element_repeat"
+        for event in skipped
+    )
+
+    animation_defs = scene.metadata["animation"]["definitions"]
+    opacity_defs = [
+        definition
+        for definition in animation_defs
+        if definition["target_attribute"] == "opacity"
+    ]
+    assert len(opacity_defs) == 1
+    end_triggers = opacity_defs[0]["timing"]["end_triggers"]
+    assert [trigger["trigger_type"] for trigger in end_triggers] == [
+        "time_offset",
+        "time_offset",
+    ]
+    assert [trigger["delay_seconds"] for trigger in end_triggers] == pytest.approx([2.0, 5.0])
+    assert opacity_defs[0]["raw_attributes"]["svg2ooxml_repeat_trigger_expanded"] == "true"
+
+
+def test_repeat_end_triggers_are_relative_to_dependent_begin_time() -> None:
+    svg = """
+    <svg xmlns="http://www.w3.org/2000/svg" width="100" height="100">
+      <rect id="child" x="0" y="0" width="10" height="10" fill="red">
+        <animate id="repeatBase" attributeName="x" values="0;10"
+                 begin="0s" dur="2s" repeatDur="indefinite"/>
+        <animate attributeName="opacity" values="1;0" begin="1s"
+                 end="repeatBase.repeat(2)" dur="10s"/>
+      </rect>
+    </svg>
+    """
+
+    render_result, scene, tracer = _render(svg)
+
+    assert "<p:endCondLst>" in render_result.slide_xml
+    assert 'delay="3000"' in render_result.slide_xml
+
+    skipped = [
+        event
+        for event in tracer.report().stage_events
+        if event.stage == "animation" and event.action == "fragment_skipped"
+    ]
+    assert not any(
+        event.metadata.get("reason") == "unsupported_end_element_repeat"
+        for event in skipped
+    )
+
+    animation_defs = scene.metadata["animation"]["definitions"]
+    opacity_defs = [
+        definition
+        for definition in animation_defs
+        if definition["target_attribute"] == "opacity"
+    ]
+    assert len(opacity_defs) == 1
+    end_triggers = opacity_defs[0]["timing"]["end_triggers"]
+    assert [trigger["trigger_type"] for trigger in end_triggers] == ["time_offset"]
+    assert [trigger["delay_seconds"] for trigger in end_triggers] == pytest.approx([3.0])
+
+
+def test_fractional_repeat_begin_stays_metadata_only() -> None:
+    svg = """
+    <svg xmlns="http://www.w3.org/2000/svg" width="100" height="100">
+      <g id="setFive">
+        <set id="repeatBase" attributeName="display" to="inline" begin="0s" dur="1s" repeatDur="indefinite"/>
+        <rect id="child" x="0" y="0" width="10" height="10" fill="red">
+          <set attributeName="x" to="34" begin="repeatBase.repeat(1/4)" dur="1s"/>
+        </rect>
+      </g>
+    </svg>
+    """
+
+    _, scene, tracer = _render(svg)
+
+    skipped = [
+        event
+        for event in tracer.report().stage_events
+        if event.stage == "animation" and event.action == "fragment_skipped"
+    ]
+    assert any(
+        event.metadata.get("reason") == "unsupported_begin_element_repeat"
+        and event.metadata.get("attribute") == "x"
+        for event in skipped
+    )
+
+    animation_defs = scene.metadata["animation"]["definitions"]
+    x_defs = [
+        definition
+        for definition in animation_defs
+        if definition["target_attribute"] == "x"
+    ]
+    assert len(x_defs) == 1
+    timing = x_defs[0]["timing"]
+    assert timing["begin_triggers"][0]["trigger_type"] == "element_repeat"
+    assert timing["begin_triggers"][0]["repeat_iteration"] == "1/4"
+    assert x_defs[0]["native_match"]["reason"] == "begin-repeat-event-not-wired"
+
+
 def test_set_animation_normalizes_numeric_value() -> None:
     svg = """
     <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">
@@ -1259,6 +1656,27 @@ def test_numeric_discrete_calc_mode_emits_set_segments() -> None:
 
     assert render_result.slide_xml.count("<p:set>") >= 3
     assert "<p:anim " not in render_result.slide_xml or "calcmode" not in render_result.slide_xml
+    assert "<p:set><p:cBhvr><p:cTn" not in render_result.slide_xml.replace("\n", "").replace(" ", "")
+
+
+def test_numeric_discrete_calc_mode_keeps_delays_outside_set_behavior_core() -> None:
+    svg = """
+    <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">
+      <rect id="rect1" width="10" height="10" fill="#000">
+        <animate attributeName="x" values="0;10;20" keyTimes="0;0.4;1" calcMode="discrete" dur="1s" begin="0s"/>
+      </rect>
+    </svg>
+    """
+
+    render_result, _, _ = _render(svg)
+    slide_xml = ET.fromstring(render_result.slide_xml.encode("utf-8"))
+    ns = {"p": "http://schemas.openxmlformats.org/presentationml/2006/main"}
+
+    assert not slide_xml.xpath(".//p:set/p:cBhvr/p:cTn/p:stCondLst", namespaces=ns)
+    delays = [cond.get("delay") for cond in slide_xml.xpath(".//p:par/p:cTn/p:stCondLst/p:cond", namespaces=ns)]
+    assert "0" in delays
+    assert "400" in delays
+    assert "1000" in delays
 
 
 def test_numeric_paced_calc_mode_uses_distance_weighted_key_times() -> None:

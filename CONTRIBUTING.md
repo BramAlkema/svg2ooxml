@@ -9,9 +9,17 @@ git clone https://github.com/BramAlkema/svg2ooxml.git
 cd svg2ooxml
 ./tools/bootstrap_venv.sh
 source .venv/bin/activate
-pip install -e .[dev,render,color,slides,api,cloud]
 pre-commit install
 ```
+
+`./tools/bootstrap_venv.sh` is the canonical local setup entrypoint. It creates
+`.venv`, installs the default editable extras, links Homebrew `fontforge` on
+macOS when available, supports `--doctor` for a quick health check, and assumes
+Python 3.14 for the standard local environment.
+
+For reproducible Linux rendering and font/raster checks with Python 3.14 parity,
+use the Docker render lane documented in
+[`docs/guides/container-workflows.md`](docs/guides/container-workflows.md).
 
 ## Making Changes
 
@@ -19,6 +27,7 @@ pre-commit install
 2. **Write tests** — unit tests go in `tests/unit/`, integration tests in `tests/integration/`.
 3. **Run the checks** before pushing:
    ```bash
+   pre-commit run --all-files
    ruff check src tests
    black src tests
    pytest
@@ -29,7 +38,7 @@ pre-commit install
 
 1. Open a PR against `main` with a clear description of the change.
 2. Include the problem statement, approach, and validation steps.
-3. Ensure CI passes — the pre-commit hooks run linting and type checks.
+3. Ensure CI passes — the pre-commit hooks run shared formatting and linting checks.
 4. Add or update tests for any new functionality.
 
 ## Code Style
@@ -56,7 +65,7 @@ pytest -m visual                  # slow, needs LibreOffice
 
 ## Architecture
 
-See [CLAUDE.md](CLAUDE.md) for a full architecture overview and module guide. Key ADRs in `docs/adr/` document important design decisions.
+Start with [docs/README.md](docs/README.md) for the documentation map. Key ADRs in `docs/adr/` and implementation notes under `docs/internals/` document important design decisions.
 
 ## Licensing
 

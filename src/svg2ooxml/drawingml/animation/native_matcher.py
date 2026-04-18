@@ -11,6 +11,7 @@ from svg2ooxml.drawingml.animation.constants import (
     DISCRETE_VISIBILITY_ATTRIBUTES,
     FADE_ATTRIBUTES,
 )
+from svg2ooxml.drawingml.animation.evidence import required_evidence_tiers_for_native_match
 from svg2ooxml.ir.animation import (
     AnimationDefinition,
     AnimationType,
@@ -92,6 +93,7 @@ class NativeAnimationMatch:
     oracle_required: bool = False
     visual_required: bool = False
     confidence: str = "candidate"
+    required_evidence_tiers: tuple[str, ...] = field(default_factory=tuple)
     limitations: tuple[str, ...] = field(default_factory=tuple)
 
     def to_dict(self) -> dict[str, Any]:
@@ -105,6 +107,7 @@ class NativeAnimationMatch:
             "oracle_required": self.oracle_required,
             "visual_required": self.visual_required,
             "confidence": self.confidence,
+            "required_evidence_tiers": list(self.required_evidence_tiers),
             "limitations": list(self.limitations),
         }
 
@@ -148,6 +151,14 @@ class _MutableMatch:
             confidence = "declared"
         elif self.oracle_required:
             confidence = "oracle-required"
+        required_evidence_tiers = tuple(
+            tier.value
+            for tier in required_evidence_tiers_for_native_match(
+                level_value=self.level.value,
+                oracle_required=self.oracle_required,
+                visual_required=self.visual_required,
+            )
+        )
         return NativeAnimationMatch(
             level=self.level,
             primitive=self.primitive,
@@ -160,6 +171,7 @@ class _MutableMatch:
             oracle_required=self.oracle_required,
             visual_required=self.visual_required,
             confidence=confidence,
+            required_evidence_tiers=required_evidence_tiers,
             limitations=tuple(self.limitations),
         )
 

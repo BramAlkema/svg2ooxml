@@ -13,6 +13,7 @@ from svg2ooxml.drawingml.animation.oracle import (
     AttrNameEntry,
     BehaviorFragment,
     DeadPath,
+    EvidenceTier,
     FilterEntry,
     OracleSlotError,
     default_oracle,
@@ -201,6 +202,11 @@ def test_compound_slot_is_registered() -> None:
     assert compound.preset_class == "emph"
     assert compound.preset_id is None
     assert compound.verification == "visually-verified"
+    assert compound.evidence_tiers == (
+        EvidenceTier.SCHEMA_VALID,
+        EvidenceTier.LOADABLE,
+        EvidenceTier.SLIDESHOW_VERIFIED,
+    )
 
 
 def test_instantiate_compound_with_empty_behaviors() -> None:
@@ -356,6 +362,11 @@ def test_filter_entry_lookup_by_value() -> None:
     assert entry.entrance_preset_id == 22
     assert entry.entrance_preset_subtype == 4
     assert entry.verification == "visually-verified"
+    assert entry.evidence_tiers == (
+        EvidenceTier.SCHEMA_VALID,
+        EvidenceTier.LOADABLE,
+        EvidenceTier.SLIDESHOW_VERIFIED,
+    )
 
 
 def test_filter_entry_unknown_raises() -> None:
@@ -426,6 +437,11 @@ def test_attrname_lookup_and_validation() -> None:
     assert entry.category == "visibility"
     assert entry.scope == "whole-shape"
     assert entry.verification == "visually-verified"
+    assert entry.evidence_tiers == (
+        EvidenceTier.SCHEMA_VALID,
+        EvidenceTier.LOADABLE,
+        EvidenceTier.SLIDESHOW_VERIFIED,
+    )
 
     with pytest.raises(OracleSlotError):
         oracle.attrname_entry("not_a_real_attrname")
@@ -514,3 +530,41 @@ def test_dead_paths_all_have_replacement_guidance() -> None:
     for dp in oracle.dead_paths():
         assert dp.replacement_slot, f"Dead path {dp.id} missing replacement_slot"
         assert dp.replacement_note, f"Dead path {dp.id} missing replacement_note"
+
+
+def test_oracle_matched_verification_maps_to_ui_authored_evidence(tmp_path) -> None:
+    root = tmp_path / "oracle"
+    (root / "demo").mkdir(parents=True)
+    (root / "demo" / "slot.xml").write_text(
+        "<p:par xmlns:p=\"http://schemas.openxmlformats.org/presentationml/2006/main\"/>",
+        encoding="utf-8",
+    )
+    (root / "index.json").write_text(
+        json.dumps(
+            {
+                "slots": {
+                    "demo/slot": {
+                        "path": "demo/slot.xml",
+                        "preset_class": "emph",
+                        "preset_id": 1,
+                        "preset_subtype": 0,
+                        "family_signature": "clickEffect|emph|1|set|-",
+                        "verification": "oracle-matched",
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    (root / "filter_vocabulary.xml").write_text("<filter-vocabulary/>", encoding="utf-8")
+    (root / "attrname_vocabulary.xml").write_text("<attrname-vocabulary/>", encoding="utf-8")
+    (root / "dead_paths.xml").write_text("<dead-paths/>", encoding="utf-8")
+
+    oracle = AnimationOracle(root=root)
+    slot = oracle.slot("demo/slot")
+
+    assert slot.evidence_tiers == (
+        EvidenceTier.SCHEMA_VALID,
+        EvidenceTier.LOADABLE,
+        EvidenceTier.UI_AUTHORED,
+    )

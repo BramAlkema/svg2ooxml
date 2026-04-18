@@ -573,6 +573,25 @@ def test_parse_from_by_values_and_preserves_raw_value_attrs() -> None:
     assert animation.raw_attributes["by"] == "5"
 
 
+def test_parse_records_target_tag_for_text_animation() -> None:
+    parser = SMILParser()
+    svg = _parse(
+        """
+        <svg xmlns="http://www.w3.org/2000/svg">
+          <text id="headline" x="10" y="20">
+            Hello
+            <animate attributeName="fill" values="#000000;#ff0000;#000000" dur="2s" />
+          </text>
+        </svg>
+        """
+    )
+
+    animations = parser.parse_svg_animations(svg)
+
+    assert len(animations) == 1
+    assert animations[0].raw_attributes["svg2ooxml_target_tag"] == "text"
+
+
 def test_parse_to_by_values_derives_start_when_numeric() -> None:
     parser = SMILParser()
     svg = _parse(
@@ -675,6 +694,26 @@ def test_parse_repeat_dur_end_and_key_points_plumbing() -> None:
     assert animation.timing.end_triggers[0].delay_seconds == pytest.approx(0.25)
     assert animation.timing.end_triggers[1].trigger_type is BeginTriggerType.TIME_OFFSET
     assert animation.timing.end_triggers[1].delay_seconds == pytest.approx(5.0)
+
+
+def test_parse_fractional_repeat_count_sets_active_duration_cap() -> None:
+    parser = SMILParser()
+    svg = _parse(
+        """
+        <svg xmlns="http://www.w3.org/2000/svg">
+          <rect id="shape">
+            <animate attributeName="x" values="0;10" begin="0s" dur="2s" repeatCount="2.5" />
+          </rect>
+        </svg>
+        """
+    )
+
+    animations = parser.parse_svg_animations(svg)
+
+    assert len(animations) == 1
+    animation = animations[0]
+    assert animation.timing.repeat_count == 3
+    assert animation.timing.repeat_duration == pytest.approx(5.0)
 
 
 def test_parse_key_points_on_non_motion_are_ignored_with_warning() -> None:

@@ -52,6 +52,11 @@ def test_classifies_simple_opacity_fade_as_exact_native_effect() -> None:
     assert match.primitive == 'p:animEffect[filter="fade"]'
     assert match.reason == "opacity-authored-fade"
     assert not match.mimic_allowed
+    assert match.required_evidence_tiers == (
+        "schema-valid",
+        "loadable",
+        "slideshow-verified",
+    )
 
 
 def test_classifies_spline_timing_as_native_mimic() -> None:
@@ -126,7 +131,27 @@ def test_native_match_serializes_to_metadata_shape() -> None:
     assert payload["level"] == "composed-native"
     assert payload["primitive"] == "p:animScale+p:animMotion"
     assert payload["reason"] == "size-scale-anchor-composed"
+    assert payload["required_evidence_tiers"] == [
+        "schema-valid",
+        "loadable",
+        "slideshow-verified",
+    ]
     assert payload["limitations"] == []
+
+
+def test_oracle_backed_match_requires_ui_authored_roundtrip_and_slideshow_evidence() -> None:
+    match = classify_native_animation(
+        _animation(target_attribute="fill-opacity", values=["0.2", "0.8"])
+    )
+
+    assert match.oracle_required is True
+    assert match.required_evidence_tiers == (
+        "schema-valid",
+        "loadable",
+        "ui-authored",
+        "roundtrip-preserved",
+        "slideshow-verified",
+    )
 
 
 def test_w3c_animation_corpus_has_declared_native_match_for_every_definition() -> None:

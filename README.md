@@ -13,14 +13,26 @@
   <a href="https://pypi.org/project/svg2ooxml/"><img src="https://img.shields.io/pypi/dm/svg2ooxml" alt="Downloads"></a>
   <a href="https://pypi.org/project/svg2ooxml/"><img src="https://img.shields.io/pypi/pyversions/svg2ooxml" alt="Python"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-blue.svg" alt="License: AGPL-3.0"></a>
-  <a href="https://github.com/BramAlkema/svg2ooxml/actions/workflows/test-suite.yml"><img src="https://img.shields.io/badge/tests-passing-brightgreen" alt="Tests"></a>
+  <a href="https://github.com/BramAlkema/svg2ooxml/actions/workflows/test-suite.yml"><img src="https://github.com/BramAlkema/svg2ooxml/actions/workflows/test-suite.yml/badge.svg?branch=main" alt="Tests"></a>
 </p>
 
 ---
 
 Convert animated SVGs to native PowerPoint — programmatically, at scale, without Office. PowerPoint's own SVG import can't do animations, can't run headless, and can't batch.
 
-svg2ooxml parses SVG markup, builds a typed intermediate representation, renders native DrawingML XML fragments, and packages them into valid `.pptx` files. 97% of the SVG feature set is covered. 525 W3C test SVGs pass OpenXML validation.
+svg2ooxml is the converter/runtime package. It parses SVG markup, builds a typed intermediate representation, renders native DrawingML XML fragments, and packages them into valid `.pptx` files.
+
+Empirical PowerPoint behavior research, authored control decks, and durable oracle evidence live in the companion repository [`openxml-audit`](https://github.com/BramAlkema/openxml-audit).
+
+## Start Here
+
+- [Quick start](#quick-start)
+- [Repository boundary](docs/internals/repository-boundary.md)
+- [Documentation guide](docs/README.md)
+- [Testing guide](docs/testing.md)
+- [Architecture decisions](docs/adr/README.md)
+- [Animation documentation map](docs/internals/animation-documentation-map.md)
+- [Roadmap](docs/ROADMAP.md)
 
 ## Comparison
 
@@ -60,9 +72,22 @@ svg2ooxml parses SVG markup, builds a typed intermediate representation, renders
 - **Masks & clipping** — clip paths, masks, group clips with native/EMF/raster fallback ladder
 - **Compositing** — `mix-blend-mode`, `paint-order`, group opacity with overlap detection
 - **Multi-slide export** — split multi-page SVGs into separate slides
-- **Figma plugin** — browser-based export from Figma to PowerPoint
 - **Extensible pipeline** — service registry with dependency injection for custom providers
 - **Validated** — 525/525 W3C test SVGs pass both Python and .NET OpenXML validators
+
+Figma and Google Slides app workflows now live outside the converter surface in
+[`apps/figma2gslides`](apps/figma2gslides/README.md).
+
+## Repository Boundary
+
+This repo currently carries:
+
+- `svg2ooxml` for converter code and the public `svg2ooxml` CLI
+- `figma2gslides` for the extracted app/runtime surface that still lives here
+- `openxml-audit` as the sibling repo for empirical PowerPoint evidence
+
+The boundary doc is at
+[docs/internals/repository-boundary.md](docs/internals/repository-boundary.md).
 
 ## Installation
 
@@ -75,8 +100,6 @@ Optional extras for specific features:
 ```bash
 pip install svg2ooxml[render]    # Skia rendering + visual comparison
 pip install svg2ooxml[color]     # Advanced color space support
-pip install svg2ooxml[slides]    # Google Slides integration
-pip install svg2ooxml[api]       # FastAPI service
 ```
 
 ## Quick Start
@@ -119,10 +142,33 @@ SVG text
 ```bash
 ./tools/bootstrap_venv.sh
 source .venv/bin/activate
-pip install -e .[dev,render,color,slides,api,cloud]
 ```
 
-Use the project venv for all local Python, pytest, and visual-tool commands. On macOS, `./tools/bootstrap_venv.sh` now prefers Python 3.14 so Homebrew `fontforge` bindings and `skia-python` both load inside `.venv`.
+The extracted Figma/Slides app may still need `api`, `cloud`, and Google auth
+dependencies during local app work, but that app surface is not part of the
+supported `svg2ooxml` public API. App-specific docs live under
+[`apps/figma2gslides`](apps/figma2gslides/README.md).
+
+Use the project venv for all local Python, pytest, and visual-tool commands.
+Local development is standardised on Python 3.14 so Homebrew `fontforge`
+bindings and `skia-python` both load inside `.venv`.
+
+```bash
+./tools/bootstrap_venv.sh --doctor   # report interpreter/module health
+source tools/venv_select.sh          # activate the canonical .venv
+```
+
+For a reproducible Linux render lane with Python 3.14 parity and a pinned
+upstream FontForge source build, use the Docker wrappers:
+
+```bash
+./tools/containers/render/build.sh
+./tools/containers/render/run.sh
+./tools/containers/render/pytest.sh
+```
+
+That lane is documented in
+[`docs/guides/container-workflows.md`](docs/guides/container-workflows.md).
 
 ```bash
 pytest                            # full test suite
@@ -135,9 +181,14 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ## Documentation
 
-- [Architecture Decision Records](docs/adr/) — key design decisions
+- [Documentation guide](docs/README.md) — start here for docs by purpose
+- [Animation documentation map](docs/internals/animation-documentation-map.md) — start here for animation docs
+- [Architecture Decision Records](docs/adr/) — converter-side design decisions
 - [Roadmap](docs/ROADMAP.md) — project status and priorities
 - [Testing guide](docs/testing.md) — test tiers and visual regression
+
+Research/evidence ADRs and the durable PPTX oracle corpus live in
+[`openxml-audit`](https://github.com/BramAlkema/openxml-audit).
 
 ## License
 

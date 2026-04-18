@@ -4,9 +4,10 @@
 
 ## Links
 
-- ADR: `docs/adr/ADR-028-effectdag-and-native-color-transform-strategy.md`
-- Research: `docs/research/drawingml-unused-opportunities.md`
-- Baseline reality: `docs/research/svg-to-drawingml-implementation-reality.md`
+- ADR: `docs/adr/README.md` (`EffectDag & Color Transforms`)
+- Documentation map: `docs/internals/animation-documentation-map.md`
+- Research: `docs/reference/research/drawingml-unused-opportunities.md`
+- Baseline reality: `docs/reference/research/svg-to-drawingml-implementation-reality.md`
 
 ## Objective
 

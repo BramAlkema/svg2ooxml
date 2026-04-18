@@ -4,9 +4,9 @@
 
   The complete set of <p:attrName> values that Microsoft PowerPoint emits
   natively when authoring animations in its UI. Confirmed exhaustive by
-  scanning tmp/example4.pptx, tmp/example5.pptx, .visual_tmp/samples/
-  experiment{6,7}.pptx and docs/research/powerpoint_oracle/: 17 distinct
-  strings across 400+ authored animations.
+  scanning local scratch decks plus the curated sibling
+  openxml-audit/docs/pptx_oracle/ corpus: 17 distinct strings across 400+
+  authored animations.
 
   PowerPoint's parser accepts additional attrName values (see dead_paths.xml
   for the falsified ones like fill.opacity / stroke.weight) but its playback

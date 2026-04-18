@@ -1,6 +1,7 @@
 # Animation SMIL Parity - Implementation Tasks
 
-**ADR**: `docs/adr/ADR-027-animation-smil-parity-and-w3c-gating.md`  
+**ADR**: `docs/adr/README.md` (`SMIL Parity & W3C Gating`)  
+**Documentation map**: `docs/internals/animation-documentation-map.md`  
 **Specs**:
 - `docs/specs/animation-smil-parity-spec.md`
 - `docs/specs/animation-w3c-suite-execution-spec.md`

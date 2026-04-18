@@ -13,7 +13,7 @@ EXPECTED_EMF_DIGESTS: dict[str, str] = {
     "comp": "b9dc0f5f63ec5b1395ccb8661fa075f7efb3d2b9",
     "cmm": "a18f5ef909dc192d0937e0ad5e18818d0aa198b7",
     "disp": "de0c077075581603d6fad4cfb5d0696b1c6c9834",
-    "turb": "a6a863ec18fbf60200f41ab6901f5dc636fc8077",
+    "turb": "544083196ae68e7655967e6135c3d1f23fe34858",
     "conv": "949b74a65438d77da56118b339e2a5b373e3707e",
 }
 

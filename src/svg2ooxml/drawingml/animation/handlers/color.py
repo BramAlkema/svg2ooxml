@@ -17,13 +17,16 @@ from svg2ooxml.drawingml.animation.constants import (
 )
 from svg2ooxml.drawingml.animation.handlers.base import AnimationHandler
 from svg2ooxml.drawingml.animation.oracle import default_oracle
-from svg2ooxml.drawingml.xml_builder import a_sub, p_elem, p_sub
+from svg2ooxml.drawingml.xml_builder import NS_P, a_sub, p_elem, p_sub
 from svg2ooxml.ir.animation import AnimationDefinition, AnimationType, CalcMode
 
 if TYPE_CHECKING:
     from svg2ooxml.ir.animation import AnimationDefinition
 
 __all__ = ["ColorAnimationHandler"]
+
+_TEXT_TARGET_TAGS = frozenset({"text", "tspan", "textpath"})
+_TEXT_COLOR_ATTRIBUTES = frozenset({"fill.color", "style.color"})
 
 
 class ColorAnimationHandler(AnimationHandler):
@@ -46,6 +49,20 @@ class ColorAnimationHandler(AnimationHandler):
         """Build ``<p:par>`` containing ``<p:animClr>`` with from/to colors."""
         ppt_attribute = self._map_color_attribute(animation.target_attribute)
 
+        if self._should_use_color_pulse(animation, ppt_attribute):
+            return self._build_color_pulse_animation(
+                animation,
+                par_id,
+                behavior_id,
+            )
+
+        if self._should_use_simple_text_color_oracle(animation, ppt_attribute):
+            return self._build_simple_text_color_animation(
+                animation,
+                par_id,
+                behavior_id,
+            )
+
         if self._should_segment(animation):
             return self._build_segmented_color_animation(
                 animation,
@@ -54,11 +71,25 @@ class ColorAnimationHandler(AnimationHandler):
                 ppt_attribute,
             )
 
-        if self._should_use_oracle_template(animation):
+        if self._should_use_oracle_template(animation, ppt_attribute):
             oracle = default_oracle()
             to_color = self._processor.parse_color(animation.values[-1])
             inner_fill = "hold" if animation.fill_mode == "freeze" else "remove"
 
+            if ppt_attribute == "fill.color":
+                return oracle.instantiate(
+                    "emph/shape_fill_color",
+                    shape_id=animation.element_id,
+                    par_id=par_id,
+                    duration_ms=animation.duration_ms,
+                    delay_ms=animation.begin_ms,
+                    STYLE_CLR_BEHAVIOR_ID=behavior_id,
+                    FILL_CLR_BEHAVIOR_ID=behavior_id + 1,
+                    FILL_TYPE_BEHAVIOR_ID=behavior_id + 2,
+                    FILL_ON_BEHAVIOR_ID=behavior_id + 3,
+                    TO_COLOR=to_color,
+                    INNER_FILL=inner_fill,
+                )
             if ppt_attribute == "style.color":
                 return oracle.instantiate(
                     "emph/text_color",
@@ -121,8 +152,17 @@ class ColorAnimationHandler(AnimationHandler):
         )
 
     @staticmethod
-    def _should_use_oracle_template(animation: AnimationDefinition) -> bool:
-        return AnimationHandler._simple_oracle_gate(animation)
+    def _should_use_oracle_template(
+        animation: AnimationDefinition,
+        ppt_attribute: str,
+    ) -> bool:
+        if not AnimationHandler._simple_oracle_gate(animation):
+            return False
+        if ppt_attribute == "style.color":
+            return False
+        if ppt_attribute == "fill.color" and ColorAnimationHandler._is_text_target(animation):
+            return False
+        return True
 
     @staticmethod
     def _should_segment(animation: AnimationDefinition) -> bool:
@@ -131,6 +171,106 @@ class ColorAnimationHandler(AnimationHandler):
             or len(animation.values) > 2
             or animation.key_times is not None
         )
+
+    @staticmethod
+    def _target_tag(animation: AnimationDefinition) -> str:
+        return animation.raw_attributes.get("svg2ooxml_target_tag", "").strip().lower()
+
+    @classmethod
+    def _is_text_target(cls, animation: AnimationDefinition) -> bool:
+        return cls._target_tag(animation) in _TEXT_TARGET_TAGS
+
+    @classmethod
+    def _uses_text_color_semantics(
+        cls,
+        animation: AnimationDefinition,
+        ppt_attribute: str,
+    ) -> bool:
+        return cls._is_text_target(animation) and ppt_attribute in _TEXT_COLOR_ATTRIBUTES
+
+    def _normalize_color_identity(self, value: str) -> str:
+        try:
+            return self._processor.parse_color(value)
+        except Exception:
+            return value.strip().lower()
+
+    def _should_use_color_pulse(
+        self,
+        animation: AnimationDefinition,
+        ppt_attribute: str,
+    ) -> bool:
+        if not self._uses_text_color_semantics(animation, ppt_attribute):
+            return False
+        if not AnimationHandler._simple_oracle_gate(animation):
+            return False
+        if animation.calc_mode != CalcMode.LINEAR:
+            return False
+        if animation.key_times is not None or animation.key_splines is not None:
+            return False
+        if len(animation.values) != 3:
+            return False
+        start = self._normalize_color_identity(animation.values[0])
+        pulse = self._normalize_color_identity(animation.values[1])
+        end = self._normalize_color_identity(animation.values[2])
+        return start == end and pulse != start
+
+    def _should_use_simple_text_color_oracle(
+        self,
+        animation: AnimationDefinition,
+        ppt_attribute: str,
+    ) -> bool:
+        return (
+            self._uses_text_color_semantics(animation, ppt_attribute)
+            and AnimationHandler._simple_oracle_gate(animation)
+            and animation.calc_mode != CalcMode.DISCRETE
+            and len(animation.values) <= 2
+            and animation.key_times is None
+        )
+
+    def _build_simple_text_color_animation(
+        self,
+        animation: AnimationDefinition,
+        par_id: int,
+        behavior_id: int,
+    ) -> etree._Element:
+        oracle = default_oracle()
+        inner_fill = "hold" if animation.fill_mode == "freeze" else "remove"
+        return oracle.instantiate(
+            "emph/text_color",
+            shape_id=animation.element_id,
+            par_id=par_id,
+            duration_ms=animation.duration_ms,
+            delay_ms=animation.begin_ms,
+            BEHAVIOR_ID=behavior_id,
+            TO_COLOR=self._processor.parse_color(animation.values[-1]),
+            INNER_FILL=inner_fill,
+        )
+
+    def _build_color_pulse_animation(
+        self,
+        animation: AnimationDefinition,
+        par_id: int,
+        behavior_id: int,
+    ) -> etree._Element:
+        oracle = default_oracle()
+        half_duration_ms = max(1, int(round(animation.duration_ms / 2.0)))
+        par = oracle.instantiate(
+            "emph/color_pulse",
+            shape_id=animation.element_id,
+            par_id=par_id,
+            duration_ms=half_duration_ms,
+            delay_ms=animation.begin_ms,
+            STYLE_CLR_BEHAVIOR_ID=behavior_id,
+            FILL_CLR_BEHAVIOR_ID=behavior_id + 1,
+            FILL_TYPE_BEHAVIOR_ID=behavior_id + 2,
+            FILL_ON_BEHAVIOR_ID=behavior_id + 3,
+            TO_COLOR=self._processor.parse_color(animation.values[1]),
+            INNER_FILL="remove",
+        )
+        outer_ctn = par.find(f"{{{NS_P}}}cTn")
+        if outer_ctn is not None:
+            outer_ctn.set("dur", str(animation.duration_ms))
+        return par
 
     def _build_anim_clr_element(
         self,

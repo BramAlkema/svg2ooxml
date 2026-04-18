@@ -1,7 +1,12 @@
 # Architecture Decision Records
 
-This document consolidates all architectural decisions for svg2ooxml.
-Individual ADR files have been archived — this is the single source of truth.
+This document consolidates converter-side architectural decisions for
+svg2ooxml. Individual ADR files have been archived — this is the single source
+of truth for the converter repo.
+
+Empirical PowerPoint research, oracle-corpus ownership, and PPTX lab tooling
+decisions now live in the sibling `openxml-audit` repo. This repo owns SVG
+parse -> IR -> DrawingML/PresentationML emission -> PPTX packaging decisions.
 
 ---
 
@@ -80,6 +85,13 @@ color-transform emission. Policy-gated rollout.
 
 ## Animation
 
+Start with `docs/internals/animation-documentation-map.md` for the current
+split between converter specs, execution ledgers, emitted SSOTs, and
+research-owned material in `openxml-audit`.
+
+This section records durable animation decisions only. Program framing,
+acceptance criteria, and cleanup mechanics live in the specs.
+
 ### SMIL Animation Support
 SMIL/animated attribute sampler, timing engine, and multi-slide orchestrator.
 IR animation types, SMIL parser, timeline sampler with interpolation. Native
@@ -104,56 +116,26 @@ min/max/restart/accumulate parsed and applied.
 
 ### Four-Layer Animation Fallback Architecture (ADR-031)
 
-Comprehensive SMIL→PresentationML mapping with empirically verified
-fallback layers for animations PowerPoint cannot play natively.
+Animations that PowerPoint cannot express with one stable native primitive use
+an ordered fallback ladder:
 
-**Layer 1 — Preset slots (15 verified templates).** Each slot is a
-parameterised `<p:par>` carrying a PowerPoint-recognised `presetID` /
-`presetSubtype`. Handlers load a slot by name and substitute runtime
-tokens. Covers: fade in/out, appear, color change, shape fill color,
-stroke color, text color, bold, underline, blink, transparency, rotate,
-scale, motion path, entrance/exit filter effects (29 filter values).
+1. preset-backed native slots for stable authored families
+2. a compound slot for stacking behaviour fragments in one executable group
+3. flipbook playback for dead-path or sampled cases
+4. Morph transitions for sole-animation geometry interpolation
 
-**Layer 2 — Compound slot (universal stacking).** Any combination of
-behaviour fragments composed inside one `<p:cTn>`. PPT's rendering
-engine walks `childTnLst` directly — preset IDs are cosmetic. One click
-fires all behaviours simultaneously. Verified with 8 heterogeneous
-effects (transparency + fill color + text color + bold + underline +
-rotate + scale + motion) stacked in a single compound call.
+Durable invariants:
 
-**Layer 3 — Flipbook (discrete frame cycling).** Pre-render N keyframes
-as stacked shapes, sequence with timed `<p:set>` on `style.visibility`.
-Universal fallback for every dead-path animation: skew, path morph,
-stroke-width, per-layer opacity, complex filter params. Verified with
-8-frame color cycling. Critical: `grpId` in `<p:bldP>` must match the
-animation `<p:cTn>` group — mismatches cause silent failure.
+- PowerPoint executes the `childTnLst` behaviour children directly, so preset
+  metadata is a UI concern, not the runtime contract.
+- Fallback choice is ordered by editability and structural stability:
+  oracle-native -> compound -> flipbook -> morph.
 
-**Layer 4 — Morph transition (smooth vertex interpolation).** Duplicate
-the slide with Morph transition for continuous geometry deformation.
-PPT interpolates custGeom vertices between slides. Verified: rectangle
-morphs smoothly into parallelogram (skewX 30°). Requires
-`mc:AlternateContent` wrapper with `p159` namespace
-(`/2015/09/main`), inline namespace declarations — hoisting to
-`<p:sld>` root triggers PPT repair dialog. Use only when the dead-path
-animation is the sole animation on the slide.
+The mapping taxonomy, evidence model, and current coverage live in:
 
-**Policy rule:** Oracle-native → compound → flipbook (mixed animations
-or complex keyframes) → morph (sole animation, smooth interpolation).
-
-**Empirical findings (2026-04-16/17):**
-- `additive="sum"` on `<p:cBhvr>`: broken for motion (shape jumps to
-  origin). Never emit. Concurrent `<p:animMotion>` siblings stack
-  additively by default.
-- `calcMode="discrete"` on non-visibility attrNames: silently dropped.
-  Use `<p:set>` segments instead.
-- Sequenced `animScale` + `animRot`: scale applies in rotated frame.
-  Cannot decompose skew via native primitives on 2D shapes.
-- Partial opacity: `<p:anim>` on `style.opacity` via TAV is a dead
-  path. Use `emph/transparency` (`<p:animEffect filter="image">`).
-
-**Feature map:** 252 SVG features mapped across 15 sections
-(`docs/research/svg-to-drawingml-feature-map.md`). 82% done, 10%
-partial, 2% dead→fallback, 5% gap, 1% unsupported.
+- `docs/specs/svg-animation-native-mapping-spec.md`
+- `docs/specs/animation-cleanup-rigour-spec.md`
+- `docs/internals/animation-documentation-map.md`
 
 ### Large-File Refactor (ADR-032, completed)
 
@@ -179,6 +161,70 @@ Shared infrastructure extracted to base classes (`_simple_oracle_gate`,
 `_build_discrete_set_sequence` in `AnimationHandler`). New sub-packages:
 `core/export/`, `core/ir/text/`, `core/ir/shape/`, `core/styling/paint/`,
 `elements/patterns/`, `filters/strategies/`, `drawingml/pipelines/`.
+
+### Research / Converter Boundary (ADR-033)
+
+The April 2026 animation push produced two different kinds of system:
+
+1. converter logic that decides what XML to emit
+2. empirical tooling that discovers which PowerPoint-authored XML shapes
+   actually load, roundtrip, and play
+
+Keeping both in one repo made the ownership blurry. Scratch decks, capture
+artifacts, extractor scripts, and oracle notes started to look like product
+assets even when they were really research evidence.
+
+Decision:
+
+- `svg2ooxml` owns conversion behavior: SMIL semantics, fallback policy,
+  `NativeFragment`/template composition, handler gates, emitted asset SSOT,
+  packaging, and release criteria.
+- `openxml-audit` owns empirical PPTX infrastructure: oracle corpus,
+  extraction/snapshot/diff lab tooling, timing probe decks, and research ADRs.
+- `svg2ooxml` may keep thin compatibility bridges for developer ergonomics, but
+  the canonical implementation and durable research docs live in
+  `openxml-audit`.
+- Converter-side claims that depend on PowerPoint behavior should point to
+  evidence in `openxml-audit/docs/pptx_oracle/` or the `openxml-audit` ADRs,
+  not to scratch decks or ad hoc notes.
+
+Consequences:
+
+- large temporary decks, captures, and render artifacts do not belong in the
+  converter repo
+- the converter keeps emitted-side SSOTs such as
+  `src/svg2ooxml/assets/animation_oracle/`, because they are part of runtime
+  behavior, not empirical corpus ownership
+- research can evolve independently without forcing the converter repo to carry
+  every probe artifact and lab concern
+- when a new empirical finding matters to emission, it lands in
+  `openxml-audit` first and is then consumed here as evidence-backed policy or
+  template work
+
+### App / Converter Boundary (ADR-034)
+
+The same repository currently contains an extracted `figma2gslides` app layer,
+but that does not make the app part of the converter surface.
+
+Decision:
+
+- `svg2ooxml` owns converter code, converter docs, and the public
+  `svg2ooxml` CLI
+- `figma2gslides` owns app runtime, auth, hosting, plugin assets, legal
+  pages, and app-local operational tooling
+- app-owned materials live under `src/figma2gslides/` and
+  `apps/figma2gslides/`
+- root `cli/` remains converter-facing; app entrypoints should not live there
+- shipping `figma2gslides` from the mono-repo is a transitional packaging
+  detail, not a promise that it is part of the supported converter API
+
+Consequences:
+
+- new Google auth, Firebase, hosting, or plugin UX work should land in the app
+  surface, not in `svg2ooxml`
+- converter docs should link to the app surface rather than absorbing app
+  operational detail
+- stale root entrypoints that point at app code should be removed or moved
 
 ---
 
@@ -216,16 +262,16 @@ SVG inputs.
 
 **Prior art in this repo.**
 
-- `docs/research/svg-to-drawingml-feature-map.md:320` — `font-variant:
+- `docs/reference/research/svg-to-drawingml-feature-map.md:320` — `font-variant:
   small-caps` is already implemented natively via `cap="small"` on
   `<a:rPr>`, validated against the .NET SDK. Small caps and all-small-caps
   are **not** candidates for baking because the native path is better:
   PowerPoint handles the cap synthesis itself with correct metrics.
-- `docs/research/svg-to-drawingml-feature-map.md:338–339` — `baseline-shift:
+- `docs/reference/research/svg-to-drawingml-feature-map.md:338–339` — `baseline-shift:
   super` / `baseline-shift: sub` already emit the `baseline` attribute on
   `<a:rPr>`, so `font-variant-position: sub|super` will share that path and
   also **not** need baking.
-- `docs/research/svg-to-drawingml-feature-map.md:363` — `xml:lang` / `lang`
+- `docs/reference/research/svg-to-drawingml-feature-map.md:363` — `xml:lang` / `lang`
   already flows to `<a:rPr lang="…"/>`, which triggers PowerPoint's
   locale-specific OT features (localised forms, required ligatures) at
   render time.
@@ -244,13 +290,13 @@ SVG inputs.
   touching the embedding pipeline should read these first. Notably flags a
   "metadata flow gap" at `text_pipeline.py:233–248` where `FontMatch`
   metadata is not explicitly merged into `FontEmbeddingRequest` metadata.
-- `docs/architecture/pipeline-analysis.md:364–368` — Known-gap list
+- `docs/internals/pipeline-analysis.md:364–368` — Known-gap list
   explicitly calls out `font-feature-settings` and `font-variation-settings`
   as unsupported. The adjacent bullet claiming `font-variant` is "stored but
   not applied" is **stale**: the feature map confirms small-caps is applied.
   Correcting that bullet is a docs-drift follow-up, out of scope for this
   ADR.
-- `docs/architecture/webfont-provider.md:491–492` — `font-feature-settings`
+- `docs/internals/webfont-provider.md:491–492` — `font-feature-settings`
   and `font-variation-settings` listed under "Future", confirming the gap
   this ADR addresses.
 

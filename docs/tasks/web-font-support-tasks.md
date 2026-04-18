@@ -832,7 +832,7 @@ class TestSVGParserWebFonts:
 **Duration**: 2 hours
 **Priority**: P2 (Nice to have)
 
-**File**: `docs/architecture/css-font-parsing.md`
+**File**: `docs/internals/css-font-parsing.md`
 
 **Content**:
 - Architecture diagram: SVG → CSS Parser → FontFaceRule IR

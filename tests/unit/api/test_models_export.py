@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from svg2ooxml.api.models import RequestedFont
+from svg2ooxml.export import RequestedFont
 
 
 def test_requested_font_accepts_string() -> None:
