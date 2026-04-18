@@ -5,7 +5,7 @@ Empirical PowerPoint behavior research, authored control decks, and durable
 oracle evidence live in the companion repository
 [`openxml-audit`](https://github.com/BramAlkema/openxml-audit).
 
-## 1.0.0 - 2026-04-18
+## 0.7.0 - 2026-04-18
 
 Release focus: package boundary cleanup, Python 3.14 standardization, and a
 more explicit split between converter code and PowerPoint evidence tooling.

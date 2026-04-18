@@ -24,7 +24,7 @@ evidence live in the companion repository
 
 ## Recent Release Focus
 
-- **1.0.0**: repository boundary cleanup, Python 3.14 standardization, the
+- **0.7.0**: repository boundary cleanup, Python 3.14 standardization, the
   extracted `apps/figma2gslides` surface, and reproducible container render
   workflows
 - **0.6.8**: animation oracle normalization, universal compound effects, and
