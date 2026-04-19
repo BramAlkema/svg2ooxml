@@ -113,7 +113,7 @@ def test_powerpoint_renderer_uses_slideshow_capture(
     result = renderer.render(pptx_path, output_dir)
 
     assert result.images == (output_dir / "slide_1.png",)
-    assert captured["cmd"][1:4] == ["-m", "tools.visual.powerpoint_capture", str(pptx_path)]
+    assert captured["cmd"][1:4] == ["-m", "tools.ppt_research.powerpoint_capture", str(pptx_path)]
     assert captured["cmd"][4] == str(output_dir)
     assert "--mode" in captured["cmd"]
     assert "slideshow-all" in captured["cmd"]
@@ -210,7 +210,7 @@ def test_powerpoint_renderer_captures_live_animation(
     )
 
     assert result == (output_dir / "frame_0000.png",)
-    assert captured["cmd"][1:4] == ["-m", "tools.visual.powerpoint_capture", str(pptx_path)]
+    assert captured["cmd"][1:4] == ["-m", "tools.ppt_research.powerpoint_capture", str(pptx_path)]
     assert captured["cmd"][4] == str(output_dir)
     assert "live" in captured["cmd"]
     assert "2.5" in captured["cmd"]

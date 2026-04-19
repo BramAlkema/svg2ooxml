@@ -4,8 +4,8 @@ Each sample module exposes ``NAME``, ``DURATION_S`` (slideshow capture hint),
 and ``build(output_path: Path) -> Path`` which writes a minimal presentation
 exercising one animation effect.
 
-Samples are consumed by :mod:`tools.visual.animation_tune` together with
-:class:`tools.visual.pptx_session.PptxSession` to drive a fast edit/reload
+Samples are consumed by :mod:`tools.ppt_research.animation_tune` together with
+:class:`tools.ppt_research.pptx_session.PptxSession` to drive a fast edit/reload
 iteration loop against Microsoft PowerPoint on macOS.
 """
 
@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from importlib import import_module
 from pathlib import Path
-from typing import Callable, Protocol
+from typing import Protocol
 
 
 class SampleModule(Protocol):
@@ -24,13 +24,13 @@ class SampleModule(Protocol):
 
 
 _REGISTRY: dict[str, str] = {
-    "fade_in": "tools.visual.animation_samples.fade_in",
-    "exit_fade": "tools.visual.animation_samples.exit_fade",
-    "appear_visible": "tools.visual.animation_samples.appear_visible",
-    "color_change": "tools.visual.animation_samples.color_change",
-    "rotate_spin": "tools.visual.animation_samples.rotate_spin",
-    "scale_grow": "tools.visual.animation_samples.scale_grow",
-    "motion_translate": "tools.visual.animation_samples.motion_translate",
+    "fade_in": "tools.ppt_research.animation_samples.fade_in",
+    "exit_fade": "tools.ppt_research.animation_samples.exit_fade",
+    "appear_visible": "tools.ppt_research.animation_samples.appear_visible",
+    "color_change": "tools.ppt_research.animation_samples.color_change",
+    "rotate_spin": "tools.ppt_research.animation_samples.rotate_spin",
+    "scale_grow": "tools.ppt_research.animation_samples.scale_grow",
+    "motion_translate": "tools.ppt_research.animation_samples.motion_translate",
 }
 
 

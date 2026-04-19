@@ -7,7 +7,6 @@ import subprocess
 import time
 from pathlib import Path
 
-
 _POWERPOINT_APP_ID = "com.microsoft.Powerpoint"
 _POWERPOINT_PROCESS_NAME = "Microsoft PowerPoint"
 

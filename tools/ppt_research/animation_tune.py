@@ -2,7 +2,7 @@
 
 Workflow::
 
-    python -m tools.visual.animation_tune fade_in
+    python -m tools.ppt_research.animation_tune fade_in
 
 Opens Microsoft PowerPoint with the freshly built sample, records a
 frame strip of slideshow playback, writes metrics, and drops into a REPL::
@@ -15,7 +15,7 @@ All captures land under ``reports/tune/<sample>/round-<NNN>/``.
 
 One-shot (non-interactive) form::
 
-    python -m tools.visual.animation_tune fade_in --once
+    python -m tools.ppt_research.animation_tune fade_in --once
 """
 
 from __future__ import annotations
@@ -25,14 +25,18 @@ import json
 import logging
 import sys
 import time
+from collections.abc import Sequence
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Sequence
 
 from PIL import Image
 
-from tools.visual.animation_samples import available_samples, build_sample, load_sample
-from tools.visual.pptx_session import PptxSession, PptxSessionError
+from tools.ppt_research.animation_samples import (
+    available_samples,
+    build_sample,
+    load_sample,
+)
+from tools.ppt_research.pptx_session import PptxSession, PptxSessionError
 
 logger = logging.getLogger("animation_tune")
 

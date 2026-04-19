@@ -332,7 +332,7 @@ The next slice should focus only on scale-origin fidelity for additive
 Run the existing proof-deck pipeline on the target scenario:
 
 ```bash
-.venv/bin/python -m tools.visual.w3c_proof_deck \
+.venv/bin/python -m tools.ppt_research.w3c_proof_deck \
   --skip-static \
   --animation-scenarios animate-elem-30-t \
   --animation-duration 4 \

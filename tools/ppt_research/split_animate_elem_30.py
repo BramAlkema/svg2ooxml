@@ -13,14 +13,14 @@ from pathlib import Path
 from lxml import etree as ET
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 
-from tools.visual.builder import PptxBuilder, VisualBuildError
-from tools.visual.renderer import PowerPointRenderer, VisualRendererError
-from tools.visual.w3c_proof_deck import (
+from tools.ppt_research.w3c_proof_deck import (
     _build_montage,
     _detect_animation_duration,
     _make_placeholder,
     _save_apng,
 )
+from tools.visual.builder import PptxBuilder, VisualBuildError
+from tools.visual.renderer import PowerPointRenderer, VisualRendererError
 
 SVG_NS = "http://www.w3.org/2000/svg"
 XLINK_NS = "http://www.w3.org/1999/xlink"

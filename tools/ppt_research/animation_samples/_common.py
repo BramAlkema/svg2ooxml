@@ -11,14 +11,14 @@ from __future__ import annotations
 import shutil
 import tempfile
 import zipfile
+from collections.abc import Callable, Sequence
 from pathlib import Path
-from typing import Callable, Sequence
 
 from lxml import etree as ET
 from pptx import Presentation
 from pptx.dml.color import RGBColor
 from pptx.enum.shapes import MSO_AUTO_SHAPE_TYPE
-from pptx.util import Emu, Inches
+from pptx.util import Inches
 
 from svg2ooxml.drawingml.animation.id_allocator import TimingIDAllocator
 from svg2ooxml.drawingml.animation.xml_builders import AnimationXMLBuilder

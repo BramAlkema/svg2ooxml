@@ -476,7 +476,7 @@ Add slide-level export tests asserting:
 Run:
 
 ```bash
-./.venv/bin/python -m tools.visual.w3c_proof_deck \
+./.venv/bin/python -m tools.ppt_research.w3c_proof_deck \
   --output reports/visual/display-visibility-spec \
   --animation-scenarios animate-elem-31-t
 ```

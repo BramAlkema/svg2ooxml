@@ -20,8 +20,7 @@ from svg2ooxml.ir.animation import (
     AnimationType,
     FillMode,
 )
-
-from tools.visual.animation_samples._common import (
+from tools.ppt_research.animation_samples._common import (
     build_timing_xml,
     inject_timing_into_pptx,
     new_presentation_with_hero_shape,

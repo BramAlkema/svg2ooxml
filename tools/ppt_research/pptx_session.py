@@ -6,7 +6,7 @@ faster than relaunching PowerPoint for every capture.
 
 macOS only — requires AppleScript (osascript) and a licensed install of
 Microsoft PowerPoint. Frame capture uses the same ScreenCaptureKit backend as
-``tools/visual/powerpoint_capture.py``.
+``tools/ppt_research/powerpoint_capture.py``.
 """
 
 from __future__ import annotations
@@ -14,19 +14,17 @@ from __future__ import annotations
 import logging
 import time
 from pathlib import Path
-from typing import Sequence
 
-from tools.visual.powerpoint_capture import (
+from tools.ppt_research.powerpoint_capture import (
     _advance_slide,
     _capture_window,
     _close_matching_presentation,
     _exit_slideshow,
-    _has_matching_powerpoint_presentation,
     _maybe_prompt_for_permissions,
     _start_slideshow,
     _wait_for_powerpoint_presentation,
 )
-from tools.visual.pptx_window import (
+from tools.ppt_research.pptx_window import (
     get_slideshow_window_id,
     open_presentation_via_ui,
 )
@@ -294,7 +292,7 @@ class PptxSession:
 
     # --------------------------------------------------------------- context
 
-    def __enter__(self) -> "PptxSession":
+    def __enter__(self) -> PptxSession:
         self.open()
         return self
 

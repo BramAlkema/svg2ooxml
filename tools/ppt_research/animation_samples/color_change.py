@@ -1,10 +1,8 @@
-"""Appear (set visibility=visible) animation sample.
+"""Color change (emph) animation sample.
 
-Slide 2 holds a rectangle that SMIL ``<set attributeName="visibility"
-to="visible">`` makes visible on click. Exercises
-:class:`SetAnimationHandler`'s visibility-visible path and the
-``entr/appear`` oracle template (preset 1 Appear — single ``<p:set>``
-child, no animEffect fade wrapper).
+Builds a two-slide deck where slide 2 holds a red rectangle that transitions
+to blue on click. Exercises :class:`ColorAnimationHandler` and the
+``emph/color`` oracle template.
 """
 
 from __future__ import annotations
@@ -12,7 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from svg2ooxml.common.units import UnitConverter
-from svg2ooxml.drawingml.animation.handlers.set import SetAnimationHandler
+from svg2ooxml.drawingml.animation.handlers.color import ColorAnimationHandler
 from svg2ooxml.drawingml.animation.tav_builder import TAVBuilder
 from svg2ooxml.drawingml.animation.value_processors import ValueProcessor
 from svg2ooxml.drawingml.animation.xml_builders import AnimationXMLBuilder
@@ -22,19 +20,15 @@ from svg2ooxml.ir.animation import (
     AnimationType,
     FillMode,
 )
-
-from tools.visual.animation_samples._common import (
+from tools.ppt_research.animation_samples._common import (
     build_timing_xml,
     inject_timing_into_pptx,
     new_presentation_with_hero_shape,
 )
 
-NAME = "appear_visible"
+NAME = "color_change"
 DURATION_S = 2.5
 PRE_ADVANCES = 1
-# PPT auto-fires the clickEffect during the pre-advance slide transition, so
-# a second advance would push past slide 2 and end the slideshow.
-TRIGGER_ADVANCE = False
 
 
 def build(output_path: Path) -> Path:
@@ -42,29 +36,25 @@ def build(output_path: Path) -> Path:
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     presentation, _slide, shape_id = new_presentation_with_hero_shape(
-        fill=(140, 60, 200),
-        label="Appear",
+        fill=(220, 40, 40),
+        label="Color",
     )
     presentation.save(output_path)
 
     animation = AnimationDefinition(
         element_id=str(shape_id),
-        animation_type=AnimationType.SET,
-        target_attribute="visibility",
-        values=["visible"],
-        # Authored SMIL <set> is instantaneous, but PowerPoint collapses the
-        # effect container once the outer par's duration elapses, which causes
-        # the visibility set to revert. Hold the outer par open for 500 ms —
-        # matches the oracle shape for preset 1 (Appear).
+        animation_type=AnimationType.ANIMATE,
+        target_attribute="fill",
+        values=["#DC2828", "#2240DC"],
         timing=AnimationTiming(
             begin=0.0,
-            duration=0.5,
+            duration=2.0,
             fill_mode=FillMode.FREEZE,
         ),
     )
 
     def _par_factory(xml_builder: AnimationXMLBuilder, par_id: int, behavior_id: int):
-        handler = SetAnimationHandler(
+        handler = ColorAnimationHandler(
             xml_builder,
             ValueProcessor(),
             TAVBuilder(xml_builder),
@@ -72,7 +62,7 @@ def build(output_path: Path) -> Path:
         )
         par = handler.build(animation, par_id, behavior_id)
         if par is None:
-            raise RuntimeError("SetAnimationHandler declined to build visibility set")
+            raise RuntimeError("ColorAnimationHandler declined to build color tween")
         return par
 
     timing_xml = build_timing_xml(

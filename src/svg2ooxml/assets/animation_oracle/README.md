@@ -26,7 +26,7 @@ This oracle was built by:
 
 1. Authoring reference animations in PowerPoint's UI, saving as `.pptx`, and
    unzipping the timing XML to extract ground-truth shapes (`tmp/example*.pptx`).
-2. Running each candidate shape through `.venv/bin/python -m tools.visual.animation_tune`,
+2. Running each candidate shape through `.venv/bin/python -m tools.ppt_research.animation_tune`,
    which drives PowerPoint via AppleScript, captures the slideshow window with
    screencapture, and compares frame pixels.
 3. Recording what played, what was silently dropped, and the structural
@@ -460,7 +460,7 @@ Each slot in `index.json` carries a `verification` field:
 Promote templates up this ladder by:
 
 1. Authoring a sample that instantiates the slot
-2. Running `.venv/bin/python -m tools.visual.animation_tune <sample_name>`
+2. Running `.venv/bin/python -m tools.ppt_research.animation_tune <sample_name>`
 3. Visually confirming the expected animation plays (not just that pixels
    changed — compare frame 0 to mid/final and verify the *right* change)
 4. Updating `verification` and the `notes` field with what you observed

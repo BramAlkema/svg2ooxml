@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Compatibility bridge to ``openxml_audit.pptx.lab``."""
+"""Compatibility bridge to ``openxml_audit.pptx.oracle``."""
 
 from __future__ import annotations
 
 from typing import Any
 
-from tools.visual._openxml_audit_bridge import load_openxml_audit_module
+from tools.ppt_research._openxml_audit_bridge import load_openxml_audit_module
 
 _TARGET = None
 
@@ -13,7 +13,7 @@ _TARGET = None
 def _target():
     global _TARGET
     if _TARGET is None:
-        _TARGET = load_openxml_audit_module("openxml_audit.pptx.lab")
+        _TARGET = load_openxml_audit_module("openxml_audit.pptx.oracle")
     return _TARGET
 
 

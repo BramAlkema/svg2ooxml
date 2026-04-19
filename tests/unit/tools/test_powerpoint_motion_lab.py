@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from lxml import etree as ET
-from tools.visual.powerpoint_motion_lab import (
+from tools.ppt_research.powerpoint_motion_lab import (
     MotionLabCase,
     PlacedMotionLabCase,
     _build_case_par,

@@ -220,7 +220,7 @@ pytest tests/golden/animation/test_golden_master.py
 
 ### Required manual/control verification
 ```bash
-python -m tools.visual.powerpoint_capture <pptx> <png> --mode slideshow
+python -m tools.ppt_research.powerpoint_capture <pptx> <png> --mode slideshow
 python -m tools.visual.corpus_audit <fixture> --renderer powerpoint --check-animation
 ```
 

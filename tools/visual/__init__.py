@@ -1,4 +1,4 @@
-"""Visual regression helpers and tooling."""
+"""Converter-facing visual regression helpers and tooling."""
 
 __all__ = [
     "browser_renderer",

@@ -379,7 +379,7 @@ class PowerPointRenderer:
         return generated
 
     def _run_capture_helper(self, args: Sequence[str], *, timeout: float) -> None:
-        cmd = [sys.executable, "-m", "tools.visual.powerpoint_capture", *args]
+        cmd = [sys.executable, "-m", "tools.ppt_research.powerpoint_capture", *args]
         if not self._use_keys:
             cmd.append("--no-keys")
         if not self._allow_reopen:

@@ -36,6 +36,10 @@ Owns empirical PowerPoint discovery and validation infrastructure:
 - oracle-corpus research
 - research ADRs and durable evidence for PowerPoint behavior
 
+The local `tools/ppt_research/` tree is only a temporary holding area for
+legacy helpers that have not been fully lifted into `openxml-audit` yet. Keep
+new empirical work out of `tools/visual/`.
+
 ## Placement Rules
 
 Put work in `svg2ooxml` when it changes emitted converter behavior.

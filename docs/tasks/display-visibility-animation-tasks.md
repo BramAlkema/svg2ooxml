@@ -225,7 +225,7 @@
   - red "Test running..." text
 
 **Commands**
-- `./.venv/bin/python -m tools.visual.w3c_proof_deck --output reports/visual/display-visibility-spec --animation-scenarios animate-elem-31-t`
+- `./.venv/bin/python -m tools.ppt_research.w3c_proof_deck --output reports/visual/display-visibility-spec --animation-scenarios animate-elem-31-t`
 
 **Acceptance**
 - The top row and bottom row are synchronized closely enough to pass manual review

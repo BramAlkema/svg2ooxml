@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Compatibility bridge to ``openxml_audit.pptx.oracle``."""
+"""Compatibility bridge to ``openxml_audit.pptx.oracle_starter_deck``."""
 
 from __future__ import annotations
 
 from typing import Any
 
-from tools.visual._openxml_audit_bridge import load_openxml_audit_module
+from tools.ppt_research._openxml_audit_bridge import load_openxml_audit_module
 
 _TARGET = None
 
@@ -13,7 +13,9 @@ _TARGET = None
 def _target():
     global _TARGET
     if _TARGET is None:
-        _TARGET = load_openxml_audit_module("openxml_audit.pptx.oracle")
+        _TARGET = load_openxml_audit_module(
+            "openxml_audit.pptx.oracle_starter_deck"
+        )
     return _TARGET
 
 
@@ -25,9 +27,9 @@ def __dir__() -> list[str]:
     return sorted(set(globals()) | set(dir(_target())))
 
 
-def main() -> int:
-    return int(_target().main())
+def main() -> None:
+    _target().main()
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    main()

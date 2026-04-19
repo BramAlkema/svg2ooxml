@@ -42,22 +42,22 @@ except Exception:
     _SCKStreamOutput = None
 
 
-from tools.visual.pptx_window import (  # noqa: E402
+from tools.ppt_research.pptx_window import (  # noqa: E402
     get_front_window_id as _get_front_window_id,
 )
-from tools.visual.pptx_window import (
+from tools.ppt_research.pptx_window import (
     get_png_type as _get_png_type,
 )
-from tools.visual.pptx_window import (
+from tools.ppt_research.pptx_window import (
     get_slideshow_window_id as _get_slideshow_window_id,
 )
-from tools.visual.pptx_window import (
+from tools.ppt_research.pptx_window import (
     get_window_id_via_jxa as _get_window_id_via_jxa,
 )
-from tools.visual.pptx_window import (
+from tools.ppt_research.pptx_window import (
     open_presentation_via_ui as _open_presentation_via_ui,
 )
-from tools.visual.pptx_window import (
+from tools.ppt_research.pptx_window import (
     osascript as _osascript,
 )
 

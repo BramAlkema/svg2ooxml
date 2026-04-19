@@ -3,20 +3,14 @@
 
 import argparse
 import logging
-import sys
 import subprocess
+import sys
 from pathlib import Path
 
 # Add project root and src to path
 project_root = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(project_root))
 sys.path.insert(0, str(project_root / "src"))
-
-from lxml import etree
-from svg2ooxml.core.animation.parser import SMILParser
-from svg2ooxml.core.animation.sampler import TimelineSampler
-from tools.visual.builder import PptxBuilder
-from tools.visual.renderer import default_renderer
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 logger = logging.getLogger("sample_animation")
@@ -69,6 +63,13 @@ def generate_resvg_snapshot(svg_text: str, output_png: Path) -> None:
 
 def sample_svg(svg_path: Path, output_pptx: Path, timestamps: list[float]) -> None:
     """Sample SVG at timestamps and create a PPTX with one slide per sample."""
+    from lxml import etree
+
+    from svg2ooxml.core.animation.parser import SMILParser
+    from svg2ooxml.core.animation.sampler import TimelineSampler
+    from tools.visual.builder import PptxBuilder
+    from tools.visual.renderer import default_renderer
+
     if not svg_path.exists():
         logger.error("SVG file not found: %s", svg_path)
         return

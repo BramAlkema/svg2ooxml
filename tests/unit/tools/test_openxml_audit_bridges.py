@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from tools.visual import (
+from tools.ppt_research import (
     powerpoint_oracle,
     powerpoint_oracle_starter_deck,
     powerpoint_timing_oracle_deck,

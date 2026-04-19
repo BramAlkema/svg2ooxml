@@ -250,7 +250,7 @@ pytest tests/unit/tools/test_powerpoint_capture.py
 
 ### Required manual/control verification
 ```bash
-python -m tools.visual.powerpoint_capture <pptx> <png> --mode slideshow
+python -m tools.ppt_research.powerpoint_capture <pptx> <png> --mode slideshow
 python -m tools.visual.corpus_audit tests/corpus/kelvin_lawrence/animate-opacity.svg --renderer powerpoint --skip-browser --check-animation
 python -m tools.visual.corpus_audit tests/corpus/kelvin_lawrence/animate-size.svg --renderer powerpoint --skip-browser --check-animation
 ```

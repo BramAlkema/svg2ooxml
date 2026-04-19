@@ -4,8 +4,8 @@ import subprocess
 from pathlib import Path
 
 import pytest
-import tools.visual.pptx_window as pptx_window
-from tools.visual import powerpoint_capture
+import tools.ppt_research.pptx_window as pptx_window
+from tools.ppt_research import powerpoint_capture
 
 
 def test_get_window_id_via_jxa_guards_non_array_window_lists(monkeypatch) -> None:

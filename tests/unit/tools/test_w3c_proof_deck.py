@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from PIL import Image
-from tools.visual.w3c_proof_deck import (
+from tools.ppt_research.w3c_proof_deck import (
     _build_montage,
     _detect_animation_duration,
     _resolve_scenarios,
