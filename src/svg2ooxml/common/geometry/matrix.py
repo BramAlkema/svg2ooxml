@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass
-from math import cos, radians, sin
+from math import cos, radians, sin, tan
 
 from svg2ooxml.ir.geometry import Point
 
@@ -134,26 +134,28 @@ class Matrix2D:
 
     @classmethod
     def skew_x(cls, angle_deg: float) -> Matrix2D:
-        return cls(c=sin(radians(angle_deg)))
+        return cls(c=tan(radians(angle_deg)))
 
     @classmethod
     def skew_y(cls, angle_deg: float) -> Matrix2D:
-        return cls(b=sin(radians(angle_deg)))
+        return cls(b=tan(radians(angle_deg)))
 
     @classmethod
     def from_transform(cls, name: str, values: Iterable[float]) -> Matrix2D:
+        name = name.strip()
+        lower_name = name.lower()
         vals = list(values)
-        if name == "matrix" and len(vals) >= 6:
+        if lower_name == "matrix" and len(vals) >= 6:
             return cls(*vals[:6])
-        if name == "translate":
+        if lower_name == "translate":
             tx = vals[0] if vals else 0.0
             ty = vals[1] if len(vals) > 1 else 0.0
             return cls(e=tx, f=ty)
-        if name == "scale":
+        if lower_name == "scale":
             sx = vals[0] if vals else 1.0
             sy = vals[1] if len(vals) > 1 else sx
             return cls(a=sx, d=sy)
-        if name == "rotate":
+        if lower_name == "rotate":
             angle = radians(vals[0]) if vals else 0.0
             cos_a = cos(angle)
             sin_a = sin(angle)
@@ -168,12 +170,12 @@ class Matrix2D:
                     f=cy - cx * sin_a - cy * cos_a,
                 )
             return cls(a=cos_a, b=sin_a, c=-sin_a, d=cos_a)
-        if name == "skewX" and vals:
+        if lower_name == "skewx" and vals:
             angle = radians(vals[0])
-            return cls(c=sin(angle))
-        if name == "skewY" and vals:
+            return cls(c=tan(angle))
+        if lower_name == "skewy" and vals:
             angle = radians(vals[0])
-            return cls(b=sin(angle))
+            return cls(b=tan(angle))
         return cls.identity()
 
     @classmethod
@@ -225,15 +227,9 @@ def _tokenize_transforms(transform: str) -> list[tuple[str, list[float]]]:
 
 
 def _parse_floats(text: str) -> list[float]:
-    cleaned = text.replace(",", " ")
-    parts = cleaned.split()
-    values: list[float] = []
-    for part in parts:
-        try:
-            values.append(float(part))
-        except ValueError:
-            continue
-    return values
+    from svg2ooxml.common.conversions.transforms import parse_numeric_list
+
+    return parse_numeric_list(text)
 
 
 __all__ = ["Matrix2D", "parse_transform_list"]

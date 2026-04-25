@@ -6,10 +6,12 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 
 from svg2ooxml.common.geometry.paths.drawingml import PathCommand, build_path_commands
+from svg2ooxml.common.units import px_to_emu
+from svg2ooxml.common.units.scalars import EMU_PER_PX_AT_DEFAULT_DPI
 from svg2ooxml.drawingml.custgeom_generator import CustGeomGenerator
 from svg2ooxml.ir.geometry import SegmentType
 
-EMU_PER_PX = 9525
+EMU_PER_PX = int(EMU_PER_PX_AT_DEFAULT_DPI)
 
 
 @dataclass(frozen=True)
@@ -97,4 +99,4 @@ def rect_to_emu(rect) -> tuple[int, int, int, int]:
 
 
 def _to_emu(value: float) -> int:
-    return int(round(value * EMU_PER_PX))
+    return int(round(px_to_emu(value)))

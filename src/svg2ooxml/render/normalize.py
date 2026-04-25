@@ -79,7 +79,16 @@ def normalize_svg(svg_root: etree._Element) -> NormalizedSvgTree:
     if svg_root is None:
         raise ValueError("normalize_svg requires an SVG root element")
 
-    width, height = _resolve_viewport(svg_root)
+    converter = UnitConverter()
+    width, height = _resolve_viewport(svg_root, converter)
+    conversion = converter.create_context(
+        width=width,
+        height=height,
+        parent_width=width,
+        parent_height=height,
+        viewport_width=width,
+        viewport_height=height,
+    )
     node_index: dict[int, NormalizedNode] = {}
     definitions: dict[str, NormalizedNode] = {}
     root_node = _build_node(
@@ -88,6 +97,8 @@ def normalize_svg(svg_root: etree._Element) -> NormalizedSvgTree:
         node_index,
         definitions,
         inherited_style={},
+        unit_converter=converter,
+        conversion_context=conversion,
     )
     _apply_paints(root_node, definitions)
     return NormalizedSvgTree(
@@ -105,12 +116,14 @@ def _build_node(
     node_index: dict[int, NormalizedNode],
     definitions: dict[str, NormalizedNode],
     inherited_style: Mapping[str, str],
+    unit_converter: UnitConverter,
+    conversion_context,
 ) -> NormalizedNode:
     tag = _local_name(getattr(element, "tag", None))
     local = parse_transform_list(element.get("transform"))
     world = parent_world.multiply(local)
     style = _compute_style(element, inherited_style)
-    geometry = _resolve_geometry(element, style)
+    geometry = _resolve_geometry(element, style, unit_converter, conversion_context)
 
     node = NormalizedNode(
         tag=tag,
@@ -132,7 +145,15 @@ def _build_node(
     for child in element:
         if not isinstance(child.tag, str):
             continue
-        child_node = _build_node(child, world, node_index, definitions, style)
+        child_node = _build_node(
+            child,
+            world,
+            node_index,
+            definitions,
+            style,
+            unit_converter,
+            conversion_context,
+        )
         node.children.append(child_node)
 
     return node
@@ -151,9 +172,7 @@ def _strip_url(token: str | None) -> str | None:
     return inner or None
 
 
-def _resolve_viewport(svg_root: etree._Element) -> tuple[float, float]:
-    converter = UnitConverter()
-
+def _resolve_viewport(svg_root: etree._Element, converter: UnitConverter) -> tuple[float, float]:
     width = _to_px(svg_root.get("width"), converter)
     height = _to_px(svg_root.get("height"), converter)
 
@@ -171,16 +190,18 @@ def _resolve_viewport(svg_root: etree._Element) -> tuple[float, float]:
     return width, height
 
 
-def _to_px(value: str | None, converter: UnitConverter) -> float:
+def _to_px(
+    value: str | None,
+    converter: UnitConverter,
+    context=None,
+    *,
+    axis: str = "x",
+) -> float:
     if not value:
         return 0.0
     try:
-        return float(value)
+        return converter.to_px(value, context=context, axis=axis)
     except ValueError:
-        pass
-    try:
-        return converter.to_px(value, context=None)
-    except Exception:
         return 0.0
 
 
@@ -249,16 +270,21 @@ def _parse_style_attribute(style: str) -> dict[str, str]:
     return result
 
 
-def _resolve_geometry(element: etree._Element, style: Mapping[str, str]) -> Any | None:
+def _resolve_geometry(
+    element: etree._Element,
+    style: Mapping[str, str],
+    unit_converter: UnitConverter,
+    conversion_context,
+) -> Any | None:
     tag = _local_name(getattr(element, "tag", None))
     if tag == "rect":
-        return _rect_geometry(element)
+        return _rect_geometry(element, unit_converter, conversion_context)
     if tag == "circle":
-        return _circle_geometry(element)
+        return _circle_geometry(element, unit_converter, conversion_context)
     if tag == "ellipse":
-        return _ellipse_geometry(element)
+        return _ellipse_geometry(element, unit_converter, conversion_context)
     if tag == "line":
-        return _line_geometry(element)
+        return _line_geometry(element, unit_converter, conversion_context)
     if tag == "polyline":
         return _poly_geometry(element, closed=False)
     if tag == "polygon":
@@ -268,15 +294,18 @@ def _resolve_geometry(element: etree._Element, style: Mapping[str, str]) -> Any 
     return None
 
 
-def _rect_geometry(element: etree._Element) -> Rectangle | None:
-    try:
-        x = float(element.get("x") or 0.0)
-        y = float(element.get("y") or 0.0)
-        width = float(element.get("width") or 0.0)
-        height = float(element.get("height") or 0.0)
-        rx = float(element.get("rx") or 0.0) or float(element.get("ry") or 0.0)
-    except ValueError:
-        return None
+def _rect_geometry(
+    element: etree._Element,
+    converter: UnitConverter,
+    context,
+) -> Rectangle | None:
+    x = _to_px(element.get("x"), converter, context, axis="x")
+    y = _to_px(element.get("y"), converter, context, axis="y")
+    width = _to_px(element.get("width"), converter, context, axis="x")
+    height = _to_px(element.get("height"), converter, context, axis="y")
+    rx = _to_px(element.get("rx"), converter, context, axis="x") or _to_px(
+        element.get("ry"), converter, context, axis="y"
+    )
     if width <= 0 or height <= 0:
         return None
     from svg2ooxml.ir.geometry import Rect
@@ -284,39 +313,42 @@ def _rect_geometry(element: etree._Element) -> Rectangle | None:
     return Rectangle(bounds=Rect(x, y, width, height), corner_radius=rx)
 
 
-def _circle_geometry(element: etree._Element) -> Circle | None:
-    try:
-        cx = float(element.get("cx") or 0.0)
-        cy = float(element.get("cy") or 0.0)
-        r = float(element.get("r") or 0.0)
-    except ValueError:
-        return None
+def _circle_geometry(
+    element: etree._Element,
+    converter: UnitConverter,
+    context,
+) -> Circle | None:
+    cx = _to_px(element.get("cx"), converter, context, axis="x")
+    cy = _to_px(element.get("cy"), converter, context, axis="y")
+    r = _to_px(element.get("r"), converter, context, axis="x")
     if r <= 0:
         return None
     return Circle(center=Point(cx, cy), radius=r)
 
 
-def _ellipse_geometry(element: etree._Element) -> Ellipse | None:
-    try:
-        cx = float(element.get("cx") or 0.0)
-        cy = float(element.get("cy") or 0.0)
-        rx = float(element.get("rx") or 0.0)
-        ry = float(element.get("ry") or 0.0)
-    except ValueError:
-        return None
+def _ellipse_geometry(
+    element: etree._Element,
+    converter: UnitConverter,
+    context,
+) -> Ellipse | None:
+    cx = _to_px(element.get("cx"), converter, context, axis="x")
+    cy = _to_px(element.get("cy"), converter, context, axis="y")
+    rx = _to_px(element.get("rx"), converter, context, axis="x")
+    ry = _to_px(element.get("ry"), converter, context, axis="y")
     if rx <= 0 or ry <= 0:
         return None
     return Ellipse(center=Point(cx, cy), radius_x=rx, radius_y=ry)
 
 
-def _line_geometry(element: etree._Element) -> dict[str, float] | None:
-    try:
-        x1 = float(element.get("x1") or 0.0)
-        y1 = float(element.get("y1") or 0.0)
-        x2 = float(element.get("x2") or 0.0)
-        y2 = float(element.get("y2") or 0.0)
-    except ValueError:
-        return None
+def _line_geometry(
+    element: etree._Element,
+    converter: UnitConverter,
+    context,
+) -> dict[str, float] | None:
+    x1 = _to_px(element.get("x1"), converter, context, axis="x")
+    y1 = _to_px(element.get("y1"), converter, context, axis="y")
+    x2 = _to_px(element.get("x2"), converter, context, axis="x")
+    y2 = _to_px(element.get("y2"), converter, context, axis="y")
     return {"type": "line", "x1": x1, "y1": y1, "x2": x2, "y2": y2}
 
 

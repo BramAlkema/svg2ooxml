@@ -7,13 +7,16 @@ from dataclasses import dataclass
 
 from lxml import etree
 
+from svg2ooxml.color.utils import color_to_hex
 from svg2ooxml.common.conversions.angles import radians_to_ppt
 from svg2ooxml.common.conversions.opacity import opacity_to_ppt
+from svg2ooxml.common.units import px_to_emu
+
 # Import centralized XML builders for safe DrawingML generation
 from svg2ooxml.drawingml.xml_builder import a_elem, a_sub, to_string
 from svg2ooxml.filters.base import Filter, FilterContext, FilterResult
 from svg2ooxml.filters.utils import parse_number
-from svg2ooxml.units.conversion import px_to_emu
+from svg2ooxml.filters.utils.parsing import parse_length
 
 
 @dataclass
@@ -68,8 +71,8 @@ class DiffuseLightingFilter(Filter):
     def apply(self, primitive: etree._Element, context: FilterContext) -> FilterResult:
         surface_scale = parse_number(primitive.get("surfaceScale"), default=1.0)
         diffuse_constant = parse_number(primitive.get("diffuseConstant"), default=1.0)
-        kernel_unit = _parse_kernel_unit(primitive.get("kernelUnitLength"))
-        color = (primitive.get("lighting-color") or "#ffffff").strip()
+        kernel_unit = _parse_kernel_unit(primitive.get("kernelUnitLength"), context)
+        color = color_to_hex(primitive.get("lighting-color"), default="FFFFFF")
         light = _parse_light_source(primitive)
         metadata = {
             "filter_type": self.filter_type,
@@ -125,8 +128,8 @@ class SpecularLightingFilter(Filter):
         surface_scale = parse_number(primitive.get("surfaceScale"), default=1.0)
         specular_constant = parse_number(primitive.get("specularConstant"), default=1.0)
         specular_exponent = parse_number(primitive.get("specularExponent"), default=1.0)
-        kernel_unit = _parse_kernel_unit(primitive.get("kernelUnitLength"))
-        color = (primitive.get("lighting-color") or "#ffffff").strip()
+        kernel_unit = _parse_kernel_unit(primitive.get("kernelUnitLength"), context)
+        color = color_to_hex(primitive.get("lighting-color"), default="FFFFFF")
         light = _parse_light_source(primitive)
         metadata = {
             "filter_type": self.filter_type,
@@ -177,16 +180,20 @@ class SpecularLightingFilter(Filter):
         )
 
 
-def _parse_kernel_unit(value: str | None) -> tuple[float | None, float | None]:
+def _parse_kernel_unit(
+    value: str | None,
+    context: FilterContext,
+) -> tuple[float | None, float | None]:
     if not value:
         return (None, None)
-    if " " in value:
-        x_str, y_str = value.split(" ", 1)
+    parts = value.replace(",", " ").split()
+    if len(parts) >= 2:
+        x_str, y_str = parts[0], parts[1]
     else:
         x_str = y_str = value
     return (
-        parse_number(x_str) if x_str else None,
-        parse_number(y_str) if y_str else None,
+        parse_length(x_str, context=context, axis="x") if x_str else None,
+        parse_length(y_str, context=context, axis="y") if y_str else None,
     )
 
 

@@ -12,18 +12,20 @@ from svg2ooxml.common.geometry.paths.drawingml import (
     build_path_commands,
     compute_path_bounds,
 )
+from svg2ooxml.common.units import px_to_emu as _px_to_emu
+from svg2ooxml.common.units.scalars import EMU_PER_PX_AT_DEFAULT_DPI
 
 # Import centralized XML builders for safe DrawingML generation
 from svg2ooxml.drawingml.xml_builder import a_elem, a_sub, to_string
 from svg2ooxml.ir.geometry import Point, Rect, SegmentType
 
-EMU_PER_PX = 9525
+EMU_PER_PX = int(EMU_PER_PX_AT_DEFAULT_DPI)
 
 
 def px_to_emu(value: float | None) -> int:
     if value is None:
         return 0
-    return max(0, int(round(value * EMU_PER_PX)))
+    return int(round(_px_to_emu(float(value))))
 
 
 @dataclass

@@ -112,6 +112,51 @@ def test_paint_style_handles_url_and_percentage_width() -> None:
     assert paint["opacity"] == pytest.approx(0.5)
 
 
+def test_paint_style_resolves_percentage_opacity_values() -> None:
+    resolver = StyleResolver()
+    element = etree.fromstring(
+        "<rect opacity='50%' fill-opacity='25%' stroke-opacity='75%'/>"
+    )
+
+    paint = resolver.compute_paint_style(element)
+
+    assert paint["opacity"] == pytest.approx(0.5)
+    assert paint["fill_opacity"] == pytest.approx(0.25)
+    assert paint["stroke_opacity"] == pytest.approx(0.75)
+
+
+def test_paint_style_resolves_context_dependent_length_units() -> None:
+    resolver = StyleResolver()
+    _, context = _make_context(width=200.0, height=100.0)
+    element = etree.fromstring("<rect stroke-width='10vw'/>")
+
+    paint = resolver.compute_paint_style(element, context=context)
+
+    assert paint["stroke_width_px"] == pytest.approx(20.0)
+
+
+def test_media_queries_resolve_length_units() -> None:
+    resolver = StyleResolver()
+    svg_markup = """
+        <svg xmlns='http://www.w3.org/2000/svg'>
+            <style>
+                @media (min-width: 2cm) { rect { fill: #008000; } }
+                @media (max-width: 1cm) { rect { stroke: #ff0000; } }
+            </style>
+            <rect width='10' height='10'/>
+        </svg>
+    """
+    root = etree.fromstring(svg_markup)
+    resolver.collect_css(root, viewport_width=100.0, viewport_height=100.0)
+    rect = root.find("{http://www.w3.org/2000/svg}rect")
+    assert rect is not None
+
+    paint = resolver.compute_paint_style(rect, context=_make_context(width=100.0)[1])
+
+    assert paint["fill"] == "#008000"
+    assert paint["stroke"] is None
+
+
 def test_stylesheet_rules_apply_to_use_clones() -> None:
     resolver = StyleResolver()
     converter, context = _make_context()

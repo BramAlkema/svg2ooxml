@@ -24,6 +24,7 @@ __all__ = [
     "ppt_to_alpha",
     "percentage_to_ppt",
     "ppt_to_percentage",
+    "parse_opacity",
     "PPT_OPACITY_SCALE",
 ]
 
@@ -54,6 +55,31 @@ def opacity_to_ppt(opacity: float) -> int:
     """
     clamped = max(0.0, min(1.0, opacity))
     return int(round(clamped * PPT_OPACITY_SCALE))
+
+
+def parse_opacity(value: str | float | int | None, default: float = 1.0) -> float:
+    """Parse CSS/SVG opacity syntax and clamp it to ``0.0``-``1.0``.
+
+    Numeric values use the SVG opacity scale directly; percentage tokens are
+    resolved as CSS alpha percentages.
+    """
+
+    if value is None:
+        return max(0.0, min(1.0, float(default)))
+    if isinstance(value, (int, float)):
+        return max(0.0, min(1.0, float(value)))
+
+    token = value.strip()
+    if not token:
+        return max(0.0, min(1.0, float(default)))
+    try:
+        if token.endswith("%"):
+            parsed = float(token[:-1]) / 100.0
+        else:
+            parsed = float(token)
+    except ValueError:
+        parsed = float(default)
+    return max(0.0, min(1.0, parsed))
 
 
 def ppt_to_opacity(ppt_value: int) -> float:

@@ -32,6 +32,25 @@ def _parse_float(value: str | None, *, default: float | None = None) -> float | 
         return default
 
 
+def _resolve_svg_length(
+    unit_converter,
+    value: str | None,
+    context,
+    *,
+    axis: str,
+    default: float | None = None,
+) -> float | None:
+    if value is None:
+        return default
+    token = value.strip()
+    if not token:
+        return default
+    try:
+        return float(unit_converter.to_px(token, context, axis=axis))
+    except Exception:
+        return default
+
+
 def _ellipse_segments(cx: float, cy: float, rx: float, ry: float) -> list[SegmentType]:
     if rx <= 0 or ry <= 0:
         return []

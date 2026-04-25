@@ -30,15 +30,16 @@ def convert_rect(
 ):
     """Convert <rect> elements into IR rectangles or paths with rounded corners."""
 
-    width = _parse_float(element.get("width"))
-    height = _parse_float(element.get("height"))
+    context = getattr(converter, "_conversion_context", None)
+    width = converter._resolve_length(element.get("width"), context, axis="x")
+    height = converter._resolve_length(element.get("height"), context, axis="y")
     if width is None or height is None or width <= 0 or height <= 0:
         return None
 
-    x = _parse_float(element.get("x"), default=0.0) or 0.0
-    y = _parse_float(element.get("y"), default=0.0) or 0.0
-    rx_raw = _parse_float(element.get("rx"))
-    ry_raw = _parse_float(element.get("ry"))
+    x = converter._resolve_length(element.get("x"), context, axis="x")
+    y = converter._resolve_length(element.get("y"), context, axis="y")
+    rx_raw = converter._resolve_length(element.get("rx"), context, axis="x")
+    ry_raw = converter._resolve_length(element.get("ry"), context, axis="y")
     rx = rx_raw if rx_raw is not None else 0.0
     ry = ry_raw if ry_raw is not None else 0.0
     if rx <= 0.0 and ry > 0.0:
@@ -102,20 +103,6 @@ def convert_rect(
     converter._process_mask_metadata(path)
     converter._trace_geometry_decision(element, "native", path.metadata)
     return path
-
-
-def _parse_float(value: str | None, *, default: float | None = None) -> float | None:
-    if value is None:
-        return default
-    value = value.strip()
-    if not value:
-        return default
-    try:
-        if value.endswith("%"):
-            return float(value[:-1]) / 100.0
-        return float(value)
-    except ValueError:
-        return default
 
 
 def _rect_segments(x: float, y: float, width: float, height: float) -> list[SegmentType]:

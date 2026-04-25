@@ -77,6 +77,9 @@ class ConversionContext:
     root_font_size: float | None = None
     font_x_height: float | None = None
 
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "dpi", validate_dpi(self.dpi))
+
     def derive(
         self,
         *,
@@ -127,7 +130,7 @@ class UnitConverter:
     """Convert SVG/CSS length primitives to pixels or EMUs."""
 
     def __init__(self, *, dpi: float = DEFAULT_DPI, ex_height_ratio: float = 0.5) -> None:
-        self.dpi = dpi
+        self.dpi = validate_dpi(dpi)
         self.ex_height_ratio = ex_height_ratio
 
     # --- public API -----------------------------------------------------
@@ -148,7 +151,7 @@ class UnitConverter:
     ) -> ConversionContext:
         """Create a conversion context for resolving percentages and relative units."""
 
-        effective_dpi = dpi if dpi is not None else self.dpi
+        effective_dpi = validate_dpi(dpi if dpi is not None else self.dpi)
         vw = viewport_width if viewport_width is not None else width
         vh = viewport_height if viewport_height is not None else height
 
@@ -218,7 +221,10 @@ class UnitConverter:
 
         if unit == "":
             # Unit-less values inherit the fallback unit (px by default).
-            return self.to_px(f"{number}{fallback_unit}", context, axis=axis, fallback_unit=fallback_unit)
+            fallback = fallback_unit.strip().lower()
+            if not fallback or fallback == "px":
+                return number
+            return self.to_px(f"{number}{fallback}", context, axis=axis, fallback_unit="px")
 
         raise ValueError(f"Unsupported unit {unit!r}")
 
@@ -258,7 +264,7 @@ class UnitConverter:
     # --- helpers --------------------------------------------------------
 
     def _dpi(self, context: ConversionContext | None) -> float:
-        return context.dpi if context is not None else self.dpi
+        return validate_dpi(context.dpi if context is not None else self.dpi)
 
     def _parse_length_value(
         self,
@@ -318,6 +324,7 @@ class UnitConverter:
 def px_to_emu(px_value: float, dpi: float = DEFAULT_DPI) -> float:
     """Convenience helper mirroring svg2pptx behaviour."""
 
+    dpi = validate_dpi(dpi)
     inches = px_value / dpi
     return inches * EMU_PER_INCH
 
@@ -325,10 +332,22 @@ def px_to_emu(px_value: float, dpi: float = DEFAULT_DPI) -> float:
 def emu_to_px(emu_value: float, dpi: float = DEFAULT_DPI) -> float:
     """Convert EMUs to pixels at the provided DPI."""
 
-    if dpi <= 0:
-        raise ValueError("dpi must be positive")
+    dpi = validate_dpi(dpi)
     inches = emu_value / EMU_PER_INCH
     return inches * dpi
+
+
+def validate_dpi(dpi: float) -> float:
+    try:
+        value = float(dpi)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("dpi must be positive") from exc
+    if value <= 0:
+        raise ValueError("dpi must be positive")
+    return value
+
+
+_validate_dpi = validate_dpi
 
 
 def emu_to_unit(emu_value: float, unit: str) -> float:
@@ -357,6 +376,7 @@ __all__ = [
     "emu_to_px",
     "emu_to_unit",
     "px_to_emu",
+    "validate_dpi",
     "DEFAULT_DPI",
     "EMU_PER_CM",
     "EMU_PER_INCH",

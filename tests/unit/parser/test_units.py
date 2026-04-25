@@ -24,3 +24,11 @@ def test_viewbox_to_px_returns_scale_factors() -> None:
 
     assert sx == 2.0
     assert sy == 2.0
+
+
+def test_viewbox_to_px_rejects_non_positive_dimensions() -> None:
+    with pytest.raises(ValueError, match="viewBox width/height must be positive"):
+        viewbox_to_px((0, 0, 0, 50), width=200, height=100)
+
+    with pytest.raises(ValueError, match="viewBox width/height must be positive"):
+        viewbox_to_px((0, 0, -100, 50), width=200, height=100)

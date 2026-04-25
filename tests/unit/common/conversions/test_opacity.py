@@ -5,6 +5,7 @@ from svg2ooxml.common.conversions.opacity import (
     PPT_OPACITY_SCALE,
     alpha_to_ppt,
     opacity_to_ppt,
+    parse_opacity,
     percentage_to_ppt,
     ppt_to_alpha,
     ppt_to_opacity,
@@ -63,6 +64,23 @@ class TestPPTToOpacity:
 
     def test_clamping_below_zero(self):
         assert ppt_to_opacity(-50000) == 0.0
+
+
+class TestParseOpacity:
+    """Test CSS/SVG opacity parsing."""
+
+    def test_number(self):
+        assert parse_opacity("0.5") == 0.5
+
+    def test_percentage(self):
+        assert parse_opacity("50%") == 0.5
+
+    def test_clamps_numeric_values(self):
+        assert parse_opacity("50") == 1.0
+        assert parse_opacity("-2") == 0.0
+
+    def test_invalid_uses_default(self):
+        assert parse_opacity("bad", default=0.25) == 0.25
 
 
 class TestAlphaToPPT:

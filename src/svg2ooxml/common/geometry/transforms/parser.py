@@ -17,7 +17,7 @@ from .matrix import (
 )
 
 _TRANSFORM_RE = re.compile(r"(?P<name>[A-Za-z]+)\((?P<args>[^)]*)\)")
-_SEPARATOR_RE = re.compile(r"[,\s]+")
+_NUMBER_RE = re.compile(r"[-+]?(?:(?:\d+\.\d*)|(?:\.\d+)|(?:\d+))(?:[eE][-+]?\d+)?")
 
 
 def parse_transform(transform: str | None) -> Matrix2D:
@@ -34,10 +34,22 @@ def parse_transform(transform: str | None) -> Matrix2D:
 
 
 def _parse_arguments(arguments: str) -> list[float]:
-    if not arguments.strip():
+    text = arguments.strip()
+    if not text:
         return []
-    parts = _SEPARATOR_RE.split(arguments.strip())
-    return [float(part) for part in parts if part]
+
+    values: list[float] = []
+    position = 0
+    for match in _NUMBER_RE.finditer(text):
+        separator = text[position:match.start()]
+        if separator.strip(" \t\r\n,"):
+            raise ValueError(f"Invalid transform arguments: {arguments!r}")
+        values.append(float(match.group(0)))
+        position = match.end()
+
+    if text[position:].strip(" \t\r\n,"):
+        raise ValueError(f"Invalid transform arguments: {arguments!r}")
+    return values
 
 
 def _matrix_for(name: str, values: Iterable[float]) -> Matrix2D:

@@ -2,19 +2,14 @@
 
 from __future__ import annotations
 
-from ..usvg_tree import TextNode, TextSpan, Tree
+from svg2ooxml.common.conversions.transforms import parse_numeric_list
+from svg2ooxml.core.resvg.usvg_tree import TextNode, TextSpan, Tree
 
 
 def _parse_number_list(value: str | None) -> list[float]:
     if not value:
         return []
-    values: list[float] = []
-    for part in value.replace(",", " ").split():
-        try:
-            values.append(float(part))
-        except ValueError:
-            continue
-    return values
+    return parse_numeric_list(value)
 
 
 def _apply_text_layout(node: TextNode) -> None:

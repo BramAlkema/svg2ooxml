@@ -10,22 +10,21 @@ from lxml import etree
 
 from svg2ooxml.common.conversions.angles import radians_to_ppt
 from svg2ooxml.common.conversions.opacity import opacity_to_ppt
+from svg2ooxml.common.units import px_to_emu
 from svg2ooxml.drawingml.xml_builder import a_elem, a_sub, to_string
 from svg2ooxml.filters.base import FilterContext, FilterResult
-from svg2ooxml.filters.primitives.component_transfer import ComponentTransferFilter
 from svg2ooxml.filters.primitives.color_matrix import ColorMatrixFilter
+from svg2ooxml.filters.primitives.component_transfer import ComponentTransferFilter
 from svg2ooxml.filters.primitives.flood import FloodFilter
 from svg2ooxml.filters.primitives.gaussian_blur import GaussianBlurFilter
-from svg2ooxml.filters.primitives.merge import MergeFilter
-from svg2ooxml.filters.primitives.offset import OffsetFilter
 from svg2ooxml.filters.primitives.lighting import (
     DiffuseLightingFilter,
     SpecularLightingFilter,
 )
+from svg2ooxml.filters.primitives.merge import MergeFilter
+from svg2ooxml.filters.primitives.offset import OffsetFilter
 from svg2ooxml.ir.effects import CustomEffect
 from svg2ooxml.services.filter_types import FilterEffectResult
-from svg2ooxml.units.conversion import px_to_emu
-
 
 # ---------------------------------------------------------------------------
 # Stack matching helpers
@@ -216,7 +215,7 @@ def build_flood_blur_merge_effect(
     flood_filter = FloodFilter()
     blur_filter = GaussianBlurFilter()
     flood_params = flood_filter._parse_params(flood_primitive)
-    blur_params = blur_filter._parse_params(blur_primitive)
+    blur_params = blur_filter._parse_params(blur_primitive, context)
 
     radius_scale = blur_filter._resolve_radius_scale(
         blur_filter._primitive_policy(context.policy),
@@ -297,8 +296,8 @@ def build_shadow_stack_effect(
     blur_filter = GaussianBlurFilter()
     flood_filter = FloodFilter()
 
-    offset_params = offset_filter._parse_params(offset_primitive)
-    blur_params = blur_filter._parse_params(blur_primitive)
+    offset_params = offset_filter._parse_params(offset_primitive, context)
+    blur_params = blur_filter._parse_params(blur_primitive, context)
     flood_params = flood_filter._parse_params(flood_primitive)
 
     radius_scale = blur_filter._resolve_radius_scale(

@@ -6,13 +6,15 @@ from dataclasses import dataclass
 
 from lxml import etree
 
-from svg2ooxml.common.conversions.opacity import opacity_to_ppt
+from svg2ooxml.color.utils import color_to_hex
+from svg2ooxml.common.conversions.opacity import opacity_to_ppt, parse_opacity
+from svg2ooxml.common.units import px_to_emu
 
 # Import centralized XML builders for safe DrawingML generation
 from svg2ooxml.drawingml.xml_builder import a_elem, a_sub, to_string
 from svg2ooxml.filters.base import Filter, FilterContext, FilterResult
-from svg2ooxml.filters.utils import build_exporter_hook, parse_number
-from svg2ooxml.units.conversion import px_to_emu
+from svg2ooxml.filters.utils import build_exporter_hook
+from svg2ooxml.filters.utils.parsing import parse_length
 
 
 @dataclass
@@ -27,7 +29,7 @@ class MorphologyFilter(Filter):
     filter_type = "morphology"
 
     def apply(self, primitive: etree._Element, context: FilterContext) -> FilterResult:
-        params = self._parse_params(primitive)
+        params = self._parse_params(primitive, context)
         radius_max = max(params.radius_x, params.radius_y)
         metadata = {
             "filter_type": self.filter_type,
@@ -116,15 +118,15 @@ class MorphologyFilter(Filter):
         )
         return FilterResult(success=True, drawingml=drawingml, metadata=metadata)
 
-    def _parse_params(self, primitive: etree._Element) -> MorphologyParams:
+    def _parse_params(self, primitive: etree._Element, context: FilterContext) -> MorphologyParams:
         operator = (primitive.get("operator") or "erode").strip().lower()
         radius = (primitive.get("radius") or "0").strip()
         if " " in radius:
             rx_str, ry_str = radius.split(" ", 1)
         else:
             rx_str = ry_str = radius
-        radius_x = max(0.0, parse_number(rx_str))
-        radius_y = max(0.0, parse_number(ry_str))
+        radius_x = max(0.0, parse_length(rx_str, context=context, axis="x"))
+        radius_y = max(0.0, parse_length(ry_str, context=context, axis="y"))
         if operator not in {"erode", "dilate"}:
             operator = "erode"
         return MorphologyParams(operator=operator, radius_x=radius_x, radius_y=radius_y)
@@ -238,16 +240,10 @@ class MorphologyFilter(Filter):
     def _normalize_colour(self, token: str | None) -> str | None:
         if not token:
             return None
-        value = token.strip().lstrip("#")
-        if len(value) == 3:
-            value = "".join(ch * 2 for ch in value)
-        if len(value) != 6:
+        value = color_to_hex(token, default="")
+        if not value:
             return None
-        try:
-            int(value, 16)
-        except ValueError:
-            return None
-        return value.upper()
+        return value
 
     def _as_colour_token(self, value: object) -> str | None:
         if value is None:
@@ -261,14 +257,16 @@ class MorphologyFilter(Filter):
             if candidate is None:
                 continue
             try:
-                alpha_value = float(str(candidate))
+                if isinstance(candidate, str):
+                    token = candidate.strip()
+                    if not token:
+                        continue
+                    alpha_value = float(token[:-1]) / 100.0 if token.endswith("%") else float(token)
+                else:
+                    alpha_value = float(candidate)
             except (ValueError, TypeError):
                 continue
-            if alpha_value < 0.0:
-                alpha_value = 0.0
-            if alpha_value > 1.0:
-                alpha_value = 1.0
-            return alpha_value
+            return parse_opacity(alpha_value, default=1.0)
         return None
 
     def _pipeline_colour(
@@ -303,7 +301,7 @@ class MorphologyFilter(Filter):
             candidate = metadata.get(key)
             if candidate is not None:
                 try:
-                    return float(candidate)
+                    return parse_opacity(candidate, default=1.0)
                 except (ValueError, TypeError):
                     continue
         return None

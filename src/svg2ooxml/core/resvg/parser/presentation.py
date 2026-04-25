@@ -6,6 +6,9 @@ import os
 import re
 from dataclasses import dataclass
 
+from svg2ooxml.common.conversions.opacity import parse_opacity
+from svg2ooxml.common.conversions.transforms import parse_numeric_list
+from svg2ooxml.common.units import UnitConverter
 from svg2ooxml.common.units.scalars import PX_PER_INCH
 
 from .tree import SvgNode
@@ -36,6 +39,9 @@ _TRANSFORM_RE = re.compile(r"([a-zA-Z]+)\s*\(([^)]*)\)")
 _DEFAULT_UNITLESS_FONT_SCALE = float(
     os.getenv("SVG2OOXML_UNITLESS_FONT_SCALE", str(72.0 / PX_PER_INCH))
 )
+_DEFAULT_FONT_SIZE_PT = 12.0
+_DEFAULT_FONT_SIZE_PX = _DEFAULT_FONT_SIZE_PT / _DEFAULT_UNITLESS_FONT_SCALE
+_UNIT_CONVERTER = UnitConverter()
 
 
 @dataclass(frozen=True)
@@ -86,19 +92,35 @@ def _parse_optional_positive(value: str | None) -> float | None:
 
 
 def _parse_font_size(value: str | None) -> float | None:
-    number = _parse_optional_positive(value)
-    if number is None:
+    if value is None:
         return None
-    return number * _DEFAULT_UNITLESS_FONT_SCALE
+    token = value.strip().lower()
+    if not token or token in {"inherit", "initial", "unset", "medium"}:
+        return None
+    if token.endswith("%"):
+        try:
+            return _DEFAULT_FONT_SIZE_PT * max(0.0, float(token[:-1])) / 100.0
+        except ValueError:
+            return None
+    try:
+        context = _UNIT_CONVERTER.create_context(
+            width=0.0,
+            height=0.0,
+            font_size=_DEFAULT_FONT_SIZE_PX,
+            root_font_size=_DEFAULT_FONT_SIZE_PX,
+        )
+        px = _UNIT_CONVERTER.to_px(token, context, axis="font-size")
+    except ValueError:
+        return None
+    if px < 0:
+        return None
+    return px * _DEFAULT_UNITLESS_FONT_SCALE
 
 
 def _parse_opacity(value: str | None) -> float | None:
-    number = _parse_optional_positive(value)
-    if number is None:
+    if value is None:
         return None
-    if number > 1:
-        number = 1.0
-    return number
+    return parse_opacity(value, default=1.0)
 
 
 def _parse_letter_spacing(value: str | None) -> float | None:
@@ -108,11 +130,14 @@ def _parse_letter_spacing(value: str | None) -> float | None:
     value = value.strip().lower()
     if value in {"normal", "inherit", "initial"}:
         return None
-    # Strip 'px' suffix if present
-    if value.endswith("px"):
-        value = value[:-2].strip()
     try:
-        return float(value)
+        context = _UNIT_CONVERTER.create_context(
+            width=0.0,
+            height=0.0,
+            font_size=_DEFAULT_FONT_SIZE_PX,
+            root_font_size=_DEFAULT_FONT_SIZE_PX,
+        )
+        return _UNIT_CONVERTER.to_px(value, context, axis="font-size")
     except ValueError:
         return None
 
@@ -133,14 +158,7 @@ def parse_transform(value: str | None) -> tuple[TransformCommand, ...] | None:
     for match in _TRANSFORM_RE.finditer(value):
         name = match.group(1)
         raw_args = match.group(2)
-        args: list[float] = []
-        for chunk in re.split(r"[\s,]+", raw_args.strip()):
-            if not chunk:
-                continue
-            try:
-                args.append(float(chunk))
-            except ValueError:
-                continue
+        args = parse_numeric_list(raw_args)
         commands.append(TransformCommand(name=name, values=tuple(args)))
     return tuple(commands) if commands else None
 

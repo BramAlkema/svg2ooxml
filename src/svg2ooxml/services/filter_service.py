@@ -21,9 +21,10 @@ from svg2ooxml.filters.resvg_bridge import (
 from svg2ooxml.services.filter_types import FilterEffectResult
 
 if TYPE_CHECKING:  # pragma: no cover - type checking only
-    from .conversion import ConversionServices
     from svg2ooxml.filters.planner import FilterPlanner
     from svg2ooxml.filters.renderer import FilterRenderer as FilterPipelineRenderer
+
+    from .conversion import ConversionServices
 
 
 ALLOWED_STRATEGIES = {
@@ -433,7 +434,15 @@ class FilterService:
             if isinstance(source_path, str) and source_path:
                 options["source_path"] = source_path
         viewport = None
+        unit_converter = None
+        conversion_context = None
         if services is not None:
+            if hasattr(services, "resolve"):
+                unit_converter = services.resolve("unit_converter")
+                conversion_context = services.resolve("conversion_context")
+                style_context = services.resolve("style_context")
+                if conversion_context is None and style_context is not None:
+                    conversion_context = getattr(style_context, "conversion", None)
             width = getattr(services, "viewport_width", None)
             height = getattr(services, "viewport_height", None)
             if width is not None or height is not None:
@@ -444,6 +453,8 @@ class FilterService:
             policy_engine=self._policy_engine,
             options=options,
             viewport=viewport,
+            unit_converter=unit_converter,
+            conversion_context=conversion_context,
         )
 
     def set_strategy(self, strategy: str) -> None:

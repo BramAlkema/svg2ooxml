@@ -6,6 +6,7 @@ import html
 import logging
 from collections.abc import Iterable
 
+from svg2ooxml.common.conversions.angles import degrees_to_ppt
 from svg2ooxml.common.conversions.bidi import is_rtl_text
 from svg2ooxml.common.conversions.opacity import opacity_to_ppt
 from svg2ooxml.drawingml.generator import DrawingMLPathGenerator, px_to_emu
@@ -71,7 +72,7 @@ def _rot_attr(metadata) -> str:
     except (TypeError, ValueError):
         return ""
     if abs(degrees) > 0.01:
-        ppt_angle = int(round(degrees * 60000))
+        ppt_angle = degrees_to_ppt(degrees)
         return f' rot="{ppt_angle}"'
     return ""
 

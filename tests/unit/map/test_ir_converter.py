@@ -598,6 +598,24 @@ def test_use_image_expands_when_resvg_use_node_is_unsupported() -> None:
     assert "imageUse" in element_ids
 
 
+def test_image_geometry_resolves_svg_length_units() -> None:
+    parse_result = _build_parse_result(
+        "<svg width='200' height='100' xmlns='http://www.w3.org/2000/svg'>"
+        "<image href='data:image/png;base64,Zm9v' x='10%' y='1cm' width='2cm' height='25%'/>"
+        "</svg>"
+    )
+
+    scene = convert_parser_output(parse_result)
+
+    assert len(scene.elements) == 1
+    image = scene.elements[0]
+    assert isinstance(image, Image)
+    assert image.origin.x == pytest.approx(20.0)
+    assert image.origin.y == pytest.approx(37.7952755906)
+    assert image.size.width == pytest.approx(75.5905511811)
+    assert image.size.height == pytest.approx(50.0)
+
+
 def test_use_symbol_applies_viewbox_scaling() -> None:
     parse_result = _build_parse_result(
         "<svg width='200' height='200' xmlns='http://www.w3.org/2000/svg'>"

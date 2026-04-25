@@ -9,7 +9,7 @@ from typing import Final
 from lxml import etree
 
 from svg2ooxml.common.geometry.transforms.matrix import Matrix2D
-from svg2ooxml.common.units import UnitConverter
+from svg2ooxml.common.units import ConversionContext, UnitConverter
 
 ALIGN_MAP: Final[dict[str, tuple[float, float]]] = {
     "xminymin": (0.0, 0.0),
@@ -22,6 +22,8 @@ ALIGN_MAP: Final[dict[str, tuple[float, float]]] = {
     "xmidymax": (0.5, 1.0),
     "xmaxymax": (1.0, 1.0),
 }
+_NUMBER_RE = re.compile(r"[-+]?(?:(?:\d+\.\d*)|(?:\.\d+)|(?:\d+))(?:[eE][-+]?\d+)?")
+_NUMERIC_SEPARATOR_RE = re.compile(r"^[\s,]*$")
 
 
 @dataclass(slots=True, frozen=True)
@@ -84,8 +86,8 @@ class ViewportEngine:
             else parse_preserve_aspect_ratio(preserve_aspect_ratio)
         )
 
-        if vb.width == 0 or vb.height == 0:
-            raise ValueError("viewBox width/height cannot be zero")
+        if vb.width <= 0 or vb.height <= 0:
+            raise ValueError("viewBox width/height must be positive")
         if vp.width <= 0 or vp.height <= 0:
             raise ValueError("viewport width/height must be positive")
 
@@ -183,27 +185,35 @@ def compute_viewbox(
     return engine.compute(view_box, viewport, preserve_aspect_ratio)
 
 
-_VIEWBOX_RE = re.compile(r"[,\s]+")
-
-
 def parse_viewbox_attribute(value: str | None) -> ViewBox | None:
     """Parse the value of the SVG ``viewBox`` attribute."""
 
     if value is None:
         return None
-    cleaned = _VIEWBOX_RE.sub(" ", value.strip())
+    cleaned = value.strip()
     if not cleaned:
         return None
-    parts = cleaned.split()
+    parts = _parse_viewbox_numbers(cleaned)
     if len(parts) != 4:
         raise ValueError(f"viewBox must provide four numbers (got {value!r})")
-    try:
-        min_x, min_y, width, height = (float(part) for part in parts)
-    except ValueError as exc:  # pragma: no cover - defensive
-        raise ValueError(f"viewBox contains non-numeric values: {value!r}") from exc
-    if width == 0 or height == 0:
-        raise ValueError("viewBox width/height must be non-zero")
+    min_x, min_y, width, height = parts
+    if width <= 0 or height <= 0:
+        raise ValueError("viewBox width/height must be positive")
     return ViewBox(min_x, min_y, width, height)
+
+
+def _parse_viewbox_numbers(value: str) -> list[float]:
+    values: list[float] = []
+    position = 0
+    for match in _NUMBER_RE.finditer(value):
+        separator = value[position : match.start()]
+        if not _NUMERIC_SEPARATOR_RE.match(separator):
+            raise ValueError(f"viewBox contains non-numeric values: {value!r}")
+        values.append(float(match.group(0)))
+        position = match.end()
+    if not _NUMERIC_SEPARATOR_RE.match(value[position:]):
+        raise ValueError(f"viewBox contains non-numeric values: {value!r}")
+    return values
 
 
 def resolve_viewbox_dimensions(
@@ -212,6 +222,7 @@ def resolve_viewbox_dimensions(
     *,
     default_width: float = 800.0,
     default_height: float = 600.0,
+    context: ConversionContext | None = None,
 ) -> tuple[float, float, ViewBox | None, PreserveAspectRatio]:
     """Resolve viewport dimensions and related metadata for an SVG element."""
 
@@ -220,8 +231,8 @@ def resolve_viewbox_dimensions(
     viewbox = parse_viewbox_attribute(svg_root.get("viewBox"))
     preserve = parse_preserve_aspect_ratio(svg_root.get("preserveAspectRatio"))
 
-    width_px = _to_px_safely(unit_converter, width_attr)
-    height_px = _to_px_safely(unit_converter, height_attr)
+    width_px = _to_px_safely(unit_converter, width_attr, context=context, axis="width")
+    height_px = _to_px_safely(unit_converter, height_attr, context=context, axis="height")
 
     if width_px is None and viewbox is not None:
         width_px = viewbox.width
@@ -242,6 +253,7 @@ def viewbox_matrix_from_element(
     *,
     default_width: float = 800.0,
     default_height: float = 600.0,
+    context: ConversionContext | None = None,
 ) -> tuple[Matrix2D, ViewBoxResult]:
     """Convenience helper returning the viewport matrix for ``svg_root``."""
 
@@ -250,6 +262,7 @@ def viewbox_matrix_from_element(
         unit_converter,
         default_width=default_width,
         default_height=default_height,
+        context=context,
     )
 
     if viewbox is None:
@@ -260,11 +273,17 @@ def viewbox_matrix_from_element(
     return engine.to_matrix(result), result
 
 
-def _to_px_safely(converter: UnitConverter, value: str | None) -> float | None:
+def _to_px_safely(
+    converter: UnitConverter,
+    value: str | None,
+    *,
+    context: ConversionContext | None = None,
+    axis: str | None = None,
+) -> float | None:
     if value is None:
         return None
     try:
-        return converter.to_px(value)
+        return converter.to_px(value, context, axis=axis)
     except Exception:  # pragma: no cover - defensive
         return None
 

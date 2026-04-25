@@ -465,6 +465,28 @@ class TestRotateWithOrbit:
         assert len(rots) == 2  # multi-keyframe split
         assert len(motions) == 1  # orbital companion
 
+    def test_symmetric_multi_keyframe_orbit_path_is_not_collapsed(
+        self, handler: TransformAnimationHandler
+    ):
+        anim = make_transform_animation(
+            transform_type=TransformType.ROTATE,
+            values=["0 40 40", "-45 40 40", "0 40 40"],
+            element_center_px=(80.0, 80.0),
+            motion_viewport_px=(160.0, 100.0),
+        )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        motion = par.find(f".//{{{NS_P}}}animMotion")
+        assert motion is not None
+        path = motion.get("path")
+        assert path is not None
+        coords = [
+            float(token)
+            for segment in path.split("L ")[1:]
+            for token in segment.strip().rstrip(" E").split()
+        ]
+        assert any(abs(value) > 1e-6 for value in coords)
+        assert max(abs(value) for value in coords) > 0.2
+
     def test_multi_keyframe_rotate_uses_nonzero_effect_group(
         self, handler: TransformAnimationHandler
     ):

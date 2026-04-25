@@ -52,6 +52,24 @@ def test_nested_svg_viewport_scales_child_geometry() -> None:
     assert cell.bbox.height == pytest.approx(5.0)
 
 
+def test_nested_svg_percent_viewport_resolves_against_parent_viewport() -> None:
+    svg = """
+    <svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100">
+      <svg x="10%" y="20%" width="50%" height="50%" viewBox="0 0 100 100">
+        <rect id="cell" x="50" y="50" width="10" height="10" fill="#000000"/>
+      </svg>
+    </svg>
+    """
+
+    scene = _render(svg)
+
+    cell = _rectangle_with_id(scene.elements, "cell")
+    assert cell.bbox.x == pytest.approx(35.0)
+    assert cell.bbox.y == pytest.approx(45.0)
+    assert cell.bbox.width == pytest.approx(5.0)
+    assert cell.bbox.height == pytest.approx(5.0)
+
+
 def test_nested_svg_viewport_scales_use_geometry() -> None:
     svg = """
     <svg xmlns="http://www.w3.org/2000/svg"
@@ -223,6 +241,27 @@ def test_parent_fill_opacity_is_inherited_by_gradient_stops() -> None:
     child = _rectangle_with_id(scene.elements, "child")
     assert isinstance(child.fill, LinearGradientPaint)
     assert [stop.opacity for stop in child.fill.stops] == pytest.approx([0.5, 0.5])
+
+
+def test_gradient_stops_resolve_css_color_syntax_and_percent_opacity() -> None:
+    svg = """
+    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20">
+      <defs>
+        <linearGradient id="grad">
+          <stop offset="0" stop-color="red" stop-opacity="50%"/>
+          <stop offset="1" style="stop-color: rgb(0 0 255 / 75%); stop-opacity: 25%"/>
+        </linearGradient>
+      </defs>
+      <rect id="child" width="10" height="10" fill="url(#grad)"/>
+    </svg>
+    """
+
+    _, scene = _render_result(svg)
+
+    child = _rectangle_with_id(scene.elements, "child")
+    assert isinstance(child.fill, LinearGradientPaint)
+    assert [stop.rgb for stop in child.fill.stops] == ["FF0000", "0000FF"]
+    assert [stop.opacity for stop in child.fill.stops] == pytest.approx([0.5, 0.1875])
 
 
 def test_parent_group_opacity_is_not_inherited_by_child() -> None:

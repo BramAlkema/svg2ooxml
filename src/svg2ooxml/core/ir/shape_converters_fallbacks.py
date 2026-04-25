@@ -8,8 +8,9 @@ from typing import Any
 from lxml import etree
 
 from svg2ooxml.common.geometry import Matrix2D
+from svg2ooxml.common.units import UnitConverter
 from svg2ooxml.core.ir import fallbacks
-from svg2ooxml.core.ir.shape_converters_utils import _bezier_point
+from svg2ooxml.core.ir.shape_converters_utils import _bezier_point, _resolve_svg_length
 from svg2ooxml.core.masks.baker import try_bake_mask
 from svg2ooxml.core.styling.style_extractor import StyleResult
 from svg2ooxml.core.traversal import marker_runtime
@@ -230,11 +231,12 @@ class ShapeFallbackMixin:
     ) -> float:
         if value in (None, "", "0"):
             return 0.0
-        try:
-            return float(value)  # type: ignore[arg-type]
-        except (TypeError, ValueError):
-            try:
-                return self._unit_converter.to_px(value, context, axis=axis)
-            except Exception:
-                return 0.0
-
+        unit_converter = getattr(self, "_unit_converter", None) or UnitConverter()
+        resolved = _resolve_svg_length(
+            unit_converter,
+            value,
+            context,
+            axis=axis,
+            default=0.0,
+        )
+        return 0.0 if resolved is None else resolved

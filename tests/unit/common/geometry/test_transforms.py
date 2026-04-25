@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+
 import pytest
 
 from svg2ooxml.common.geometry.transforms.decompose import decompose_matrix
@@ -25,6 +27,21 @@ def test_parse_transform_composes_operations() -> None:
     assert origin[1] == pytest.approx(20.0)
     assert x == pytest.approx(10.0)
     assert y == pytest.approx(22.0)
+
+
+def test_parse_transform_uses_tangent_for_skew() -> None:
+    skew_x = parse_transform("skewX(45)")
+    skew_y = parse_transform("skewY(30)")
+
+    assert skew_x.transform_xy(0.0, 1.0)[0] == pytest.approx(math.tan(math.radians(45)))
+    assert skew_y.transform_xy(1.0, 0.0)[1] == pytest.approx(math.tan(math.radians(30)))
+
+
+def test_parse_transform_accepts_compact_signed_numbers() -> None:
+    matrix = parse_transform("translate(10-20)")
+
+    assert matrix.e == pytest.approx(10.0)
+    assert matrix.f == pytest.approx(-20.0)
 
 
 def test_identity_matrix_multiplies_cleanly() -> None:

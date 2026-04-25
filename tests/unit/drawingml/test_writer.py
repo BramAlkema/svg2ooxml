@@ -78,6 +78,19 @@ def test_render_scene_renders_rectangle() -> None:
     assert "FF0000" in xml
 
 
+def test_render_scene_preserves_negative_shape_offsets() -> None:
+    writer = DrawingMLWriter()
+    rect = Rectangle(
+        bounds=Rect(x=-10, y=-5, width=20, height=15),
+        fill=SolidPaint("FF0000"),
+    )
+
+    xml = writer.render_scene([rect]).slide_xml
+
+    assert f'x="{px_to_emu(-10)}"' in xml
+    assert f'y="{px_to_emu(-5)}"' in xml
+
+
 def test_render_rectangle_with_pattern_tile_registers_media() -> None:
     """Rectangle with PatternPaint tile_image gets blipFill with registered media."""
     writer = DrawingMLWriter()

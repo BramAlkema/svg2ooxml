@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 
+import pytest
 from lxml import etree
 from tests.unit.filters.policy import (
     assert_assets,
@@ -41,6 +42,18 @@ def test_flood_produces_extension_payload() -> None:
     assert "svg2ooxml:flood" not in effect.effect.drawingml
 
 
+def test_flood_resolves_named_color_and_percentage_opacity() -> None:
+    service = FilterService()
+    results = _resolve(service, "<filter id='f'><feFlood flood-color='red' flood-opacity='50%'/></filter>")
+
+    effect = results[0]
+
+    assert effect.metadata["flood_color"] == "FF0000"
+    assert effect.metadata["flood_opacity"] == pytest.approx(0.5)
+    assert '<a:srgbClr val="FF0000">' in effect.effect.drawingml
+    assert '<a:alpha val="50000"/>' in effect.effect.drawingml
+
+
 def test_offset_includes_pixel_and_emu_metadata() -> None:
     service = FilterService()
     results = _resolve(service, "<filter id='f'><feOffset dx='5' dy='-3'/></filter>")
@@ -50,6 +63,17 @@ def test_offset_includes_pixel_and_emu_metadata() -> None:
     assert effect.metadata["dx_emu"] == int(px_to_emu(5.0))
     assert effect.effect.drawingml.startswith("<a:effectLst>")
     assert "<a:outerShdw" in effect.effect.drawingml
+
+
+def test_offset_resolves_absolute_length_units() -> None:
+    service = FilterService()
+    results = _resolve(service, "<filter id='f'><feOffset dx='1cm' dy='-5mm'/></filter>")
+    effect = results[0]
+
+    assert effect.metadata["dx"] == pytest.approx(37.7952755906)
+    assert effect.metadata["dy"] == pytest.approx(-18.8976377953)
+    assert effect.metadata["dx_emu"] == int(px_to_emu(effect.metadata["dx"]))
+    assert effect.metadata["dy_emu"] == int(px_to_emu(effect.metadata["dy"]))
 
 
 def test_morphology_dilate_emits_glow_with_colour_strategy() -> None:
@@ -79,6 +103,23 @@ def test_morphology_dilate_emits_glow_with_colour_strategy() -> None:
     assert drawingml.startswith("<a:effectLst>")
     assert "<a:glow" in drawingml
     assert 'val="112233"' in drawingml
+
+
+def test_morphology_dilate_resolves_named_flood_color_and_percentage_alpha() -> None:
+    service = FilterService()
+    results = _resolve(
+        service,
+        "<filter id='f'>"
+        "  <feMorphology operator='dilate' radius='2' flood-color='blue' flood-opacity='25%'/>"
+        "</filter>",
+    )
+
+    effect = results[0]
+
+    assert effect.metadata["color"] == "0000FF"
+    assert effect.metadata["alpha"] == pytest.approx(0.25)
+    assert 'val="0000FF"' in effect.effect.drawingml
+    assert '<a:alpha val="25000"/>' in effect.effect.drawingml
 
 
 def test_morphology_erode_emits_soft_edge_effect() -> None:
@@ -236,6 +277,25 @@ def test_convolve_matrix_tracks_kernel() -> None:
     assert_assets(effect, modern="emf")
     assets = effect.metadata.get("fallback_assets") or []
     assert assets[0].get("metadata", {}).get("filter_type") == "convolve_matrix"
+
+
+def test_convolve_matrix_uses_svg_defaults_and_length_units() -> None:
+    service = FilterService()
+    kernel = " ".join(["1"] * 16)
+    results = _resolve(
+        service,
+        "<filter id='f'>"
+        f"  <feConvolveMatrix order='4,4' kernelMatrix='{kernel}' kernelUnitLength='1cm 2cm'/>"
+        "</filter>",
+    )
+
+    effect = results[0]
+
+    assert effect.metadata["order"] == (4, 4)
+    assert effect.metadata["target"] == (2, 2)
+    assert effect.metadata["divisor"] == pytest.approx(16.0)
+    assert effect.metadata["kernel_unit_length"][0] == pytest.approx(96.0 / 2.54)
+    assert effect.metadata["kernel_unit_length"][1] == pytest.approx(2 * 96.0 / 2.54)
 
 
 def test_displacement_map_resvg_path() -> None:
@@ -544,6 +604,24 @@ def test_diffuse_lighting_uses_generic_approximation_policy_flag() -> None:
     assert "<a:glow" in result.drawingml
     assert "<a:innerShdw" in result.drawingml
     assert "<a:softEdge" in result.drawingml
+
+
+def test_diffuse_lighting_resolves_color_and_kernel_unit_lengths() -> None:
+    primitive = etree.fromstring(
+        "<feDiffuseLighting surfaceScale='2' diffuseConstant='1.3' lighting-color='rebeccapurple' kernelUnitLength='1cm,2cm'>"
+        "  <feDistantLight azimuth='45' elevation='45'/>"
+        "</feDiffuseLighting>"
+    )
+    context = FilterContext(
+        filter_element=primitive,
+        options={"policy": {"approximation_allowed": True}},
+    )
+
+    result = DiffuseLightingFilter().apply(primitive, context)
+
+    assert result.metadata["lighting_color"] == "663399"
+    assert result.metadata["kernel_unit_length"][0] == pytest.approx(96.0 / 2.54)
+    assert result.metadata["kernel_unit_length"][1] == pytest.approx(2 * 96.0 / 2.54)
 
 
 def test_diffuse_lighting_blocks_approximation_for_image_source() -> None:

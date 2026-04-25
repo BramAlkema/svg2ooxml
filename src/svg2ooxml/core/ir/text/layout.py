@@ -9,6 +9,7 @@ import math
 import re
 from typing import TYPE_CHECKING, Any
 
+from svg2ooxml.common.conversions.transforms import parse_numeric_list
 from svg2ooxml.common.geometry.algorithms import CurveTextPositioner
 from svg2ooxml.core.ir.font_metrics import (
     estimate_run_width as _estimate_run_width,
@@ -76,13 +77,7 @@ def text_scale_for_coord_space(
 def parse_number_list(value: str | None) -> list[float]:
     if not value:
         return []
-    values: list[float] = []
-    for part in value.replace(",", " ").split():
-        try:
-            values.append(float(part))
-        except ValueError:
-            continue
-    return values
+    return parse_numeric_list(value)
 
 
 def resvg_text_origin(

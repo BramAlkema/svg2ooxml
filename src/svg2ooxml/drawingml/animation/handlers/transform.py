@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
 
 from lxml import etree
 
+from svg2ooxml.common.conversions.angles import degrees_to_ppt
 from svg2ooxml.common.units import emu_to_px
 from svg2ooxml.drawingml.animation.oracle import default_oracle
 from svg2ooxml.drawingml.animation.timing_utils import compute_paced_key_times_2d
@@ -120,7 +121,7 @@ class TransformAnimationHandler(AnimationHandler):
                     behavior_id=behavior_id,
                     angles=angles,
                     format_coord=self._format_coord,
-                    slide_size=self._get_slide_size(),
+                    slide_size=self._get_motion_slide_size(animation),
                     rotation_center=rotation_center,
                 )
 
@@ -140,7 +141,7 @@ class TransformAnimationHandler(AnimationHandler):
                     angles=angles,
                     orbit_offset=orbit_offset,
                     format_coord=self._format_coord,
-                    slide_size=self._get_slide_size(),
+                    slide_size=self._get_motion_slide_size(animation),
                 )
 
             child = build_rotate_element(
@@ -316,7 +317,7 @@ class TransformAnimationHandler(AnimationHandler):
         behavior_id: int,
         angles: list[float],
     ) -> etree._Element:
-        formatted = [str(int(round(a * 60000))) for a in angles]
+        formatted = [str(degrees_to_ppt(a)) for a in angles]
         return self._build_discrete_set_sequence(
             animation, par_id, behavior_id, "style.rotation", formatted
         )
@@ -330,6 +331,16 @@ class TransformAnimationHandler(AnimationHandler):
         from svg2ooxml.drawingml.writer import DEFAULT_SLIDE_SIZE
 
         return DEFAULT_SLIDE_SIZE
+
+    def _get_motion_slide_size(
+        self,
+        animation: AnimationDefinition,
+    ) -> tuple[int, int]:
+        viewport_w, viewport_h = self._resolve_motion_viewport_px(animation)
+        return (
+            max(int(round(self._units.to_emu(viewport_w, axis="x"))), 1),
+            max(int(round(self._units.to_emu(viewport_h, axis="y"))), 1),
+        )
 
     @staticmethod
     def _format_coord(value: float) -> str:

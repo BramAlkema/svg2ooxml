@@ -7,7 +7,8 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
 
-from svg2ooxml.common.units import UnitConverter
+from svg2ooxml.common.units import UnitConverter, px_to_emu
+from svg2ooxml.common.units.scalars import EMU_PER_PX_AT_DEFAULT_DPI
 from svg2ooxml.core.traversal.clip_geometry import (
     ClipComputeResult,
     ClipCustGeom,
@@ -26,7 +27,7 @@ from svg2ooxml.ir.geometry import Rect, SegmentType
 from svg2ooxml.ir.paint import SolidPaint
 from svg2ooxml.ir.scene import ClipRef
 
-EMU_PER_PX = 9525
+EMU_PER_PX = int(EMU_PER_PX_AT_DEFAULT_DPI)
 
 
 @dataclass
@@ -357,7 +358,7 @@ def _rect_to_emu_tuple(rect: Rect) -> tuple[int, int, int, int]:
 
 
 def _to_emu(value: float) -> int:
-    return int(round(value * EMU_PER_PX))
+    return int(round(px_to_emu(value)))
 
 
 __all__ = ["StructuredClipService", "ClipAnalysis"]

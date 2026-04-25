@@ -172,23 +172,23 @@ def build_orbital_motion_element(
     dx_px, dy_px = orbit_offset
     start_deg = angles[0]
     total_sweep = angles[-1] - start_deg
+    angle_key_times = _orbit_angle_key_times(animation, angles)
+    path_sweep = (
+        sum(abs(angles[index + 1] - angles[index]) for index in range(len(angles) - 1))
+        if angle_key_times is not None
+        else abs(total_sweep)
+    )
 
     # Build arc path with line segments
-    n_steps = max(8, int(abs(total_sweep) / 45.0) * 2)
+    n_steps = max(8, int(path_sweep / 45.0) * 2)
     if n_steps < 2:
         return None
 
     segments: list[str] = ["M 0 0"]
     for step in range(1, n_steps + 1):
-        # For multi-keyframe, interpolate through all angles
         t = step / n_steps
-        # Linear interpolation through the full angle sequence
-        if (
-            len(angles) > 2
-            and animation.key_times
-            and len(animation.key_times) == len(angles)
-        ):
-            theta_deg = interpolate_angles(angles, animation.key_times, t)
+        if angle_key_times is not None:
+            theta_deg = interpolate_angles(angles, angle_key_times, t)
         else:
             theta_deg = start_deg + total_sweep * t
         theta_rad = math.radians(theta_deg) - math.radians(start_deg)
@@ -223,6 +223,19 @@ def build_orbital_motion_element(
     anim_motion.append(cBhvr)
     p_sub(anim_motion, "rCtr", x="0", y="0")
     return anim_motion
+
+
+def _orbit_angle_key_times(
+    animation: AnimationDefinition,
+    angles: list[float],
+) -> list[float] | None:
+    """Return timing points for orbit sampling across rotate keyframes."""
+    if len(angles) <= 2:
+        return None
+    if animation.key_times and len(animation.key_times) == len(angles):
+        return list(animation.key_times)
+    step = 1.0 / (len(angles) - 1)
+    return [index * step for index in range(len(angles))]
 
 
 def interpolate_angles(

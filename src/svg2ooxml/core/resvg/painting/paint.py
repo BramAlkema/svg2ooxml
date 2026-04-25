@@ -6,6 +6,7 @@ import re
 from dataclasses import dataclass
 
 from svg2ooxml.color.parsers import parse_color as parse_global_color
+from svg2ooxml.common.conversions.transforms import parse_numeric_list
 
 from .colors import parse_rgb
 
@@ -162,13 +163,7 @@ def _parse_dash_array(value: str | None) -> list[float] | None:
     token = value.strip()
     if not token or token.lower() == "none":
         return None
-    parts = token.replace(",", " ").split()
-    numbers: list[float] = []
-    for part in parts:
-        try:
-            numbers.append(float(part))
-        except ValueError:
-            continue
+    numbers = parse_numeric_list(token)
     return numbers or None
 
 

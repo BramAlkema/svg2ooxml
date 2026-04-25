@@ -23,6 +23,12 @@ def test_parse_color_handles_rgb_and_rgba() -> None:
     assert rgba == (0.0, 0.0, 1.0, 0.5)
 
 
+def test_parse_color_handles_modern_rgb_alpha_syntax() -> None:
+    color = parse_color("rgb(0 128 255 / 25%)")
+
+    assert color == (0.0, 128 / 255.0, 1.0, 0.25)
+
+
 def test_parse_color_handles_currentcolor() -> None:
     fallback = (0.2, 0.3, 0.4, 1.0)
     color = parse_color("currentColor", current_color=fallback)

@@ -666,6 +666,43 @@ def test_parse_from_by_values_and_preserves_raw_value_attrs() -> None:
     assert animation.raw_attributes["by"] == "5"
 
 
+def test_parse_from_by_compact_signed_numeric_lists() -> None:
+    parser = SMILParser()
+    svg = _parse(
+        """
+        <svg xmlns="http://www.w3.org/2000/svg">
+          <rect id="shape">
+            <animate attributeName="points" from="10-20" by="5 6" dur="1s" />
+          </rect>
+        </svg>
+        """
+    )
+
+    animations = parser.parse_svg_animations(svg)
+
+    assert len(animations) == 1
+    assert animations[0].values == ["10-20", "15 -14"]
+
+
+def test_parse_from_by_unit_values_degrades_without_partial_numeric_math() -> None:
+    parser = SMILParser()
+    svg = _parse(
+        """
+        <svg xmlns="http://www.w3.org/2000/svg">
+          <rect id="shape">
+            <animate attributeName="x" from="10px" by="5" dur="1s" />
+          </rect>
+        </svg>
+        """
+    )
+
+    animations = parser.parse_svg_animations(svg)
+
+    assert len(animations) == 1
+    assert animations[0].values == ["10px", "5"]
+    assert parser.get_degradation_reasons()["by_value_non_numeric"] == 1
+
+
 def test_parse_records_target_tag_for_text_animation() -> None:
     parser = SMILParser()
     svg = _parse(

@@ -25,6 +25,8 @@ class FilterContext:
     primitive: etree._Element | None = None
     pipeline_state: dict[str, FilterResult] | None = None
     tracer: RenderTracer | None = None
+    unit_converter: Any | None = None
+    conversion_context: Any | None = None
 
     @property
     def policy(self) -> dict[str, Any]:
@@ -45,6 +47,8 @@ class FilterContext:
             primitive=primitive,
             pipeline_state=self.pipeline_state,
             tracer=self.tracer,
+            unit_converter=self.unit_converter,
+            conversion_context=self.conversion_context,
         )
 
 

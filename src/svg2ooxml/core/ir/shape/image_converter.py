@@ -11,7 +11,6 @@ from lxml import etree
 from svg2ooxml.core.ir.shape_converters_utils import (
     _compute_bbox,
     _guess_image_format,
-    _parse_float,
 )
 from svg2ooxml.core.styling import style_runtime as styles_runtime
 from svg2ooxml.core.traversal.viewbox import (
@@ -20,7 +19,7 @@ from svg2ooxml.core.traversal.viewbox import (
     resolve_viewbox_dimensions,
 )
 from svg2ooxml.ir.geometry import Point, Rect
-from svg2ooxml.ir.scene import Image, MaskInstance, MaskRef
+from svg2ooxml.ir.scene import Image
 from svg2ooxml.services.image_service import ImageResource, ImageService
 
 
@@ -32,12 +31,13 @@ class ShapeImageMixin:
         href = self._normalize_image_href(href)
         if not href:
             return None
-        width = _parse_float(element.get("width"))
-        height = _parse_float(element.get("height"))
+        context = getattr(self, "_conversion_context", None)
+        width = self._resolve_length(element.get("width"), context, axis="x")
+        height = self._resolve_length(element.get("height"), context, axis="y")
         if width is None or height is None or width <= 0 or height <= 0:
             return None
-        x = _parse_float(element.get("x"), default=0.0) or 0.0
-        y = _parse_float(element.get("y"), default=0.0) or 0.0
+        x = self._resolve_length(element.get("x"), context, axis="x")
+        y = self._resolve_length(element.get("y"), context, axis="y")
 
         image_policy = self._policy_options("image")
         style = styles_runtime.extract_style(self, element)

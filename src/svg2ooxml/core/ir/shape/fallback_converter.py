@@ -2,13 +2,10 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 from lxml import etree
 
 from svg2ooxml.core.ir.shape_converters_utils import (
     _local_name,
-    _parse_float,
 )
 from svg2ooxml.core.styling import style_runtime as styles_runtime
 from svg2ooxml.core.traversal.constants import DEFAULT_TOLERANCE
@@ -149,16 +146,17 @@ class ShapeFallbackPathMixin:
         """Fallback for degenerate primitive shapes when resvg cannot convert."""
         tag = _local_name(element.tag).lower()
         epsilon = 1e-6
+        context = getattr(self, "_conversion_context", None)
 
         if tag == "rect":
-            width = _parse_float(element.get("width"))
-            height = _parse_float(element.get("height"))
+            width = self._resolve_length(element.get("width"), context, axis="x")
+            height = self._resolve_length(element.get("height"), context, axis="y")
             if width is None or height is None:
                 return None
             if width > DEFAULT_TOLERANCE and height > DEFAULT_TOLERANCE:
                 return None
-            x = _parse_float(element.get("x"), default=0.0) or 0.0
-            y = _parse_float(element.get("y"), default=0.0) or 0.0
+            x = self._resolve_length(element.get("x"), context, axis="x")
+            y = self._resolve_length(element.get("y"), context, axis="y")
             if height > DEFAULT_TOLERANCE:
                 segments = [LineSegment(Point(x, y), Point(x + epsilon, y + height))]
             elif width > DEFAULT_TOLERANCE:
@@ -168,23 +166,23 @@ class ShapeFallbackPathMixin:
             return self._segments_to_path(element, segments, coord_space)
 
         if tag == "circle":
-            radius = _parse_float(element.get("r"))
+            radius = self._resolve_length(element.get("r"), context, axis="x")
             if radius is None or radius > DEFAULT_TOLERANCE:
                 return None
-            cx = _parse_float(element.get("cx"), default=0.0) or 0.0
-            cy = _parse_float(element.get("cy"), default=0.0) or 0.0
+            cx = self._resolve_length(element.get("cx"), context, axis="x")
+            cy = self._resolve_length(element.get("cy"), context, axis="y")
             segments = [LineSegment(Point(cx, cy), Point(cx + epsilon, cy + epsilon))]
             return self._segments_to_path(element, segments, coord_space)
 
         if tag == "ellipse":
-            rx = _parse_float(element.get("rx"))
-            ry = _parse_float(element.get("ry"))
+            rx = self._resolve_length(element.get("rx"), context, axis="x")
+            ry = self._resolve_length(element.get("ry"), context, axis="y")
             if rx is None or ry is None:
                 return None
             if rx > DEFAULT_TOLERANCE and ry > DEFAULT_TOLERANCE:
                 return None
-            cx = _parse_float(element.get("cx"), default=0.0) or 0.0
-            cy = _parse_float(element.get("cy"), default=0.0) or 0.0
+            cx = self._resolve_length(element.get("cx"), context, axis="x")
+            cy = self._resolve_length(element.get("cy"), context, axis="y")
             if ry > DEFAULT_TOLERANCE:
                 segments = [
                     LineSegment(Point(cx, cy - ry), Point(cx + epsilon, cy + ry))
@@ -200,10 +198,10 @@ class ShapeFallbackPathMixin:
             return self._segments_to_path(element, segments, coord_space)
 
         if tag == "line":
-            x1 = _parse_float(element.get("x1"), default=0.0) or 0.0
-            y1 = _parse_float(element.get("y1"), default=0.0) or 0.0
-            x2 = _parse_float(element.get("x2"), default=0.0) or 0.0
-            y2 = _parse_float(element.get("y2"), default=0.0) or 0.0
+            x1 = self._resolve_length(element.get("x1"), context, axis="x")
+            y1 = self._resolve_length(element.get("y1"), context, axis="y")
+            x2 = self._resolve_length(element.get("x2"), context, axis="x")
+            y2 = self._resolve_length(element.get("y2"), context, axis="y")
             if abs(x2 - x1) > DEFAULT_TOLERANCE or abs(y2 - y1) > DEFAULT_TOLERANCE:
                 return None
             segments = [LineSegment(Point(x1, y1), Point(x2 + epsilon, y2 + epsilon))]

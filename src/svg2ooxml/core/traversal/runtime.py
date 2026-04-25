@@ -5,7 +5,10 @@ from __future__ import annotations
 from lxml import etree
 
 from svg2ooxml.common.geometry import Matrix2D
-from svg2ooxml.core.traversal.viewbox import viewbox_matrix_from_element
+from svg2ooxml.core.traversal.viewbox import (
+    resolve_viewbox_dimensions,
+    viewbox_matrix_from_element,
+)
 
 
 def push_element_transform(traversal, element: etree._Element) -> bool:
@@ -48,22 +51,53 @@ def _nested_svg_viewport_transform(
     if unit_converter is None:
         return None
 
+    parent_context = _parent_svg_viewport_context(traversal, element)
+
     try:
-        viewbox_matrix, _ = viewbox_matrix_from_element(element, unit_converter)
+        viewbox_matrix, _ = viewbox_matrix_from_element(
+            element,
+            unit_converter,
+            context=parent_context,
+        )
     except Exception:
         viewbox_matrix = Matrix2D.identity()
 
-    x = _to_px(unit_converter, element.get("x"), axis="x")
-    y = _to_px(unit_converter, element.get("y"), axis="y")
+    x = _to_px(unit_converter, element.get("x"), axis="x", context=parent_context)
+    y = _to_px(unit_converter, element.get("y"), axis="y", context=parent_context)
     translate = Matrix2D.translate(x, y)
     return translate.multiply(viewbox_matrix)
 
 
-def _to_px(unit_converter, value: str | None, *, axis: str) -> float:
+def _parent_svg_viewport_context(traversal, element: etree._Element):
+    unit_converter = getattr(traversal._converter, "_unit_converter", None)
+    if unit_converter is None:
+        return getattr(traversal._converter, "_conversion_context", None)
+
+    parent = element.getparent()
+    while parent is not None:
+        if local_name(getattr(parent, "tag", None)) == "svg":
+            try:
+                width, height, _, _ = resolve_viewbox_dimensions(parent, unit_converter)
+                return unit_converter.create_context(
+                    width=width,
+                    height=height,
+                    parent_width=width,
+                    parent_height=height,
+                    viewport_width=width,
+                    viewport_height=height,
+                )
+            except Exception:
+                break
+        parent = parent.getparent()
+
+    return getattr(traversal._converter, "_conversion_context", None)
+
+
+def _to_px(unit_converter, value: str | None, *, axis: str, context=None) -> float:
     if value is None:
         return 0.0
     try:
-        return float(unit_converter.to_px(value, axis=axis))
+        return float(unit_converter.to_px(value, context, axis=axis))
     except Exception:
         try:
             return float(value)

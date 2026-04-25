@@ -24,7 +24,7 @@ class PPTConverter:
     Example:
         >>> ppt = PPTConverter()
         >>> ppt.px_to_emu(100.0)
-        914400
+        952500
         >>> ppt.degrees_to_ppt(45.0)
         2700000
         >>> ppt.opacity_to_ppt(0.7)
@@ -61,7 +61,7 @@ class PPTConverter:
         Example:
             >>> ppt = PPTConverter()
             >>> ppt.px_to_emu(100.0)
-            914400
+            952500
         """
         emu = self._unit_converter.to_emu(px, axis=axis)
         return int(round(emu))
@@ -84,7 +84,7 @@ class PPTConverter:
             >>> ppt.length_to_emu("1in")
             914400
             >>> ppt.length_to_emu(100.0)  # Defaults to px
-            914400
+            952500
         """
         emu = self._unit_converter.to_emu(value, axis=axis)
         return int(round(emu))

@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 
-from svg2ooxml.common.units import ConversionContext, UnitConverter
+from svg2ooxml.common.units import ConversionContext, UnitConverter, emu_to_px
 from svg2ooxml.io.emf import DashPattern, EMFBlob
 from svg2ooxml.io.emf.path import flatten_segments
 from svg2ooxml.ir.geometry import BezierSegment, LineSegment, SegmentType
@@ -239,10 +239,10 @@ def _dash_pattern(
     if not stroke.dash_array:
         return None
     converted = [
-        max(1, int(round(unit_converter.to_emu(length, conversion_context, axis="x") / 9525)))
+        max(1, int(round(emu_to_px(unit_converter.to_emu(length, conversion_context, axis="x")))))
         for length in stroke.dash_array
     ]
-    phase = int(round(unit_converter.to_emu(stroke.dash_offset or 0.0, conversion_context, axis="x") / 9525))
+    phase = int(round(emu_to_px(unit_converter.to_emu(stroke.dash_offset or 0.0, conversion_context, axis="x"))))
     return DashPattern(pattern=tuple(converted), offset=phase)
 
 

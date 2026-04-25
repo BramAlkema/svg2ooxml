@@ -7,9 +7,11 @@ import math
 import re
 from collections.abc import Iterable
 
+from svg2ooxml.color.utils import color_to_hex
 from svg2ooxml.common.conversions.angles import radians_to_ppt
-from svg2ooxml.common.conversions.opacity import opacity_to_ppt
+from svg2ooxml.common.conversions.opacity import opacity_to_ppt, parse_opacity
 from svg2ooxml.common.units import px_to_emu
+from svg2ooxml.common.units.scalars import EMU_PER_INCH
 from svg2ooxml.drawingml.emf_adapter import EMFAdapter, PaletteResolver
 from svg2ooxml.drawingml.raster_adapter import RasterAdapter
 
@@ -131,16 +133,8 @@ class FilterRenderer:
         }
 
     def _build_flood(self, name, attrs, remainder, result, context) -> str:
-        color = attrs.get("color", "000000").strip().upper()
-        if color.startswith("#"):
-            color = color[1:]
-        if len(color) == 3:
-            color = "".join(ch * 2 for ch in color)
-        try:
-            opacity = float(attrs.get("opacity", "1"))
-        except ValueError:
-            opacity = 1.0
-        opacity = max(0.0, min(opacity, 1.0))
+        color = color_to_hex(attrs.get("color"), default="000000")
+        opacity = parse_opacity(attrs.get("opacity"), default=1.0)
         alpha = opacity_to_ppt(opacity)
 
         effectLst = a_elem("effectLst")
@@ -172,7 +166,7 @@ class FilterRenderer:
         angle_rad = math.atan2(dy_emu, dx_emu)
         ppt_angle = radians_to_ppt(angle_rad % (2 * math.pi))
 
-        distance = min(distance, 914400)
+        distance = min(distance, EMU_PER_INCH)
 
         outerShdw = a_sub(effectLst, "outerShdw", blurRad="0", dist=distance, dir=ppt_angle, algn="ctr")
         srgbClr = a_sub(outerShdw, "srgbClr", val="000000")

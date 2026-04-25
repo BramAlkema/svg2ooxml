@@ -18,6 +18,15 @@ def test_pixels_to_emu_defaults() -> None:
     assert emu == pytest.approx(EMU_PER_INCH)
 
 
+def test_pixels_to_emu_rejects_non_positive_dpi() -> None:
+    with pytest.raises(ValueError, match="dpi must be positive"):
+        FractionalEMUConverter(dpi=0)
+
+    converter = FractionalEMUConverter()
+    with pytest.raises(ValueError, match="dpi must be positive"):
+        converter.pixels_to_emu(96, dpi=-96)
+
+
 def test_points_to_emu_rounding() -> None:
     converter = FractionalEMUConverter(precision_mode=PrecisionMode.HIGH)
 

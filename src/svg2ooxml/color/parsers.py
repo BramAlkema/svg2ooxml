@@ -9,11 +9,11 @@ from collections.abc import Mapping
 from .models import TRANSPARENT, Color
 from .names import CSS3_NAMES_TO_HEX
 
-_HEX_RE = re.compile(r"^#?(?P<value>[0-9a-fA-F]{3,8})$")
-_RGB_RE = re.compile(r"rgba?\((?P<body>.+)\)")
-_HSL_RE = re.compile(r"hsla?\((?P<body>.+)\)")
-_OKLAB_RE = re.compile(r"oklab\((?P<body>.+)\)")
-_OKLCH_RE = re.compile(r"oklch\((?P<body>.+)\)")
+_HEX_RE = re.compile(r"^#?(?P<value>[0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$")
+_RGB_RE = re.compile(r"^rgba?\((?P<body>.+)\)$")
+_HSL_RE = re.compile(r"^hsla?\((?P<body>.+)\)$")
+_OKLAB_RE = re.compile(r"^oklab\((?P<body>.+)\)$")
+_OKLCH_RE = re.compile(r"^oklch\((?P<body>.+)\)$")
 
 # CSS system colors → sensible sRGB defaults
 _SYSTEM_COLORS: dict[str, str] = {
@@ -72,25 +72,28 @@ def parse_color(
         if resolved is not None:
             return resolved
 
-    hex_match = _HEX_RE.match(token)
-    if hex_match:
-        return _parse_hex(hex_match.group("value"))
+    try:
+        hex_match = _HEX_RE.match(token)
+        if hex_match:
+            return _parse_hex(hex_match.group("value"))
 
-    rgb_match = _RGB_RE.match(lowered)
-    if rgb_match:
-        return _parse_rgb(rgb_match.group("body"))
+        rgb_match = _RGB_RE.match(lowered)
+        if rgb_match:
+            return _parse_rgb(rgb_match.group("body"))
 
-    hsl_match = _HSL_RE.match(lowered)
-    if hsl_match:
-        return _parse_hsl(hsl_match.group("body"))
+        hsl_match = _HSL_RE.match(lowered)
+        if hsl_match:
+            return _parse_hsl(hsl_match.group("body"))
 
-    oklab_match = _OKLAB_RE.match(lowered)
-    if oklab_match:
-        return _parse_oklab(oklab_match.group("body"))
+        oklab_match = _OKLAB_RE.match(lowered)
+        if oklab_match:
+            return _parse_oklab(oklab_match.group("body"))
 
-    oklch_match = _OKLCH_RE.match(lowered)
-    if oklch_match:
-        return _parse_oklch(oklch_match.group("body"))
+        oklch_match = _OKLCH_RE.match(lowered)
+        if oklch_match:
+            return _parse_oklch(oklch_match.group("body"))
+    except ValueError:
+        return None
 
     hex_value = CSS3_NAMES_TO_HEX.get(lowered)
     if hex_value:
@@ -152,7 +155,18 @@ def _parse_hsl(body: str) -> Color:
 
 
 def _split_components(body: str, *, expected_min: int, expected_max: int) -> list[str]:
-    parts = [segment.strip() for segment in re.split(r"[,/]|(?<!\d)\s+", body) if segment.strip()]
+    token = body.strip()
+    if "," in token:
+        parts = [
+            segment.strip()
+            for segment in token.replace("/", ",").split(",")
+            if segment.strip()
+        ]
+    else:
+        main, separator, alpha = token.partition("/")
+        parts = [segment.strip() for segment in main.split() if segment.strip()]
+        if separator and alpha.strip():
+            parts.append(alpha.strip())
     if not (expected_min <= len(parts) <= expected_max):
         raise ValueError("unexpected number of parameters")
     return parts

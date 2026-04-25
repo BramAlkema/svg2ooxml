@@ -6,21 +6,16 @@ from dataclasses import dataclass
 
 from lxml import etree
 
-from svg2ooxml.common.conversions.opacity import opacity_to_ppt
+from svg2ooxml.color.utils import color_to_hex
+from svg2ooxml.common.conversions.opacity import opacity_to_ppt, parse_opacity
 
 # Import centralized XML builders for safe DrawingML generation
 from svg2ooxml.drawingml.xml_builder import a_elem, a_sub, to_string
 from svg2ooxml.filters.base import Filter, FilterContext, FilterResult
-from svg2ooxml.filters.utils import parse_number
 
 
 def _normalise_color(value: str | None) -> str:
-    token = (value or "#000000").strip()
-    if token.startswith("#"):
-        token = token[1:]
-    if len(token) == 3:
-        token = "".join(ch * 2 for ch in token)
-    return token.upper()
+    return color_to_hex(value, default="000000")
 
 
 @dataclass
@@ -56,15 +51,9 @@ class FloodFilter(Filter):
     def _parse_params(self, primitive: etree._Element) -> FloodParams:
         style_map = self._parse_style(primitive.get("style"))
         color = _normalise_color(primitive.get("flood-color") or style_map.get("flood-color"))
-        opacity = max(
-            0.0,
-            min(
-                parse_number(
-                    primitive.get("flood-opacity") or style_map.get("flood-opacity"),
-                    default=1.0,
-                ),
-                1.0,
-            ),
+        opacity = parse_opacity(
+            primitive.get("flood-opacity") or style_map.get("flood-opacity"),
+            default=1.0,
         )
         return FloodParams(color=color, opacity=opacity)
 

@@ -124,6 +124,7 @@ class IRConverterContext:
             viewport_height=viewport_height,
         )
         self.conversion_context = conversion
+        self.services.register("conversion_context", conversion)
 
     def trace_stage(
         self,

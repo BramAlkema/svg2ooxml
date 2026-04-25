@@ -7,12 +7,12 @@ from dataclasses import dataclass
 from lxml import etree
 
 from svg2ooxml.common.conversions.opacity import opacity_to_ppt
+from svg2ooxml.common.units import px_to_emu
 
 # Import centralized XML builders for safe DrawingML generation
 from svg2ooxml.drawingml.xml_builder import a_elem, a_sub, to_string
 from svg2ooxml.filters.base import Filter, FilterContext, FilterResult
-from svg2ooxml.filters.utils import parse_number
-from svg2ooxml.units.conversion import px_to_emu
+from svg2ooxml.filters.utils.parsing import parse_length
 
 
 @dataclass
@@ -32,7 +32,7 @@ class GaussianBlurFilter(Filter):
     filter_type = "gaussian_blur"
 
     def apply(self, primitive: etree._Element, context: FilterContext) -> FilterResult:
-        params = self._parse_params(primitive)
+        params = self._parse_params(primitive, context)
         policy_options = context.policy
         primitive_policy = self._primitive_policy(policy_options)
         allow_anisotropic = bool(policy_options.get("allow_anisotropic_native", False))
@@ -165,14 +165,14 @@ class GaussianBlurFilter(Filter):
     # Helpers
     # ------------------------------------------------------------------
 
-    def _parse_params(self, primitive: etree._Element) -> GaussianBlurParams:
+    def _parse_params(self, primitive: etree._Element, context: FilterContext) -> GaussianBlurParams:
         std_deviation = (primitive.get("stdDeviation") or "0").strip()
         if " " in std_deviation:
             sx_str, sy_str = std_deviation.split(" ", 1)
         else:
             sx_str = sy_str = std_deviation
-        std_dev_x = max(0.0, parse_number(sx_str))
-        std_dev_y = max(0.0, parse_number(sy_str))
+        std_dev_x = max(0.0, parse_length(sx_str, context=context, axis="x"))
+        std_dev_y = max(0.0, parse_length(sy_str, context=context, axis="y"))
         edge_mode = (primitive.get("edgeMode") or "duplicate").strip().lower()
         input_name = primitive.get("in")
         return GaussianBlurParams(

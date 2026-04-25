@@ -56,9 +56,24 @@ def _motion_paths(slide_xml: str) -> list[str]:
     return re.findall(r'<p:animMotion[^>]* path="([^"]+)"', slide_xml)
 
 
+def _motion_path_has_nonzero_delta(path: str) -> bool:
+    return any(
+        abs(float(token)) > 1e-6
+        for token in re.findall(r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[-+]?\d+)?", path)
+    )
+
+
+def _motion_path_max_abs_delta(path: str) -> float:
+    values = [
+        abs(float(token))
+        for token in re.findall(r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[-+]?\d+)?", path)
+    ]
+    return max(values, default=0.0)
+
+
 def _shape_offset(slide_xml: str, shape_id: int) -> tuple[int, int]:
     match = re.search(
-        rf'<p:cNvPr id="{shape_id}"[^>]*>.*?<a:off x="([0-9]+)" y="([0-9]+)"',
+        rf'<p:cNvPr id="{shape_id}"[^>]*>.*?<a:off x="(-?[0-9]+)" y="(-?[0-9]+)"',
         slide_xml,
         flags=re.DOTALL,
     )
@@ -585,6 +600,25 @@ def test_rotate_animation_uses_by_not_tavlst() -> None:
     assert 'by="' in render_result.slide_xml
     # tavLst is NOT valid in animRot per ECMA-376
     assert "<p:tavLst" not in render_result.slide_xml
+
+
+def test_symmetric_pivot_rotate_emits_nonzero_orbit_path() -> None:
+    svg = """
+    <svg xmlns="http://www.w3.org/2000/svg" width="160" height="100">
+      <path id="wing" d="M 20 20 L 100 60 L 20 60 Z" fill="#FCD205">
+        <animateTransform attributeName="transform" type="rotate"
+                          values="0 100 60;-45 100 60;0 100 60"
+                          dur="0.04s" repeatCount="indefinite"/>
+      </path>
+    </svg>
+    """
+
+    render_result, _, _ = _render(svg)
+
+    paths = _motion_paths(render_result.slide_xml)
+    assert render_result.slide_xml.count("<p:animRot") == 2
+    assert any(_motion_path_has_nonzero_delta(path) for path in paths)
+    assert max(_motion_path_max_abs_delta(path) for path in paths) > 0.2
 
 
 def test_translate_animation_emits_anim_motion() -> None:

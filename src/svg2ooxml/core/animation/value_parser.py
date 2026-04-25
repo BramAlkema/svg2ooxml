@@ -6,8 +6,8 @@ import re
 
 from svg2ooxml.ir.animation import AnimationType
 
-_NUMBER_LIST_SPLIT_RE = re.compile(r"[,\s]+")
-
+_NUMBER_RE = re.compile(r"[-+]?(?:(?:\d+\.\d*)|(?:\.\d+)|(?:\d+))(?:[eE][-+]?\d+)?")
+_NUMERIC_SEPARATOR_RE = re.compile(r"^[\s,]*$")
 
 # ------------------------------------------------------------------ #
 # Module-level functions                                             #
@@ -142,17 +142,22 @@ def combine_numeric_values(
 
 
 def parse_numeric_list(value: str) -> list[float] | None:
-    tokens = [
-        token
-        for token in _NUMBER_LIST_SPLIT_RE.split(value.strip())
-        if token
-    ]
-    if not tokens:
+    token = value.strip()
+    if not token:
         return None
-    try:
-        return [float(token) for token in tokens]
-    except ValueError:
+    values: list[float] = []
+    position = 0
+    for match in _NUMBER_RE.finditer(token):
+        separator = token[position : match.start()]
+        if not _NUMERIC_SEPARATOR_RE.match(separator):
+            return None
+        values.append(float(match.group(0)))
+        position = match.end()
+    if not _NUMERIC_SEPARATOR_RE.match(token[position:]):
         return None
+    if not values:
+        return None
+    return values
 
 
 def format_number(value: float) -> str:

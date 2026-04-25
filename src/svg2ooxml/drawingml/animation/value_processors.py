@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING
 from svg2ooxml.common.conversions.angles import degrees_to_ppt
 from svg2ooxml.common.conversions.colors import color_to_hex
 from svg2ooxml.common.conversions.opacity import opacity_to_ppt
+from svg2ooxml.common.conversions.opacity import parse_opacity as parse_opacity_value
 from svg2ooxml.common.conversions.transforms import (
     parse_angle,
     parse_numeric_list,
@@ -159,15 +160,16 @@ class ValueProcessor:
             >>> ValueProcessor.parse_opacity("0.5")
             '50000'
         """
-        try:
-            opacity_float = float(value)
-        except (ValueError, TypeError):
-            opacity_float = 1.0  # Default to fully opaque
-
-        # If value > 1, assume percentage (0-100), otherwise assume 0-1
-        if opacity_float > 1.0:
-            opacity_float = opacity_float / 100.0
-
+        token = str(value).strip() if value is not None else ""
+        if token.endswith("%"):
+            opacity_float = parse_opacity_value(token, default=1.0)
+        else:
+            try:
+                opacity_float = float(token)
+            except (ValueError, TypeError):
+                opacity_float = 1.0
+            if opacity_float > 1.0:
+                opacity_float /= 100.0
         ppt_opacity = opacity_to_ppt(opacity_float)
         return str(ppt_opacity)
 
@@ -216,18 +218,15 @@ class ValueProcessor:
             >>> ValueProcessor.normalize_numeric_value("ppt_x", "100", unit_converter=uc)
             '914400'
         """
-        # Parse numeric value
-        try:
-            numeric_value = float(value)
-        except (ValueError, TypeError):
-            return value  # Return as-is if can't parse
-
         # Angle attributes: degrees → 60000ths
         if attribute in ANGLE_ATTRIBUTES:
-            return ValueProcessor.format_ppt_angle(numeric_value)
+            return ValueProcessor.format_ppt_angle(parse_angle(value))
 
         # Position/size attributes: px → EMU
         # Get axis hint for proper DPI conversion
         axis = AXIS_MAP.get(attribute)
-        emu = unit_converter.to_emu(numeric_value, axis=axis)
+        try:
+            emu = unit_converter.to_emu(value, axis=axis)
+        except (TypeError, ValueError):
+            return value
         return str(int(round(emu)))

@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
-from dataclasses import dataclass
-
 from copy import deepcopy
+from dataclasses import dataclass
 
 from lxml import etree
 
+from svg2ooxml.color.parsers import parse_color
+from svg2ooxml.common.conversions.colors import color_to_hex
+from svg2ooxml.common.conversions.opacity import parse_opacity
 from svg2ooxml.core.resvg.geometry.matrix import Matrix
 from svg2ooxml.core.resvg.painting.gradients import (
     GradientStop,
@@ -397,19 +399,18 @@ def _parse_stops(element: etree._Element) -> tuple[GradientStopDescriptor, ...]:
     stops: list[GradientStopDescriptor] = []
     for stop_el in element.findall(".//{http://www.w3.org/2000/svg}stop") + element.findall(".//stop"):
         color_attr = stop_el.get("stop-color") or _parse_style(stop_el.get("style")).get("stop-color") or "#000000"
-        color_hex = _normalize_hex(color_attr) or "#000000"
+        parsed_color = parse_color(color_attr)
+        color_hex = f"#{color_to_hex(color_attr, default='000000')}"
         opacity_attr = stop_el.get("stop-opacity") or _parse_style(stop_el.get("style")).get("stop-opacity")
-        try:
-            opacity = float(opacity_attr) if opacity_attr is not None else 1.0
-        except ValueError:
-            opacity = 1.0
+        color_alpha = float(getattr(parsed_color, "a", 1.0)) if parsed_color is not None else 1.0
+        opacity = color_alpha * parse_opacity(opacity_attr, default=1.0)
         offset_str = stop_el.get("offset", "0")
         offset = _parse_offset(offset_str)
         stops.append(
             GradientStopDescriptor(
                 offset=max(0.0, min(1.0, offset)),
                 color=color_hex,
-                opacity=max(0.0, min(1.0, opacity)),
+                opacity=opacity,
             )
         )
     return tuple(stops)
@@ -437,7 +438,7 @@ def _analyze_mesh_structure(element: etree._Element) -> tuple[int, int, int, int
                     continue
                 style_map = _parse_style(stop_el.get("style"))
                 color_attr = stop_el.get("stop-color") or style_map.get("stop-color")
-                color_hex = _normalize_hex(color_attr) or "#000000"
+                color_hex = f"#{color_to_hex(color_attr, default='000000')}"
                 colors.add(color_hex.lstrip("#").upper())
                 stop_count += 1
         cols = max(cols, row_cols)

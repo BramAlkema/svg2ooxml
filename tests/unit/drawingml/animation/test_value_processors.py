@@ -47,6 +47,7 @@ class TestParseOpacity:
         assert ValueProcessor.parse_opacity("70") == "70000"
         assert ValueProcessor.parse_opacity("50") == "50000"
         assert ValueProcessor.parse_opacity("100") == "100000"
+        assert ValueProcessor.parse_opacity("50%") == "50000"
 
     def test_opacity_invalid_defaults_to_opaque(self):
         assert ValueProcessor.parse_opacity("invalid") == "100000"
@@ -87,6 +88,7 @@ class TestNormalizeNumericValue:
         assert ValueProcessor.normalize_numeric_value("rotation", "90", unit_converter=uc) == "5400000"
         assert ValueProcessor.normalize_numeric_value("rotate", "180", unit_converter=uc) == "10800000"
         assert ValueProcessor.normalize_numeric_value("ppt_angle", "360", unit_converter=uc) == "21600000"
+        assert ValueProcessor.normalize_numeric_value("ppt_angle", "90deg", unit_converter=uc) == "5400000"
 
     def test_position_attributes_x_axis(self):
         uc = UnitConverter()
@@ -96,6 +98,13 @@ class TestNormalizeNumericValue:
         assert isinstance(result, str)
         # 100px at 96 DPI ≈ 914400 EMU (1 inch)
         assert int(result) > 900000
+
+    def test_position_attributes_accept_units(self):
+        uc = UnitConverter()
+
+        result = ValueProcessor.normalize_numeric_value("ppt_x", "1in", unit_converter=uc)
+
+        assert result == "914400"
 
     def test_position_attributes_y_axis(self):
         uc = UnitConverter()

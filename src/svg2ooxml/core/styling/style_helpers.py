@@ -5,6 +5,10 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import Any
 
+from svg2ooxml.color.parsers import parse_color
+from svg2ooxml.common.conversions.colors import color_to_hex
+from svg2ooxml.common.conversions.opacity import parse_opacity
+from svg2ooxml.common.conversions.transforms import parse_numeric_list
 from svg2ooxml.common.geometry import Matrix2D
 from svg2ooxml.ir.numpy_compat import NUMPY_AVAILABLE, np
 
@@ -37,13 +41,7 @@ def parse_dash_array(value: str | None) -> list[float] | None:
     token = value.strip()
     if not token or token.lower() == "none":
         return None
-    parts = token.replace(",", " ").split()
-    numbers: list[float] = []
-    for part in parts:
-        try:
-            numbers.append(float(part))
-        except ValueError:
-            continue
+    numbers = parse_numeric_list(token)
     return numbers or None
 
 
@@ -182,11 +180,9 @@ def parse_offset(value: str) -> float:
 def parse_stop_color(stop_element, style_parser=None) -> tuple[str, float]:
     style_attrs = parse_style_attr(stop_element.get("style")) if style_parser is None else style_parser(stop_element.get("style"))
     color = stop_element.get("stop-color") or style_attrs.get("stop-color") or "#000000"
-    color = normalize_hex(color) or "000000"
+    parsed_color = parse_color(color)
+    color = color_to_hex(color, default="000000")
     opacity_str = stop_element.get("stop-opacity") or style_attrs.get("stop-opacity")
-    try:
-        opacity = float(opacity_str) if opacity_str is not None else 1.0
-    except ValueError:
-        opacity = 1.0
-    opacity = max(0.0, min(1.0, opacity))
+    color_alpha = float(getattr(parsed_color, "a", 1.0)) if parsed_color is not None else 1.0
+    opacity = color_alpha * parse_opacity(opacity_str, default=1.0)
     return color, opacity

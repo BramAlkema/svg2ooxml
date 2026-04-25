@@ -6,11 +6,13 @@ from dataclasses import dataclass
 
 from lxml import etree
 
+from svg2ooxml.common.units import px_to_emu
+
 # Import centralized XML builders for safe DrawingML generation
 from svg2ooxml.drawingml.xml_builder import a_elem, a_sub, to_string
 from svg2ooxml.filters.base import Filter, FilterContext, FilterResult
 from svg2ooxml.filters.utils import parse_float_list, parse_number
-from svg2ooxml.units.conversion import px_to_emu
+from svg2ooxml.filters.utils.parsing import parse_length
 
 
 @dataclass
@@ -32,7 +34,7 @@ class ConvolveMatrixFilter(Filter):
     filter_type = "convolve_matrix"
 
     def apply(self, primitive: etree._Element, context: FilterContext) -> FilterResult:
-        params = self._parse_params(primitive)
+        params = self._parse_params(primitive, context)
         policy_options = context.policy
         approximation_allowed = bool(policy_options.get("approximation_allowed", True))
         blur_strategy = str(policy_options.get("blur_strategy") or "soft_edge").strip().lower()
@@ -81,30 +83,35 @@ class ConvolveMatrixFilter(Filter):
             warnings=["feConvolveMatrix rendered via EMF fallback"],
         )
 
-    def _parse_params(self, primitive: etree._Element) -> ConvolveMatrixParams:
+    def _parse_params(self, primitive: etree._Element, context: FilterContext) -> ConvolveMatrixParams:
         order_attr = (primitive.get("order") or "3").strip()
-        if " " in order_attr:
-            ox_str, oy_str = order_attr.split(" ", 1)
+        order_values = parse_float_list(order_attr)
+        if len(order_values) >= 2:
+            order_x = max(1, int(order_values[0]))
+            order_y = max(1, int(order_values[1]))
+        elif order_values:
+            order_x = order_y = max(1, int(order_values[0]))
         else:
-            ox_str = order_attr
-            oy_str = order_attr
-        order_x = max(1, int(parse_number(ox_str, default=3.0)))
-        order_y = max(1, int(parse_number(oy_str, default=3.0)))
+            order_x = order_y = 3
         kernel = parse_float_list(primitive.get("kernelMatrix"))
-        divisor = parse_number(primitive.get("divisor"), default=1.0)
+        default_divisor = sum(kernel) if kernel else 1.0
+        if abs(default_divisor) <= 1e-12:
+            default_divisor = 1.0
+        divisor = parse_number(primitive.get("divisor"), default=default_divisor)
         bias = parse_number(primitive.get("bias"))
-        target_x = int(parse_number(primitive.get("targetX"), default=(order_x - 1) / 2))
-        target_y = int(parse_number(primitive.get("targetY"), default=(order_y - 1) / 2))
+        target_x = int(parse_number(primitive.get("targetX"), default=order_x // 2))
+        target_y = int(parse_number(primitive.get("targetY"), default=order_y // 2))
         edge_mode = (primitive.get("edgeMode") or "duplicate").strip().lower()
         preserve_alpha = (primitive.get("preserveAlpha") or "false").strip().lower() == "true"
         kernel_unit = primitive.get("kernelUnitLength")
-        if kernel_unit and " " in kernel_unit:
-            kx_str, ky_str = kernel_unit.split(" ", 1)
+        kernel_unit_values = (kernel_unit or "").replace(",", " ").split()
+        if len(kernel_unit_values) >= 2:
+            kx_str, ky_str = kernel_unit_values[0], kernel_unit_values[1]
         else:
             kx_str = ky_str = kernel_unit
         kernel_unit_length = (
-            parse_number(kx_str) if kx_str else None,
-            parse_number(ky_str) if ky_str else None,
+            parse_length(kx_str, context=context, axis="x") if kx_str else None,
+            parse_length(ky_str, context=context, axis="y") if ky_str else None,
         )
         return ConvolveMatrixParams(
             order_x=order_x,

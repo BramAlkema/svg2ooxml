@@ -8,12 +8,13 @@ from dataclasses import dataclass
 from lxml import etree
 
 from svg2ooxml.common.conversions.angles import radians_to_ppt
+from svg2ooxml.common.units import px_to_emu
+from svg2ooxml.common.units.scalars import EMU_PER_INCH
 
 # Import centralized XML builders for safe DrawingML generation
 from svg2ooxml.drawingml.xml_builder import a_elem, a_sub, to_string
 from svg2ooxml.filters.base import Filter, FilterContext, FilterResult
-from svg2ooxml.filters.utils import parse_number
-from svg2ooxml.units.conversion import px_to_emu
+from svg2ooxml.filters.utils.parsing import parse_length
 
 
 @dataclass
@@ -27,7 +28,7 @@ class OffsetFilter(Filter):
     filter_type = "offset"
 
     def apply(self, primitive: etree._Element, context: FilterContext) -> FilterResult:
-        params = self._parse_params(primitive)
+        params = self._parse_params(primitive, context)
         metadata = {
             "filter_type": self.filter_type,
             "dx": params.dx,
@@ -40,9 +41,9 @@ class OffsetFilter(Filter):
         drawingml = self._build_drawingml(dx_emu, dy_emu)
         return FilterResult(success=True, drawingml=drawingml, metadata=metadata)
 
-    def _parse_params(self, primitive: etree._Element) -> OffsetParams:
-        dx = parse_number(primitive.get("dx"))
-        dy = parse_number(primitive.get("dy"))
+    def _parse_params(self, primitive: etree._Element, context: FilterContext) -> OffsetParams:
+        dx = parse_length(primitive.get("dx"), context=context, axis="x")
+        dy = parse_length(primitive.get("dy"), context=context, axis="y")
         return OffsetParams(dx=dx, dy=dy)
 
     def _build_drawingml(self, dx_emu: int, dy_emu: int) -> str:
@@ -56,7 +57,7 @@ class OffsetFilter(Filter):
         # PowerPoint angle (0 = right, counter-clockwise positive, units 60000 per degree)
         angle_rad = math.atan2(dy_emu, dx_emu)
         ppt_angle = radians_to_ppt(angle_rad % (2 * math.pi))
-        distance = min(distance, 914400)
+        distance = min(distance, EMU_PER_INCH)
 
         # Create outer shadow with zero blur to simulate offset
         outerShdw = a_sub(effectLst, "outerShdw", blurRad="0", dist=distance, dir=ppt_angle, algn="ctr")

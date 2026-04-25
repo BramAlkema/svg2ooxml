@@ -28,6 +28,16 @@ def test_parse_rgb_and_hsl() -> None:
     assert hsl.g > 0.0 and hsl.r < 0.2
 
 
+def test_parse_modern_space_separated_color_functions() -> None:
+    rgb = parse_color("rgb(255 0 0 / 50%)")
+    hsl = parse_color("hsl(240 100% 50% / 25%)")
+
+    assert rgb == Color(1.0, 0.0, 0.0, 0.5)
+    assert hsl is not None
+    assert hsl.b == pytest.approx(1.0)
+    assert hsl.a == pytest.approx(0.25)
+
+
 def test_parse_current_color() -> None:
     base = Color(0.1, 0.2, 0.3, 0.4)
 
@@ -50,3 +60,8 @@ def test_parse_transparent_keyword() -> None:
 
 def test_parse_unknown_returns_none() -> None:
     assert parse_color("not-a-color") is None
+
+
+def test_parse_invalid_color_syntax_returns_none() -> None:
+    assert parse_color("rgb(invalid)") is None
+    assert parse_color("#12345") is None

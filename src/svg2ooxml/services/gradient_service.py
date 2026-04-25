@@ -12,7 +12,7 @@ from lxml import etree
 from svg2ooxml.color.models import Color
 from svg2ooxml.color.parsers import parse_color
 from svg2ooxml.common.conversions.angles import degrees_to_ppt
-from svg2ooxml.common.conversions.opacity import opacity_to_ppt
+from svg2ooxml.common.conversions.opacity import opacity_to_ppt, parse_opacity
 from svg2ooxml.common.conversions.scale import position_to_ppt
 from svg2ooxml.drawingml.bridges.resvg_paint_bridge import (
     GradientDescriptor,
@@ -410,11 +410,7 @@ class GradientService:
 
         color = parse_color(color_value) or Color(0.0, 0.0, 0.0, 1.0)
         if opacity_value is not None:
-            try:
-                alpha = self._clamp(float(opacity_value))
-                color = color.with_alpha(alpha)
-            except ValueError:
-                pass
+            color = color.with_alpha(color.a * parse_opacity(opacity_value, default=1.0))
         return color
 
     def _parse_style(self, payload: str | None) -> dict[str, str]:

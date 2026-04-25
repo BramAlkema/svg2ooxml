@@ -6,14 +6,15 @@ from dataclasses import dataclass
 
 from lxml import etree
 
+from svg2ooxml.color.utils import color_to_hex
 from svg2ooxml.common.conversions.angles import degrees_to_ppt
-from svg2ooxml.common.conversions.opacity import opacity_to_ppt
+from svg2ooxml.common.conversions.opacity import opacity_to_ppt, parse_opacity
+from svg2ooxml.common.units import px_to_emu
 
 # Import centralized XML builders for safe DrawingML generation
 from svg2ooxml.drawingml.xml_builder import a_elem, a_sub, to_string
 from svg2ooxml.filters.base import Filter, FilterContext, FilterResult
-from svg2ooxml.filters.utils import parse_number
-from svg2ooxml.units.conversion import px_to_emu
+from svg2ooxml.filters.utils.parsing import parse_length
 
 
 @dataclass
@@ -30,7 +31,7 @@ class DropShadowFilter(Filter):
     filter_type = "drop_shadow"
 
     def apply(self, primitive: etree._Element, context: FilterContext) -> FilterResult:
-        params = self._parse_params(primitive)
+        params = self._parse_params(primitive, context)
         shadow_xml = self._to_drawingml(params)
         metadata = {
             "filter_type": self.filter_type,
@@ -42,18 +43,12 @@ class DropShadowFilter(Filter):
         }
         return FilterResult(success=True, drawingml=shadow_xml, metadata=metadata)
 
-    def _parse_params(self, primitive: etree._Element) -> DropShadowParams:
-        dx = parse_number(primitive.get("dx"))
-        dy = parse_number(primitive.get("dy"))
-        std_dev = parse_number(primitive.get("stdDeviation"))
-        flood_color = primitive.get("flood-color", "000000").lstrip("#").upper()
-        if len(flood_color) == 3:
-            flood_color = "".join(ch * 2 for ch in flood_color)
-        try:
-            flood_opacity = float(primitive.get("flood-opacity", "1"))
-        except ValueError:
-            flood_opacity = 1.0
-        flood_opacity = max(0.0, min(flood_opacity, 1.0))
+    def _parse_params(self, primitive: etree._Element, context: FilterContext) -> DropShadowParams:
+        dx = parse_length(primitive.get("dx"), context=context, axis="x")
+        dy = parse_length(primitive.get("dy"), context=context, axis="y")
+        std_dev = parse_length(primitive.get("stdDeviation"), context=context, axis="x")
+        flood_color = color_to_hex(primitive.get("flood-color"), default="000000")
+        flood_opacity = parse_opacity(primitive.get("flood-opacity"), default=1.0)
         return DropShadowParams(dx=dx, dy=dy, std_dev=std_dev, flood_color=flood_color, flood_opacity=flood_opacity)
 
     def _to_drawingml(self, params: DropShadowParams) -> str:
@@ -85,11 +80,9 @@ class GlowFilter(Filter):
     filter_type = "glow"
 
     def apply(self, primitive: etree._Element, context: FilterContext) -> FilterResult:
-        radius = parse_number(primitive.get("stdDeviation")) * 2.0
-        color = (primitive.get("flood-color") or "FFFFFF").lstrip("#").upper()
-        if len(color) == 3:
-            color = "".join(ch * 2 for ch in color)
-        opacity = parse_number(primitive.get("flood-opacity"), default=1.0)
+        radius = parse_length(primitive.get("stdDeviation"), context=context, axis="x") * 2.0
+        color = color_to_hex(primitive.get("flood-color"), default="FFFFFF")
+        opacity = parse_opacity(primitive.get("flood-opacity"), default=1.0)
         blur_radius = int(px_to_emu(max(0.0, radius)))
         alpha = opacity_to_ppt(opacity)
 

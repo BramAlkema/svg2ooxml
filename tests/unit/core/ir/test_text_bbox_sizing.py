@@ -1,5 +1,6 @@
 """Tests for text bounding box sizing."""
 
+from svg2ooxml.core.ir.text.layout import parse_number_list
 from svg2ooxml.core.ir.text_converter import TextConverter
 from svg2ooxml.ir.text import Run
 
@@ -120,6 +121,10 @@ def test_text_bbox_empty_runs():
     assert bbox.y == 20
     assert bbox.width == 0
     assert bbox.height == 0
+
+
+def test_text_number_list_accepts_compact_signed_values():
+    assert parse_number_list("10-20,30") == [10.0, -20.0, 30.0]
 
 
 def test_text_bbox_y_offset_for_baseline():

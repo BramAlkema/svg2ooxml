@@ -329,7 +329,7 @@ def _arc_to_center_parameters(
     x_axis_rotation: float,
     large_arc_flag: float,
     sweep_flag: float,
-) -> tuple[Point, float, float, float, float]:
+) -> tuple[Point, float, float, float, float, float]:
     phi = math.radians(x_axis_rotation % 360.0)
 
     dx = (start.x - end.x) / 2.0
@@ -385,13 +385,14 @@ def _arc_to_center_parameters(
     elif sweep_flag == 1 and delta_angle < 0:
         delta_angle += 360.0
 
-    return Point(cx, cy), rx, ry, start_angle, delta_angle
+    return Point(cx, cy), rx, ry, phi, start_angle, delta_angle
 
 
 def _arc_to_bezier_segments(
     center: Point,
     rx: float,
     ry: float,
+    phi: float,
     start_angle: float,
     sweep_angle: float,
 ) -> list[SegmentType]:
@@ -399,37 +400,55 @@ def _arc_to_bezier_segments(
         return []
 
     segments = max(int(math.ceil(abs(sweep_angle) / 90.0)), 1)
-    angle_increment = sweep_angle / segments
+    angle_increment = math.radians(sweep_angle / segments)
     current_angle = math.radians(start_angle)
 
     output: list[SegmentType] = []
-    start_point = Point(
-        center.x + rx * math.cos(current_angle),
-        center.y + ry * math.sin(current_angle),
-    )
+    start_point = _arc_point(center, rx, ry, phi, current_angle)
 
     for _ in range(segments):
-        current_angle += math.radians(angle_increment)
-        end_point = Point(
-            center.x + rx * math.cos(current_angle),
-            center.y + ry * math.sin(current_angle),
-        )
-        alpha = math.tan(math.radians(angle_increment) / 4.0) * 4.0 / 3.0
+        end_angle = current_angle + angle_increment
+        end_point = _arc_point(center, rx, ry, phi, end_angle)
+        alpha = math.tan(angle_increment / 4.0) * 4.0 / 3.0
 
+        start_tangent = _arc_derivative(rx, ry, phi, current_angle)
+        end_tangent = _arc_derivative(rx, ry, phi, end_angle)
         control1 = Point(
-            start_point.x - alpha * rx * math.sin(math.radians(start_angle)),
-            start_point.y + alpha * ry * math.cos(math.radians(start_angle)),
+            start_point.x + alpha * start_tangent.x,
+            start_point.y + alpha * start_tangent.y,
         )
         control2 = Point(
-            end_point.x + alpha * rx * math.sin(math.radians(start_angle + sweep_angle)),
-            end_point.y - alpha * ry * math.cos(math.radians(start_angle + sweep_angle)),
+            end_point.x - alpha * end_tangent.x,
+            end_point.y - alpha * end_tangent.y,
         )
 
         output.append(BezierSegment(start_point, control1, control2, end_point))
         start_point = end_point
-        start_angle += angle_increment
+        current_angle = end_angle
 
     return output
+
+
+def _arc_point(center: Point, rx: float, ry: float, phi: float, theta: float) -> Point:
+    cos_phi = math.cos(phi)
+    sin_phi = math.sin(phi)
+    x = rx * math.cos(theta)
+    y = ry * math.sin(theta)
+    return Point(
+        center.x + cos_phi * x - sin_phi * y,
+        center.y + sin_phi * x + cos_phi * y,
+    )
+
+
+def _arc_derivative(rx: float, ry: float, phi: float, theta: float) -> Point:
+    cos_phi = math.cos(phi)
+    sin_phi = math.sin(phi)
+    dx = -rx * math.sin(theta)
+    dy = ry * math.cos(theta)
+    return Point(
+        cos_phi * dx - sin_phi * dy,
+        sin_phi * dx + cos_phi * dy,
+    )
 
 
 def _take_numbers(

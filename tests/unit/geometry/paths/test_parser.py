@@ -89,3 +89,13 @@ def test_parse_arc_command() -> None:
     end_point = segments[-1].end
     assert end_point.x == pytest.approx(10.0)
     assert end_point.y == pytest.approx(10.0)
+
+
+def test_parse_rotated_arc_preserves_endpoint() -> None:
+    segments = parse_path_data("M 0 0 A 10 20 45 0 1 30 0")
+
+    assert len(segments) == 2
+    assert all(isinstance(segment, BezierSegment) for segment in segments)
+    end_point = segments[-1].end
+    assert end_point.x == pytest.approx(30.0)
+    assert end_point.y == pytest.approx(0.0, abs=1e-9)

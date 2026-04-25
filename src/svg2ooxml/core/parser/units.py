@@ -13,8 +13,8 @@ def viewbox_to_px(
     """Return scale factors that map the provided viewBox into the viewport."""
 
     _, _, vb_width, vb_height = viewbox
-    if vb_width == 0 or vb_height == 0:
-        return width, height
+    if vb_width <= 0 or vb_height <= 0:
+        raise ValueError("viewBox width/height must be positive")
     scale_x = width / vb_width
     scale_y = height / vb_height
     return scale_x, scale_y

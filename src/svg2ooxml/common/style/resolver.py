@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Any
 import tinycss2
 from lxml import etree
 
+from svg2ooxml.common.conversions.opacity import parse_opacity
 from svg2ooxml.common.units.scalars import PX_PER_INCH
 from svg2ooxml.core.parser.colors import parse_color
 
@@ -493,22 +494,9 @@ class StyleResolver:
         except ValueError:
             pass
 
-        if context is not None:
-            if token.endswith("%"):
-                try:
-                    pct = float(token[:-1])
-                except ValueError:
-                    pct = 0.0
-                basis = context.viewport_width if axis == "x" else context.viewport_height
-                return basis * (pct / 100.0) if basis is not None else 0.0
-            if token.endswith("em"):
-                try:
-                    return float(token[:-2]) * context.conversion.font_size
-                except ValueError:
-                    return context.conversion.font_size
-
         try:
-            return self._unit_converter.to_px(token)
+            conversion = context.conversion if context is not None else None
+            return self._unit_converter.to_px(token, conversion, axis=axis)
         except Exception:
             return 0.0
 
@@ -516,19 +504,24 @@ class StyleResolver:
     def _parse_float(value: str | None, default: float) -> float:
         if value is None:
             return default
-        try:
-            return float(value)
-        except (TypeError, ValueError):
-            return default
+        return parse_opacity(value, default)
 
     # ------------------------------------------------------------------ #
     # Stylesheet helpers                                                 #
     # ------------------------------------------------------------------ #
 
-    def collect_css(self, root: etree._Element) -> None:
+    def collect_css(
+        self,
+        root: etree._Element,
+        *,
+        viewport_width: float | None = None,
+        viewport_height: float | None = None,
+    ) -> None:
         """Parse <style> elements so selectors can be applied during styling."""
 
         self._css_rules = []
+        self._viewport_width = viewport_width
+        self._viewport_height = viewport_height
         if root is None:
             return
 
@@ -614,15 +607,31 @@ class StyleResolver:
     def _media_matches(self, query: str) -> bool:
         """Evaluate a simple media query against viewport dimensions."""
         import re as _re
+
         # No viewport set → include everything
         if self._viewport_width is None and self._viewport_height is None:
             return True
         w = self._viewport_width or 0.0
         h = self._viewport_height or 0.0
+        conversion = self._unit_converter.create_context(
+            width=w,
+            height=h,
+            parent_width=w,
+            parent_height=h,
+            viewport_width=w,
+            viewport_height=h,
+        )
         # Check min-width, max-width, min-height, max-height
-        for m in _re.finditer(r"(min|max)-(width|height)\s*:\s*([\d.]+)", query):
+        for m in _re.finditer(
+            r"(min|max)-(width|height)\s*:\s*([+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?[a-z%]*)",
+            query,
+        ):
             bound_type, dim, val_str = m.group(1), m.group(2), m.group(3)
-            val = float(val_str)
+            axis = "x" if dim == "width" else "y"
+            try:
+                val = self._unit_converter.to_px(val_str, conversion, axis=axis)
+            except Exception:
+                val = 0.0
             actual = w if dim == "width" else h
             if bound_type == "min" and actual < val:
                 return False

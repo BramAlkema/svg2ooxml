@@ -63,6 +63,20 @@ def test_px_to_emu_roundtrip() -> None:
     assert back == pytest.approx(px, rel=1e-6)
 
 
+def test_rejects_non_positive_dpi() -> None:
+    with pytest.raises(ValueError, match="dpi must be positive"):
+        UnitConverter(dpi=0)
+
+    with pytest.raises(ValueError, match="dpi must be positive"):
+        px_to_emu(10, dpi=-96)
+
+
+def test_unitless_empty_fallback_returns_raw_number() -> None:
+    converter = UnitConverter()
+
+    assert converter.to_px("42", fallback_unit="") == pytest.approx(42.0)
+
+
 def test_emu_to_unit_conversions() -> None:
     inches = 2.0
     emu_value = inches * EMU_PER_INCH

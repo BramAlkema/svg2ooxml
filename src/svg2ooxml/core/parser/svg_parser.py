@@ -195,8 +195,6 @@ class SVGParser:
         normalization_changes.setdefault("preparse", prep_report)
         self._trace(tracer, "normalization", metadata=normalization_changes)
 
-        self._style_resolver.collect_css(root)
-
         # Parse web fonts from @font-face rules
         web_fonts = self._font_parser.parse_stylesheets(root)
         svg_font_result = self._svg_font_parser.parse(root)
@@ -239,6 +237,11 @@ class SVGParser:
         services.register("markers", references.markers)
         width_px, height_px = self._extract_dimensions(root)
         style_context = self._build_style_context(width_px, height_px)
+        self._style_resolver.collect_css(
+            root,
+            viewport_width=width_px,
+            viewport_height=height_px,
+        )
         if style_context is not None:
             services.register("style_context", style_context)
         root_style = self._style_resolver.compute_text_style(
@@ -460,6 +463,8 @@ class SVGParser:
         try:
             numbers = [float(part) for part in parts]
         except ValueError:
+            return None
+        if numbers[2] <= 0 or numbers[3] <= 0:
             return None
         return (numbers[0], numbers[1], numbers[2], numbers[3])
 

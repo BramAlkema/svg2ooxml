@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import copy
-import logging
 import struct
 from collections import defaultdict
 from collections.abc import Callable
@@ -12,17 +11,9 @@ from typing import Any
 import numpy as np
 from lxml import etree
 
-from svg2ooxml.drawingml.raster_adapter import RasterAdapter, _surface_to_png
+from svg2ooxml.common.units import px_to_emu
 from svg2ooxml.filters.base import FilterContext, FilterResult
 from svg2ooxml.filters.planner import FilterPlanner
-from svg2ooxml.filters.utils import parse_number
-from svg2ooxml.io.emf.blob import EMU_PER_INCH, EMFBlob
-from svg2ooxml.ir.effects import CustomEffect
-from svg2ooxml.render.filters import FilterPlan, UnsupportedPrimitiveError, apply_filter
-from svg2ooxml.render.rasterizer import Viewport
-from svg2ooxml.render.surface import Surface
-from svg2ooxml.services.filter_types import FilterEffectResult
-
 from svg2ooxml.filters.primitives.blend import BlendFilter
 from svg2ooxml.filters.primitives.color_matrix import ColorMatrixFilter
 from svg2ooxml.filters.primitives.component_transfer import ComponentTransferFilter
@@ -39,6 +30,13 @@ from svg2ooxml.filters.primitives.morphology import MorphologyFilter
 from svg2ooxml.filters.primitives.offset import OffsetFilter
 from svg2ooxml.filters.primitives.tile import TileFilter
 from svg2ooxml.filters.resvg_bridge import ResolvedFilter
+from svg2ooxml.filters.utils import parse_number
+from svg2ooxml.io.emf.blob import EMFBlob
+from svg2ooxml.ir.effects import CustomEffect
+from svg2ooxml.render.filters import FilterPlan
+from svg2ooxml.render.rasterizer import Viewport
+from svg2ooxml.render.surface import Surface
+from svg2ooxml.services.filter_types import FilterEffectResult
 
 _PROMOTION_FILTER_FACTORIES = {
     "feflood": FloodFilter,
@@ -142,8 +140,8 @@ def turbulence_emf_effect(
     width_px = max(1, int(round(viewport.width)))
     height_px = max(1, int(round(viewport.height)))
     bmp_bytes = surface_to_bmp(surface)
-    width_emu = max(1, int(round(width_px * EMU_PER_INCH / 96)))
-    height_emu = max(1, int(round(height_px * EMU_PER_INCH / 96)))
+    width_emu = max(1, int(round(px_to_emu(width_px))))
+    height_emu = max(1, int(round(px_to_emu(height_px))))
     blob = EMFBlob(width_emu=width_emu, height_emu=height_emu)
     blob.draw_bitmap(
         0,

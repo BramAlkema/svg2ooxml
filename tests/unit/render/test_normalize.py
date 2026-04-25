@@ -72,6 +72,24 @@ def test_normalize_resolves_fill_and_stroke():
     assert tuple(round(component, 4) for component in stroke.paint.color) == (1.0, 0.0, 0.0)
 
 
+def test_normalize_resolves_geometry_length_units():
+    svg_markup = """
+    <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"200\" height=\"100\">
+        <rect x=\"10%\" y=\"1cm\" width=\"2cm\" height=\"25%\" />
+    </svg>
+    """
+    root = etree.fromstring(svg_markup)
+
+    tree = normalize_svg(root)
+
+    rect_node = tree.root.children[0]
+    rect_geometry = rect_node.geometry
+    assert rect_geometry.bounds.x == pytest.approx(20.0)
+    assert rect_geometry.bounds.y == pytest.approx(37.7952755906)
+    assert rect_geometry.bounds.width == pytest.approx(75.5905511811)
+    assert rect_geometry.bounds.height == pytest.approx(25.0)
+
+
 def test_normalize_handles_gradients():
     svg_markup = """
     <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"10\" height=\"10\">

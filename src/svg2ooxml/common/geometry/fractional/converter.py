@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from decimal import ROUND_HALF_UP, Decimal
 
+from svg2ooxml.common.units.conversion import validate_dpi
+
 from .constants import (
     DEFAULT_DPI,
     EMU_PER_CM,
@@ -29,10 +31,11 @@ class FractionalEMUConverter:
     _scale: float = 1.0
 
     def __post_init__(self) -> None:
+        object.__setattr__(self, "dpi", validate_dpi(self.dpi))
         object.__setattr__(self, "_scale", float(self.precision_mode.value))
 
     def pixels_to_emu(self, pixels: float, dpi: float | None = None) -> float:
-        dpi = dpi or self.dpi
+        dpi = validate_dpi(self.dpi if dpi is None else dpi)
         emu = (pixels / dpi) * EMU_PER_INCH
         return self._validate(emu, pixels)
 
