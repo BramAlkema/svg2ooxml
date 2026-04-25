@@ -9,6 +9,22 @@ from pathlib import Path
 from typing import Any
 
 from svg2ooxml.core.animation import SMILParser, TimelineSampler, TimelineSamplingConfig
+from svg2ooxml.core.export.animation_processor import (
+    _build_animation_metadata,
+    _compose_sampled_center_motions,
+    _enrich_animations_with_element_centers,
+    _expand_deterministic_repeat_triggers,
+    _lower_safe_group_transform_targets_with_animated_descendants,
+    _prepare_scene_for_native_opacity_effects,
+)
+from svg2ooxml.core.export.motion_geometry import _apply_immediate_motion_starts
+from svg2ooxml.core.export.variant_expansion import (
+    _coalesce_simple_position_motions,
+    _compose_simple_line_endpoint_animations,
+    _materialize_simple_line_paths,
+    _materialize_stroked_polyline_groups,
+    _merge_trace_reports,
+)
 from svg2ooxml.core.ir.converter import IRScene
 from svg2ooxml.core.parser import ParserConfig, SVGParser
 from svg2ooxml.core.slide_orchestrator import (
@@ -28,21 +44,6 @@ from svg2ooxml.ir import convert_parser_output
 from svg2ooxml.ir.animation import AnimationScene, AnimationSummary
 from svg2ooxml.policy import PolicyContext
 from svg2ooxml.services import configure_services
-
-from svg2ooxml.core.export.animation_processor import (
-    _build_animation_metadata,
-    _compose_sampled_center_motions,
-    _expand_deterministic_repeat_triggers,
-    _enrich_animations_with_element_centers,
-)
-from svg2ooxml.core.export.motion_geometry import _apply_immediate_motion_starts
-from svg2ooxml.core.export.variant_expansion import (
-    _coalesce_simple_position_motions,
-    _compose_simple_line_endpoint_animations,
-    _materialize_simple_line_paths,
-    _materialize_stroked_polyline_groups,
-    _merge_trace_reports,
-)
 
 
 class SvgConversionError(RuntimeError):
@@ -480,6 +481,7 @@ class SvgToPptxExporter:
                 scene,
                 parse_result.svg_root,
             )
+            animations = _lower_safe_group_transform_targets_with_animated_descendants(animations, scene)
             animations = _enrich_animations_with_element_centers(animations, scene)
             animations = _compose_sampled_center_motions(animations, scene)
             _materialize_simple_line_paths(scene, animations)
@@ -487,6 +489,7 @@ class SvgToPptxExporter:
             animations = _materialize_stroked_polyline_groups(scene, animations)
             _apply_immediate_motion_starts(scene, animations)
             animations = _coalesce_simple_position_motions(animations, scene)
+            _prepare_scene_for_native_opacity_effects(scene, animations)
             timeline_scenes = self._timeline_sampler.generate_scenes(animations)
             scene.animations = animations
             animation_meta = _build_animation_metadata(

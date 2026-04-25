@@ -46,6 +46,7 @@ class TraversalHooksMixin(ShapeCreationMixin, StylingHooksMixin, ClippingHooksMi
         mask_ref, mask_instance = self._resolve_mask_ref(element)
 
         style = style_runtime.extract_style(self, element)
+        style = self._style_with_local_opacity(element, style)
         metadata = dict(style.metadata)
         self._attach_policy_metadata(metadata, "geometry")
         group = Group(

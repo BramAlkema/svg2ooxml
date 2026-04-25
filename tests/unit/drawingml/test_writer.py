@@ -16,6 +16,12 @@ from svg2ooxml.core.pipeline.navigation import (
     SlideTarget,
 )
 from svg2ooxml.drawingml.writer import EMU_PER_PX, DrawingMLWriter, px_to_emu
+from svg2ooxml.ir.animation import (
+    AnimationDefinition,
+    AnimationTiming,
+    AnimationType,
+    TransformType,
+)
 from svg2ooxml.ir.effects import CustomEffect
 from svg2ooxml.ir.entrypoints import convert_parser_output
 from svg2ooxml.ir.geometry import BezierSegment, LineSegment, Point, Rect
@@ -1439,6 +1445,89 @@ def test_render_scene_exposes_shape_fragments() -> None:
     assert all(fragment.startswith("<p:sp>") for fragment in result.shape_xml)
 
 
+def test_render_scene_preserves_leaf_group_when_group_is_animation_target() -> None:
+    writer = DrawingMLWriter()
+    group = Group(
+        children=[
+            Rectangle(bounds=Rect(0, 0, 20, 10), fill=SolidPaint("4472C4")),
+        ],
+        metadata={"element_ids": ["bee_group"]},
+    )
+    animation = AnimationDefinition(
+        element_id="bee_group",
+        animation_type=AnimationType.ANIMATE_TRANSFORM,
+        target_attribute="transform",
+        values=["0,0", "10,0"],
+        timing=AnimationTiming(begin=0.0, duration=1.0),
+        transform_type=TransformType.TRANSLATE,
+    )
+
+    result = writer.render_scene(
+        [group],
+        animation_payload={"definitions": [animation]},
+    )
+
+    assert len(result.shape_xml) == 1
+    assert result.shape_xml[0].startswith("<p:grpSp>")
+
+    root = ET.fromstring(result.slide_xml.encode("utf-8"))
+    ns = {"p": "http://schemas.openxmlformats.org/presentationml/2006/main"}
+    group_ids = {
+        elem.get("id")
+        for elem in root.xpath(".//p:spTree/p:grpSp/p:nvGrpSpPr/p:cNvPr", namespaces=ns)
+        if elem.get("id")
+    }
+    timing_shape_ids = {
+        elem.get("spid")
+        for elem in root.xpath(".//p:timing//p:spTgt", namespaces=ns)
+        if elem.get("spid")
+    }
+
+    assert group_ids
+    assert timing_shape_ids & group_ids
+
+
+def test_preserved_group_children_use_group_local_coordinates() -> None:
+    writer = DrawingMLWriter()
+    group = Group(
+        children=[
+            Rectangle(bounds=Rect(10, 15, 20, 10), fill=SolidPaint("4472C4")),
+            Rectangle(bounds=Rect(35, 20, 10, 8), fill=SolidPaint("ED7D31")),
+        ],
+        metadata={"element_ids": ["bee_group"]},
+    )
+    animation = AnimationDefinition(
+        element_id="bee_group",
+        animation_type=AnimationType.ANIMATE_TRANSFORM,
+        target_attribute="transform",
+        values=["0,0", "10,0"],
+        timing=AnimationTiming(begin=0.0, duration=1.0),
+        transform_type=TransformType.TRANSLATE,
+    )
+
+    result = writer.render_scene(
+        [group],
+        animation_payload={"definitions": [animation]},
+    )
+
+    root = ET.fromstring(result.slide_xml.encode("utf-8"))
+    ns = {
+        "a": "http://schemas.openxmlformats.org/drawingml/2006/main",
+        "p": "http://schemas.openxmlformats.org/presentationml/2006/main",
+    }
+    group_xfrm = root.find(".//p:grpSp/p:grpSpPr/a:xfrm", ns)
+    assert group_xfrm is not None
+
+    child_offsets = root.xpath(
+        ".//p:grpSp/p:sp/p:spPr/a:xfrm/a:off",
+        namespaces=ns,
+    )
+    assert [off.attrib for off in child_offsets] == [
+        {"x": "0", "y": "0"},
+        {"x": str(px_to_emu(25)), "y": str(px_to_emu(5))},
+    ]
+
+
 def test_nested_group_uses_real_group_bounds() -> None:
     writer = DrawingMLWriter()
     group = Group(
@@ -1470,7 +1559,7 @@ def test_nested_group_uses_real_group_bounds() -> None:
     assert ch_ext is not None
     assert off.attrib == {"x": str(px_to_emu(10)), "y": str(px_to_emu(15))}
     assert ext.attrib == {"cx": str(px_to_emu(20)), "cy": str(px_to_emu(12))}
-    assert ch_off.attrib == {"x": str(px_to_emu(10)), "y": str(px_to_emu(15))}
+    assert ch_off.attrib == {"x": "0", "y": "0"}
     assert ch_ext.attrib == {"cx": str(px_to_emu(20)), "cy": str(px_to_emu(12))}
 
 

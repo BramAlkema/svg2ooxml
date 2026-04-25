@@ -9,7 +9,6 @@ from typing import Any
 from svg2ooxml.core.ir.converter import IRScene
 from svg2ooxml.ir.animation import AnimationDefinition, AnimationType, CalcMode
 
-
 # ---------------------------------------------------------------------------
 # Sampling & interpolation
 # ---------------------------------------------------------------------------
@@ -356,17 +355,24 @@ def _build_sampled_motion_replacement(
     *,
     template: AnimationDefinition,
     points: list[tuple[float, float]],
+    key_times: list[float] | None = None,
 ) -> AnimationDefinition:
     from dataclasses import replace as _replace
 
     relative_points = _relative_motion_points(points)
     path = _build_motion_path_from_relative_points(relative_points)
+    key_points = (
+        _path_progress_key_points(relative_points)
+        if key_times is not None and len(key_times) == len(relative_points)
+        else None
+    )
     return _replace(
         template,
         animation_type=AnimationType.ANIMATE_MOTION,
         target_attribute="position",
         values=[path],
-        key_times=None,
+        key_times=list(key_times) if key_points is not None else None,
+        key_points=key_points,
         key_splines=None,
         calc_mode=CalcMode.LINEAR,
         transform_type=None,
@@ -406,6 +412,27 @@ def _build_motion_path_from_relative_points(
             f"{command} {_format_motion_delta(x)} {_format_motion_delta(y)}"
         )
     return " ".join(segments) + " E"
+
+
+def _path_progress_key_points(
+    points: list[tuple[float, float]],
+) -> list[float]:
+    if len(points) <= 1:
+        return [0.0]
+
+    lengths = [0.0]
+    total = 0.0
+    for index in range(1, len(points)):
+        x0, y0 = points[index - 1]
+        x1, y1 = points[index]
+        total += math.hypot(x1 - x0, y1 - y0)
+        lengths.append(total)
+
+    if total <= 1e-9:
+        step = 1.0 / (len(points) - 1)
+        return [index * step for index in range(len(points))]
+
+    return [length / total for length in lengths]
 
 
 # ---------------------------------------------------------------------------

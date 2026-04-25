@@ -8,6 +8,21 @@ from dataclasses import dataclass, replace
 from math import isfinite
 from typing import Any
 
+from svg2ooxml.core.export.motion_geometry import (
+    _build_sampled_motion_replacement,
+    _image_local_layout,
+    _infer_element_heading_deg,
+    _inverse_project_affine_point,
+    _inverse_project_affine_rect,
+    _lerp,
+    _parse_sampled_motion_points,
+    _project_affine_point,
+    _resolve_affine_matrix,
+    _rotate_point,
+    _sample_polyline_at_fraction,
+    _sample_progress_values,
+    _translate_element_to_center_target,
+)
 from svg2ooxml.core.ir.converter import IRScene
 from svg2ooxml.drawingml.animation.native_matcher import (
     NativeAnimationMatch,
@@ -24,23 +39,6 @@ from svg2ooxml.ir.animation import (
     CalcMode,
     TransformType,
 )
-
-from svg2ooxml.core.export.motion_geometry import (
-    _build_sampled_motion_replacement,
-    _image_local_layout,
-    _inverse_project_affine_point,
-    _inverse_project_affine_rect,
-    _infer_element_heading_deg,
-    _lerp,
-    _parse_sampled_motion_points,
-    _project_affine_point,
-    _resolve_affine_matrix,
-    _rotate_point,
-    _sample_polyline_at_fraction,
-    _sample_progress_values,
-    _translate_element_to_center_target,
-)
-
 
 # ---------------------------------------------------------------------------
 # Serialization
@@ -487,6 +485,83 @@ def _parse_rotate_bounds(animation: AnimationDefinition) -> tuple[float, float]:
     return (start_angle, end_angle)
 
 
+def _parse_rotate_keyframes(
+    animation: AnimationDefinition,
+) -> tuple[list[float], tuple[float, float] | None]:
+    from svg2ooxml.common.conversions.transforms import parse_numeric_list
+
+    angles: list[float] = []
+    center: tuple[float, float] | None = None
+    for value in animation.values:
+        numbers = parse_numeric_list(value)
+        if numbers:
+            angles.append(numbers[0])
+        else:
+            angles.append(0.0)
+        if len(numbers) >= 3:
+            parsed_center = (numbers[1], numbers[2])
+            if center is None:
+                center = parsed_center
+            elif (
+                abs(center[0] - parsed_center[0]) > 1e-6
+                or abs(center[1] - parsed_center[1]) > 1e-6
+            ):
+                return (angles, center)
+    return (angles, center)
+
+
+def _interpolate_numeric_keyframes(
+    values: list[float],
+    key_times: list[float] | None,
+    fraction: float,
+) -> float:
+    if not values:
+        return 0.0
+    if len(values) == 1 or fraction <= 0.0:
+        return values[0]
+    if fraction >= 1.0:
+        return values[-1]
+
+    if key_times and len(key_times) == len(values):
+        for index in range(len(key_times) - 1):
+            if fraction <= key_times[index + 1]:
+                span = max(1e-9, key_times[index + 1] - key_times[index])
+                local_t = (fraction - key_times[index]) / span
+                return _lerp(values[index], values[index + 1], local_t)
+        return values[-1]
+
+    position = fraction * (len(values) - 1)
+    index = min(int(position), len(values) - 2)
+    local_t = position - index
+    return _lerp(values[index], values[index + 1], local_t)
+
+
+def _interpolate_pair_keyframes(
+    values: list[tuple[float, float]],
+    key_times: list[float] | None,
+    fraction: float,
+) -> tuple[float, float]:
+    if not values:
+        return (0.0, 0.0)
+    xs = [pair[0] for pair in values]
+    ys = [pair[1] for pair in values]
+    return (
+        _interpolate_numeric_keyframes(xs, key_times, fraction),
+        _interpolate_numeric_keyframes(ys, key_times, fraction),
+    )
+
+
+def _rotate_around_point(
+    point: tuple[float, float],
+    center: tuple[float, float],
+    angle_deg: float,
+) -> tuple[float, float]:
+    local_x = point[0] - center[0]
+    local_y = point[1] - center[1]
+    rotated_x, rotated_y = _rotate_point((local_x, local_y), angle_deg)
+    return (center[0] + rotated_x, center[1] + rotated_y)
+
+
 def _numeric_bounds(
     member: tuple[int, AnimationDefinition] | None,
     *,
@@ -498,6 +573,12 @@ def _numeric_bounds(
         return (float(member[1].values[0]), float(member[1].values[-1]))
     except (TypeError, ValueError):
         return (default, default)
+
+
+def _parse_translate_pair(value: str) -> tuple[float, float]:
+    from svg2ooxml.common.conversions.transforms import parse_translation_pair
+
+    return parse_translation_pair(value)
 
 
 # ---------------------------------------------------------------------------
@@ -628,6 +709,249 @@ def _enrich_animations_with_element_centers(
     return enriched
 
 
+def _lower_safe_group_transform_targets_with_animated_descendants(
+    animations: list[AnimationDefinition],
+    scene: IRScene,
+) -> list[AnimationDefinition]:
+    """Lower safe parent-group motion when descendants animate too.
+
+    PowerPoint handles ``grpSp`` motion reliably only when the group is the
+    sole animated target in that subtree. Once descendants also animate, the
+    grouped playback becomes brittle and our descendant-mimic attempts have not
+    held up empirically.
+
+    Keep the fallback intentionally narrow: translate-only group motion can be
+    cloned onto renderable leaf descendants while the group is flattened, but
+    rotate/scale/matrix group transforms are dropped in mixed subtrees. This
+    preserves descendant-local effects and avoids preserving an animated
+    ``grpSp`` that PowerPoint renders incorrectly.
+    """
+
+    from svg2ooxml.ir.scene import Group
+
+    group_leaf_ids: dict[str, tuple[str, ...]] = {}
+    group_descendant_ids: dict[str, tuple[str, ...]] = {}
+
+    def _element_ids(element: object) -> tuple[str, ...]:
+        meta = getattr(element, "metadata", None)
+        if not isinstance(meta, dict):
+            return ()
+        return tuple(
+            dict.fromkeys(
+                eid for eid in meta.get("element_ids", []) if isinstance(eid, str) and eid
+            )
+        )
+
+    def _leaf_element_ids(element: object) -> tuple[str, ...]:
+        if isinstance(element, Group):
+            collected: list[str] = []
+            for child in element.children:
+                collected.extend(_leaf_element_ids(child))
+            return tuple(dict.fromkeys(collected))
+        return _element_ids(element)
+
+    def _all_descendant_ids(element: object) -> tuple[str, ...]:
+        collected: list[str] = []
+        collected.extend(_element_ids(element))
+        if isinstance(element, Group):
+            for child in element.children:
+                collected.extend(_all_descendant_ids(child))
+        return tuple(dict.fromkeys(collected))
+
+    def _walk(elements: list[object]) -> None:
+        for element in elements:
+            if not isinstance(element, Group):
+                continue
+            group_ids = _element_ids(element)
+            if group_ids:
+                leaf_ids = _leaf_element_ids(element)
+                descendant_ids = _all_descendant_ids(element)
+                for group_id in group_ids:
+                    group_leaf_ids[group_id] = tuple(
+                        eid for eid in leaf_ids if eid != group_id
+                    )
+                    group_descendant_ids[group_id] = tuple(
+                        eid for eid in descendant_ids if eid != group_id
+                    )
+            _walk(list(getattr(element, "children", [])))
+
+    _walk(list(scene.elements))
+
+    if not group_descendant_ids:
+        return animations
+
+    animated_ids = {
+        animation.element_id
+        for animation in animations
+        if isinstance(animation.element_id, str) and animation.element_id
+    }
+
+    mixed_group_ids = {
+        group_id
+        for group_id, descendant_ids in group_descendant_ids.items()
+        if any(descendant_id in animated_ids for descendant_id in descendant_ids)
+    }
+    if not mixed_group_ids:
+        return animations
+
+    lowered: list[AnimationDefinition] = []
+    for animation in animations:
+        if (
+            animation.animation_type != AnimationType.ANIMATE_TRANSFORM
+            or animation.transform_type is None
+            or animation.element_id not in mixed_group_ids
+        ):
+            lowered.append(animation)
+            continue
+
+        if animation.transform_type != TransformType.TRANSLATE:
+            continue
+
+        for leaf_id in group_leaf_ids.get(animation.element_id, ()):
+            raw_attributes = dict(animation.raw_attributes)
+            raw_attributes["svg2ooxml_group_transform_split"] = animation.element_id
+            raw_attributes["svg2ooxml_group_transform_expanded"] = animation.element_id
+            clone_animation_id = (
+                f"{animation.animation_id}__{leaf_id}"
+                if isinstance(animation.animation_id, str) and animation.animation_id
+                else None
+            )
+            lowered.append(
+                replace(
+                    animation,
+                    element_id=leaf_id,
+                    animation_id=clone_animation_id,
+                    raw_attributes=raw_attributes,
+                )
+            )
+    return lowered
+
+
+def _group_transform_clone_origin(animation: AnimationDefinition) -> str | None:
+    for key in (
+        "svg2ooxml_group_transform_split",
+        "svg2ooxml_group_transform_expanded",
+    ):
+        origin = animation.raw_attributes.get(key)
+        if isinstance(origin, str) and origin:
+            return origin
+    return None
+
+
+def _prepare_scene_for_native_opacity_effects(
+    scene: IRScene,
+    animations: list[AnimationDefinition],
+) -> None:
+    """Remove baked static alpha for targets driven by native opacity effects."""
+    from dataclasses import replace as _replace
+
+    from svg2ooxml.ir.paint import LinearGradientPaint, RadialGradientPaint, SolidPaint
+    from svg2ooxml.ir.scene import Group
+
+    target_ids = {
+        animation.element_id
+        for animation in animations
+        if _needs_unbaked_native_opacity_effect(animation)
+    }
+    if not target_ids:
+        return
+
+    def _reset_paint_alpha(paint: object, baked_opacity: float) -> object:
+        if isinstance(paint, SolidPaint):
+            if abs(float(paint.opacity) - baked_opacity) <= 1e-6:
+                return _replace(paint, opacity=1.0)
+            return paint
+        if isinstance(paint, (LinearGradientPaint, RadialGradientPaint)):
+            if paint.stops and all(abs(float(stop.opacity) - baked_opacity) <= 1e-6 for stop in paint.stops):
+                return _replace(
+                    paint,
+                    stops=[
+                        _replace(stop, opacity=1.0)
+                        for stop in paint.stops
+                    ],
+                )
+        return paint
+
+    def _walk(elements: list[object]) -> list[object]:
+        updated_elements: list[object] = []
+        for element in elements:
+            if isinstance(element, Group):
+                updated_elements.append(
+                    _replace(element, children=_walk(list(element.children)))
+                )
+                continue
+
+            metadata = getattr(element, "metadata", None)
+            element_ids = (
+                [eid for eid in metadata.get("element_ids", []) if isinstance(eid, str)]
+                if isinstance(metadata, dict)
+                else []
+            )
+            if not any(element_id in target_ids for element_id in element_ids):
+                updated_elements.append(element)
+                continue
+
+            baked_opacity = float(getattr(element, "opacity", 1.0))
+            kwargs: dict[str, object] = {}
+            fill = getattr(element, "fill", None)
+            if fill is not None:
+                reset_fill = _reset_paint_alpha(fill, baked_opacity)
+                if reset_fill is not fill:
+                    kwargs["fill"] = reset_fill
+            stroke = getattr(element, "stroke", None)
+            if stroke is not None and getattr(stroke, "paint", None) is not None:
+                reset_stroke_paint = _reset_paint_alpha(stroke.paint, baked_opacity)
+                if reset_stroke_paint is not stroke.paint or abs(float(stroke.opacity) - baked_opacity) <= 1e-6:
+                    kwargs["stroke"] = _replace(
+                        stroke,
+                        paint=reset_stroke_paint,
+                        opacity=(1.0 if abs(float(stroke.opacity) - baked_opacity) <= 1e-6 else stroke.opacity),
+                    )
+            if abs(baked_opacity - 1.0) > 1e-6:
+                kwargs["opacity"] = 1.0
+            updated_elements.append(_replace(element, **kwargs) if kwargs else element)
+        return updated_elements
+
+    scene.elements = _walk(list(scene.elements))
+
+
+def _needs_unbaked_native_opacity_effect(animation: AnimationDefinition) -> bool:
+    if animation.animation_type != AnimationType.ANIMATE:
+        return False
+    if animation.target_attribute != "opacity":
+        return False
+
+    values = animation.values
+    if len(values) == 2 and animation.repeat_count in (None, 1, "1") and not animation.key_times:
+        start = _opacity_float(values[0])
+        end = _opacity_float(values[-1])
+        return (start <= 0.0 and end >= 0.999) or (end <= 0.0 and start >= 0.999)
+
+    if len(values) != 3:
+        return False
+    if animation.calc_mode == CalcMode.DISCRETE:
+        return False
+    if animation.key_splines:
+        return False
+    if animation.key_times and [round(value, 6) for value in animation.key_times] != [0.0, 0.5, 1.0]:
+        return False
+
+    start = _opacity_float(values[0])
+    peak = _opacity_float(values[1])
+    end = _opacity_float(values[2])
+    return abs(start - end) <= 1e-6 and start <= 0.0 and peak > start
+
+
+def _opacity_float(value: str) -> float:
+    try:
+        opacity = float(value)
+    except (TypeError, ValueError):
+        return 1.0
+    if opacity > 1.0:
+        opacity = opacity / 100.0
+    return max(0.0, min(1.0, opacity))
+
+
 # ---------------------------------------------------------------------------
 # Sampled center motion composition
 # ---------------------------------------------------------------------------
@@ -750,7 +1074,7 @@ def _build_sampled_center_motion_composition(
 ) -> _SampledCenterMotionComposition | None:
     from dataclasses import replace as _replace
 
-    from svg2ooxml.ir.scene import Image
+    from svg2ooxml.ir.scene import Group, Image
     from svg2ooxml.ir.scene import Path as IRPath
     from svg2ooxml.ir.shapes import Circle, Polygon, Polyline
 
@@ -816,6 +1140,7 @@ def _build_sampled_center_motion_composition(
             replacement_animation=_build_sampled_motion_replacement(
                 template=motion_template,
                 points=center_points,
+                key_times=samples,
             ),
             updated_indices=updated_indices,
             start_center=center_points[0],
@@ -857,8 +1182,9 @@ def _build_sampled_center_motion_composition(
         width = float(content_rect.width)
         height = float(content_rect.height)
 
+        samples = _sample_progress_values()
         center_points = []
-        for progress in _sample_progress_values():
+        for progress in samples:
             sx = _lerp(from_sx, to_sx, progress)
             sy = _lerp(from_sy, to_sy, progress)
             x = _lerp(x0, x1, progress)
@@ -884,13 +1210,109 @@ def _build_sampled_center_motion_composition(
             replacement_animation=_build_sampled_motion_replacement(
                 template=motion_template,
                 points=center_points,
+                key_times=samples,
             ),
             updated_indices=updated_indices,
             start_center=center_points[0],
             element_id=motion_template.element_id,
         )
 
-    if isinstance(element, (IRPath, Polyline, Polygon)):
+    if isinstance(element, (Group, IRPath, Polyline, Polygon)):
+        translate_member = _single_matching_member(
+            members,
+            lambda anim: (
+                anim.animation_type == AnimationType.ANIMATE_TRANSFORM
+                and anim.transform_type == TransformType.TRANSLATE
+                and len(anim.values) >= 2
+                and not anim.key_splines
+                and (
+                    (
+                        anim.calc_mode.value
+                        if isinstance(anim.calc_mode, CalcMode)
+                        else str(anim.calc_mode).lower()
+                    )
+                    in {CalcMode.LINEAR.value, CalcMode.PACED.value}
+                )
+            ),
+        )
+        rotate_transform_member = None
+        if translate_member is not None:
+            split_origin = _group_transform_clone_origin(translate_member[1])
+            rotate_candidates = [
+                (index, anim)
+                for index, anim in members
+                if anim.animation_type == AnimationType.ANIMATE_TRANSFORM
+                and anim.transform_type == TransformType.ROTATE
+                and len(anim.values) >= 2
+                and (
+                    (
+                        split_origin is not None
+                        and _group_transform_clone_origin(anim) == split_origin
+                    )
+                    or (
+                        split_origin is None
+                        and _group_transform_clone_origin(anim) is None
+                    )
+                )
+            ]
+            if len(rotate_candidates) == 1:
+                rotate_transform_member = rotate_candidates[0]
+        if translate_member is not None and rotate_transform_member is not None:
+            matrix = _resolve_affine_matrix([translate_member[1], rotate_transform_member[1]])
+            local_center = _inverse_project_affine_point(current_center, matrix)
+            translation_pairs = [
+                _parse_translate_pair(value) for value in translate_member[1].values
+            ]
+            angles, rotation_center = _parse_rotate_keyframes(rotate_transform_member[1])
+            if rotation_center is not None:
+                sample_points = {
+                    0.0,
+                    1.0,
+                    *(_sample_progress_values(24)),
+                    *(translate_member[1].key_times or []),
+                    *(rotate_transform_member[1].key_times or []),
+                }
+                ordered_samples = sorted(sample_points)
+                center_points: list[tuple[float, float]] = []
+                for progress in ordered_samples:
+                    tx, ty = _interpolate_pair_keyframes(
+                        translation_pairs,
+                        translate_member[1].key_times,
+                        progress,
+                    )
+                    angle = _interpolate_numeric_keyframes(
+                        angles,
+                        rotate_transform_member[1].key_times,
+                        progress,
+                    )
+                    rotated_center = _rotate_around_point(
+                        local_center,
+                        rotation_center,
+                        angle,
+                    )
+                    moved_center = (rotated_center[0] + tx, rotated_center[1] + ty)
+                    center_points.append(
+                        _project_affine_point(moved_center, matrix)
+                    )
+
+                updated_rotate = _replace(
+                    rotate_transform_member[1],
+                    values=[str(angle) for angle in angles],
+                    element_center_px=None,
+                )
+                return _SampledCenterMotionComposition(
+                    replacement_index=translate_member[0],
+                    consumed_indices={translate_member[0]},
+                    replacement_animation=_build_sampled_motion_replacement(
+                        template=translate_member[1],
+                        points=center_points,
+                        key_times=ordered_samples,
+                    ),
+                    updated_indices={rotate_transform_member[0]: updated_rotate},
+                    start_center=center_points[0],
+                    element_id=translate_member[1].element_id,
+                )
+
         motion_member = _single_matching_member(
             members,
             lambda anim: (
@@ -916,8 +1338,9 @@ def _build_sampled_center_motion_composition(
             return None
 
         start_angle, end_angle = _parse_rotate_bounds(rotate_member[1])
+        samples = _sample_progress_values()
         center_points = []
-        for progress in _sample_progress_values():
+        for progress in samples:
             motion_point = _sample_polyline_at_fraction(motion_points, progress)
             angle = _lerp(start_angle, end_angle, progress)
             rotated = _rotate_point(
@@ -932,6 +1355,7 @@ def _build_sampled_center_motion_composition(
             replacement_animation=_build_sampled_motion_replacement(
                 template=motion_member[1],
                 points=center_points,
+                key_times=samples,
             ),
             updated_indices={},
             start_center=center_points[0],

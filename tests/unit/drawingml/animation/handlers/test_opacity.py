@@ -242,12 +242,14 @@ class TestBuild:
         assert ctn is not None
         assert ctn.get("presetSubtype") == "0"
         assert ctn.get("autoRev") is None
+        assert ctn.get("repeatCount") is None
         effect_cbhvr = anim_effect.find(f"{{{NS_P}}}cBhvr")
         assert effect_cbhvr is not None
         assert effect_cbhvr.get("rctx") == "IE"
         effect_ctn = effect_cbhvr.find(f"{{{NS_P}}}cTn")
         assert effect_ctn is not None
         assert effect_ctn.get("autoRev") == "1"
+        assert effect_ctn.get("repeatCount") is None
         assert fragment.source == "builder"
         assert fragment.strategy == "opacity-pulse-transparency-effect"
 
@@ -278,6 +280,25 @@ class TestBuild:
         assert par.find(f".//{{{NS_P}}}anim") is not None
         assert fragment.source == "builder"
         assert fragment.strategy == "opacity-property-animation"
+
+    def test_repeating_opacity_pulse_repeats_on_outer_container(
+        self, handler: OpacityAnimationHandler
+    ):
+        anim = make_opacity_animation(
+            values=["0", "1", "0"],
+            timing=AnimationTiming(begin=0.0, duration=1.5, repeat_count="indefinite"),
+        )
+
+        par = _par(handler.build(anim, par_id=4, behavior_id=5))
+        ctn = par.find(f"{{{NS_P}}}cTn")
+        assert ctn is not None
+        assert ctn.get("dur") == "1500"
+        assert ctn.get("repeatCount") == "indefinite"
+
+        effect_ctn = par.find(f".//{{{NS_P}}}animEffect/{{{NS_P}}}cBhvr/{{{NS_P}}}cTn")
+        assert effect_ctn is not None
+        assert effect_ctn.get("dur") == "750"
+        assert effect_ctn.get("repeatCount") is None
 
     def test_spline_opacity_uses_property_animation_and_dense_tavs(
         self, handler: OpacityAnimationHandler

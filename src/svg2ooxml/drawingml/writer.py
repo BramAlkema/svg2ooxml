@@ -15,12 +15,11 @@ from svg2ooxml.ir.text import TextFrame
 
 from .animation_pipeline import AnimationPipeline
 from .assets import AssetRegistry
-from .pipelines.asset_pipeline import AssetPipeline
 from .clipmask import clip_bounds_for
-from .filter_fallback import resolve_filter_fallback_bounds
 from .generator import EMU_PER_PX, DrawingMLPathGenerator, px_to_emu
 from .mask_pipeline import MaskPipeline
 from .navigation import register_navigation
+from .pipelines.asset_pipeline import AssetPipeline
 from .rasterizer import SKIA_AVAILABLE, Rasterizer
 from .result import DrawingMLRenderResult
 from .shape_renderer import DrawingMLShapeRenderer
@@ -114,6 +113,140 @@ def _apply_mask_alpha(element, alpha: float):
         except TypeError:
             pass
     return element
+
+
+def _translate_group_child_to_local_coordinates(element, dx: float, dy: float):
+    """Return a copy of *element* translated by ``(-dx, -dy)`` for grpSp output.
+
+    PowerPoint group children live in the group's child coordinate space, not
+    the slide coordinate space. Rendering preserved groups with slide-absolute
+    child offsets is tolerated for static layout but breaks grouped animation
+    playback. This helper localises geometry only for XML emission; the source
+    scene and animation metadata remain in slide space.
+    """
+    if abs(dx) <= 1e-9 and abs(dy) <= 1e-9:
+        return element
+
+    from svg2ooxml.ir.geometry import BezierSegment, LineSegment, Point, Rect
+    from svg2ooxml.ir.scene import Group as IRGroup
+    from svg2ooxml.ir.scene import Image as IRImage
+    from svg2ooxml.ir.scene import Path as IRPath
+    from svg2ooxml.ir.shapes import Circle, Ellipse, Line, Polygon, Polyline, Rectangle
+    from svg2ooxml.ir.text import TextFrame as IRTextFrame
+
+    def _move_point(point: Point) -> Point:
+        return Point(point.x - dx, point.y - dy)
+
+    def _move_rect(rect: Rect) -> Rect:
+        return Rect(rect.x - dx, rect.y - dy, rect.width, rect.height)
+
+    if isinstance(element, IRGroup):
+        return replace(
+            element,
+            children=[
+                _translate_group_child_to_local_coordinates(child, dx, dy)
+                for child in element.children
+            ],
+        )
+    if isinstance(element, IRPath):
+        moved_segments = []
+        for segment in element.segments:
+            if isinstance(segment, LineSegment):
+                moved_segments.append(
+                    LineSegment(
+                        start=_move_point(segment.start),
+                        end=_move_point(segment.end),
+                    )
+                )
+            elif isinstance(segment, BezierSegment):
+                moved_segments.append(
+                    BezierSegment(
+                        start=_move_point(segment.start),
+                        control1=_move_point(segment.control1),
+                        control2=_move_point(segment.control2),
+                        end=_move_point(segment.end),
+                    )
+                )
+            else:
+                moved_segments.append(segment)
+        return replace(element, segments=moved_segments)
+    if isinstance(element, Rectangle):
+        return replace(element, bounds=_move_rect(element.bounds))
+    if isinstance(element, Circle):
+        return replace(element, center=_move_point(element.center))
+    if isinstance(element, Ellipse):
+        return replace(element, center=_move_point(element.center))
+    if isinstance(element, Line):
+        return replace(
+            element,
+            start=_move_point(element.start),
+            end=_move_point(element.end),
+        )
+    if isinstance(element, Polyline):
+        return replace(element, points=[_move_point(point) for point in element.points])
+    if isinstance(element, Polygon):
+        return replace(element, points=[_move_point(point) for point in element.points])
+    if isinstance(element, IRTextFrame):
+        return replace(
+            element,
+            origin=_move_point(element.origin),
+            bbox=_move_rect(element.bbox),
+        )
+    if isinstance(element, IRImage):
+        return replace(element, origin=_move_point(element.origin))
+    return element
+
+
+def _multiply_element_opacity(element, opacity: float):
+    if opacity >= 0.999:
+        return element
+    current = getattr(element, "opacity", None)
+    if not isinstance(current, (int, float)):
+        return element
+    try:
+        return replace(element, opacity=max(0.0, min(1.0, float(current) * opacity)))
+    except TypeError:
+        return element
+
+
+def _metadata_with_group_semantics(
+    child_metadata: object,
+    group_metadata: dict[str, object],
+) -> dict[str, object]:
+    metadata = dict(child_metadata) if isinstance(child_metadata, dict) else {}
+    clip_bounds = group_metadata.get("_clip_bounds")
+    if clip_bounds is not None and "_clip_bounds" not in metadata:
+        metadata["_clip_bounds"] = clip_bounds
+    navigation = group_metadata.get("navigation")
+    if navigation is not None and "navigation" not in metadata:
+        metadata["navigation"] = navigation
+    return metadata
+
+
+def _apply_group_wrapper_semantics_to_child(
+    child,
+    group: Group,
+    group_metadata: dict[str, object],
+):
+    wrapped = _multiply_element_opacity(child, group.opacity)
+    metadata = _metadata_with_group_semantics(
+        getattr(wrapped, "metadata", None),
+        group_metadata,
+    )
+    try:
+        return replace(wrapped, metadata=metadata)
+    except TypeError:
+        return wrapped
+
+
+def _apply_group_wrapper_semantics(
+    group: Group,
+    group_metadata: dict[str, object],
+) -> list:
+    return [
+        _apply_group_wrapper_semantics_to_child(child, group, group_metadata)
+        for child in group.children
+    ]
 
 
 class DrawingMLWriter:
@@ -421,7 +554,7 @@ class DrawingMLWriter:
             f'<a:xfrm>'
             f'<a:off x="{x}" y="{y}"/>'
             f'<a:ext cx="{width}" cy="{height}"/>'
-            f'<a:chOff x="{x}" y="{y}"/>'
+            f'<a:chOff x="0" y="0"/>'
             f'<a:chExt cx="{width}" cy="{height}"/>'
             f'</a:xfrm>'
         )
@@ -437,8 +570,13 @@ class DrawingMLWriter:
             return False
         return True
 
+    def _group_directly_targets_animation(self, group: Group) -> bool:
+        return self._animation_pipeline.metadata_targets_animation(group.metadata)
+
     def _should_flatten_group_for_native_animation(self, group: Group) -> bool:
         if not self._can_remove_group_wrapper(group):
+            return False
+        if self._group_directly_targets_animation(group):
             return False
         return self._group_contains_bookmark_navigation(
             group
@@ -649,16 +787,32 @@ class DrawingMLWriter:
                 isinstance(c, Group) for c in element.children
             )
 
-            if not has_nested_groups:
+            if not has_nested_groups and not self._group_directly_targets_animation(element):
+                children = element.children
+                if (
+                    not self._can_remove_group_wrapper(element)
+                    or self._metadata_has_bookmark_navigation(metadata)
+                    or metadata.get("navigation") is not None
+                ):
+                    children = _apply_group_wrapper_semantics(element, metadata)
                 fragments, next_id = self._render_elements(
-                    element.children, shape_id,
+                    children, shape_id,
                 )
                 if not fragments:
                     return None
                 return fragments, next_id
 
+            group_bbox = element.bbox
+            local_children = [
+                _translate_group_child_to_local_coordinates(
+                    child,
+                    group_bbox.x,
+                    group_bbox.y,
+                )
+                for child in element.children
+            ]
             child_fragments, next_id = self._render_elements(
-                element.children, shape_id + 1,
+                local_children, shape_id + 1,
             )
             if not child_fragments:
                 return None

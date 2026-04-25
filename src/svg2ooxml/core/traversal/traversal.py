@@ -38,8 +38,10 @@ class ElementTraversal:
         self._transform_parser = transform_parser or TransformParser()
         self._coord_space = CoordinateSpace()
         self._normalized_lookup = normalized_lookup or {}
+        self._root_element: etree._Element | None = None
 
     def extract(self, svg_root: etree._Element) -> list:
+        self._root_element = svg_root
         viewbox_matrix = None
         if svg_root is not None:
             converter = self._converter

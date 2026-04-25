@@ -22,7 +22,7 @@ from svg2ooxml.core.traversal.geometry_utils import (
     transform_axis_aligned_rect,
 )
 from svg2ooxml.ir.geometry import Point
-from svg2ooxml.ir.paint import PatternPaint, Stroke, StrokeCap, StrokeJoin
+from svg2ooxml.ir.paint import PatternPaint, SolidPaint, Stroke, StrokeCap, StrokeJoin
 from svg2ooxml.ir.scene import ClipRef, Group, MaskInstance, MaskRef
 from svg2ooxml.ir.shapes import Circle, Ellipse, Rectangle
 
@@ -58,6 +58,72 @@ class ShapeResvgMixin:
         parsed = parse_style_attr(style_attr)
         value = parsed.get(attribute)
         return isinstance(value, str) and value.strip().lower() == "none"
+
+    @staticmethod
+    def _source_has_property(
+        source_element: etree._Element | None,
+        attribute: str,
+    ) -> bool:
+        if source_element is None:
+            return False
+        if source_element.get(attribute) is not None:
+            return True
+        style_attr = source_element.get("style")
+        if not isinstance(style_attr, str) or attribute not in style_attr:
+            return False
+        return attribute in parse_style_attr(style_attr)
+
+    def _style_with_local_opacity(
+        self,
+        element: etree._Element | None,
+        style: StyleResult,
+    ) -> StyleResult:
+        """Keep SVG ``opacity`` local instead of inheriting ancestor opacity."""
+        if element is None:
+            return style
+        try:
+            paint_style = self._style_resolver.compute_paint_style(
+                element,
+                context=self._css_context,
+            )
+            local_style = self._materialize_style(element, paint_style)
+            opacity = float(paint_style.get("opacity", 1.0))
+        except Exception:
+            opacity = style.opacity if self._source_has_property(element, "opacity") else 1.0
+            local_style = None
+
+        fill = style.fill
+        if (
+            local_style is not None
+            and isinstance(fill, SolidPaint)
+            and isinstance(local_style.fill, SolidPaint)
+            and fill.rgb == local_style.fill.rgb
+        ):
+            fill = replace(fill, opacity=local_style.fill.opacity)
+
+        stroke = style.stroke
+        if (
+            local_style is not None
+            and stroke is not None
+            and local_style.stroke is not None
+            and isinstance(stroke.paint, SolidPaint)
+            and isinstance(local_style.stroke.paint, SolidPaint)
+            and stroke.paint.rgb == local_style.stroke.paint.rgb
+        ):
+            stroke = replace(
+                stroke,
+                paint=replace(stroke.paint, opacity=local_style.stroke.paint.opacity),
+                opacity=local_style.stroke.opacity,
+            )
+
+        opacity = max(0.0, min(1.0, opacity))
+        try:
+            return replace(style, fill=fill, stroke=stroke, opacity=opacity)
+        except TypeError:
+            style.fill = fill
+            style.stroke = stroke
+            style.opacity = opacity
+            return style
 
     @staticmethod
     def _merge_pattern_paint(
@@ -331,8 +397,13 @@ class ShapeResvgMixin:
         )
         return ellipse
 
-    @staticmethod
-    def _combine_strokes(override: Stroke | None, base: Stroke | None) -> Stroke | None:
+    def _combine_strokes(
+        self,
+        override: Stroke | None,
+        base: Stroke | None,
+        *,
+        override_element: etree._Element | None = None,
+    ) -> Stroke | None:
         if base is None and override is None:
             return None
         if base is None:
@@ -357,8 +428,17 @@ class ShapeResvgMixin:
             if override.miter_limit != 4.0 or base.miter_limit == 4.0
             else base.miter_limit
         )
-        dash_array = override.dash_array if override.dash_array else base.dash_array
-        dash_offset = override.dash_offset if override.dash_offset else base.dash_offset
+        dash_array = base.dash_array
+        if override.dash_array is not None or self._source_has_property(
+            override_element, "stroke-dasharray"
+        ):
+            dash_array = override.dash_array
+
+        dash_offset = base.dash_offset
+        if self._source_has_property(override_element, "stroke-dashoffset"):
+            dash_offset = override.dash_offset
+        elif override.dash_offset not in (None, 0.0):
+            dash_offset = override.dash_offset
         opacity = override.opacity if override.opacity != 1.0 else base.opacity
 
         return Stroke(
@@ -410,17 +490,23 @@ class ShapeResvgMixin:
         )
 
     def _merge_use_styles(
-        self, use_style: StyleResult, source_style: StyleResult | None
+        self,
+        use_style: StyleResult,
+        source_style: StyleResult | None,
+        *,
+        use_element: etree._Element | None = None,
     ) -> StyleResult:
         if source_style is None:
             return use_style
 
         fill = source_style.fill if source_style.fill is not None else use_style.fill
-        stroke = self._combine_strokes(use_style.stroke, source_style.stroke)
-
-        opacity = (
-            use_style.opacity if use_style.opacity != 1.0 else source_style.opacity
+        stroke = self._combine_strokes(
+            use_style.stroke,
+            source_style.stroke,
+            override_element=use_element,
         )
+
+        opacity = max(0.0, min(1.0, source_style.opacity * use_style.opacity))
 
         effects: list[Any] = []
         effects.extend(source_style.effects)
@@ -474,11 +560,28 @@ class ShapeResvgMixin:
         # if it's frozen, but we can pass it explicitly or use a proxy.
         # For now, let's just use it in the specialized converters.
 
+        if hasattr(self, "_local_name"):
+            element_local = self._local_name(element.tag).lower()
+        else:
+            element_local = (
+                element.tag.split("}")[-1].lower()
+                if isinstance(element.tag, str)
+                else ""
+            )
+
         # Extract style (same as legacy path)
         # Keep runtime-style lookup patchable via the legacy module path.
         from svg2ooxml.core.ir import shape_converters as shape_converters_module
 
         style = shape_converters_module.styles_runtime.extract_style(self, element)
+        if element_local == "use":
+            use_paint_dict = self._style_resolver.compute_paint_style(
+                element,
+                context=self._css_context,
+            )
+            style = self._materialize_style(element, use_paint_dict)
+        else:
+            style = self._style_with_local_opacity(element, style)
         metadata = dict(style.metadata)
         self._attach_policy_metadata(metadata, "geometry")
 
@@ -496,61 +599,62 @@ class ShapeResvgMixin:
         source_style: StyleResult | None = None
         if isinstance(source_element, etree._Element):
             self._append_metadata_element_id(metadata, source_element.get("id"))
-            paint_dict = self._style_resolver.compute_paint_style(
-                source_element, context=self._css_context
-            )
-            source_style = self._materialize_style(source_element, paint_dict)
-            style = self._merge_use_styles(style, source_style)
-            metadata.update(source_style.metadata or {})
+            if element_local == "use":
+                paint_dict = self._style_resolver.compute_paint_style(
+                    source_element, context=self._css_context
+                )
+                source_style = self._materialize_style(source_element, paint_dict)
+                style = self._merge_use_styles(
+                    style,
+                    source_style,
+                    use_element=element,
+                )
+                metadata.update(source_style.metadata or {})
 
         # For <use> elements, resvg expansion does not apply viewBox scaling or
         # the <use> element's own transform. Rebuild the local transform to keep
         # parity with legacy behavior.
         use_global_override: Matrix2D | None = None
         original_global_transform = global_transform
-        if hasattr(self, "_local_name"):
-            element_local = self._local_name(element.tag).lower()
-        else:
-            element_local = (
-                element.tag.split("}")[-1].lower()
-                if isinstance(element.tag, str)
-                else ""
-            )
         if element_local == "use" and isinstance(source_element, etree._Element):
             from svg2ooxml.core.styling.use_expander import (
                 compose_use_transform,
-                compute_use_transform,
             )
 
-            use_matrix = compute_use_transform(
-                self, element, source_element, tolerance=DEFAULT_TOLERANCE
+            combined = compose_use_transform(
+                self,
+                element,
+                source_element,
+                tolerance=DEFAULT_TOLERANCE,
             )
-            if use_matrix is not None and not use_matrix.is_identity(
-                tolerance=DEFAULT_TOLERANCE
+            local_transform = self._matrix_from_transform(element.get("transform"))
+            try:
+                parent_transform = coord_space.current.multiply(local_transform.inverse())
+            except Exception:
+                parent_transform = coord_space.current
+            use_global_override = parent_transform.multiply(combined)
+            global_transform = use_global_override
+
+        # Resvg's local tree currently omits nested <svg> viewport transforms.
+        # The traversal CTM includes them, plus ordinary XML transforms.
+        if element_local != "use":
+            global_transform = coord_space.current
+
+        def _preserve_base_solid_opacity(resvg_paint, base_paint):
+            if (
+                isinstance(resvg_paint, SolidPaint)
+                and isinstance(base_paint, SolidPaint)
+                and resvg_paint.rgb == base_paint.rgb
             ):
-                combined = compose_use_transform(
-                    self,
-                    element,
-                    source_element,
-                    tolerance=DEFAULT_TOLERANCE,
-                )
-                if global_transform is None:
-                    use_global_override = combined
-                else:
-                    local_transform = self._matrix2d_from_resvg(
-                        getattr(resvg_node, "transform", None)
-                    )
-                    try:
-                        parent_transform = self._matrix2d_from_resvg(
-                            global_transform
-                        ).multiply(local_transform.inverse())
-                    except Exception:
-                        parent_transform = self._matrix2d_from_resvg(global_transform)
-                    use_global_override = parent_transform.multiply(combined)
-                if use_global_override is not None:
-                    global_transform = use_global_override
+                return replace(resvg_paint, opacity=base_paint.opacity)
+            return resvg_paint
 
-        def _apply_resvg_paint_overrides(node, base_style: StyleResult) -> StyleResult:
+        def _apply_resvg_paint_overrides(
+            node,
+            base_style: StyleResult,
+            *,
+            preserve_base_paint_opacity: bool = False,
+        ) -> StyleResult:
             updated = base_style
             tree = getattr(self, "_resvg_tree", None)
             if tree is None:
@@ -563,18 +667,36 @@ class ShapeResvgMixin:
 
                 resvg_stroke = resolve_stroke_style(node.stroke, tree)
                 if resvg_stroke is not None and resvg_stroke.paint is not None:
+                    stroke_paint = resvg_stroke.paint
                     if (
-                        isinstance(resvg_stroke.paint, PatternPaint)
+                        isinstance(stroke_paint, PatternPaint)
                         and updated.stroke is not None
                         and isinstance(updated.stroke.paint, PatternPaint)
                     ):
+                        stroke_paint = self._merge_pattern_paint(
+                            stroke_paint,
+                            updated.stroke.paint,
+                        )
+                    elif preserve_base_paint_opacity and updated.stroke is not None:
+                        stroke_paint = _preserve_base_solid_opacity(
+                            stroke_paint,
+                            updated.stroke.paint,
+                        )
+                    if updated.stroke is not None:
                         resvg_stroke = replace(
                             resvg_stroke,
-                            paint=self._merge_pattern_paint(
-                            resvg_stroke.paint, updated.stroke.paint
-                        ),
+                            width=updated.stroke.width,
+                            join=updated.stroke.join,
+                            cap=updated.stroke.cap,
+                            miter_limit=updated.stroke.miter_limit,
+                            dash_array=updated.stroke.dash_array,
+                            dash_offset=updated.stroke.dash_offset,
+                            opacity=updated.stroke.opacity,
+                        )
+                    updated = replace(
+                        updated,
+                        stroke=replace(resvg_stroke, paint=stroke_paint),
                     )
-                updated = replace(updated, stroke=resvg_stroke)
             elif self._source_explicitly_disables_paint(source_element, "stroke"):
                 updated = replace(updated, stroke=None)
             if hasattr(node, "fill") and node.fill is not None:
@@ -586,6 +708,11 @@ class ShapeResvgMixin:
                         updated.fill, PatternPaint
                     ):
                         resvg_fill = self._merge_pattern_paint(resvg_fill, updated.fill)
+                    elif preserve_base_paint_opacity:
+                        resvg_fill = _preserve_base_solid_opacity(
+                            resvg_fill,
+                            updated.fill,
+                        )
                     updated = replace(updated, fill=resvg_fill)
                 elif self._source_explicitly_disables_paint(source_element, "fill"):
                     updated = replace(updated, fill=None)
@@ -593,12 +720,21 @@ class ShapeResvgMixin:
                 updated = replace(updated, fill=None)
             return updated
 
-        style = _apply_resvg_paint_overrides(resvg_node, style)
+        style = _apply_resvg_paint_overrides(
+            resvg_node,
+            style,
+            preserve_base_paint_opacity=isinstance(source_element, etree._Element),
+        )
 
         node_type = type(resvg_node).__name__
         # Get clip/mask refs
         clip_ref = self._resolve_clip_ref(element)
         mask_ref, mask_instance = self._resolve_mask_ref(element)
+        if element_local == "use" and isinstance(source_element, etree._Element):
+            if clip_ref is None:
+                clip_ref = self._resolve_clip_ref(source_element)
+            if mask_ref is None and mask_instance is None:
+                mask_ref, mask_instance = self._resolve_mask_ref(source_element)
 
         # Create a modified proxy of the node that carries the GLOBAL transform
         # for the native converters and adapters.
@@ -661,6 +797,64 @@ class ShapeResvgMixin:
                     self, "_resvg_node_transform_lookup", {}
                 )
 
+                def _node_source_element(node) -> etree._Element | None:
+                    source = getattr(node, "source", None)
+                    return source if isinstance(source, etree._Element) else None
+
+                def _style_for_resvg_node(
+                    node,
+                    fallback_style: StyleResult,
+                ) -> StyleResult:
+                    node_source = _node_source_element(node)
+                    if node_source is not None:
+                        paint_dict = self._style_resolver.compute_paint_style(
+                            node_source,
+                            context=self._css_context,
+                        )
+                        node_style = self._materialize_style(node_source, paint_dict)
+                        node_style = self._style_with_local_opacity(
+                            node_source,
+                            node_style,
+                        )
+                    else:
+                        node_style = replace(fallback_style, opacity=1.0)
+                    return _apply_resvg_paint_overrides(
+                        node,
+                        node_style,
+                        preserve_base_paint_opacity=node_source is not None,
+                    )
+
+                def _metadata_for_resvg_node(
+                    node,
+                    node_style: StyleResult,
+                ) -> dict[str, Any]:
+                    node_metadata = dict(node_style.metadata)
+                    self._attach_policy_metadata(node_metadata, "geometry")
+                    node_source = _node_source_element(node)
+                    if node_source is not None:
+                        self._append_metadata_element_id(
+                            node_metadata,
+                            node_source.get("id"),
+                        )
+                    use_instance = getattr(node, "use_source", None)
+                    if isinstance(use_instance, etree._Element):
+                        self._append_metadata_element_id(
+                            node_metadata,
+                            use_instance.get("id"),
+                        )
+                    return node_metadata
+
+                def _clip_mask_for_source(
+                    child_element: etree._Element | None,
+                ) -> tuple[ClipRef | None, MaskRef | None, MaskInstance | None]:
+                    if child_element is None:
+                        return None, None, None
+                    child_clip_ref = self._resolve_clip_ref(child_element)
+                    child_mask_ref, child_mask_instance = self._resolve_mask_ref(
+                        child_element
+                    )
+                    return child_clip_ref, child_mask_ref, child_mask_instance
+
                 def _convert_resvg_children(nodes, parent_style, parent_global=None):
                     """Recursively convert resvg child nodes, flattening nested groups."""
                     result_shapes: list[Any] = []
@@ -695,8 +889,15 @@ class ShapeResvgMixin:
                             # only needs the parent's global.
                             child_global = parent_global
                         child_proxy = GlobalTransformProxy(child, child_global)
-                        child_style = _apply_resvg_paint_overrides(child, parent_style)
-                        child_metadata = dict(metadata)
+                        child_style = _style_for_resvg_node(child, parent_style)
+                        child_metadata = _metadata_for_resvg_node(child, child_style)
+                        child_source_element = _node_source_element(child)
+                        child_element = child_source_element if child_source_element is not None else element
+                        (
+                            child_clip_ref,
+                            child_mask_ref,
+                            child_mask_instance,
+                        ) = _clip_mask_for_source(child_source_element)
                         child_node_type = type(child).__name__
 
                         # Recurse into nested groups
@@ -709,6 +910,9 @@ class ShapeResvgMixin:
                                 if nested_shapes:
                                     sub_group = Group(
                                         children=nested_shapes,
+                                        clip=child_clip_ref,
+                                        mask=child_mask_ref,
+                                        mask_instance=child_mask_instance,
                                         opacity=(
                                             child_style.opacity
                                             if child_style.opacity != 1.0
@@ -721,39 +925,39 @@ class ShapeResvgMixin:
 
                         if child_node_type == "RectNode":
                             rectangle = self._resvg_rect_to_rectangle(
-                                element=element,
+                                element=child_element,
                                 resvg_node=child_proxy,
                                 style=child_style,
                                 metadata=child_metadata,
-                                clip_ref=clip_ref,
-                                mask_ref=mask_ref,
-                                mask_instance=mask_instance,
+                                clip_ref=child_clip_ref,
+                                mask_ref=child_mask_ref,
+                                mask_instance=child_mask_instance,
                             )
                             if rectangle is not None:
                                 result_shapes.append(rectangle)
                                 continue
                         if child_node_type == "CircleNode":
                             circle = self._resvg_circle_to_circle(
-                                element=element,
+                                element=child_element,
                                 resvg_node=child_proxy,
                                 style=child_style,
                                 metadata=child_metadata,
-                                clip_ref=clip_ref,
-                                mask_ref=mask_ref,
-                                mask_instance=mask_instance,
+                                clip_ref=child_clip_ref,
+                                mask_ref=child_mask_ref,
+                                mask_instance=child_mask_instance,
                             )
                             if circle is not None:
                                 result_shapes.append(circle)
                                 continue
                         if child_node_type == "EllipseNode":
                             ellipse = self._resvg_ellipse_to_ellipse(
-                                element=element,
+                                element=child_element,
                                 resvg_node=child_proxy,
                                 style=child_style,
                                 metadata=child_metadata,
-                                clip_ref=clip_ref,
-                                mask_ref=mask_ref,
-                                mask_instance=mask_instance,
+                                clip_ref=child_clip_ref,
+                                mask_ref=child_mask_ref,
+                                mask_instance=child_mask_instance,
                             )
                             if ellipse is not None:
                                 result_shapes.append(ellipse)
@@ -778,21 +982,21 @@ class ShapeResvgMixin:
                         except Exception as exc:
                             self._logger.debug(
                                 "Resvg adapter failed for %s child: %s",
-                                element.get("id") or f"<{child_node_type}>",
+                                child_element.get("id") or f"<{child_node_type}>",
                                 exc,
                             )
                             segments = None
 
                         if segments:
                             child_shape = self._resvg_segments_to_path(
-                                element=element,
+                                element=child_element,
                                 segments=segments,
                                 coord_space=CoordinateSpace(),
                                 style=child_style,
                                 metadata=child_metadata,
-                                clip_ref=clip_ref,
-                                mask_ref=mask_ref,
-                                mask_instance=mask_instance,
+                                clip_ref=child_clip_ref,
+                                mask_ref=child_mask_ref,
+                                mask_instance=child_mask_instance,
                             )
                             if isinstance(child_shape, list):
                                 result_shapes.extend(child_shape)

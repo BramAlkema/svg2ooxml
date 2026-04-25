@@ -96,9 +96,12 @@ def render_rectangle(
         HEIGHT_EMU=px_to_emu(bounds.height),
         PRESET=preset,
         AV_LIST=av_list,
-        FILL_XML=_format_block(paint_to_fill(rect.fill, shape_bbox=bounds), "        "),
+        FILL_XML=_format_block(
+            paint_to_fill(rect.fill, opacity=rect.opacity, shape_bbox=bounds), "        "
+        ),
         STROKE_XML=_format_block(
-            stroke_to_xml(rect.stroke, metadata=rect.metadata), "        "
+            stroke_to_xml(rect.stroke, metadata=rect.metadata, opacity=rect.opacity),
+            "        ",
         ),
         HYPERLINK_XML=hyperlink_xml,
         EFFECTS_XML=_effect_block(rect.effects),
@@ -128,10 +131,16 @@ def render_circle(
         preset="ellipse",
         template=template,
         fill_xml=_format_block(
-            paint_to_fill(circle.fill, shape_bbox=bounds), "        "
+            paint_to_fill(circle.fill, opacity=circle.opacity, shape_bbox=bounds),
+            "        ",
         ),
         stroke_xml=_format_block(
-            stroke_to_xml(circle.stroke, metadata=circle.metadata), "        "
+            stroke_to_xml(
+                circle.stroke,
+                metadata=circle.metadata,
+                opacity=circle.opacity,
+            ),
+            "        ",
         ),
         effects_xml=_effect_block(circle.effects),
         hyperlink_xml=hyperlink_xml,
@@ -160,10 +169,16 @@ def render_ellipse(
         preset="ellipse",
         template=template,
         fill_xml=_format_block(
-            paint_to_fill(ellipse.fill, shape_bbox=bounds), "        "
+            paint_to_fill(ellipse.fill, opacity=ellipse.opacity, shape_bbox=bounds),
+            "        ",
         ),
         stroke_xml=_format_block(
-            stroke_to_xml(ellipse.stroke, metadata=ellipse.metadata), "        "
+            stroke_to_xml(
+                ellipse.stroke,
+                metadata=ellipse.metadata,
+                opacity=ellipse.opacity,
+            ),
+            "        ",
         ),
         effects_xml=_effect_block(ellipse.effects),
         hyperlink_xml=hyperlink_xml,
@@ -210,9 +225,13 @@ def render_path(
     logger: logging.Logger,
     hyperlink_xml: str = "",
 ) -> str:
-    fill_xml = _format_block(paint_to_fill(path.fill, shape_bbox=path.bbox), "        ")
+    fill_xml = _format_block(
+        paint_to_fill(path.fill, opacity=path.opacity, shape_bbox=path.bbox),
+        "        ",
+    )
     stroke_xml = _format_block(
-        stroke_to_xml(path.stroke, metadata=path.metadata), "        "
+        stroke_to_xml(path.stroke, metadata=path.metadata, opacity=path.opacity),
+        "        ",
     )
     policy_geom = policy_for(path.metadata, "geometry")
     shape_name = f"Path {shape_id}"
@@ -279,7 +298,8 @@ def render_line(
         GEOMETRY_XML='        <a:prstGeom prst="line"><a:avLst/></a:prstGeom>\n',
         FILL_XML=_format_block(paint_to_fill(None), "        "),
         STROKE_XML=_format_block(
-            stroke_to_xml(line.stroke, metadata=line.metadata), "        "
+            stroke_to_xml(line.stroke, metadata=line.metadata, opacity=line.opacity),
+            "        ",
         ),
         EFFECTS_XML=_effect_block(line.effects),
         HYPERLINK_XML=hyperlink_xml,
@@ -773,9 +793,16 @@ def _render_polygonal_shape(
 
     shape_name = f"{'Polygon' if closed else 'Polyline'} {shape_id}"
 
-    fill_xml = paint_to_fill(getattr(shape, "fill", None), shape_bbox=bounds)
+    opacity = getattr(shape, "opacity", 1.0)
+    fill_xml = paint_to_fill(
+        getattr(shape, "fill", None),
+        opacity=opacity,
+        shape_bbox=bounds,
+    )
     stroke_xml = stroke_to_xml(
-        getattr(shape, "stroke", None), metadata=getattr(shape, "metadata", None)
+        getattr(shape, "stroke", None),
+        metadata=getattr(shape, "metadata", None),
+        opacity=opacity,
     )
 
     return template.format(

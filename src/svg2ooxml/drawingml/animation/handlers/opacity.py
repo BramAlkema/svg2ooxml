@@ -179,6 +179,7 @@ class OpacityAnimationHandler(AnimationHandler):
             outer_par,
             "cTn",
             id=str(par_id),
+            dur=str(animation.duration_ms),
             fill="hold",
             nodeType="clickEffect",
             grpId=str(par_id),
@@ -186,6 +187,7 @@ class OpacityAnimationHandler(AnimationHandler):
             presetClass="emph",
             presetSubtype="0",
         )
+        self._apply_repeat_count(outer_ctn, animation.repeat_count)
 
         st_cond_lst = p_sub(outer_ctn, "stCondLst")
         if animation.begin_triggers:
@@ -206,7 +208,7 @@ class OpacityAnimationHandler(AnimationHandler):
             set_cbhvr,
             "cTn",
             id=str(behavior_id),
-            dur="1",
+            dur=str(animation.duration_ms),
             fill="hold",
             nodeType="withEffect",
         )
@@ -225,7 +227,7 @@ class OpacityAnimationHandler(AnimationHandler):
             prLst=f"opacity: {peak_opacity}",
         )
         effect_cbhvr = p_sub(anim_effect, "cBhvr", rctx="IE")
-        effect_ctn = p_sub(
+        p_sub(
             effect_cbhvr,
             "cTn",
             id=str(effect_behavior_id),
@@ -234,7 +236,6 @@ class OpacityAnimationHandler(AnimationHandler):
             nodeType="withEffect",
             autoRev="1",
         )
-        self._apply_repeat_count(effect_ctn, animation.repeat_count)
         effect_tgt = p_sub(effect_cbhvr, "tgtEl")
         p_sub(effect_tgt, "spTgt", spid=animation.element_id)
 

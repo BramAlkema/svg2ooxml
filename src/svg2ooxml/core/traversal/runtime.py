@@ -4,23 +4,71 @@ from __future__ import annotations
 
 from lxml import etree
 
+from svg2ooxml.common.geometry import Matrix2D
+from svg2ooxml.core.traversal.viewbox import viewbox_matrix_from_element
+
 
 def push_element_transform(traversal, element: etree._Element) -> bool:
+    transform = _combined_element_transform(traversal, element)
+    if transform is None or transform.is_identity():
+        return False
+    traversal._coord_space.push(transform)
+    return True
+
+
+def _combined_element_transform(traversal, element: etree._Element) -> Matrix2D | None:
     normalized = None
     if getattr(traversal, "_normalized_lookup", None):
         normalized = traversal._normalized_lookup.get(id(element))
 
+    transform = None
     if normalized is not None:
         transform = normalized.local_transform
-        if transform is not None and not transform.is_identity():
-            traversal._coord_space.push(transform)
-            return True
+    else:
+        transform = traversal._transform_parser.parse_to_matrix(element.get("transform"))
 
-    transform = traversal._transform_parser.parse_to_matrix(element.get("transform"))
-    if transform is not None and not transform.is_identity():
-        traversal._coord_space.push(transform)
-        return True
-    return False
+    nested_svg_transform = _nested_svg_viewport_transform(traversal, element)
+    if transform is None:
+        return nested_svg_transform
+    if nested_svg_transform is None:
+        return transform
+    return transform.multiply(nested_svg_transform)
+
+
+def _nested_svg_viewport_transform(
+    traversal,
+    element: etree._Element,
+) -> Matrix2D | None:
+    if local_name(getattr(element, "tag", None)) != "svg":
+        return None
+    if element is getattr(traversal, "_root_element", None):
+        return None
+
+    unit_converter = getattr(traversal._converter, "_unit_converter", None)
+    if unit_converter is None:
+        return None
+
+    try:
+        viewbox_matrix, _ = viewbox_matrix_from_element(element, unit_converter)
+    except Exception:
+        viewbox_matrix = Matrix2D.identity()
+
+    x = _to_px(unit_converter, element.get("x"), axis="x")
+    y = _to_px(unit_converter, element.get("y"), axis="y")
+    translate = Matrix2D.translate(x, y)
+    return translate.multiply(viewbox_matrix)
+
+
+def _to_px(unit_converter, value: str | None, *, axis: str) -> float:
+    if value is None:
+        return 0.0
+    try:
+        return float(unit_converter.to_px(value, axis=axis))
+    except Exception:
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return 0.0
 
 
 def local_name(tag: str | None) -> str:
@@ -41,7 +89,9 @@ def process_anchor(traversal, element: etree._Element, current_navigation, recur
 
 
 def resolve_active_navigation(traversal, element: etree._Element, current_navigation):
-    inline_navigation = traversal._hyperlinks.resolve_inline_navigation(element)
+    inline_navigation = None
+    if local_name(getattr(element, "tag", None)) != "use":
+        inline_navigation = traversal._hyperlinks.resolve_inline_navigation(element)
     group_navigation = traversal.navigation_from_attributes(element)
     return inline_navigation or group_navigation or current_navigation
 

@@ -38,6 +38,7 @@ if not getattr(advanced_mod, "COLOR_ENGINE_AVAILABLE", False):
 
 from svg2ooxml.core.pptx_exporter import SvgToPptxExporter
 from svg2ooxml.core.tracing import ConversionTracer
+from svg2ooxml.ir.animation import AnimationType, TransformType
 
 _NS = {
     "p": "http://schemas.openxmlformats.org/presentationml/2006/main",
@@ -103,6 +104,29 @@ def _timing_shape_ids_inside_groups(slide_xml: str) -> set[str]:
         if c_nv_pr.get("id")
     }
     return timing_shape_ids & grouped_shape_ids
+
+
+def _timing_group_ids(slide_xml: str) -> set[str]:
+    root = ET.fromstring(slide_xml.encode("utf-8"))
+    timing_shape_ids = {
+        sp_tgt.get("spid")
+        for sp_tgt in root.xpath(".//p:timing//p:spTgt", namespaces=_NS)
+        if sp_tgt.get("spid")
+    }
+    group_shape_ids = {
+        c_nv_pr.get("id")
+        for c_nv_pr in root.xpath(".//p:spTree/p:grpSp/p:nvGrpSpPr/p:cNvPr", namespaces=_NS)
+        if c_nv_pr.get("id")
+    }
+    return timing_shape_ids & group_shape_ids
+
+
+def _shape_fill_alpha(slide_xml: str, shape_id: int) -> list[str]:
+    root = ET.fromstring(slide_xml.encode("utf-8"))
+    return root.xpath(
+        f'./p:cSld/p:spTree/p:sp[p:nvSpPr/p:cNvPr/@id="{shape_id}"]/p:spPr/a:solidFill/a:srgbClr/a:alpha/@val',
+        namespaces={**_NS, "a": "http://schemas.openxmlformats.org/drawingml/2006/main"},
+    )
 
 
 def test_render_svg_emits_animation_metadata() -> None:
@@ -1196,6 +1220,173 @@ def test_animate_elem_19_linear_calc_mode_targets_top_level_shape() -> None:
     assert not _timing_shape_ids_inside_groups(render_result.slide_xml)
     assert "<p:attrName>ppt_w</p:attrName>" not in render_result.slide_xml
     assert render_result.slide_xml.count("<p:animScale") == 3
+
+
+def test_group_translate_animation_targets_emitted_group_shape() -> None:
+    svg = """
+    <svg xmlns="http://www.w3.org/2000/svg" width="40" height="20">
+      <g id="bee_group">
+        <animateTransform attributeName="transform" type="translate"
+                          values="0,0;10,0" dur="1s" begin="0s" fill="freeze"/>
+        <rect x="0" y="0" width="20" height="10" fill="#000"/>
+      </g>
+    </svg>
+    """
+
+    render_result, _, _ = _render(svg)
+
+    assert "<p:grpSp>" in render_result.slide_xml
+    assert _timing_group_ids(render_result.slide_xml)
+
+
+def test_group_translate_with_animated_child_lowers_parent_translate_and_flattens() -> None:
+    svg = """
+    <svg xmlns="http://www.w3.org/2000/svg" width="40" height="20">
+      <g id="bee_group">
+        <animateTransform attributeName="transform" type="translate"
+                          values="0,0;10,0" dur="1s" begin="0s" fill="freeze"/>
+        <rect id="body" x="0" y="0" width="12" height="10" fill="#444"/>
+        <rect id="child" x="0" y="0" width="20" height="10" fill="#000">
+          <animateTransform attributeName="transform" type="rotate"
+                            values="0 10 5;15 10 5;0 10 5" dur="1s" begin="0s"/>
+        </rect>
+      </g>
+    </svg>
+    """
+
+    render_result, scene, _ = _render(svg)
+
+    assert scene.animations is not None
+    assert "<p:grpSp>" not in render_result.slide_xml
+    assert not _timing_group_ids(render_result.slide_xml)
+    assert not _timing_shape_ids_inside_groups(render_result.slide_xml)
+    assert not any(
+        animation.element_id == "bee_group"
+        and animation.animation_type == AnimationType.ANIMATE_TRANSFORM
+        for animation in scene.animations
+    )
+    lowered_translates = {
+        animation.element_id
+        for animation in scene.animations
+        if animation.animation_type == AnimationType.ANIMATE_TRANSFORM
+        and animation.transform_type == TransformType.TRANSLATE
+        and animation.raw_attributes.get("svg2ooxml_group_transform_split") == "bee_group"
+    }
+    assert lowered_translates == {"body", "child"}
+    assert any(
+        animation.element_id == "child"
+        and animation.animation_type == AnimationType.ANIMATE_TRANSFORM
+        and animation.transform_type == TransformType.ROTATE
+        for animation in scene.animations
+    )
+
+
+def test_group_translate_with_fill_animated_child_lowers_parent_translate_and_flattens() -> None:
+    svg = """
+    <svg xmlns="http://www.w3.org/2000/svg" width="40" height="20">
+      <g id="bee_group">
+        <animateTransform attributeName="transform" type="translate"
+                          values="0,0;10,0" dur="1s" begin="0s" fill="freeze"/>
+        <rect id="body" x="0" y="0" width="12" height="10" fill="#444"/>
+        <rect id="child" x="16" y="0" width="12" height="10" fill="#000">
+          <animate attributeName="fill"
+                   values="#000000;#F07E13;#000000"
+                   dur="1s" begin="0s"/>
+        </rect>
+      </g>
+    </svg>
+    """
+
+    render_result, scene, _ = _render(svg)
+
+    assert scene.animations is not None
+    assert "<p:grpSp>" not in render_result.slide_xml
+    assert not _timing_group_ids(render_result.slide_xml)
+    assert not _timing_shape_ids_inside_groups(render_result.slide_xml)
+    assert not any(
+        animation.element_id == "bee_group"
+        and animation.animation_type == AnimationType.ANIMATE_TRANSFORM
+        for animation in scene.animations
+    )
+    lowered_translates = {
+        animation.element_id
+        for animation in scene.animations
+        if animation.animation_type == AnimationType.ANIMATE_TRANSFORM
+        and animation.transform_type == TransformType.TRANSLATE
+        and animation.raw_attributes.get("svg2ooxml_group_transform_split") == "bee_group"
+    }
+    assert lowered_translates == {"body", "child"}
+    assert any(
+        animation.element_id == "child"
+        and animation.animation_type == AnimationType.ANIMATE
+        and animation.target_attribute == "fill"
+        for animation in scene.animations
+    )
+
+
+def test_group_translate_rotate_with_animated_child_lowers_translate_and_drops_rotate() -> None:
+    svg = """
+    <svg xmlns="http://www.w3.org/2000/svg" width="40" height="20">
+      <g id="bee_group">
+        <animateTransform attributeName="transform" type="translate"
+                          values="0,0;10,0;0,0" dur="1s" begin="0s"/>
+        <animateTransform attributeName="transform" type="rotate"
+                          values="0 20 10;20 20 10;0 20 10"
+                          dur="1s" begin="0s" additive="sum"/>
+        <rect id="body" x="0" y="0" width="12" height="10" fill="#444"/>
+        <path id="child" d="M 15 5 L 25 5 L 20 12 Z" fill="#000">
+          <animateTransform attributeName="transform" type="rotate"
+                            values="0 20 8;15 20 8;0 20 8" dur="1s" begin="0s"/>
+        </path>
+      </g>
+    </svg>
+    """
+
+    render_result, scene, _ = _render(svg)
+
+    assert scene.animations is not None
+    assert "<p:grpSp>" not in render_result.slide_xml
+    assert not _timing_group_ids(render_result.slide_xml)
+    assert not _timing_shape_ids_inside_groups(render_result.slide_xml)
+    assert not any(
+        animation.element_id == "bee_group"
+        and animation.animation_type == AnimationType.ANIMATE_TRANSFORM
+        for animation in scene.animations
+    )
+    lowered_translates = [
+        animation
+        for animation in scene.animations
+        if animation.raw_attributes.get("svg2ooxml_group_transform_split") == "bee_group"
+        and animation.transform_type == TransformType.TRANSLATE
+    ]
+    assert {animation.element_id for animation in lowered_translates} == {"body", "child"}
+    assert not [
+        animation
+        for animation in scene.animations
+        if animation.raw_attributes.get("svg2ooxml_group_transform_split") == "bee_group"
+        and animation.transform_type == TransformType.ROTATE
+    ]
+    assert any(
+        animation.animation_type == AnimationType.ANIMATE_TRANSFORM
+        and animation.transform_type == TransformType.ROTATE
+        for animation in scene.animations
+        if animation.element_id == "child"
+    )
+
+
+def test_opacity_pulse_does_not_bake_static_zero_alpha() -> None:
+    svg = """
+    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20">
+      <polygon id="pulse" points="2,10 10,2 18,10" fill="#F07E13" opacity="0">
+        <animate attributeName="opacity" values="0;1;0" dur="1.5s" repeatCount="indefinite"/>
+      </polygon>
+    </svg>
+    """
+
+    render_result, _, _ = _render(svg)
+
+    assert not _shape_fill_alpha(render_result.slide_xml, 2)
+    assert 'repeatCount="indefinite"' in render_result.slide_xml
 
 
 def test_multi_keyframe_opacity_animation_uses_transparency_effect() -> None:

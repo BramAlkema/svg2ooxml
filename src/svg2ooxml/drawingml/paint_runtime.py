@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Mapping
+from dataclasses import replace
 from typing import Any
 
 from svg2ooxml.common.conversions.angles import degrees_to_ppt
@@ -44,8 +45,6 @@ def _normalize_gradient_units(paint, shape_bbox):
     Returns the paint unchanged if units are objectBoundingBox (default)
     or if no bbox is available.
     """
-    from dataclasses import replace
-
     units = getattr(paint, "gradient_units", None)
     if units != "userSpaceOnUse" or shape_bbox is None:
         return paint
@@ -80,6 +79,20 @@ def _normalize_gradient_units(paint, shape_bbox):
     return paint
 
 
+def _clamp_opacity(value: float) -> float:
+    return max(0.0, min(1.0, value))
+
+
+def _scale_gradient_stops(paint, opacity: float | None):
+    if opacity is None or opacity >= 0.999:
+        return paint
+    stops = [
+        replace(stop, opacity=_clamp_opacity(float(stop.opacity) * opacity))
+        for stop in getattr(paint, "stops", [])
+    ]
+    return replace(paint, stops=stops)
+
+
 def paint_to_fill(paint, *, opacity: float | None = None, shape_bbox=None) -> str:
     if isinstance(paint, SolidPaint):
         effective = paint.opacity
@@ -91,9 +104,11 @@ def paint_to_fill(paint, *, opacity: float | None = None, shape_bbox=None) -> st
         )
     if isinstance(paint, LinearGradientPaint):
         paint = _normalize_gradient_units(paint, shape_bbox)
+        paint = _scale_gradient_stops(paint, opacity)
         return linear_gradient_to_fill(paint)
     if isinstance(paint, RadialGradientPaint):
         paint = _normalize_gradient_units(paint, shape_bbox)
+        paint = _scale_gradient_stops(paint, opacity)
         return radial_gradient_to_fill(paint)
     if isinstance(paint, GradientPaintRef):
         # Create solidFill with schemeClr element
@@ -105,7 +120,12 @@ def paint_to_fill(paint, *, opacity: float | None = None, shape_bbox=None) -> st
     return to_string(no_fill())
 
 
-def stroke_to_xml(stroke, metadata: Mapping[str, Any] | None = None) -> str:
+def stroke_to_xml(
+    stroke,
+    metadata: Mapping[str, Any] | None = None,
+    *,
+    opacity: float | None = None,
+) -> str:
     markers = {}
     marker_profiles = {}
     if isinstance(metadata, Mapping):
@@ -131,18 +151,31 @@ def stroke_to_xml(stroke, metadata: Mapping[str, Any] | None = None) -> str:
     paint = stroke.paint
     if isinstance(paint, SolidPaint):
         color = paint.rgb.upper()
-        alpha = opacity_to_ppt(paint.opacity)
+        effective_opacity = paint.opacity
+        if opacity is not None:
+            effective_opacity = _clamp_opacity(effective_opacity * opacity)
+        alpha = opacity_to_ppt(effective_opacity)
         fill = solid_fill(color, alpha=alpha, theme_color=paint.theme_color)
         ln.append(fill)
     elif isinstance(paint, PatternPaint):
+        pattern_opacity = stroke.opacity if hasattr(stroke, "opacity") else None
+        if opacity is not None:
+            pattern_opacity = (
+                opacity
+                if pattern_opacity is None
+                else _clamp_opacity(pattern_opacity * opacity)
+            )
         ln.append(
             _pattern_to_fill_elem(
-                paint, opacity=stroke.opacity if hasattr(stroke, "opacity") else None
+                paint,
+                opacity=pattern_opacity,
             )
         )
     elif isinstance(paint, LinearGradientPaint):
+        paint = _scale_gradient_stops(paint, opacity)
         ln.append(_linear_gradient_to_fill_elem(paint))
     elif isinstance(paint, RadialGradientPaint):
+        paint = _scale_gradient_stops(paint, opacity)
         ln.append(_radial_gradient_to_fill_elem(paint))
     elif isinstance(paint, GradientPaintRef):
         # Create solidFill with schemeClr element
