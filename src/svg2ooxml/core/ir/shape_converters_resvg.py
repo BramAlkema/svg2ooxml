@@ -9,11 +9,14 @@ from typing import Any
 from lxml import etree
 
 from svg2ooxml.common.geometry import Matrix2D
-from svg2ooxml.core.ir.shape_converters_utils import (
-    _uniform_scale,
-)
+from svg2ooxml.core.ir.shape_converters_utils import _uniform_scale
 from svg2ooxml.core.styling.style_extractor import StyleResult
-from svg2ooxml.core.styling.style_helpers import parse_style_attr
+from svg2ooxml.core.styling.style_helpers import (
+    apply_stroke_opacity as _apply_paint_opacity,
+)
+from svg2ooxml.core.styling.style_helpers import (
+    parse_style_attr,
+)
 from svg2ooxml.core.traversal.constants import DEFAULT_TOLERANCE
 from svg2ooxml.core.traversal.coordinate_space import CoordinateSpace
 from svg2ooxml.core.traversal.geometry_utils import (
@@ -22,12 +25,46 @@ from svg2ooxml.core.traversal.geometry_utils import (
     transform_axis_aligned_rect,
 )
 from svg2ooxml.ir.geometry import Point
-from svg2ooxml.ir.paint import PatternPaint, SolidPaint, Stroke, StrokeCap, StrokeJoin
+from svg2ooxml.ir.paint import (
+    LinearGradientPaint,
+    PatternPaint,
+    RadialGradientPaint,
+    SolidPaint,
+    Stroke,
+    StrokeCap,
+    StrokeJoin,
+)
 from svg2ooxml.ir.scene import ClipRef, Group, MaskInstance, MaskRef
 from svg2ooxml.ir.shapes import Circle, Ellipse, Rectangle
 
 
 class ShapeResvgMixin:
+    @staticmethod
+    def _paint_with_base_opacity(paint, base_paint):
+        if (
+            isinstance(paint, SolidPaint)
+            and isinstance(base_paint, SolidPaint)
+            and paint.rgb == base_paint.rgb
+        ):
+            return replace(paint, opacity=base_paint.opacity)
+        if (
+            isinstance(paint, (LinearGradientPaint, RadialGradientPaint))
+            and isinstance(base_paint, type(paint))
+            and len(paint.stops) == len(base_paint.stops)
+        ):
+            return replace(
+                paint,
+                stops=[
+                    replace(paint_stop, opacity=base_stop.opacity)
+                    for paint_stop, base_stop in zip(
+                        paint.stops,
+                        base_paint.stops,
+                        strict=True,
+                    )
+                ],
+            )
+        return paint
+
     @staticmethod
     def _append_metadata_element_id(
         metadata: dict[str, Any],
@@ -86,34 +123,40 @@ class ShapeResvgMixin:
                 element,
                 context=self._css_context,
             )
-            local_style = self._materialize_style(element, paint_style)
+            inherited_paint_style = (
+                self._style_extractor._compute_paint_style_with_inheritance(
+                    element,
+                    context=self._css_context,
+                )
+            )
+            inherited_style = self._materialize_style(element, inherited_paint_style)
             opacity = float(paint_style.get("opacity", 1.0))
         except Exception:
-            opacity = style.opacity if self._source_has_property(element, "opacity") else 1.0
-            local_style = None
+            opacity = (
+                style.opacity
+                if self._source_has_property(element, "opacity")
+                else 1.0
+            )
+            inherited_style = None
 
         fill = style.fill
-        if (
-            local_style is not None
-            and isinstance(fill, SolidPaint)
-            and isinstance(local_style.fill, SolidPaint)
-            and fill.rgb == local_style.fill.rgb
-        ):
-            fill = replace(fill, opacity=local_style.fill.opacity)
+        if inherited_style is not None:
+            fill = self._paint_with_base_opacity(fill, inherited_style.fill)
 
         stroke = style.stroke
         if (
-            local_style is not None
+            inherited_style is not None
             and stroke is not None
-            and local_style.stroke is not None
-            and isinstance(stroke.paint, SolidPaint)
-            and isinstance(local_style.stroke.paint, SolidPaint)
-            and stroke.paint.rgb == local_style.stroke.paint.rgb
+            and inherited_style.stroke is not None
         ):
+            stroke_paint = self._paint_with_base_opacity(
+                stroke.paint,
+                inherited_style.stroke.paint,
+            )
             stroke = replace(
                 stroke,
-                paint=replace(stroke.paint, opacity=local_style.stroke.paint.opacity),
-                opacity=local_style.stroke.opacity,
+                paint=stroke_paint,
+                opacity=inherited_style.stroke.opacity,
             )
 
         opacity = max(0.0, min(1.0, opacity))
@@ -187,6 +230,18 @@ class ShapeResvgMixin:
             return float(value)
         except (TypeError, ValueError):
             return default
+
+    @staticmethod
+    def _clamp_opacity(value: float) -> float:
+        return max(0.0, min(1.0, value))
+
+    @staticmethod
+    def _style_opacity(style: Mapping[str, Any] | None, key: str) -> float:
+        if not isinstance(style, Mapping):
+            return 1.0
+        return ShapeResvgMixin._clamp_opacity(
+            ShapeResvgMixin._coerce_float(style.get(key), 1.0)
+        )
 
     @staticmethod
     def _matrix2d_from_resvg(matrix: Matrix2D | None) -> Matrix2D:
@@ -452,6 +507,25 @@ class ShapeResvgMixin:
             opacity=opacity,
         )
 
+    @staticmethod
+    def _paint_with_opacity(paint, opacity: float):
+        opacity = ShapeResvgMixin._clamp_opacity(opacity)
+        if paint is None or opacity >= 0.999:
+            return paint
+        return _apply_paint_opacity(paint, opacity)
+
+    @staticmethod
+    def _stroke_with_opacity(stroke: Stroke | None, opacity: float) -> Stroke | None:
+        if stroke is None:
+            return None
+        opacity = ShapeResvgMixin._clamp_opacity(opacity)
+        if opacity >= 0.999:
+            return stroke
+        return replace(
+            stroke,
+            opacity=ShapeResvgMixin._clamp_opacity(stroke.opacity * opacity),
+        )
+
     def _materialize_style(
         self,
         element: etree._Element,
@@ -495,18 +569,47 @@ class ShapeResvgMixin:
         source_style: StyleResult | None,
         *,
         use_element: etree._Element | None = None,
+        source_element: etree._Element | None = None,
+        use_paint_style: Mapping[str, Any] | None = None,
+        multiply_opacity: bool = True,
     ) -> StyleResult:
         if source_style is None:
             return use_style
 
-        fill = source_style.fill if source_style.fill is not None else use_style.fill
+        source_has_fill = self._source_has_property(source_element, "fill")
+        source_has_fill_opacity = self._source_has_property(
+            source_element, "fill-opacity"
+        )
+        if source_has_fill:
+            fill = source_style.fill
+            if fill is not None and not source_has_fill_opacity:
+                fill = self._paint_with_opacity(
+                    fill,
+                    self._style_opacity(use_paint_style, "fill_opacity"),
+                )
+        else:
+            fill = use_style.fill
+
         stroke = self._combine_strokes(
             use_style.stroke,
             source_style.stroke,
             override_element=use_element,
         )
+        if (
+            stroke is not None
+            and use_style.stroke is None
+            and not self._source_has_property(source_element, "stroke-opacity")
+        ):
+            stroke = self._stroke_with_opacity(
+                stroke,
+                self._style_opacity(use_paint_style, "stroke_opacity"),
+            )
 
-        opacity = max(0.0, min(1.0, source_style.opacity * use_style.opacity))
+        opacity = (
+            max(0.0, min(1.0, source_style.opacity * use_style.opacity))
+            if multiply_opacity
+            else source_style.opacity
+        )
 
         effects: list[Any] = []
         effects.extend(source_style.effects)
@@ -574,14 +677,22 @@ class ShapeResvgMixin:
         from svg2ooxml.core.ir import shape_converters as shape_converters_module
 
         style = shape_converters_module.styles_runtime.extract_style(self, element)
+        use_paint_dict: Mapping[str, Any] | None = None
         if element_local == "use":
-            use_paint_dict = self._style_resolver.compute_paint_style(
-                element,
-                context=self._css_context,
-            )
-            style = self._materialize_style(element, use_paint_dict)
-        else:
-            style = self._style_with_local_opacity(element, style)
+            try:
+                use_paint_dict = (
+                    self._style_extractor._compute_paint_style_with_inheritance(
+                        element,
+                        context=self._css_context,
+                    )
+                )
+            except Exception:
+                use_paint_dict = self._style_resolver.compute_paint_style(
+                    element,
+                    context=self._css_context,
+                )
+            style = self._materialize_style(element, dict(use_paint_dict))
+        style = self._style_with_local_opacity(element, style)
         metadata = dict(style.metadata)
         self._attach_policy_metadata(metadata, "geometry")
 
@@ -608,6 +719,8 @@ class ShapeResvgMixin:
                     style,
                     source_style,
                     use_element=element,
+                    source_element=source_element,
+                    use_paint_style=use_paint_dict,
                 )
                 metadata.update(source_style.metadata or {})
 
@@ -640,20 +753,29 @@ class ShapeResvgMixin:
         if element_local != "use":
             global_transform = coord_space.current
 
-        def _preserve_base_solid_opacity(resvg_paint, base_paint):
-            if (
-                isinstance(resvg_paint, SolidPaint)
-                and isinstance(base_paint, SolidPaint)
-                and resvg_paint.rgb == base_paint.rgb
-            ):
-                return replace(resvg_paint, opacity=base_paint.opacity)
-            return resvg_paint
+        def _resolved_paint_opacity(
+            opacity_source: etree._Element | None,
+            key: str,
+        ) -> float:
+            if opacity_source is None:
+                opacity_source = element
+            try:
+                paint_style = (
+                    self._style_extractor._compute_paint_style_with_inheritance(
+                        opacity_source,
+                        context=self._css_context,
+                    )
+                )
+            except Exception:
+                return 1.0
+            return self._style_opacity(paint_style, key)
 
         def _apply_resvg_paint_overrides(
             node,
             base_style: StyleResult,
             *,
             preserve_base_paint_opacity: bool = False,
+            preserve_base_paint_presence: bool = False,
         ) -> StyleResult:
             updated = base_style
             tree = getattr(self, "_resvg_tree", None)
@@ -667,36 +789,51 @@ class ShapeResvgMixin:
 
                 resvg_stroke = resolve_stroke_style(node.stroke, tree)
                 if resvg_stroke is not None and resvg_stroke.paint is not None:
-                    stroke_paint = resvg_stroke.paint
                     if (
-                        isinstance(stroke_paint, PatternPaint)
-                        and updated.stroke is not None
-                        and isinstance(updated.stroke.paint, PatternPaint)
+                        preserve_base_paint_presence
+                        and updated.stroke is None
+                        and not self._source_has_property(source_element, "stroke")
                     ):
-                        stroke_paint = self._merge_pattern_paint(
-                            stroke_paint,
-                            updated.stroke.paint,
+                        pass
+                    else:
+                        stroke_paint = resvg_stroke.paint
+                        if (
+                            isinstance(stroke_paint, PatternPaint)
+                            and updated.stroke is not None
+                            and isinstance(updated.stroke.paint, PatternPaint)
+                        ):
+                            stroke_paint = self._merge_pattern_paint(
+                                stroke_paint,
+                                updated.stroke.paint,
+                            )
+                        elif preserve_base_paint_opacity and updated.stroke is not None:
+                            stroke_paint = self._paint_with_base_opacity(
+                                stroke_paint,
+                                updated.stroke.paint,
+                            )
+                        elif preserve_base_paint_opacity:
+                            stroke_paint = self._paint_with_opacity(
+                                stroke_paint,
+                                _resolved_paint_opacity(
+                                    source_element,
+                                    "stroke_opacity",
+                                ),
+                            )
+                        if updated.stroke is not None:
+                            resvg_stroke = replace(
+                                resvg_stroke,
+                                width=updated.stroke.width,
+                                join=updated.stroke.join,
+                                cap=updated.stroke.cap,
+                                miter_limit=updated.stroke.miter_limit,
+                                dash_array=updated.stroke.dash_array,
+                                dash_offset=updated.stroke.dash_offset,
+                                opacity=updated.stroke.opacity,
+                            )
+                        updated = replace(
+                            updated,
+                            stroke=replace(resvg_stroke, paint=stroke_paint),
                         )
-                    elif preserve_base_paint_opacity and updated.stroke is not None:
-                        stroke_paint = _preserve_base_solid_opacity(
-                            stroke_paint,
-                            updated.stroke.paint,
-                        )
-                    if updated.stroke is not None:
-                        resvg_stroke = replace(
-                            resvg_stroke,
-                            width=updated.stroke.width,
-                            join=updated.stroke.join,
-                            cap=updated.stroke.cap,
-                            miter_limit=updated.stroke.miter_limit,
-                            dash_array=updated.stroke.dash_array,
-                            dash_offset=updated.stroke.dash_offset,
-                            opacity=updated.stroke.opacity,
-                        )
-                    updated = replace(
-                        updated,
-                        stroke=replace(resvg_stroke, paint=stroke_paint),
-                    )
             elif self._source_explicitly_disables_paint(source_element, "stroke"):
                 updated = replace(updated, stroke=None)
             if hasattr(node, "fill") and node.fill is not None:
@@ -704,15 +841,31 @@ class ShapeResvgMixin:
 
                 resvg_fill = resolve_fill_paint(node.fill, tree)
                 if resvg_fill is not None:
+                    if (
+                        preserve_base_paint_presence
+                        and updated.fill is None
+                        and not self._source_has_property(source_element, "fill")
+                    ):
+                        return updated
                     if isinstance(resvg_fill, PatternPaint) and isinstance(
                         updated.fill, PatternPaint
                     ):
                         resvg_fill = self._merge_pattern_paint(resvg_fill, updated.fill)
                     elif preserve_base_paint_opacity:
-                        resvg_fill = _preserve_base_solid_opacity(
+                        preserved_fill = self._paint_with_base_opacity(
                             resvg_fill,
                             updated.fill,
                         )
+                        if preserved_fill is resvg_fill:
+                            resvg_fill = self._paint_with_opacity(
+                                resvg_fill,
+                                _resolved_paint_opacity(
+                                    source_element,
+                                    "fill_opacity",
+                                ),
+                            )
+                        else:
+                            resvg_fill = preserved_fill
                     updated = replace(updated, fill=resvg_fill)
                 elif self._source_explicitly_disables_paint(source_element, "fill"):
                     updated = replace(updated, fill=None)
@@ -723,7 +876,8 @@ class ShapeResvgMixin:
         style = _apply_resvg_paint_overrides(
             resvg_node,
             style,
-            preserve_base_paint_opacity=isinstance(source_element, etree._Element),
+            preserve_base_paint_opacity=True,
+            preserve_base_paint_presence=element_local == "use",
         )
 
         node_type = type(resvg_node).__name__
@@ -816,12 +970,22 @@ class ShapeResvgMixin:
                             node_source,
                             node_style,
                         )
+                        if element_local == "use":
+                            node_style = self._merge_use_styles(
+                                fallback_style,
+                                node_style,
+                                use_element=element,
+                                source_element=node_source,
+                                use_paint_style=use_paint_dict,
+                                multiply_opacity=False,
+                            )
                     else:
                         node_style = replace(fallback_style, opacity=1.0)
                     return _apply_resvg_paint_overrides(
                         node,
                         node_style,
                         preserve_base_paint_opacity=node_source is not None,
+                        preserve_base_paint_presence=element_local == "use",
                     )
 
                 def _metadata_for_resvg_node(

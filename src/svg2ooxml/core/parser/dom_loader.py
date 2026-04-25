@@ -10,6 +10,13 @@ from lxml import etree
 from .xml_utils import walk
 
 
+class _BlockedExternalResolver(etree.Resolver):
+    """Prevent XML external entities from reading files or network resources."""
+
+    def resolve(self, system_url, public_id, context):  # noqa: ANN001, D102
+        return self.resolve_string("", context)
+
+
 @dataclass(frozen=True)
 class ParserOptions:
     """Configuration passed to the XML parser."""
@@ -18,7 +25,9 @@ class ParserOptions:
     remove_blank_text: bool = False
     strip_cdata: bool = False
     recover: bool = True
-    resolve_entities: bool = True
+    resolve_entities: bool = False
+    load_dtd: bool = False
+    no_network: bool = True
 
     def as_lxml_config(self) -> dict[str, Any]:
         return {
@@ -27,6 +36,8 @@ class ParserOptions:
             "strip_cdata": self.strip_cdata,
             "recover": self.recover,
             "resolve_entities": self.resolve_entities,
+            "load_dtd": self.load_dtd,
+            "no_network": self.no_network,
         }
 
 
@@ -38,6 +49,7 @@ class XMLParser:
 
     def parse(self, content: str) -> etree._Element:
         parser = etree.XMLParser(**self._options.as_lxml_config())
+        parser.resolvers.add(_BlockedExternalResolver())
         return etree.fromstring(content.encode("utf-8"), parser=parser)
 
     def validate_root(self, root: etree._Element) -> None:

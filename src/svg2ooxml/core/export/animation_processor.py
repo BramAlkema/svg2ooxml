@@ -590,18 +590,37 @@ def _sampled_motion_group_key(
     animation: AnimationDefinition,
     alias_map: dict[str, tuple[str, ...]],
 ) -> tuple[Any, ...]:
-    timing = animation.timing
+    return (
+        alias_map.get(animation.element_id, (animation.element_id,)),
+        *_timing_group_key(animation.timing),
+        animation.restart,
+        animation.min_ms,
+        animation.max_ms,
+    )
+
+
+def _timing_group_key(timing: AnimationTiming) -> tuple[Any, ...]:
     begin_triggers = tuple(
         _begin_trigger_group_key(trigger)
         for trigger in (timing.begin_triggers or [])
     )
+    end_triggers = tuple(
+        _begin_trigger_group_key(trigger)
+        for trigger in (timing.end_triggers or [])
+    )
+    repeat_duration = (
+        round(float(timing.repeat_duration), 6)
+        if timing.repeat_duration is not None
+        else None
+    )
     return (
-        alias_map.get(animation.element_id, (animation.element_id,)),
         round(float(timing.begin), 6),
         round(float(timing.duration), 6),
         str(timing.repeat_count),
+        repeat_duration,
         timing.fill_mode.value,
         begin_triggers,
+        end_triggers,
     )
 
 

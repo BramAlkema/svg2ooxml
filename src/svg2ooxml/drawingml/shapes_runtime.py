@@ -66,8 +66,12 @@ def _rot_attr(metadata) -> str:
     if not isinstance(metadata, dict):
         return ""
     deg = metadata.get("text_rotation_deg")
-    if deg is not None and abs(float(deg)) > 0.01:
-        ppt_angle = int(round(float(deg) * 60000))
+    try:
+        degrees = float(deg)
+    except (TypeError, ValueError):
+        return ""
+    if abs(degrees) > 0.01:
+        ppt_angle = int(round(degrees * 60000))
         return f' rot="{ppt_angle}"'
     return ""
 
@@ -665,16 +669,13 @@ def run_fragment(run: Run, text_segment: str, navigation_factory) -> str:
         attributes.append(f'baseline="{baseline_pct}"')
     language = getattr(run, "language", None)
     if language:
-        attributes.append(f'lang="{html.escape(language, quote=True)}"')
+        attributes.append(f'lang="{language}"')
 
     rgb = (run.rgb or "000000").upper()
-    font_family = html.escape(run.font_family or "Arial", quote=True)
-    east_asian = html.escape(
-        getattr(run, "east_asian_font", "") or run.font_family or "Arial", quote=True
-    )
-    complex_script = html.escape(
-        getattr(run, "complex_script_font", "") or run.font_family or "Arial",
-        quote=True,
+    font_family = str(run.font_family or "Arial")
+    east_asian = str(getattr(run, "east_asian_font", "") or run.font_family or "Arial")
+    complex_script = str(
+        getattr(run, "complex_script_font", "") or run.font_family or "Arial"
     )
 
     # Build a:r element with lxml

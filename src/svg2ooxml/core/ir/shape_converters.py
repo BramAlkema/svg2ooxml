@@ -24,7 +24,6 @@ from svg2ooxml.core.ir.shape_converters_utils import (
     _foreign_object_clip_id,
     _guess_image_format,
     _local_name,
-    _parse_float,
     _rect_segments_from_bbox,
 )
 from svg2ooxml.core.styling import style_runtime as styles_runtime
@@ -341,12 +340,27 @@ class ShapeConversionMixin(
         traverse_callback: Callable[[etree._Element, Any | None], list],
         current_navigation,
     ):
-        width = _parse_float(element.get("width"))
-        height = _parse_float(element.get("height"))
+        conversion_context = getattr(self, "_conversion_context", None)
+        width = self._resolve_length(
+            element.get("width"), conversion_context, axis="x"
+        )
+        height = self._resolve_length(
+            element.get("height"), conversion_context, axis="y"
+        )
         if width is None or height is None or width <= 0 or height <= 0:
+            self._trace_stage(
+                "foreign_object_dropped",
+                stage="foreign_object",
+                metadata={
+                    "reason": "invalid_dimensions",
+                    "width": element.get("width"),
+                    "height": element.get("height"),
+                },
+                subject=element.get("id"),
+            )
             return None
-        x = _parse_float(element.get("x"), default=0.0) or 0.0
-        y = _parse_float(element.get("y"), default=0.0) or 0.0
+        x = self._resolve_length(element.get("x"), conversion_context, axis="x")
+        y = self._resolve_length(element.get("y"), conversion_context, axis="y")
 
         rect_points = [
             (x, y),
@@ -364,6 +378,7 @@ class ShapeConversionMixin(
             _classify_foreign_payload(payload) if payload is not None else "empty"
         )
         style = styles_runtime.extract_style(self, element)
+        style = self._style_with_local_opacity(element, style)
 
         metadata: dict[str, Any] = {
             "foreign_object": {
@@ -378,10 +393,14 @@ class ShapeConversionMixin(
         mask_ref, mask_instance = self._resolve_mask_ref(element)
 
         if payload is None:
-            placeholder = self._foreign_object_placeholder(
-                bbox, clip_ref, mask_ref, mask_instance, metadata
+            placeholder = self._foreign_object_placeholder_with_opacity(
+                bbox,
+                clip_ref,
+                mask_ref,
+                mask_instance,
+                metadata,
+                opacity=style.opacity,
             )
-            placeholder = replace(placeholder, opacity=style.opacity)
             self._trace_geometry_decision(element, "placeholder", placeholder.metadata)
             self._trace_stage(
                 "foreign_object_placeholder",
@@ -421,10 +440,14 @@ class ShapeConversionMixin(
         if payload_type == "image":
             href = _extract_image_href(payload)
             if not href:
-                placeholder = self._foreign_object_placeholder(
-                    bbox, clip_ref, mask_ref, mask_instance, metadata
+                return self._foreign_object_placeholder_with_opacity(
+                    bbox,
+                    clip_ref,
+                    mask_ref,
+                    mask_instance,
+                    metadata,
+                    opacity=style.opacity,
                 )
-                return replace(placeholder, opacity=style.opacity)
 
             image_metadata = dict(metadata)
             image_metadata.setdefault("foreign_object", {}).setdefault("href", href)
@@ -455,10 +478,14 @@ class ShapeConversionMixin(
         if payload_type == "xhtml":
             text_content = _collect_foreign_text(payload)
             if not text_content:
-                placeholder = self._foreign_object_placeholder(
-                    bbox, clip_ref, mask_ref, mask_instance, metadata
+                placeholder = self._foreign_object_placeholder_with_opacity(
+                    bbox,
+                    clip_ref,
+                    mask_ref,
+                    mask_instance,
+                    metadata,
+                    opacity=style.opacity,
                 )
-                placeholder = replace(placeholder, opacity=style.opacity)
                 self._trace_geometry_decision(
                     element, "placeholder", placeholder.metadata
                 )
@@ -469,7 +496,12 @@ class ShapeConversionMixin(
                     subject=element.get("id"),
                 )
                 return placeholder
-            run = Run(text=text_content, font_family="Arial", font_size_pt=12.0)
+            run = Run(
+                text=text_content,
+                font_family="Arial",
+                font_size_pt=12.0,
+                fill_opacity=style.opacity,
+            )
             frame = TextFrame(
                 origin=Point(bbox.x, bbox.y),
                 anchor=TextAnchor.START,
@@ -488,10 +520,14 @@ class ShapeConversionMixin(
             )
             return frame
 
-        placeholder = self._foreign_object_placeholder(
-            bbox, clip_ref, mask_ref, mask_instance, metadata
+        placeholder = self._foreign_object_placeholder_with_opacity(
+            bbox,
+            clip_ref,
+            mask_ref,
+            mask_instance,
+            metadata,
+            opacity=style.opacity,
         )
-        placeholder = replace(placeholder, opacity=style.opacity)
         self._trace_geometry_decision(element, "placeholder", placeholder.metadata)
         self._trace_stage(
             "foreign_object_placeholder",
@@ -500,6 +536,21 @@ class ShapeConversionMixin(
             subject=element.get("id"),
         )
         return placeholder
+
+    def _foreign_object_placeholder_with_opacity(
+        self,
+        bbox: Rect,
+        clip_ref: ClipRef,
+        mask_ref: MaskRef | None,
+        mask_instance: MaskInstance | None,
+        metadata: dict[str, Any],
+        *,
+        opacity: float,
+    ) -> Path:
+        placeholder = self._foreign_object_placeholder(
+            bbox, clip_ref, mask_ref, mask_instance, metadata
+        )
+        return replace(placeholder, opacity=opacity)
 
     def _foreign_object_placeholder(
         self,

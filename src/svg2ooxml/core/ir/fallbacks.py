@@ -201,7 +201,10 @@ def render_bitmap_fallback(
     stroke_color = None
     stroke_width = 1
     if style.stroke and isinstance(style.stroke.paint, SolidPaint):
-        stroke_color = hex_to_rgba(style.stroke.paint.rgb, style.stroke.opacity * shape_opacity)
+        stroke_color = hex_to_rgba(
+            style.stroke.paint.rgb,
+            style.stroke.paint.opacity * style.stroke.opacity * shape_opacity,
+        )
         stroke_width = max(1, int(round(style.stroke.width * scale)))
 
     # translate points so the minimum corner sits at (0, 0)

@@ -8,6 +8,28 @@ from typing import TYPE_CHECKING, Any
 from lxml import etree
 
 from svg2ooxml.common.style.resolver import StyleResolver
+from svg2ooxml.core.styling.paint import maybe_set_geometry_fallback
+from svg2ooxml.core.styling.paint.gradient import (
+    build_gradient_paint,
+    record_gradient_metadata,
+    record_mesh_gradient_metadata,
+)
+from svg2ooxml.core.styling.paint.pattern import (
+    build_pattern_paint,
+    record_pattern_metadata,
+)
+from svg2ooxml.core.styling.style_helpers import (
+    extract_url_id as _extract_url_id,
+)
+from svg2ooxml.core.styling.style_helpers import (
+    normalize_hex as _normalize_hex,
+)
+from svg2ooxml.core.styling.style_helpers import (
+    parse_dash_array as _parse_dash_array,
+)
+from svg2ooxml.core.styling.style_helpers import (
+    parse_optional_float as _parse_optional_float,
+)
 from svg2ooxml.drawingml.bridges.resvg_paint_bridge import (
     MeshGradientDescriptor,
 )
@@ -19,23 +41,6 @@ from svg2ooxml.ir.paint import (
     Stroke,
     StrokeCap,
     StrokeJoin,
-)
-from svg2ooxml.core.styling.style_helpers import (
-    apply_stroke_opacity,
-    extract_url_id as _extract_url_id,
-    normalize_hex as _normalize_hex,
-    parse_dash_array as _parse_dash_array,
-    parse_optional_float as _parse_optional_float,
-)
-from svg2ooxml.core.styling.paint import maybe_set_geometry_fallback
-from svg2ooxml.core.styling.paint.gradient import (
-    build_gradient_paint,
-    record_gradient_metadata,
-    record_mesh_gradient_metadata,
-)
-from svg2ooxml.core.styling.paint.pattern import (
-    build_pattern_paint,
-    record_pattern_metadata,
 )
 from svg2ooxml.services import ConversionServices
 
@@ -295,7 +300,7 @@ class StyleExtractor:
         stroke_paint = self._resolve_paint(
             element,
             stripped,
-            opacity=float(paint_style.get("stroke_opacity", 1.0)),
+            opacity=1.0,
             services=services,
             context=context,
             metadata=metadata,
@@ -323,8 +328,6 @@ class StyleExtractor:
         miter_limit = _parse_optional_float(element.get("stroke-miterlimit")) or 4.0
         stroke_opacity = float(paint_style.get("stroke_opacity", 1.0) or 0.0)
         stroke_opacity = max(0.0, min(1.0, stroke_opacity))
-
-        stroke_paint = apply_stroke_opacity(stroke_paint, stroke_opacity)
 
         stroke_obj = Stroke(
             paint=stroke_paint,

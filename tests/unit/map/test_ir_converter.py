@@ -423,6 +423,69 @@ def test_foreign_object_with_nested_svg_produces_group() -> None:
     assert metadata.get("payload_type") == "nested_svg"
 
 
+def test_foreign_object_lengths_resolve_svg_units() -> None:
+    parse_result = _build_parse_result(
+        "<svg width='200' height='200' xmlns='http://www.w3.org/2000/svg'>"
+        "  <foreignObject x='1in' y='0' width='1in' height='1in'>"
+        "    <svg xmlns='http://www.w3.org/2000/svg' width='96' height='96'>"
+        "      <rect id='nested' width='96' height='96' fill='#00AAFF'/>"
+        "    </svg>"
+        "  </foreignObject>"
+        "</svg>"
+    )
+
+    scene = _convert_with_resvg(parse_result)
+
+    assert len(scene.elements) == 1
+    group = scene.elements[0]
+    assert isinstance(group, Group)
+    assert group.clip is not None
+    assert group.clip.bounding_box is not None
+    assert group.clip.bounding_box.x == pytest.approx(96.0)
+    assert group.clip.bounding_box.width == pytest.approx(96.0)
+    rect = next(child for child in group.children if isinstance(child, Rectangle))
+    assert rect.bounds.x == pytest.approx(96.0)
+    assert rect.bounds.width == pytest.approx(96.0)
+
+
+def test_invalid_foreign_object_dimensions_do_not_leak_children() -> None:
+    parse_result = _build_parse_result(
+        "<svg width='200' height='200' xmlns='http://www.w3.org/2000/svg'>"
+        "  <foreignObject x='0' y='0' width='bogus' height='1in'>"
+        "    <svg xmlns='http://www.w3.org/2000/svg' width='96' height='96'>"
+        "      <rect id='nested' width='96' height='96' fill='#00AAFF'/>"
+        "    </svg>"
+        "  </foreignObject>"
+        "</svg>"
+    )
+
+    scene = _convert_with_resvg(parse_result)
+
+    assert scene.elements == []
+
+
+def test_foreign_object_opacity_stays_local_under_opaque_group() -> None:
+    parse_result = _build_parse_result(
+        "<svg width='200' height='200' xmlns='http://www.w3.org/2000/svg'>"
+        "  <g id='outer' opacity='0.5'>"
+        "    <foreignObject id='fo' x='0' y='0' width='20' height='20'>"
+        "      <svg xmlns='http://www.w3.org/2000/svg' width='20' height='20'>"
+        "        <rect id='nested' width='20' height='20' fill='#00AAFF'/>"
+        "      </svg>"
+        "    </foreignObject>"
+        "  </g>"
+        "</svg>"
+    )
+
+    scene = _convert_with_resvg(parse_result)
+
+    outer = scene.elements[0]
+    assert isinstance(outer, Group)
+    foreign_group = next(child for child in outer.children if isinstance(child, Group))
+    assert outer.opacity == pytest.approx(0.5)
+    assert foreign_group.opacity == pytest.approx(1.0)
+
+
 def test_foreign_object_image_emits_image_ir() -> None:
     parse_result = _build_parse_result(
         "<svg width='200' height='200' xmlns='http://www.w3.org/2000/svg'>"

@@ -24,6 +24,8 @@ evidence live in the companion repository
 
 ## Recent Release Focus
 
+- **0.7.1**: animation timing hardening, resvg geometry fallback fixes,
+  DrawingML writer correctness, and targeted regressions for PowerPoint export
 - **0.7.0**: repository boundary cleanup, Python 3.14 standardization, the
   extracted `apps/figma2gslides` surface, and reproducible container render
   workflows

@@ -65,12 +65,20 @@ def parse_timing(
         animation_summary=animation_summary,
         record_degradation=record_degradation,
     )
-    dur_value = element.get("dur", "1s")
-    duration = float("inf") if dur_value == "indefinite" else parse_time_value(dur_value)
+    dur_value = (element.get("dur", "1s") or "1s").strip()
+    if dur_value.lower() == "indefinite":
+        duration = float("inf")
+    else:
+        try:
+            duration = parse_time_value(dur_value)
+        except (TypeError, ValueError):
+            animation_summary.add_warning("Invalid dur value; using 1s")
+            record_degradation("duration_invalid")
+            duration = 1.0
     repeat_duration = _parse_optional_duration(element.get("repeatDur"))
 
-    repeat_attr = element.get("repeatCount", "1")
-    if repeat_attr == "indefinite":
+    repeat_attr = (element.get("repeatCount", "1") or "1").strip()
+    if repeat_attr.lower() == "indefinite":
         repeat_count: int | str = "indefinite"
     else:
         try:
@@ -92,7 +100,7 @@ def parse_timing(
                     else:
                         repeat_duration = min(repeat_duration, fractional_repeat_duration)
 
-    fill_attr = element.get("fill", "remove")
+    fill_attr = (element.get("fill", "remove") or "remove").strip().lower()
     fill_mode = FillMode.FREEZE if fill_attr == "freeze" else FillMode.REMOVE
 
     return AnimationTiming(
@@ -107,9 +115,15 @@ def parse_timing(
 
 
 def _parse_optional_duration(value: str | None) -> float | None:
-    if not value or value == "indefinite":
+    if not value:
         return None
-    return parse_time_value(value)
+    text = value.strip()
+    if not text or text.lower() == "indefinite":
+        return None
+    try:
+        return parse_time_value(text)
+    except (TypeError, ValueError):
+        return None
 
 
 def parse_begin(

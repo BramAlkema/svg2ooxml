@@ -4,6 +4,7 @@ import pytest
 
 from svg2ooxml.core.pptx_exporter import SvgToPptxExporter
 from svg2ooxml.core.tracing import ConversionTracer
+from svg2ooxml.ir.paint import LinearGradientPaint
 from svg2ooxml.ir.scene import Group
 from svg2ooxml.ir.shapes import Rectangle
 
@@ -92,6 +93,67 @@ def test_use_opacity_multiplies_source_opacity() -> None:
     assert instance.opacity == pytest.approx(0.25)
 
 
+def test_use_fill_none_overrides_default_referenced_fill() -> None:
+    svg = """
+    <svg xmlns="http://www.w3.org/2000/svg"
+         xmlns:xlink="http://www.w3.org/1999/xlink"
+         width="20" height="20">
+      <defs>
+        <rect id="source" width="10" height="10"/>
+      </defs>
+      <use id="instance" href="#source" xlink:href="#source" fill="none"/>
+    </svg>
+    """
+
+    _, scene = _render_result(svg)
+
+    instance = _rectangle_with_id(scene.elements, "instance")
+    assert instance.fill is None
+
+
+def test_use_fill_opacity_applies_to_referenced_fill() -> None:
+    svg = """
+    <svg xmlns="http://www.w3.org/2000/svg"
+         xmlns:xlink="http://www.w3.org/1999/xlink"
+         width="20" height="20">
+      <defs>
+        <rect id="source" width="10" height="10" fill="#0000ff"/>
+      </defs>
+      <use id="instance" href="#source" xlink:href="#source" fill-opacity="0.5"/>
+    </svg>
+    """
+
+    render_result, scene = _render_result(svg)
+
+    instance = _rectangle_with_id(scene.elements, "instance")
+    assert instance.fill is not None
+    assert instance.fill.opacity == pytest.approx(0.5)
+    assert '<a:alpha val="50000"/>' in render_result.slide_xml
+
+
+def test_use_stroke_opacity_applies_without_use_stroke_paint() -> None:
+    svg = """
+    <svg xmlns="http://www.w3.org/2000/svg"
+         xmlns:xlink="http://www.w3.org/1999/xlink"
+         width="20" height="20">
+      <defs>
+        <rect id="source" width="10" height="10" fill="none"
+              stroke="#000000" stroke-width="2"/>
+      </defs>
+      <use id="instance" href="#source" xlink:href="#source" stroke-opacity="0.5"/>
+    </svg>
+    """
+
+    render_result, scene = _render_result(svg)
+
+    instance = _rectangle_with_id(scene.elements, "instance")
+    assert instance.stroke is not None
+    assert instance.stroke.paint.opacity == pytest.approx(1.0)
+    assert instance.stroke.opacity == pytest.approx(0.5)
+    assert '<a:alpha val="50000"/>' in render_result.slide_xml
+    assert '<a:alpha val="25000"/>' not in render_result.slide_xml
+
+
 def test_direct_shape_opacity_is_local_and_emitted_once() -> None:
     svg = """
     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20">
@@ -104,6 +166,63 @@ def test_direct_shape_opacity_is_local_and_emitted_once() -> None:
     shape = _rectangle_with_id(scene.elements, "shape")
     assert shape.opacity == pytest.approx(0.5)
     assert '<a:alpha val="50000"/>' in render_result.slide_xml
+
+
+def test_direct_stroke_opacity_is_emitted_once() -> None:
+    svg = """
+    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20">
+      <rect id="shape" width="10" height="10" fill="none"
+            stroke="#000000" stroke-width="2" stroke-opacity="0.5"/>
+    </svg>
+    """
+
+    render_result, scene = _render_result(svg)
+
+    shape = _rectangle_with_id(scene.elements, "shape")
+    assert shape.stroke is not None
+    assert shape.stroke.paint.opacity == pytest.approx(1.0)
+    assert shape.stroke.opacity == pytest.approx(0.5)
+    assert '<a:alpha val="50000"/>' in render_result.slide_xml
+    assert '<a:alpha val="25000"/>' not in render_result.slide_xml
+
+
+def test_parent_fill_opacity_is_inherited_by_child_paint() -> None:
+    svg = """
+    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20">
+      <g fill-opacity="0.5">
+        <rect id="child" width="10" height="10" fill="#0000ff"/>
+      </g>
+    </svg>
+    """
+
+    render_result, scene = _render_result(svg)
+
+    child = _rectangle_with_id(scene.elements, "child")
+    assert child.fill is not None
+    assert child.fill.opacity == pytest.approx(0.5)
+    assert '<a:alpha val="50000"/>' in render_result.slide_xml
+
+
+def test_parent_fill_opacity_is_inherited_by_gradient_stops() -> None:
+    svg = """
+    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20">
+      <defs>
+        <linearGradient id="grad">
+          <stop offset="0" stop-color="#000000"/>
+          <stop offset="1" stop-color="#ffffff"/>
+        </linearGradient>
+      </defs>
+      <g fill-opacity="0.5">
+        <rect id="child" width="10" height="10" fill="url(#grad)"/>
+      </g>
+    </svg>
+    """
+
+    _, scene = _render_result(svg)
+
+    child = _rectangle_with_id(scene.elements, "child")
+    assert isinstance(child.fill, LinearGradientPaint)
+    assert [stop.opacity for stop in child.fill.stops] == pytest.approx([0.5, 0.5])
 
 
 def test_parent_group_opacity_is_not_inherited_by_child() -> None:

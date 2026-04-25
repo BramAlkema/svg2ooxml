@@ -55,6 +55,18 @@ def test_sampler_additive_conflict_resolution() -> None:
     assert "2" in values
 
 
+def test_sampler_respects_configured_max_duration() -> None:
+    sampler = TimelineSampler(
+        TimelineSamplingConfig(sample_rate=10.0, max_duration=0.5, optimize_static_periods=False)
+    )
+    animation = _animation(values=["0", "1"], duration=2.0)
+
+    scenes = sampler.generate_scenes([animation])
+
+    assert scenes
+    assert max(scene.time for scene in scenes) <= 0.5
+
+
 def test_sampler_discrete_mode_respects_keyframes() -> None:
     sampler = TimelineSampler(TimelineSamplingConfig(sample_rate=2.0))
     animation = AnimationDefinition(
@@ -70,3 +82,25 @@ def test_sampler_discrete_mode_respects_keyframes() -> None:
     values = [scene.get_element_property("shape", "opacity") for scene in scenes]
     assert "1" in values
     assert values.count("0") >= 1
+
+
+def test_sampler_discrete_mode_holds_value_until_next_key_time() -> None:
+    sampler = TimelineSampler(
+        TimelineSamplingConfig(sample_rate=4.0, optimize_static_periods=False)
+    )
+    animation = AnimationDefinition(
+        element_id="shape",
+        animation_type=AnimationType.ANIMATE,
+        target_attribute="opacity",
+        values=["0", "1", "2"],
+        timing=AnimationTiming(duration=1.0),
+        calc_mode=CalcMode.DISCRETE,
+        key_times=[0.0, 0.4, 1.0],
+    )
+
+    scenes = sampler.generate_scenes([animation])
+    at_quarter = next(scene for scene in scenes if abs(scene.time - 0.25) < 1e-9)
+    at_boundary = next(scene for scene in scenes if abs(scene.time - 0.4) < 1e-9)
+
+    assert at_quarter.get_element_property("shape", "opacity") == "0"
+    assert at_boundary.get_element_property("shape", "opacity") == "1"

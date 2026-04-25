@@ -167,6 +167,8 @@ def process_generic(traversal, tag: str, element: etree._Element, active_navigat
     )
 
     if converted is None:
+        if tag == "foreignObject":
+            return []
         ir_elements: list = []
         for child in traversal._children(element):
             ir_elements.extend(recurse(child, active_navigation))

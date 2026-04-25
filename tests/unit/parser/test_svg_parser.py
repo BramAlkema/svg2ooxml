@@ -34,6 +34,25 @@ def test_parse_returns_success_with_valid_svg() -> None:
     assert result.normalization_changes["preparse"]["added_xml_declaration"] is True
 
 
+def test_parse_does_not_expand_external_entities(tmp_path) -> None:
+    secret = tmp_path / "secret.txt"
+    secret.write_text("XXE_PROBE_CONTENT", encoding="utf-8")
+    svg = (
+        f'<!DOCTYPE svg [ <!ENTITY xxe SYSTEM "{secret.as_uri()}"> ]>'
+        "<svg width='10' height='10'><text>&xxe;</text></svg>"
+    )
+
+    result = SVGParser().parse(svg)
+
+    assert result.success is True
+    assert "XXE_PROBE_CONTENT" not in "".join(result.svg_root.itertext())
+
+    compat_result = SVGParser(ParserConfig(resolve_entities=True)).parse(svg)
+
+    assert compat_result.success is True
+    assert "XXE_PROBE_CONTENT" not in "".join(compat_result.svg_root.itertext())
+
+
 def test_parse_rejects_non_svg_root() -> None:
     parser = SVGParser()
 

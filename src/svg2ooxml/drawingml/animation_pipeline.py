@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import replace
 from typing import TYPE_CHECKING, Any
 
@@ -12,6 +12,14 @@ from .animation import DrawingMLAnimationWriter
 
 if TYPE_CHECKING:  # pragma: no cover - type checking only
     from svg2ooxml.core.tracing import ConversionTracer
+
+
+def _iter_string_items(value: object) -> Iterable[str]:
+    """Yield string items from metadata lists without treating strings as lists."""
+
+    if not isinstance(value, (list, tuple, set)):
+        return ()
+    return (item for item in value if isinstance(item, str))
 
 
 class AnimationPipeline:
@@ -54,37 +62,36 @@ class AnimationPipeline:
     def register_mapping(self, metadata: dict[str, object] | None, shape_id: int) -> None:
         if not isinstance(metadata, dict):
             return
-        element_ids = metadata.get("element_ids")
-        if not isinstance(element_ids, list):
-            element_ids = []
-        for element_id in element_ids:
-            if isinstance(element_id, str):
-                self._shape_map.setdefault(element_id, str(shape_id))
+        for element_id in _iter_string_items(metadata.get("element_ids")):
+            self._shape_map.setdefault(element_id, str(shape_id))
         self._register_navigation_trigger(metadata, shape_id)
 
-    def register_element_ids(self, element_ids: list[object], shape_id: int) -> None:
-        for element_id in element_ids:
-            if isinstance(element_id, str):
-                self._shape_map.setdefault(element_id, str(shape_id))
+    def register_element_ids(self, element_ids: Iterable[object], shape_id: int) -> None:
+        for element_id in _iter_string_items(element_ids):
+            self._shape_map.setdefault(element_id, str(shape_id))
 
     def metadata_targets_animation(self, metadata: dict[str, object] | None) -> bool:
         if not isinstance(metadata, dict) or not self._animation_element_ids:
             return False
-        element_ids = metadata.get("element_ids")
-        if not isinstance(element_ids, list):
-            return False
         return any(
-            isinstance(element_id, str) and element_id in self._animation_element_ids
-            for element_id in element_ids
+            element_id in self._animation_element_ids
+            for element_id in _iter_string_items(metadata.get("element_ids"))
         )
 
     def _register_navigation_trigger(self, metadata: dict[str, object], shape_id: int) -> None:
         navigation = metadata.get("navigation")
-        if not isinstance(navigation, dict):
-            return
+        entries = navigation if isinstance(navigation, list) else [navigation]
+        for entry in entries:
+            if isinstance(entry, dict):
+                self._register_bookmark_navigation_entry(entry, shape_id)
+
+    def _register_bookmark_navigation_entry(
+        self,
+        navigation: dict[str, object],
+        shape_id: int,
+    ) -> None:
         if navigation.get("kind") != "bookmark":
             return
-
         bookmark = navigation.get("bookmark")
         name: object | None = None
         if isinstance(bookmark, dict):

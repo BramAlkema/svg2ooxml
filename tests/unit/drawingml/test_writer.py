@@ -214,6 +214,48 @@ def test_render_scene_from_ir_flattens_filter_png_assets_when_requested() -> Non
     assert flattened.getpixel((1, 0)) == (255, 255, 255, 255)
 
 
+def test_render_scene_from_ir_flattens_filter_png_assets_against_scene_background() -> None:
+    writer = DrawingMLWriter()
+    image = PILImage.new("RGBA", (2, 1), (0, 0, 0, 0))
+    image.putpixel((0, 0), (255, 0, 0, 255))
+    buffer = BytesIO()
+    image.save(buffer, format="PNG")
+
+    rect = Rectangle(
+        bounds=Rect(x=0, y=0, width=10, height=10),
+        fill=SolidPaint("FF0000"),
+        metadata={
+            "policy": {
+                "media": {
+                    "filter_assets": {
+                        "blur": [
+                            {
+                                "type": "raster",
+                                "data": buffer.getvalue(),
+                                "relationship_id": "rIdRasterTest",
+                                "flatten_for_powerpoint": True,
+                            }
+                        ]
+                    }
+                }
+            },
+            "filters": [{"id": "blur", "fallback": "bitmap"}],
+            "filter_metadata": {
+                "blur": {"bounds": {"x": 0.0, "y": 0.0, "width": 10.0, "height": 10.0}}
+            },
+        },
+    )
+    scene = IRScene(elements=[rect], width_px=20, height_px=20, background_color="00FF00")
+
+    result = writer.render_scene_from_ir(scene)
+
+    filter_media = next(
+        asset for asset in result.assets.media if asset.relationship_id == "rIdRasterTest"
+    )
+    flattened = PILImage.open(BytesIO(filter_media.data)).convert("RGBA")
+    assert flattened.getpixel((1, 0)) == (0, 255, 0, 255)
+
+
 def test_render_reuses_identical_pattern_tile_media_on_slide() -> None:
     writer = DrawingMLWriter()
     tile_data = b"\x89PNG\r\n\x1a\n" + b"\x00" * 50
@@ -471,6 +513,48 @@ def test_text_runs_emit_font_slots_and_kerning() -> None:
     assert 'lang="en-US"' in xml
     assert '<a:ea typeface="MS Gothic"/>' in xml
     assert '<a:cs typeface="Nirmala UI"/>' in xml
+
+
+def test_text_run_font_slots_are_escaped_once() -> None:
+    writer = DrawingMLWriter()
+    frame = TextFrame(
+        origin=Point(0, 0),
+        anchor=TextAnchor.START,
+        bbox=Rect(0, 0, 120, 30),
+        runs=[
+            Run(
+                text="Hi",
+                font_family="Rock & Roll",
+                font_size_pt=18.0,
+                language="en&GB",
+                east_asian_font="East & Asian",
+                complex_script_font="Script & Serif",
+            )
+        ],
+    )
+
+    xml = writer.render_scene([frame]).slide_xml
+
+    assert 'typeface="Rock &amp; Roll"' in xml
+    assert 'typeface="Rock &amp;amp; Roll"' not in xml
+    assert 'lang="en&amp;GB"' in xml
+    assert 'lang="en&amp;amp;GB"' not in xml
+
+
+def test_invalid_text_rotation_metadata_is_ignored() -> None:
+    writer = DrawingMLWriter()
+    frame = TextFrame(
+        origin=Point(0, 0),
+        anchor=TextAnchor.START,
+        bbox=Rect(0, 0, 120, 30),
+        runs=[Run(text="Hi", font_family="Arial", font_size_pt=18.0)],
+        metadata={"text_rotation_deg": "bad"},
+    )
+
+    xml = writer.render_scene([frame]).slide_xml
+
+    assert "<a:t>Hi</a:t>" in xml
+    assert ' rot="' not in xml
 
 
 def test_render_scene_renders_path_custom_geometry() -> None:
@@ -1311,6 +1395,41 @@ def test_apply_mask_alpha_removes_mask_ref() -> None:
     assert abs(result.fill.opacity - 0.5) < 0.001
 
 
+def test_render_scene_does_not_consume_mask_alpha_metadata() -> None:
+    writer = DrawingMLWriter()
+    rect = Rectangle(
+        bounds=Rect(0, 0, 20, 10),
+        fill=SolidPaint("4472C4"),
+        metadata={"_mask_alpha": 0.5},
+    )
+
+    first = writer.render_scene([rect]).slide_xml
+    second = writer.render_scene([rect]).slide_xml
+
+    assert '<a:alpha val="50000"/>' in first
+    assert first == second
+
+
+def test_render_scene_applies_alpha_mask_with_copied_metadata() -> None:
+    writer = DrawingMLWriter()
+    path = IRPath(
+        segments=[
+            LineSegment(Point(0, 0), Point(20, 0)),
+            LineSegment(Point(20, 0), Point(20, 10)),
+            LineSegment(Point(20, 10), Point(0, 10)),
+            LineSegment(Point(0, 10), Point(0, 0)),
+        ],
+        fill=SolidPaint("4472C4"),
+        mask=MaskRef(mask_id="m1"),
+        metadata={"mask": {"strategy": "alpha", "alpha_value": 0.5}},
+    )
+
+    xml = writer.render_scene([path]).slide_xml
+
+    assert '<a:alpha val="50000"/>' in xml
+    assert "_mask_alpha" not in path.metadata
+
+
 def test_image_clip_produces_src_rect() -> None:
     """Image (0,0,100,100) with clip (25,25,50,50) emits srcRect."""
     writer = DrawingMLWriter()
@@ -1595,6 +1714,25 @@ def test_render_shapes_from_ir_returns_shape_fragments() -> None:
 
     assert len(fragments) == 1
     assert "Rectangle 2" in fragments[0]
+
+
+def test_render_shapes_from_ir_uses_scene_metadata_for_w3c_test_frame_suppression() -> None:
+    writer = DrawingMLWriter()
+    rect = Rectangle(
+        bounds=Rect(0, 0, 20, 10),
+        fill=SolidPaint("4472C4"),
+        metadata={"element_ids": ["test-frame"]},
+    )
+    scene = IRScene(
+        elements=[rect],
+        width_px=20,
+        height_px=10,
+        metadata={"source_path": "tests/svg/example.svg"},
+    )
+
+    fragments = writer.render_shapes_from_ir(scene)
+
+    assert fragments == ()
 
 
 def test_render_scene_uses_scheme_color_for_theme_mapped_shapes() -> None:

@@ -66,6 +66,7 @@ class SMILParser:
     # Public API                                                            #
     # --------------------------------------------------------------------- #
     def parse_svg_animations(self, svg_element: etree._Element) -> list[AnimationDefinition]:
+        self.reset_summary()
         animations: list[AnimationDefinition] = []
         animation_elements = self._find_animation_elements(svg_element)
 
@@ -123,9 +124,11 @@ class SMILParser:
     # ------------------------------------------------------------------ #
     def _find_animation_elements(self, svg_element: etree._Element) -> list[etree._Element]:
         elements: list[etree._Element] = []
-        for tag in self._ANIMATION_TAGS:
-            elements.extend(svg_element.xpath(f".//{tag}"))
-            elements.extend(svg_element.xpath(f".//svg:{tag}", namespaces=self._namespace_map))
+        for element in svg_element.iter():
+            if not isinstance(element.tag, str):
+                continue
+            if etree.QName(element).localname in self._ANIMATION_TAGS:
+                elements.append(element)
         return elements
 
     def _parse_animation_element(self, element: etree._Element) -> AnimationDefinition | None:
@@ -353,6 +356,16 @@ class SMILParser:
 
     def _ensure_target_ids(self, elements: list[etree._Element]) -> None:
         """Assign synthetic IDs to elements that are targets of animations but lack an ID."""
+        if not elements:
+            return
+        root = elements[0].getroottree().getroot()
+        used_ids = {
+            element_id
+            for node in root.iter()
+            if isinstance(node.tag, str)
+            for element_id in [node.get("id")]
+            if isinstance(element_id, str) and element_id
+        }
         counter = 0
         for element in elements:
             # Check if it has a target via href
@@ -360,12 +373,21 @@ class SMILParser:
             if href and href.startswith("#"):
                 continue
 
+            # Explicit targets should not cause unrelated parent mutation.
+            target = element.get("target")
+            if target and target.startswith("#"):
+                continue
+
             # Check parent
             parent = element.getparent()
             if parent is not None and not parent.get("id"):
-                synthetic_id = f"anim-target-{counter}"
+                while True:
+                    synthetic_id = f"anim-target-{counter}"
+                    counter += 1
+                    if synthetic_id not in used_ids:
+                        break
                 parent.set("id", synthetic_id)
-                counter += 1
+                used_ids.add(synthetic_id)
 
     def _get_target_element_id(self, element: etree._Element) -> str | None:
         # 1. Standard href or xlink:href
@@ -373,17 +395,17 @@ class SMILParser:
         if href and href.startswith("#"):
             return href[1:]
 
-        # 2. Parent fallback (now guaranteed to have an ID if it's an anim parent)
+        # 2. Non-standard explicit target attribute
+        target = element.get("target")
+        if target and target.startswith("#"):
+            return target[1:]
+
+        # 3. Parent fallback (now guaranteed to have an ID if it's an anim parent)
         parent = element.getparent()
         if parent is not None:
             parent_id = parent.get("id")
             if parent_id:
                 return parent_id
-
-        # 3. Non-standard target attribute
-        target = element.get("target")
-        if target and target.startswith("#"):
-            return target[1:]
 
         return None
 
@@ -530,13 +552,13 @@ class SMILParser:
             if target is not None:
                 return target
 
-        parent = animation_element.getparent()
-        if parent is not None and etree.QName(parent).localname not in self._ANIMATION_TAGS:
-            return parent
-
         target = animation_element.get("target")
         if target and target.startswith("#"):
             return self._lookup_element_by_id(root, target[1:])
+
+        parent = animation_element.getparent()
+        if parent is not None and etree.QName(parent).localname not in self._ANIMATION_TAGS:
+            return parent
 
         return None
 

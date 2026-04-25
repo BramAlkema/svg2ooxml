@@ -151,7 +151,7 @@ def stroke_to_xml(
     paint = stroke.paint
     if isinstance(paint, SolidPaint):
         color = paint.rgb.upper()
-        effective_opacity = paint.opacity
+        effective_opacity = _clamp_opacity(paint.opacity * stroke.opacity)
         if opacity is not None:
             effective_opacity = _clamp_opacity(effective_opacity * opacity)
         alpha = opacity_to_ppt(effective_opacity)
@@ -172,10 +172,16 @@ def stroke_to_xml(
             )
         )
     elif isinstance(paint, LinearGradientPaint):
-        paint = _scale_gradient_stops(paint, opacity)
+        effective_opacity = stroke.opacity
+        if opacity is not None:
+            effective_opacity = _clamp_opacity(effective_opacity * opacity)
+        paint = _scale_gradient_stops(paint, effective_opacity)
         ln.append(_linear_gradient_to_fill_elem(paint))
     elif isinstance(paint, RadialGradientPaint):
-        paint = _scale_gradient_stops(paint, opacity)
+        effective_opacity = stroke.opacity
+        if opacity is not None:
+            effective_opacity = _clamp_opacity(effective_opacity * opacity)
+        paint = _scale_gradient_stops(paint, effective_opacity)
         ln.append(_radial_gradient_to_fill_elem(paint))
     elif isinstance(paint, GradientPaintRef):
         # Create solidFill with schemeClr element

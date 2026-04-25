@@ -11,6 +11,7 @@ from svg2ooxml.ir.animation import (
     AnimationType,
     BeginTriggerType,
     CalcMode,
+    FillMode,
     TransformType,
 )
 
@@ -144,6 +145,24 @@ def test_parse_animation_id_is_preserved_for_begin_references() -> None:
     assert animations[0].animation_id == "grow"
     assert animations[1].timing.begin_triggers is not None
     assert animations[1].timing.begin_triggers[0].target_element_id == "grow"
+
+
+def test_parse_preserves_document_order_across_animation_element_types() -> None:
+    parser = SMILParser()
+    svg = _parse(
+        """
+        <svg xmlns="http://www.w3.org/2000/svg">
+          <rect id="shape">
+            <animateTransform id="first" attributeName="transform" type="translate" values="0 0;10 0" dur="1s" />
+            <animate id="second" attributeName="opacity" values="0;1" dur="1s" />
+          </rect>
+        </svg>
+        """
+    )
+
+    animations = parser.parse_svg_animations(svg)
+
+    assert [animation.animation_id for animation in animations] == ["first", "second"]
 
 
 def test_parse_invalid_begin_expression_adds_warning_and_falls_back() -> None:
@@ -363,6 +382,38 @@ def test_reset_summary_clears_degradation_reasons() -> None:
     assert parser.get_degradation_reasons() == {}
 
 
+def test_parse_resets_summary_between_calls() -> None:
+    parser = SMILParser()
+    invalid_svg = _parse(
+        """
+        <svg xmlns="http://www.w3.org/2000/svg">
+          <rect id="shape">
+            <animate attributeName="x" values="0;10;20" keyTimes="0;0.7;0.2" dur="1s" />
+          </rect>
+        </svg>
+        """
+    )
+    valid_svg = _parse(
+        """
+        <svg xmlns="http://www.w3.org/2000/svg">
+          <rect id="shape">
+            <animate attributeName="opacity" values="0;1" dur="1s" />
+          </rect>
+        </svg>
+        """
+    )
+
+    parser.parse_svg_animations(invalid_svg)
+    assert parser.get_degradation_reasons()
+
+    animations = parser.parse_svg_animations(valid_svg)
+
+    assert len(animations) == 1
+    assert parser.get_degradation_reasons() == {}
+    assert parser.get_animation_summary().warnings == []
+    assert parser.get_animation_summary().total_animations == 1
+
+
 def test_parse_animate_motion_resolves_mpath_reference() -> None:
     parser = SMILParser()
     svg = _parse(
@@ -383,6 +434,48 @@ def test_parse_animate_motion_resolves_mpath_reference() -> None:
     animation = animations[0]
     assert animation.animation_type is AnimationType.ANIMATE_MOTION
     assert animation.values == ["M 0 0 L 10 10"]
+
+
+def test_parse_animate_motion_resolves_unnamespaced_mpath_reference() -> None:
+    parser = SMILParser()
+    svg = _parse(
+        """
+        <svg>
+          <path id="motionPath" d="M 0 0 L 10 10" />
+          <rect id="shape">
+            <animateMotion dur="1s">
+              <mpath href="#motionPath" />
+            </animateMotion>
+          </rect>
+        </svg>
+        """
+    )
+
+    animations = parser.parse_svg_animations(svg)
+
+    assert len(animations) == 1
+    assert animations[0].values == ["M 0 0 L 10 10"]
+
+
+def test_parse_animate_motion_falls_back_to_xlink_href_when_href_empty() -> None:
+    parser = SMILParser()
+    svg = _parse(
+        """
+        <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+          <path id="motionPath" d="M 0 0 L 10 10" />
+          <rect id="shape">
+            <animateMotion dur="1s">
+              <mpath href="" xlink:href="#motionPath" />
+            </animateMotion>
+          </rect>
+        </svg>
+        """
+    )
+
+    animations = parser.parse_svg_animations(svg)
+
+    assert len(animations) == 1
+    assert animations[0].values == ["M 0 0 L 10 10"]
 
 
 def test_parse_animate_motion_rotate_mode() -> None:
@@ -634,6 +727,52 @@ def test_parse_to_only_values_can_use_underlying_target_attribute() -> None:
     assert parser.get_degradation_reasons() == {}
 
 
+def test_parse_explicit_target_attribute_beats_parent_fallback() -> None:
+    parser = SMILParser()
+    svg = _parse(
+        """
+        <svg xmlns="http://www.w3.org/2000/svg">
+          <rect id="target" opacity="0.25" />
+          <g>
+            <animate target="#target" attributeName="opacity" to="1" dur="1s" />
+          </g>
+        </svg>
+        """
+    )
+
+    animations = parser.parse_svg_animations(svg)
+
+    assert len(animations) == 1
+    assert animations[0].element_id == "target"
+    assert animations[0].values == ["0.25", "1"]
+    assert animations[0].raw_attributes["svg2ooxml_target_tag"] == "rect"
+    assert svg.xpath(".//svg:g", namespaces={"svg": "http://www.w3.org/2000/svg"})[0].get("id") is None
+
+
+def test_parse_synthetic_target_ids_do_not_collide_with_existing_ids() -> None:
+    parser = SMILParser()
+    svg = _parse(
+        """
+        <svg xmlns="http://www.w3.org/2000/svg">
+          <rect id="anim-target-0" />
+          <rect>
+            <animate attributeName="opacity" values="0;1" dur="1s" />
+          </rect>
+          <circle>
+            <animate attributeName="opacity" values="1;0" dur="1s" />
+          </circle>
+        </svg>
+        """
+    )
+
+    animations = parser.parse_svg_animations(svg)
+
+    assert [animation.element_id for animation in animations] == [
+        "anim-target-1",
+        "anim-target-2",
+    ]
+
+
 def test_parse_by_only_animation_does_not_drop_definition() -> None:
     parser = SMILParser()
     svg = _parse(
@@ -714,6 +853,49 @@ def test_parse_fractional_repeat_count_sets_active_duration_cap() -> None:
     animation = animations[0]
     assert animation.timing.repeat_count == 3
     assert animation.timing.repeat_duration == pytest.approx(5.0)
+
+
+def test_parse_timing_keywords_are_case_and_space_insensitive() -> None:
+    parser = SMILParser()
+    svg = _parse(
+        """
+        <svg xmlns="http://www.w3.org/2000/svg">
+          <rect id="shape">
+            <animate attributeName="x" values="0;10" dur=" Indefinite "
+                     repeatCount=" INDEFINITE " repeatDur=" INDEFINITE "
+                     fill=" Freeze " />
+          </rect>
+        </svg>
+        """
+    )
+
+    animations = parser.parse_svg_animations(svg)
+
+    assert len(animations) == 1
+    assert animations[0].timing.duration == float("inf")
+    assert animations[0].timing.repeat_count == "indefinite"
+    assert animations[0].timing.repeat_duration is None
+    assert animations[0].timing.fill_mode is FillMode.FREEZE
+
+
+def test_parse_invalid_duration_suffix_falls_back_with_warning() -> None:
+    parser = SMILParser()
+    svg = _parse(
+        """
+        <svg xmlns="http://www.w3.org/2000/svg">
+          <rect id="shape">
+            <animate attributeName="x" values="0;10" dur="oopsms" />
+          </rect>
+        </svg>
+        """
+    )
+
+    animations = parser.parse_svg_animations(svg)
+
+    assert len(animations) == 1
+    assert animations[0].timing.duration == pytest.approx(1.0)
+    assert any("Invalid dur value" in warning for warning in parser.animation_summary.warnings)
+    assert parser.get_degradation_reasons().get("duration_invalid") == 1
 
 
 def test_parse_key_points_on_non_motion_are_ignored_with_warning() -> None:

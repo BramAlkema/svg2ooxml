@@ -88,26 +88,27 @@ class TraversalHooksMixin(ShapeCreationMixin, StylingHooksMixin, ClippingHooksMi
         if not tag:
             return None
 
-        if tag == "foreignObject":
-            return self._convert_foreign_object(
-                element=element,
-                coord_space=coord_space,
-                traverse_callback=traverse_callback,
-                current_navigation=current_navigation,
-            )
-
-        if tag == "switch":
-            return self._convert_switch(
-                element=element,
-                coord_space=coord_space,
-                current_navigation=current_navigation,
-                traverse_callback=traverse_callback,
-            )
-
-        handler = self._dispatch.get(tag)
-        if handler is None:
-            return None
         try:
+            if tag == "foreignObject":
+                return self._convert_foreign_object(
+                    element=element,
+                    coord_space=coord_space,
+                    traverse_callback=traverse_callback,
+                    current_navigation=current_navigation,
+                )
+
+            if tag == "switch":
+                return self._convert_switch(
+                    element=element,
+                    coord_space=coord_space,
+                    current_navigation=current_navigation,
+                    traverse_callback=traverse_callback,
+                )
+
+            handler = self._dispatch.get(tag)
+            if handler is None:
+                return None
+
             if tag == "use":
                 return handler(
                     element=element,
@@ -127,7 +128,19 @@ class TraversalHooksMixin(ShapeCreationMixin, StylingHooksMixin, ClippingHooksMi
                 )
             return handler(element=element, coord_space=coord_space)
         except Exception as exc:  # pragma: no cover - defensive logging
-            self._logger.error("Failed to convert <%s>: %s", tag, exc)
+            logger = getattr(self, "_logger", None)
+            if logger is not None:
+                logger.exception("Failed to convert <%s>: %s", tag, exc)
+            self._trace_stage(
+                "conversion_error",
+                stage="conversion",
+                subject=element.get("id"),
+                metadata={
+                    "tag": tag,
+                    "error": type(exc).__name__,
+                    "message": str(exc),
+                },
+            )
             return None
 
     def attach_metadata(

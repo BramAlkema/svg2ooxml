@@ -39,6 +39,8 @@ class TimelineSampler:
             return []
 
         duration = self._calculate_duration(animations, target_duration)
+        if self.config.max_duration is not None:
+            duration = min(duration, max(0.0, self.config.max_duration))
         samples = self._generate_time_samples(animations, duration)
 
         # Batch evaluation: resolve all timestamps per (element, attribute)
@@ -266,10 +268,13 @@ class _ConflictResolver:
         else:
             times = [index / (len(animation.values) - 1) for index in range(len(animation.values))]
 
+        selected_index = 0
         for index, key_time in enumerate(times):
-            if progress <= key_time:
-                return animation.values[index]
-        return animation.values[-1]
+            if progress + 1e-12 >= key_time:
+                selected_index = index
+            else:
+                break
+        return animation.values[min(selected_index, len(animation.values) - 1)]
 
 
 class _SceneOptimizer:
@@ -322,20 +327,6 @@ class _SceneOptimizer:
                     return True
 
         return False
-
-
-def _group_by_element(animations: list[AnimationDefinition]) -> dict[str, list[AnimationDefinition]]:
-    groups: dict[str, list[AnimationDefinition]] = {}
-    for animation in animations:
-        groups.setdefault(animation.element_id, []).append(animation)
-    return groups
-
-
-def _group_by_attribute(animations: list[AnimationDefinition]) -> dict[str, list[AnimationDefinition]]:
-    groups: dict[str, list[AnimationDefinition]] = {}
-    for animation in animations:
-        groups.setdefault(animation.target_attribute, []).append(animation)
-    return groups
 
 
 def _group_by_element_and_attribute(

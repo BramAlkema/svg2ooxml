@@ -44,7 +44,7 @@ class ParserConfig:
     recover: bool = True
     remove_blank_text: bool = False
     strip_cdata: bool = False
-    resolve_entities: bool = True
+    resolve_entities: bool = False
     apply_normalization: bool = True
     eager_ir: bool = False
 

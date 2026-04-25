@@ -110,6 +110,22 @@ def test_gradient_stroke_generates_gradient_fill() -> None:
     assert "<a:gradFill" in xml
 
 
+def test_gradient_stroke_applies_stroke_opacity() -> None:
+    gradient = LinearGradientPaint(
+        stops=[
+            GradientStop(0.0, "FF0000"),
+            GradientStop(1.0, "00FF00"),
+        ],
+        start=(0.0, 0.0),
+        end=(1.0, 0.0),
+    )
+    stroke = Stroke(paint=gradient, width=2.0, opacity=0.5)
+
+    xml = paint_runtime.stroke_to_xml(stroke)
+
+    assert xml.count('<a:alpha val="50000"/>') == 2
+
+
 def test_dashed_stroke_emits_cust_dash() -> None:
     stroke = Stroke(
         paint=SolidPaint("000000"),

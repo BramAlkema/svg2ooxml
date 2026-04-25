@@ -29,12 +29,11 @@ def parse_animation_values(
         path = element.get("path")
         if path:
             return [path.strip()]
-        mpath = (
-            element.find(".//mpath")
-            or element.find(".//svg:mpath", namespaces=namespace_map)
-        )
+        mpath = element.find(".//mpath")
+        if mpath is None:
+            mpath = element.find(".//svg:mpath", namespaces=namespace_map)
         if mpath is not None:
-            href = mpath.get("href", mpath.get("{http://www.w3.org/1999/xlink}href"))
+            href = mpath.get("href") or mpath.get("{http://www.w3.org/1999/xlink}href")
             if href:
                 resolved = resolve_motion_path_reference(element, href.strip())
                 if resolved is not None:

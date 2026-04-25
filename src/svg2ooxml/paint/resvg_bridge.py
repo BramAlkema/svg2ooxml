@@ -120,7 +120,7 @@ def resolve_stroke_style(stroke: StrokeStyle | None, tree: Tree) -> Stroke | Non
 
     paint: Paint
     if stroke.color is not None:
-        paint = _color_to_solid(stroke.color, _clamp01(_coerce_float(getattr(stroke, "opacity", 1.0), 1.0)))
+        paint = _color_to_solid(stroke.color, None)
     elif stroke.reference is not None:
         paint = _resolve_paint_reference(stroke.reference, tree)
     else:

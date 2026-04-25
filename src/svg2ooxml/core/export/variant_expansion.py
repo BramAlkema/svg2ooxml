@@ -7,22 +7,14 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from typing import Any
 
-from svg2ooxml.core.ir.converter import IRScene
-from svg2ooxml.ir.animation import (
-    AnimationDefinition,
-    AnimationType,
-    CalcMode,
-    TransformType,
-)
-
 from svg2ooxml.core.export.animation_processor import (
-    _begin_trigger_group_key,
     _is_polyline_segment_fade_animation,
     _is_simple_line_endpoint_animation,
     _is_simple_motion_sampling_candidate,
     _is_simple_origin_rotate_animation,
     _parse_rotate_bounds,
     _simple_position_axis,
+    _timing_group_key,
 )
 from svg2ooxml.core.export.motion_geometry import (
     _build_sampled_motion_replacement,
@@ -34,7 +26,13 @@ from svg2ooxml.core.export.motion_geometry import (
     _sample_polyline_at_fraction,
     _sample_progress_values,
 )
-
+from svg2ooxml.core.ir.converter import IRScene
+from svg2ooxml.ir.animation import (
+    AnimationDefinition,
+    AnimationType,
+    CalcMode,
+    TransformType,
+)
 
 # ---------------------------------------------------------------------------
 # Trace report merging
@@ -83,23 +81,17 @@ def _animation_group_key(
     animation: AnimationDefinition,
     alias_map: dict[str, tuple[str, ...]],
 ) -> tuple[Any, ...]:
-    timing = animation.timing
-    begin_triggers = tuple(
-        _begin_trigger_group_key(trigger)
-        for trigger in (timing.begin_triggers or [])
-    )
     return (
         alias_map.get(animation.element_id, (animation.element_id,)),
-        round(float(timing.begin), 6),
-        round(float(timing.duration), 6),
-        str(timing.repeat_count),
-        timing.fill_mode.value,
+        *_timing_group_key(animation.timing),
         animation.additive,
         animation.accumulate,
         animation.calc_mode.value
         if isinstance(animation.calc_mode, CalcMode)
         else str(animation.calc_mode),
-        begin_triggers,
+        animation.restart,
+        animation.min_ms,
+        animation.max_ms,
     )
 
 

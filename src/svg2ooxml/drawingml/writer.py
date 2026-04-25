@@ -59,7 +59,7 @@ def _element_ids_for(element: object) -> set[str]:
     metadata = getattr(element, "metadata", None)
     if isinstance(metadata, dict):
         ids = metadata.get("element_ids")
-        if isinstance(ids, list):
+        if isinstance(ids, (list, tuple, set)):
             element_ids.update(
                 str(element_id) for element_id in ids if isinstance(element_id, str)
             )
@@ -330,10 +330,13 @@ class DrawingMLWriter:
         self._tracer = tracer
         self._asset_registry = AssetRegistry()
         self._next_navigation_index = 1
+        scene_background_color = getattr(scene, "background_color", None)
+        if scene_background_color is None:
+            scene_background_color = self._scene_background_color
         self._asset_pipeline.reset(
             assets=self._assets,
             trace_writer=self._trace_writer,
-            scene_background_color=getattr(scene, 'background_color', None),
+            scene_background_color=scene_background_color,
         )
         self._mask_pipeline.reset(assets=self._assets, tracer=self._tracer)
         self._animation_pipeline.reset(animation_payload, tracer=self._tracer)
@@ -470,12 +473,20 @@ class DrawingMLWriter:
             animation_payload=animation_payload,
             animations=animations,
         )
-        return self.render_shapes(
-            scene.elements,
-            slide_size=slide_size,
-            tracer=tracer,
-            animation_payload=payload,
-        )
+        prev_scene_metadata = self._scene_metadata
+        prev_scene_background_color = self._scene_background_color
+        self._scene_metadata = scene.metadata if isinstance(scene.metadata, dict) else None
+        self._scene_background_color = scene.background_color or "FFFFFF"
+        try:
+            return self.render_shapes(
+                scene.elements,
+                slide_size=slide_size,
+                tracer=tracer,
+                animation_payload=payload,
+            )
+        finally:
+            self._scene_metadata = prev_scene_metadata
+            self._scene_background_color = prev_scene_background_color
 
     def _scene_render_args_from_ir(
         self,
@@ -665,8 +676,16 @@ class DrawingMLWriter:
                 metadata={"shape_id": shape_id, "reason": "w3c_test_frame"},
             )
             return None
-        metadata = getattr(element, "metadata", None)
-        if isinstance(metadata, dict):
+        source_metadata = getattr(element, "metadata", None)
+        if isinstance(source_metadata, dict):
+            metadata = dict(source_metadata)
+            mask_metadata = metadata.get("mask")
+            if isinstance(mask_metadata, dict):
+                metadata["mask"] = dict(mask_metadata)
+            try:
+                element = replace(element, metadata=metadata)
+            except TypeError:
+                pass
             self.register_filter_assets(metadata)
         else:
             metadata = {}
