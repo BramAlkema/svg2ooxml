@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import re
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -10,9 +11,9 @@ from typing import TYPE_CHECKING
 
 from lxml import etree as ET
 
+from svg2ooxml.common.ooxml_relationships import is_safe_relationship_id
 from svg2ooxml.drawingml.assets import FontAsset, MediaAsset, NavigationAsset
 from svg2ooxml.drawingml.result import DrawingMLRenderResult
-from svg2ooxml.drawingml.writer import DEFAULT_SLIDE_SIZE
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from svg2ooxml.core.ir import IRScene
@@ -34,6 +35,156 @@ FONT_STYLE_TAGS: dict[str, str] = {
     "boldItalic": "boldItalic",
 }
 FONT_STYLE_ORDER: tuple[str, ...] = ("regular", "bold", "italic", "boldItalic")
+MASK_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.drawingml.mask+xml"
+_SAFE_PACKAGE_FILENAME_RE = re.compile(r"[^A-Za-z0-9._-]+")
+_SAFE_PACKAGE_SUFFIX_RE = re.compile(r"\.[A-Za-z0-9]{1,16}\Z")
+_CONTENT_TYPE_SUFFIXES: dict[str, tuple[str, ...]] = {
+    "image/png": (".png",),
+    "image/jpeg": (".jpg", ".jpeg"),
+    "image/gif": (".gif",),
+    "image/svg+xml": (".svg",),
+    "image/x-emf": (".emf",),
+    MASK_CONTENT_TYPE: (".xml",),
+}
+
+
+def _normalized_content_type(content_type: str | None) -> str:
+    return (content_type or "").split(";", 1)[0].strip().lower()
+
+
+def _suffixes_for_content_type(content_type: str | None) -> tuple[str, ...]:
+    return _CONTENT_TYPE_SUFFIXES.get(_normalized_content_type(content_type), (".bin",))
+
+
+def _normalize_package_suffix(suffix: str | None, fallback: str) -> str:
+    fallback_suffix = fallback if fallback.startswith(".") else f".{fallback}"
+    fallback_suffix = fallback_suffix.lower()
+    if not _SAFE_PACKAGE_SUFFIX_RE.fullmatch(fallback_suffix):
+        fallback_suffix = ".bin"
+
+    candidate = (suffix or "").strip()
+    if candidate and not candidate.startswith("."):
+        candidate = f".{candidate}"
+    candidate = candidate.lower()
+    if _SAFE_PACKAGE_SUFFIX_RE.fullmatch(candidate):
+        return candidate
+    return fallback_suffix
+
+
+def sanitize_package_filename(
+    filename: str | None,
+    *,
+    fallback_stem: str = "part",
+    fallback_suffix: str = ".bin",
+) -> str:
+    """Return a single safe OPC filename with no directory components."""
+
+    raw = str(filename or "").replace("\\", "/").rstrip("/")
+    name = raw.rsplit("/", 1)[-1].strip()
+    if name in {"", ".", ".."}:
+        name = ""
+
+    path = Path(name)
+    stem = path.stem if path.stem not in {"", ".", ".."} else ""
+    safe_stem = _SAFE_PACKAGE_FILENAME_RE.sub("_", stem).strip("._")
+    if not safe_stem:
+        safe_stem = fallback_stem
+    suffix = _normalize_package_suffix(path.suffix, fallback_suffix)
+    return f"{safe_stem}{suffix}"
+
+
+def _sanitize_filename_for_content_type(
+    filename: str | None,
+    content_type: str | None,
+    *,
+    fallback_stem: str,
+) -> str:
+    suffixes = _suffixes_for_content_type(content_type)
+    fallback_suffix = suffixes[0]
+    candidate = sanitize_package_filename(
+        filename,
+        fallback_stem=fallback_stem,
+        fallback_suffix=fallback_suffix,
+    )
+    path = Path(candidate)
+    suffix = path.suffix.lower()
+    if suffix not in suffixes:
+        suffix = fallback_suffix
+    stem = path.stem or fallback_stem
+    return f"{stem}{suffix}"
+
+
+def sanitize_media_filename(filename: str | None, content_type: str | None) -> str:
+    """Return a safe package filename for media parts."""
+
+    return _sanitize_filename_for_content_type(
+        filename,
+        content_type,
+        fallback_stem="media",
+    )
+
+
+def sanitize_mask_part_name(part_name: str | None, content_type: str | None) -> str:
+    """Return a safe absolute OPC part name for DrawingML mask assets."""
+
+    filename = sanitize_package_filename(part_name, fallback_stem="mask")
+    safe_filename = _sanitize_filename_for_content_type(
+        filename,
+        content_type,
+        fallback_stem="mask",
+    )
+    return f"/ppt/masks/{safe_filename}"
+
+
+def sanitize_slide_filename(filename: str | None, *, fallback_index: object = None) -> str:
+    """Return a safe slide XML filename with no directory components."""
+
+    index = _positive_int(fallback_index)
+    fallback_stem = f"slide{index}" if index is not None else "slide"
+    candidate = sanitize_package_filename(
+        filename,
+        fallback_stem=fallback_stem,
+        fallback_suffix=".xml",
+    )
+    stem = Path(candidate).stem or fallback_stem
+    return f"{stem}.xml"
+
+
+def resolve_package_child(
+    package_root: Path,
+    package_path: Path,
+    *,
+    required_prefix: Path | None = None,
+) -> Path:
+    """Resolve an OPC child path and reject traversal outside the package root."""
+
+    root = package_root.resolve()
+    target = (package_root / package_path).resolve()
+    try:
+        target.relative_to(root)
+    except ValueError as exc:
+        raise ValueError(f"Package part escapes PPTX staging directory: {package_path}") from exc
+
+    if required_prefix is not None:
+        prefix = (package_root / required_prefix).resolve()
+        try:
+            target.relative_to(prefix)
+        except ValueError as exc:
+            raise ValueError(
+                f"Package part is outside required prefix {required_prefix}: {package_path}"
+            ) from exc
+
+    return target
+
+
+def _positive_int(value: object) -> int | None:
+    try:
+        parsed = int(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return None
+    if parsed < 1:
+        return None
+    return parsed
 
 
 @dataclass
@@ -42,6 +193,9 @@ class PackagedMedia:
     filename: str
     content_type: str
     data: bytes
+
+    def __post_init__(self) -> None:
+        self.filename = sanitize_media_filename(self.filename, self.content_type)
 
     @property
     def package_path(self) -> Path:
@@ -64,6 +218,9 @@ class SlideAssembly:
     navigation: list[NavigationAsset] = field(default_factory=list)
     masks: list[MaskAsset] = field(default_factory=list)
     font_assets: list[FontAsset] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        self.filename = sanitize_slide_filename(self.filename, fallback_index=self.index)
 
 
 @dataclass
@@ -89,6 +246,9 @@ class MaskAsset:
     content_type: str
     data: bytes
 
+    def __post_init__(self) -> None:
+        self.part_name = sanitize_mask_part_name(self.part_name, self.content_type)
+
     @property
     def package_path(self) -> Path:
         part = self.part_name.lstrip("/")
@@ -113,6 +273,13 @@ class SlideEntry:
     slide_id: int
     slide_size: tuple[int, int]
 
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "filename",
+            sanitize_slide_filename(self.filename, fallback_index=self.index),
+        )
+
 
 @dataclass(frozen=True, slots=True)
 class MediaMeta:
@@ -121,6 +288,13 @@ class MediaMeta:
     filename: str
     content_type: str
 
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "filename",
+            sanitize_media_filename(self.filename, self.content_type),
+        )
+
 
 @dataclass(frozen=True, slots=True)
 class MaskMeta:
@@ -128,6 +302,13 @@ class MaskMeta:
 
     part_name: str
     content_type: str
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "part_name",
+            sanitize_mask_part_name(self.part_name, self.content_type),
+        )
 
 
 class PackagingContext:
@@ -148,7 +329,10 @@ class PackagingContext:
         if existing:
             return existing
 
-        base = asset.filename or f"media_{self._media_counter}"
+        base = sanitize_media_filename(
+            asset.filename or f"media_{self._media_counter}",
+            asset.content_type,
+        )
         path = Path(base)
         stem = path.stem or "media"
         suffix = path.suffix or self._suffix_for_content_type(asset.content_type)
@@ -171,6 +355,16 @@ class PackagingContext:
         self._next_slide_id += 1
         return rel_id, slide_id
 
+    def allocate_media_relationship_id(self, preferred_id: object | None = None) -> str:
+        """Return a safe media relationship ID."""
+
+        if is_safe_relationship_id(preferred_id):
+            assert isinstance(preferred_id, str)
+            return preferred_id
+        rel_id = f"rIdMedia{self._media_counter}"
+        self._media_counter += 1
+        return rel_id
+
     @staticmethod
     def _suffix_for_content_type(content_type: str) -> str:
         return suffix_for_content_type(content_type)
@@ -178,14 +372,7 @@ class PackagingContext:
 
 def suffix_for_content_type(content_type: str) -> str:
     """Map image MIME type to file extension."""
-    mapping = {
-        "image/png": ".png",
-        "image/jpeg": ".jpg",
-        "image/gif": ".gif",
-        "image/svg+xml": ".svg",
-        "image/x-emf": ".emf",
-    }
-    return mapping.get(content_type, ".bin")
+    return _suffixes_for_content_type(content_type)[0]
 
 
 class SlideAssembler:
@@ -203,7 +390,9 @@ class SlideAssembler:
             assigned_name = self._context.assign_media_filename(asset, index)
             media_parts.append(
                 PackagedMedia(
-                    relationship_id=asset.relationship_id,
+                    relationship_id=self._context.allocate_media_relationship_id(
+                        asset.relationship_id
+                    ),
                     filename=assigned_name,
                     content_type=asset.content_type,
                     data=asset.data,
@@ -214,7 +403,9 @@ class SlideAssembler:
         for mask in result.assets.iter_masks():
             mask_parts.append(
                 MaskAsset(
-                    relationship_id=mask["relationship_id"],
+                    relationship_id=self._context.allocate_media_relationship_id(
+                        mask.get("relationship_id")
+                    ),
                     part_name=mask["part_name"],
                     content_type=mask["content_type"],
                     data=mask["data"],
@@ -387,6 +578,7 @@ __all__ = [
     "FONT_STYLE_ORDER",
     "FONT_STYLE_TAGS",
     "MASK_REL_TYPE",
+    "MASK_CONTENT_TYPE",
     "P_NS",
     "PPTXPackageBuilder",
     "PackagingContext",
@@ -398,7 +590,12 @@ __all__ = [
     "THEME_NS",
     "content_type_for_extension",
     "normalize_style_kind",
+    "resolve_package_child",
     "safe_int",
+    "sanitize_mask_part_name",
+    "sanitize_media_filename",
+    "sanitize_package_filename",
+    "sanitize_slide_filename",
     "suffix_for_content_type",
     "write_pptx",
 ]

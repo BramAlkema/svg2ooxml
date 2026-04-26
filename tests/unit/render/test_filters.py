@@ -8,6 +8,7 @@ import pytest
 from svg2ooxml.core.resvg.parser.presentation import Presentation
 from svg2ooxml.core.resvg.usvg_tree import FilterNode, FilterPrimitive
 from svg2ooxml.render.filters import apply_filter, plan_filter
+from svg2ooxml.render.filters_region import parse_user_length
 from svg2ooxml.render.rasterizer import Viewport
 from svg2ooxml.render.surface import Surface
 
@@ -301,6 +302,53 @@ def test_fe_image_local_file_missing_returns_no_plan(tmp_path) -> None:
     filter_node = _make_filter_node([image])
     plan = plan_filter(filter_node, options={"source_path": str(tmp_path / "scene.svg")})
     assert plan is None
+
+
+def test_fe_image_local_file_outside_asset_root_returns_no_plan(tmp_path) -> None:
+    png_data = base64.b64decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg=="
+    )
+    asset_root = tmp_path / "assets"
+    asset_root.mkdir()
+    outside = tmp_path / "pixel.png"
+    outside.write_bytes(png_data)
+
+    image = FilterPrimitive(
+        tag="feImage",
+        attributes={"href": str(outside)},
+        styles={},
+    )
+    filter_node = _make_filter_node([image])
+
+    plan = plan_filter(
+        filter_node,
+        options={"source_path": str(asset_root / "scene.svg"), "asset_root": str(asset_root)},
+    )
+
+    assert plan is None
+
+
+def test_fe_image_file_uri_returns_no_plan(tmp_path) -> None:
+    png_data = base64.b64decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg=="
+    )
+    image_path = tmp_path / "pixel.png"
+    image_path.write_bytes(png_data)
+    image = FilterPrimitive(
+        tag="feImage",
+        attributes={"href": image_path.as_uri()},
+        styles={},
+    )
+    filter_node = _make_filter_node([image])
+
+    plan = plan_filter(filter_node, options={"source_path": str(tmp_path / "scene.svg")})
+
+    assert plan is None
+
+
+def test_filter_region_user_lengths_accept_svg_units() -> None:
+    assert parse_user_length("1cm", 0.0, 100.0) == pytest.approx(37.7952755906)
+    assert parse_user_length("25%", 0.0, 80.0) == pytest.approx(20.0)
 
 
 def test_apply_filter_displacement_map_shifts_pixels() -> None:

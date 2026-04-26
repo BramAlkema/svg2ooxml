@@ -39,6 +39,23 @@ def test_resolve_paints_for_solid_styles() -> None:
     assert stroke.paint.opacity == pytest.approx(1.0)
 
 
+def test_resolve_fill_paint_preserves_css_color_alpha() -> None:
+    svg_markup = """
+        <svg xmlns="http://www.w3.org/2000/svg">
+            <rect width="20" height="10" fill="rgb(255 0 0 / 50%)" fill-opacity="50%"/>
+        </svg>
+    """
+    result = normalize_svg_string(svg_markup)
+    rect = _find_rect_node(result.tree)
+    assert rect is not None, "expected rectangle node in normalized tree"
+
+    fill_paint = resolve_fill_paint(rect.fill, result.tree)
+
+    assert isinstance(fill_paint, SolidPaint)
+    assert fill_paint.rgb == "FF0000"
+    assert fill_paint.opacity == pytest.approx(0.25)
+
+
 def test_resolve_stroke_style_defaults_width_to_one() -> None:
     svg_markup = """
         <svg xmlns="http://www.w3.org/2000/svg">

@@ -33,6 +33,20 @@ def test_has_external_references_detects_href_protocols() -> None:
         assert has_external_references(root) is True
 
 
+def test_has_external_references_detects_uppercase_href_protocol() -> None:
+    root = _make_element("<svg><image href='HTTPS://example.com/image.png'/></svg>")
+
+    assert has_external_references(root) is True
+
+
+def test_has_external_references_detects_external_style_attribute_url() -> None:
+    root = _make_element(
+        "<svg><rect style=\"fill:url('file:///tmp/pattern.png')\"/></svg>"
+    )
+
+    assert has_external_references(root) is True
+
+
 def test_has_external_references_detects_style_urls() -> None:
     root = _make_element("<svg><style>@import url('https://example');</style></svg>")
 

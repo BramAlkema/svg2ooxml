@@ -210,7 +210,11 @@ class SVGParser:
                 try:
                     from svg2ooxml.services.image_service import FileResolver
                     base_dir = os.path.dirname(source_path)
-                    image_service.register_resolver(FileResolver(base_dir), prepend=True)
+                    asset_root = _resolve_asset_root_option(services)
+                    image_service.register_resolver(
+                        FileResolver(base_dir, asset_root=asset_root),
+                        prepend=True,
+                    )
                 except ImportError:
                     self._logger.warning("Could not import FileResolver to handle source_path images.")
 
@@ -604,6 +608,17 @@ def parse_svg(
 
     parser = SVGParser(config=config, services=services)
     return parser.parse(svg_content, tracer=tracer, source_path=source_path)
+
+
+def _resolve_asset_root_option(services: Any) -> str | None:
+    resolver = getattr(services, "resolve", None)
+    if not callable(resolver):
+        return None
+    for key in ("asset_root", "root_dir", "source_root"):
+        value = resolver(key)
+        if isinstance(value, str) and value:
+            return value
+    return None
 
 
 __all__ = ["SVGParser", "ParserConfig", "parse_svg"]

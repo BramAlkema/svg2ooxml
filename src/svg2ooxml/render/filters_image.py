@@ -2,11 +2,8 @@
 
 from __future__ import annotations
 
-import base64
-import binascii
 import io
 import mimetypes
-import urllib.parse
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
@@ -20,9 +17,15 @@ except ImportError:  # pragma: no cover
 
 from svg2ooxml.core.resvg.usvg_tree import FilterPrimitive
 from svg2ooxml.render.surface import Surface
+from svg2ooxml.services.image_service import (
+    ImageService,
+    is_external_image_href,
+    normalize_image_href,
+    resolve_local_image_path,
+)
 
 
-class _Unsupported(Exception):
+class _UnsupportedError(Exception):
     """Thin wrapper so this module doesn't import UnsupportedPrimitiveError."""
 
 
@@ -30,7 +33,7 @@ def plan_image_primitive(
     primitive: FilterPrimitive,
     *,
     options: Mapping[str, Any] | None = None,
-    error_cls: type[Exception] = _Unsupported,
+    error_cls: type[Exception] = _UnsupportedError,
 ) -> dict[str, Any]:
     """Parse an ``<feImage>`` primitive and return its decoded surface."""
 
@@ -61,28 +64,14 @@ def _extract_href(attrs: Mapping[str, str]) -> str | None:
 
 
 def _decode_data_uri(uri: str) -> tuple[str | None, bytes]:
-    if not uri.startswith("data:"):
+    if not uri.lower().startswith("data:"):
         raise ValueError("external feImage references are not supported")
-    header, _, payload = uri.partition(",")
-    if not payload:
+    if "," not in uri:
         raise ValueError("data URI is missing payload")
-    meta = header[5:]  # strip "data:"
-    is_base64 = ";base64" in meta
-    if is_base64:
-        try:
-            data = base64.b64decode(payload.strip())
-        except (ValueError, binascii.Error) as exc:
-            raise ValueError("invalid base64 payload in data URI") from exc
-    else:
-        data = urllib.parse.unquote_to_bytes(payload)
-    mime = None
-    if meta:
-        parts = [part for part in meta.split(";") if part]
-        if parts:
-            candidate = parts[0]
-            if candidate != "base64":
-                mime = candidate
-    return mime, data
+    resource = ImageService._data_uri_resolver(uri)
+    if resource is None:
+        raise ValueError("invalid data URI")
+    return resource.mime_type, resource.data
 
 
 def _decode_image_payload(
@@ -90,14 +79,16 @@ def _decode_image_payload(
     *,
     options: Mapping[str, Any] | None = None,
 ) -> tuple[str | None, bytes]:
-    if uri.startswith("data:"):
-        return _decode_data_uri(uri)
+    normalized_uri = normalize_image_href(uri)
+    if not normalized_uri:
+        raise ValueError("feImage requires an href attribute")
+    if normalized_uri.lower().startswith("data:"):
+        return _decode_data_uri(normalized_uri)
 
-    lowered = uri.lower()
-    if lowered.startswith(("http://", "https://", "ftp://")):
+    if is_external_image_href(normalized_uri):
+        if normalized_uri.startswith("#"):
+            raise ValueError("fragment feImage references are not yet supported")
         raise ValueError("external feImage URL references are not supported")
-    if uri.startswith("#"):
-        raise ValueError("fragment feImage references are not yet supported")
 
     source_path = _option_string(options, "source_path", "svg_path", "svg_file")
     if source_path is None:
@@ -106,15 +97,18 @@ def _decode_image_payload(
     base_dir = Path(source_path).expanduser()
     if base_dir.suffix:
         base_dir = base_dir.parent
-    target = Path(uri).expanduser()
-    if not target.is_absolute():
-        target = (base_dir / target).resolve()
-    else:
-        target = target.resolve()
+    allowed_root = _resolve_asset_root(options, base_dir)
+    target = resolve_local_image_path(
+        normalized_uri,
+        base_dir,
+        asset_root=allowed_root,
+    )
+    if target is None:
+        raise ValueError("feImage resource not found or path escapes the allowed asset root")
     try:
         data = target.read_bytes()
     except (FileNotFoundError, OSError) as exc:
-        raise ValueError(f"feImage resource not found: {uri}") from exc
+        raise ValueError(f"feImage resource not found: {normalized_uri}") from exc
 
     mime, _ = mimetypes.guess_type(target.name)
     return mime, data
@@ -124,7 +118,7 @@ def _decode_image_rgba(
     data: bytes,
     primitive: FilterPrimitive,
     *,
-    error_cls: type[Exception] = _Unsupported,
+    error_cls: type[Exception] = _UnsupportedError,
 ) -> np.ndarray:
     if skia is not None:
         image = skia.Image.MakeFromEncoded(data)
@@ -171,14 +165,7 @@ def _decode_image_rgba(
 
 
 def _normalize_href(value: str) -> str:
-    token = value.strip()
-    if token.lower().startswith("url(") and token.endswith(")"):
-        token = token[4:-1].strip()
-    if (token.startswith("'") and token.endswith("'")) or (
-        token.startswith('"') and token.endswith('"')
-    ):
-        token = token[1:-1]
-    return token.strip()
+    return normalize_image_href(value) or ""
 
 
 def _option_string(options: Mapping[str, Any] | None, *keys: str) -> str | None:
@@ -189,6 +176,21 @@ def _option_string(options: Mapping[str, Any] | None, *keys: str) -> str | None:
         if isinstance(value, str) and value.strip():
             return value.strip()
     return None
+
+
+def _resolve_asset_root(options: Mapping[str, Any] | None, base_dir: Path) -> Path | None:
+    if isinstance(options, Mapping):
+        for key in ("asset_root", "root_dir", "source_root"):
+            value = options.get(key)
+            if isinstance(value, str) and value.strip():
+                try:
+                    return Path(value).expanduser().resolve()
+                except OSError:
+                    continue
+    try:
+        return base_dir.resolve()
+    except OSError:
+        return None
 
 
 __all__ = ["plan_image_primitive"]

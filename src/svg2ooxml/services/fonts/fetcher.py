@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import re
 import tempfile
 import urllib.request
 from collections.abc import Iterable
@@ -14,6 +15,8 @@ from urllib.parse import urlparse
 MAX_FONT_SIZE = 10 * 1024 * 1024  # 10 MiB safety limit
 ENV_FONT_CACHE_DIR = "SVG2OOXML_FONT_CACHE_DIR"
 ENV_WEB_FONT_CACHE_DIR = "SVG2OOXML_WEB_FONT_CACHE"
+FONT_EXTENSIONS = {".ttf", ".otf", ".woff", ".woff2", ".svg", ".eot"}
+GOOGLE_FONTS_CSS_HOST = "fonts.googleapis.com"
 
 
 def _default_cache_directory() -> Path:
@@ -60,7 +63,11 @@ class FontFetcher:
         return results
 
     def fetch(self, source: FontSource) -> Path | None:
-        cache_key = self._cache_key(source.url)
+        url = normalize_remote_font_url(source.url)
+        if url is None:
+            return None
+
+        cache_key = self._cache_key(url)
         target_path = self.cache_directory / cache_key
         if target_path.exists():
             try:
@@ -73,11 +80,11 @@ class FontFetcher:
         if not self.allow_network:
             return None
 
-        parsed = urlparse(source.url)
-        host = parsed.netloc.lower()
+        parsed = urlparse(url)
+        host = (parsed.hostname or "").lower()
         try:
-            if "fonts.googleapis.com" in host:
-                css_bytes = self._download_bytes(source.url)
+            if _is_google_fonts_css_host(host):
+                css_bytes = self._download_bytes(url)
                 if css_bytes is None:
                     return None
                 for font_url in self._extract_urls_from_css(css_bytes.decode("utf-8", errors="ignore")):
@@ -85,13 +92,16 @@ class FontFetcher:
                     if path is not None:
                         return path
                 return None
-            return self._download_to_cache(source.url)
+            return self._download_to_cache(url)
         except Exception:
             if target_path.exists():
                 target_path.unlink(missing_ok=True)
             return None
 
     def _download_to_cache(self, url: str) -> Path | None:
+        url = normalize_remote_font_url(url)
+        if url is None:
+            return None
         cache_key = self._cache_key(url)
         target_path = self.cache_directory / cache_key
         data = self._download_bytes(url)
@@ -114,8 +124,14 @@ class FontFetcher:
             return None
 
     def _download_bytes(self, url: str) -> bytes | None:
+        normalized_url = normalize_remote_font_url(url)
+        if normalized_url is None:
+            return None
         try:
-            with urllib.request.urlopen(url, timeout=15) as response:
+            with urllib.request.urlopen(normalized_url, timeout=15) as response:
+                final_url = getattr(response, "geturl", lambda: normalized_url)()
+                if normalize_remote_font_url(final_url) is None:
+                    return None
                 data = response.read(self.max_download_size + 1)
         except Exception:
             return None
@@ -125,23 +141,50 @@ class FontFetcher:
 
     @staticmethod
     def _sanitize_font_data(data: bytes) -> bool:
-        sniff = data[:32].lower()
+        sniff = data[:512].lower()
         if b"<script" in sniff or b"<html" in sniff:
             return False
         return True
 
     @staticmethod
     def _extract_urls_from_css(css: str) -> list[str]:
-        import re
-
-        return [match.strip() for match in re.findall(r"url\(['\"]?(.*?)['\"]?\)", css)]
+        urls: list[str] = []
+        for match in re.findall(r"url\(\s*['\"]?(.*?)['\"]?\s*\)", css, flags=re.IGNORECASE):
+            url = normalize_remote_font_url(match.strip())
+            if url is not None:
+                urls.append(url)
+        return urls
 
     @staticmethod
     def _cache_key(url: str) -> str:
         digest = hashlib.sha256(url.encode("utf-8")).hexdigest()
-        _, ext = os.path.splitext(url)
-        ext = ext.lower() if ext else ".ttf"
+        parsed = urlparse(url)
+        _, ext = os.path.splitext(parsed.path)
+        ext = ext.lower() if ext.lower() in FONT_EXTENSIONS else ".ttf"
         return f"{digest}{ext}"
 
 
-__all__ = ["FontFetcher", "FontSource", "MAX_FONT_SIZE"]
+def normalize_remote_font_url(url: str | None) -> str | None:
+    if not isinstance(url, str):
+        return None
+    token = url.strip()
+    if not token:
+        return None
+    parsed = urlparse(token)
+    if parsed.scheme.lower() not in {"http", "https"}:
+        return None
+    if not parsed.hostname:
+        return None
+    return token
+
+
+def _is_google_fonts_css_host(host: str) -> bool:
+    return host == GOOGLE_FONTS_CSS_HOST
+
+
+__all__ = [
+    "FontFetcher",
+    "FontSource",
+    "MAX_FONT_SIZE",
+    "normalize_remote_font_url",
+]

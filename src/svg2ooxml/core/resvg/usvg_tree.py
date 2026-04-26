@@ -10,6 +10,8 @@ from typing import (
     Any,
 )
 
+from svg2ooxml.common.conversions.transforms import parse_numeric_list
+
 from .geometry.matrix import Matrix, matrix_from_commands
 from .painting.gradients import (
     GradientStop,
@@ -317,8 +319,8 @@ def _parse_offset(value: str | None) -> float:
 
 def _parse_stop(node: SvgNode) -> GradientStop | None:
     offset = _parse_offset(node.attributes.get("offset"))
-    color_value = node.attributes.get("stop-color") or node.styles.get("stop-color")
-    opacity_value = node.attributes.get("stop-opacity") or node.styles.get("stop-opacity")
+    color_value = node.styles.get("stop-color") or node.attributes.get("stop-color")
+    opacity_value = node.styles.get("stop-opacity") or node.attributes.get("stop-opacity")
     opacity = _parse_number(opacity_value, 1.0)
     color = parse_color(color_value or "#000000", opacity)
     if color is None:
@@ -343,15 +345,7 @@ def _optional_number(value: str | None) -> float | None:
 def _parse_points(raw: str) -> tuple[float, ...]:
     if not raw:
         return ()
-    cleaned = raw.replace(",", " ")
-    parts = [part for part in cleaned.split() if part]
-    numbers: list[float] = []
-    for part in parts:
-        try:
-            numbers.append(float(part))
-        except ValueError:
-            continue
-    return tuple(numbers)
+    return tuple(parse_numeric_list(raw))
 
 
 def _parse_view_box(raw: str | None) -> tuple[float, float, float, float] | None:

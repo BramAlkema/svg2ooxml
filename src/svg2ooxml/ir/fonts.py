@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
+from urllib.parse import urlparse
 
 
 @dataclass
@@ -20,17 +21,20 @@ class FontFaceSrc:
     @property
     def is_data_uri(self) -> bool:
         """Check if this is a base64 data URI."""
-        return self.url.startswith("data:")
+        return self.url.strip().lower().startswith("data:")
 
     @property
     def is_remote(self) -> bool:
         """Check if this is a remote HTTP(S) URL."""
-        return self.url.startswith(("http://", "https://"))
+        scheme = urlparse(self.url.strip()).scheme.lower()
+        return scheme in {"http", "https"}
 
     @property
     def is_local(self) -> bool:
         """Check if this is a local() font reference."""
-        return self.url.startswith("local(") or not (self.is_data_uri or self.is_remote)
+        return self.url.strip().lower().startswith("local(") or not (
+            self.is_data_uri or self.is_remote
+        )
 
 
 @dataclass

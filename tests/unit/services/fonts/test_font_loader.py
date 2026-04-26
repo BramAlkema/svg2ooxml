@@ -71,13 +71,14 @@ class TestFontLoader:
 
     def test_load_data_uri_no_base64_encoding(self):
         """Data URI without base64 encoding (rare)."""
-        data_uri = "data:font/ttf,plaintext"
+        data_uri = "data:font/ttf,plain%20text"
 
         loader = FontLoader()
         result = loader.load_data_uri(data_uri)
 
         # Should succeed but with plain text data
         assert result is not None
+        assert result.data == b"plain text"
 
     def test_load_data_uri_exceeds_size_limit(self):
         """Data URI exceeding size limit returns None."""
@@ -117,6 +118,17 @@ class TestFontLoader:
         assert result.format == "ttf"
         assert result.data == ttf_data
 
+    def test_load_from_src_data_uri_is_case_insensitive(self):
+        """Load mixed-case data URI prefixes."""
+        ttf_data = b"\x00\x01\x00\x00" + b"\x00" * 50
+        b64_data = base64.b64encode(ttf_data).decode("ascii")
+        src = FontFaceSrc(url=f"DATA:font/ttf;BASE64,{b64_data}", format="ttf")
+
+        result = FontLoader().load_from_src(src)
+
+        assert result is not None
+        assert result.data == ttf_data
+
     def test_load_from_src_local_font(self):
         """Loading local() font returns None."""
         src = FontFaceSrc(url="local(Arial)", format=None)
@@ -141,32 +153,50 @@ class TestFontLoader:
 
         assert result is None
 
-    def test_resolve_local_path_absolute_fallback(self, tmp_path: Path):
-        """Absolute paths fall back to base_dir parent when missing."""
+    def test_load_from_src_file_url_is_not_local_file(self, tmp_path: Path):
+        """file:// URLs are rejected instead of being read as document fonts."""
+        font_file = tmp_path / "font.ttf"
+        font_file.write_bytes(b"\x00\x01\x00\x00" + b"\x00" * 50)
+        src = FontFaceSrc(url=font_file.as_uri(), format="ttf")
+
+        result = FontLoader(base_dir=tmp_path).load_from_src(src)
+
+        assert result is None
+
+    def test_resolve_local_path_rejects_absolute_escape(self, tmp_path: Path):
+        """Absolute paths outside the allowed root are rejected."""
         base_dir = tmp_path / "svg"
         base_dir.mkdir(parents=True)
-        resources_dir = tmp_path / "resources"
-        resources_dir.mkdir(parents=True)
-        resource_file = resources_dir / "Blocky.svg"
-        resource_file.write_text("<svg/>", encoding="utf-8")
+        outside = tmp_path / "outside.svg"
+        outside.write_text("<svg/>", encoding="utf-8")
 
         loader = FontLoader(base_dir=base_dir)
-        absolute = Path("/") / "resources" / "Blocky.svg"
-        resolved = loader._resolve_local_path(str(absolute))
+        resolved = loader._resolve_local_path(str(outside))
 
-        assert resolved == resource_file.resolve()
+        assert resolved is None
 
-    def test_resolve_local_path_relative_resources_fallback(self, tmp_path: Path):
-        """Relative paths fall back to sibling resources directory."""
+    def test_resolve_local_path_rejects_parent_escape_by_default(self, tmp_path: Path):
+        """Relative paths cannot escape base_dir unless an asset root is configured."""
         base_dir = tmp_path / "svg"
         base_dir.mkdir(parents=True)
-        resources_dir = tmp_path / "resources"
-        resources_dir.mkdir(parents=True)
-        resource_file = resources_dir / "Blocky.woff"
+        outside = tmp_path / "Blocky.woff"
+        outside.write_bytes(b"wOFF" + b"\x00" * 32)
+
+        loader = FontLoader(base_dir=base_dir)
+        resolved = loader._resolve_local_path("../Blocky.woff")
+
+        assert resolved is None
+
+    def test_resolve_local_path_allows_explicit_asset_root(self, tmp_path: Path):
+        """Callers can opt into broader source-tree resource resolution."""
+        base_dir = tmp_path / "svg"
+        base_dir.mkdir(parents=True)
+        resource_file = tmp_path / "fonts" / "Blocky.woff"
+        resource_file.parent.mkdir(parents=True)
         resource_file.write_bytes(b"wOFF" + b"\x00" * 32)
 
-        loader = FontLoader(base_dir=base_dir)
-        resolved = loader._resolve_local_path("woffs/Blocky.woff")
+        loader = FontLoader(base_dir=base_dir, asset_root=tmp_path)
+        resolved = loader._resolve_local_path("../fonts/Blocky.woff")
 
         assert resolved == resource_file.resolve()
 

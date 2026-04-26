@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import base64
+import binascii
 import logging
 import re
 from dataclasses import dataclass
 from io import BytesIO
 from pathlib import Path
 from typing import TYPE_CHECKING, TypedDict
-from urllib.parse import urldefrag
+from urllib.parse import unquote, unquote_to_bytes, urldefrag, urlparse
 
 if TYPE_CHECKING:  # pragma: no cover - type checking only
     from svg2ooxml.ir.fonts import FontFaceSrc
@@ -78,7 +79,8 @@ class FontLoader:
         *,
         allow_network: bool = True,
         max_size: int = MAX_FONT_SIZE,
-        base_dir: Path | None = None,
+        base_dir: Path | str | None = None,
+        asset_root: Path | str | None = None,
         allow_svg_fonts: bool = True,
         logger: logging.Logger | None = None,
     ) -> None:
@@ -93,7 +95,12 @@ class FontLoader:
         self.fetcher = fetcher
         self.allow_network = allow_network
         self.max_size = max_size
-        self.base_dir = base_dir
+        self.base_dir = Path(base_dir).expanduser().resolve() if base_dir is not None else None
+        self.asset_root = (
+            Path(asset_root).expanduser().resolve()
+            if asset_root is not None
+            else self.base_dir
+        )
         self.allow_svg_fonts = allow_svg_fonts
         self._logger = logger or globals()["logger"]
 
@@ -147,58 +154,23 @@ class FontLoader:
         # Decode base64
         if encoding and encoding.lower() == "base64":
             try:
-                raw_data = base64.b64decode(data_str)
-            except Exception as exc:
+                raw_data = base64.b64decode(data_str.strip(), validate=True)
+            except (ValueError, binascii.Error) as exc:
                 self._logger.warning("Failed to decode base64 data URI: %s", exc)
                 return None
         else:
             # URL-encoded or plain text (rare for fonts)
             try:
-                raw_data = data_str.encode("utf-8")
+                raw_data = unquote_to_bytes(data_str)
             except Exception as exc:
                 self._logger.warning("Failed to encode data URI: %s", exc)
                 return None
 
-        # Check size limit
-        if len(raw_data) > self.max_size:
-            self._logger.warning(
-                "Data URI font exceeds size limit: %d bytes > %d bytes",
-                len(raw_data),
-                self.max_size
-            )
-            return None
-
-        # Detect format from MIME type or magic bytes
-        font_format = self._detect_format(raw_data, format_hint or mime_type)
-
-        # Decompress if needed
-        decompressed = False
-        if font_format == "svg":
-            raw_data = self._convert_svg_font(raw_data, fragment)
-            if raw_data is None:
-                return None
-            decompressed = True
-            font_format = "ttf"
-        elif font_format == "woff2":
-            decompressed_data = self._decompress_woff2(raw_data)
-            if decompressed_data is None:
-                return None
-            raw_data = decompressed_data
-            decompressed = True
-            font_format = "ttf"  # WOFF2 decompresses to TTF
-        elif font_format == "woff":
-            decompressed_data = self._decompress_woff(raw_data)
-            if decompressed_data is None:
-                return None
-            raw_data = decompressed_data
-            decompressed = True
-            font_format = "ttf"  # WOFF decompresses to TTF
-
-        return LoadedFont(
-            data=raw_data,
-            format=font_format,
+        return self._finalize_loaded_font(
+            raw_data,
             source_url=data_uri[:100] + "..." if len(data_uri) > 100 else data_uri,
-            decompressed=decompressed,
+            format_hint=format_hint or mime_type,
+            font_id=fragment,
         )
 
     def load_remote(self, url: str, format_hint: str | None = None) -> LoadedFont | None:
@@ -220,6 +192,11 @@ class FontLoader:
             return None
 
         url_no_frag, fragment = urldefrag(url)
+        from .fetcher import normalize_remote_font_url
+        if normalize_remote_font_url(url_no_frag) is None:
+            self._logger.debug("Skipping unsupported remote font URL: %s", url)
+            return None
+
         # Use fetcher to download
         from .fetcher import FontSource
         source = FontSource(url=url_no_frag, font_family="unknown")
@@ -232,38 +209,11 @@ class FontLoader:
 
             # Read downloaded file
             raw_data = path.read_bytes()
-
-            # Detect format
-            font_format = format_hint or self._detect_format(raw_data)
-
-            # Decompress if needed
-            decompressed = False
-            if font_format == "svg":
-                raw_data = self._convert_svg_font(raw_data, fragment)
-                if raw_data is None:
-                    return None
-                decompressed = True
-                font_format = "ttf"
-            elif font_format == "woff2":
-                decompressed_data = self._decompress_woff2(raw_data)
-                if decompressed_data is None:
-                    return None
-                raw_data = decompressed_data
-                decompressed = True
-                font_format = "ttf"
-            elif font_format == "woff":
-                decompressed_data = self._decompress_woff(raw_data)
-                if decompressed_data is None:
-                    return None
-                raw_data = decompressed_data
-                decompressed = True
-                font_format = "ttf"
-
-            return LoadedFont(
-                data=raw_data,
-                format=font_format,
+            return self._finalize_loaded_font(
+                raw_data,
                 source_url=url,
-                decompressed=decompressed,
+                format_hint=format_hint,
+                font_id=fragment,
             )
         except Exception as exc:
             self._logger.warning("Error loading remote font %s: %s", url, exc)
@@ -289,46 +239,74 @@ class FontLoader:
                 self._logger.warning("Font file not found: %s", path)
                 return None
 
-            raw_data = path.read_bytes()
-
-            if len(raw_data) > self.max_size:
-                self._logger.warning("Font file exceeds size limit: %s", path)
-                return None
-
-            font_format = self._detect_format(raw_data, format_hint or path.suffix.lstrip("."))
-
-            # Decompress if needed
-            decompressed = False
-            if font_format == "svg":
-                raw_data = self._convert_svg_font(raw_data, font_id)
-                if raw_data is None:
-                    return None
-                decompressed = True
-                font_format = "ttf"
-            elif font_format == "woff2":
-                decompressed_data = self._decompress_woff2(raw_data)
-                if decompressed_data is None:
-                    return None
-                raw_data = decompressed_data
-                decompressed = True
-                font_format = "ttf"
-            elif font_format == "woff":
-                decompressed_data = self._decompress_woff(raw_data)
-                if decompressed_data is None:
-                    return None
-                raw_data = decompressed_data
-                decompressed = True
-                font_format = "ttf"
-
-            return LoadedFont(
-                data=raw_data,
-                format=font_format,
+            return self._finalize_loaded_font(
+                path.read_bytes(),
                 source_url=str(path),
-                decompressed=decompressed,
+                format_hint=format_hint or path.suffix.lstrip("."),
+                font_id=font_id,
             )
         except Exception as exc:
             self._logger.warning("Error loading font file %s: %s", path, exc)
             return None
+
+    def _finalize_loaded_font(
+        self,
+        raw_data: bytes,
+        *,
+        source_url: str,
+        format_hint: str | None = None,
+        font_id: str | None = None,
+    ) -> LoadedFont | None:
+        if len(raw_data) > self.max_size:
+            self._logger.warning(
+                "Font payload exceeds size limit: %d bytes > %d bytes",
+                len(raw_data),
+                self.max_size,
+            )
+            return None
+
+        font_format = self._detect_format(raw_data, format_hint)
+        processed = self._process_font_payload(raw_data, font_format, font_id)
+        if processed is None:
+            return None
+        font_data, loaded_format, decompressed = processed
+        if len(font_data) > self.max_size:
+            self._logger.warning(
+                "Processed font payload exceeds size limit: %d bytes > %d bytes",
+                len(font_data),
+                self.max_size,
+            )
+            return None
+
+        return LoadedFont(
+            data=font_data,
+            format=loaded_format,
+            source_url=source_url,
+            decompressed=decompressed,
+        )
+
+    def _process_font_payload(
+        self,
+        raw_data: bytes,
+        font_format: str,
+        font_id: str | None,
+    ) -> tuple[bytes, str, bool] | None:
+        if font_format == "svg":
+            converted = self._convert_svg_font(raw_data, font_id)
+            if converted is None:
+                return None
+            return converted, "ttf", True
+        if font_format == "woff2":
+            decompressed_data = self._decompress_woff2(raw_data)
+            if decompressed_data is None:
+                return None
+            return decompressed_data, "ttf", True
+        if font_format == "woff":
+            decompressed_data = self._decompress_woff(raw_data)
+            if decompressed_data is None:
+                return None
+            return decompressed_data, "ttf", True
+        return raw_data, font_format, False
 
     # ------------------------------------------------------------------
     # Format detection
@@ -616,54 +594,41 @@ class FontLoader:
         return converted
 
     def _resolve_local_path(self, url: str) -> Path | None:
-        if not url:
+        token = self._normalize_local_font_url(url)
+        if not token or self.base_dir is None:
             return None
-        path = Path(url)
-        candidates: list[Path] = []
-
-        if path.is_absolute():
-            candidates.append(path)
-            if self.base_dir is not None:
-                try:
-                    relative = path.relative_to(path.anchor)
-                except ValueError:
-                    relative = Path(*path.parts[1:])
-                candidates.append((self.base_dir / relative))
-                candidates.append((self.base_dir.parent / relative))
-                candidates.extend(self._resource_candidates(path))
-        else:
-            if self.base_dir is None:
-                return None
-            candidates.append(self.base_dir / path)
-            candidates.append(self.base_dir.parent / path)
-            candidates.extend(self._resource_candidates(path))
-
-        for candidate in candidates:
-            try:
-                if candidate.exists():
-                    return candidate.resolve()
-            except Exception:
-                continue
-
-        if candidates:
-            return candidates[0].resolve()
+        path = Path(token).expanduser()
+        try:
+            target = path.resolve() if path.is_absolute() else (self.base_dir / path).resolve()
+        except (OSError, RuntimeError, ValueError):
+            return None
+        root = self.asset_root or self.base_dir
+        if not _path_is_within(target, root):
+            return None
+        if target.is_file():
+            return target
         return None
 
-    def _resource_candidates(self, path: Path) -> list[Path]:
-        if self.base_dir is None:
-            return []
-        roots = [
-            self.base_dir,
-            self.base_dir.parent,
-        ]
-        subdirs = ("resources", "assets", "fonts", "woffs")
-        candidates: list[Path] = []
-        for root in roots:
-            for subdir in subdirs:
-                base = root / subdir
-                candidates.append(base / path)
-                candidates.append(base / path.name)
-        return candidates
+    @staticmethod
+    def _normalize_local_font_url(url: str) -> str | None:
+        token = unquote(url.strip())
+        if not token or token.startswith("#"):
+            return None
+        lowered = token.lower()
+        if lowered.startswith(("data:", "local(")):
+            return None
+        parsed = urlparse(token)
+        if parsed.scheme and not (len(parsed.scheme) == 1 and ":" in token[:3]):
+            return None
+        return token
+
+
+def _path_is_within(path: Path, root: Path) -> bool:
+    try:
+        path.relative_to(root)
+    except ValueError:
+        return False
+    return True
 
 
 __all__ = [

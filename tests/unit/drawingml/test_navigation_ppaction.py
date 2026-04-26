@@ -6,6 +6,7 @@ from svg2ooxml.core.pipeline.navigation import (
     NavigationAction,
     NavigationKind,
     NavigationSpec,
+    SlideTarget,
 )
 from svg2ooxml.drawingml.navigation import register_navigation
 from svg2ooxml.drawingml.xml_builder import to_string
@@ -214,10 +215,99 @@ def test_external_hyperlink_uses_relationship_not_action():
     assert assets[0].action is None  # External links don't use action
 
 
+def test_external_hyperlink_trims_safe_target():
+    """External targets are normalized before they are written to relationships."""
+    spec = NavigationSpec(
+        kind=NavigationKind.EXTERNAL,
+        href=" https://example.com/docs ",
+    )
+
+    assets = []
+
+    result = register_navigation(
+        spec,
+        scope="shape",
+        text="External Link",
+        allocate_rel_id=lambda: "rId1",
+        add_asset=assets.append,
+    )
+    xml = _elem_to_xml(result)
+
+    assert "r:id=" in xml
+    assert len(assets) == 1
+    assert assets[0].target == "https://example.com/docs"
+
+
+def test_external_hyperlink_rejects_unsafe_targets():
+    """Unsafe external hyperlinks are dropped before XML or rels are emitted."""
+    unsafe_hrefs = [
+        "javascript:alert(1)",
+        " data:text/plain,hi",
+        "file:///etc/passwd",
+        "ftp://example.com/file",
+        "//example.com/path",
+        "\\\\server\\share",
+        "https://example.com/\nInjected",
+        "http://localhost:8000",
+        "http://127.0.0.2/status",
+        "http://0.0.0.0/status",
+        "http://[::1]/status",
+        "http://169.254.169.254/latest",
+        "http://metadata.google.internal/computeMetadata/v1/",
+    ]
+
+    for href in unsafe_hrefs:
+        assets = []
+        spec = NavigationSpec(kind=NavigationKind.EXTERNAL, href=href)
+
+        result = register_navigation(
+            spec,
+            scope="shape",
+            text="External Link",
+            allocate_rel_id=lambda: "rId1",
+            add_asset=assets.append,
+        )
+
+        assert result is None
+        assert assets == []
+
+
+def test_navigation_rejects_invalid_relationship_id():
+    """Invalid rel IDs must not be embedded in hlinkClick XML."""
+    assets = []
+    spec = NavigationSpec(kind=NavigationKind.EXTERNAL, href="https://example.com")
+
+    result = register_navigation(
+        spec,
+        scope="shape",
+        text="External Link",
+        allocate_rel_id=lambda: "bad id",
+        add_asset=assets.append,
+    )
+
+    assert result is None
+    assert assets == []
+
+
+def test_slide_navigation_rejects_zero_index():
+    """Slide relationships are one-based package references."""
+    assets = []
+    spec = NavigationSpec(kind=NavigationKind.SLIDE, slide=SlideTarget(index=0))
+
+    result = register_navigation(
+        spec,
+        scope="shape",
+        text="Go to Slide 0",
+        allocate_rel_id=lambda: "rId1",
+        add_asset=assets.append,
+    )
+
+    assert result is None
+    assert assets == []
+
+
 def test_slide_navigation_uses_relationship_not_action():
     """Verify slide navigation uses relationship IDs, not action attributes."""
-    from svg2ooxml.core.pipeline.navigation import SlideTarget
-
     spec = NavigationSpec(
         kind=NavigationKind.SLIDE,
         slide=SlideTarget(index=2),

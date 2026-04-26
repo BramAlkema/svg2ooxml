@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import argparse
 import json
 import os
 import platform
@@ -13,40 +12,16 @@ import time
 import uuid
 from pathlib import Path
 
-try:
-    import objc
-    import ScreenCaptureKit as SCK  # noqa: N817
-    from Foundation import NSObject
-
-    class _SCKStreamOutput(NSObject):
-        def init(self):
-            self = objc.super(_SCKStreamOutput, self).init()
-            if self is None:
-                return None
-            self.sample_buffer = None
-            self.error = None
-            return self
-
-        def stream_didOutputSampleBuffer_ofType_(
-            self, stream, sampleBuffer, outputType
-        ):
-            if outputType != SCK.SCStreamOutputTypeScreen:
-                return
-            if self.sample_buffer is None:
-                self.sample_buffer = sampleBuffer
-
-        def stream_didStopWithError_(self, stream, error):
-            self.error = error
-
-except Exception:
-    _SCKStreamOutput = None
-
-
+from tools.ppt_research.powerpoint_capture_backend import (  # noqa: E402
+    _capture_window_screen_capture_kit,
+)
+from tools.ppt_research.powerpoint_capture_scripts import (  # noqa: E402
+    _applescript_string,
+    _matching_presentation_script,
+    build_start_slideshow_script,
+)
 from tools.ppt_research.pptx_window import (  # noqa: E402
     get_front_window_id as _get_front_window_id,
-)
-from tools.ppt_research.pptx_window import (
-    get_png_type as _get_png_type,
 )
 from tools.ppt_research.pptx_window import (
     get_slideshow_window_id as _get_slideshow_window_id,
@@ -316,172 +291,6 @@ display dialog "PowerPoint visual capture may trigger macOS prompts for Automati
     _POWERPOINT_PERMISSION_NOTICE_SHOWN = True
 
 
-def _capture_window_screen_capture_kit(
-    window_id: int,
-    output_path: Path,
-    *,
-    timeout: float,
-) -> None:
-    try:
-        import CoreMedia
-        import Quartz
-        import ScreenCaptureKit as SCK  # noqa: N817
-        from AppKit import NSApplication
-        from Foundation import NSURL, NSDate, NSRunLoop
-    except Exception as exc:
-        raise RuntimeError("ScreenCaptureKit unavailable") from exc
-    if _SCKStreamOutput is None:
-        raise RuntimeError("ScreenCaptureKit unavailable")
-    try:
-        import CoreVideo
-    except Exception:
-        CoreVideo = None
-
-    run_loop = NSRunLoop.currentRunLoop()
-    NSApplication.sharedApplication()
-    try:
-        Quartz.CGMainDisplayID()
-    except Exception:
-        pass
-    content = None
-    content_error = None
-    content_done = False
-
-    def content_handler(new_content, error):
-        nonlocal content, content_error, content_done
-        content = new_content
-        content_error = error
-        content_done = True
-
-    SCK.SCShareableContent.getShareableContentExcludingDesktopWindows_onScreenWindowsOnly_completionHandler_(
-        True,
-        False,
-        content_handler,
-    )
-
-    deadline = time.time() + timeout
-    while time.time() < deadline and not content_done:
-        run_loop.runUntilDate_(NSDate.dateWithTimeIntervalSinceNow_(0.05))
-
-    if not content_done:
-        raise RuntimeError("Timed out waiting for shareable content")
-    if content_error is not None:
-        raise RuntimeError(f"ScreenCaptureKit content error: {content_error}")
-
-    def _value(obj, name):
-        value = getattr(obj, name)
-        return value() if callable(value) else value
-
-    target_window = None
-    for window in _value(content, "windows"):
-        try:
-            if int(_value(window, "windowID")) == window_id:
-                target_window = window
-                break
-        except Exception:
-            continue
-    if target_window is None:
-        raise RuntimeError(f"Window {window_id} not found in ScreenCaptureKit")
-
-    filter_obj = None
-    try:
-        filter_obj = SCK.SCContentFilter.alloc().initWithDesktopIndependentWindow_(
-            target_window
-        )
-    except Exception as exc:
-        raise RuntimeError("ScreenCaptureKit window capture not supported") from exc
-
-    def _set_config_attr(config_obj, name, value):
-        try:
-            setattr(config_obj, name, value)
-            return
-        except Exception:
-            setter_name = f"set{name[0].upper()}{name[1:]}_"
-            setter = getattr(config_obj, setter_name, None)
-            if setter is None:
-                raise
-            setter(value)
-
-    config = SCK.SCStreamConfiguration.alloc().init()
-    frame = _value(target_window, "frame")
-    scale = 1.0
-    try:
-        scale = float(_value(target_window, "scaleFactor"))
-    except Exception:
-        pass
-    _set_config_attr(config, "width", max(1, int(frame.size.width * scale)))
-    _set_config_attr(config, "height", max(1, int(frame.size.height * scale)))
-    _set_config_attr(config, "capturesAudio", False)
-    _set_config_attr(config, "showsCursor", False)
-    _set_config_attr(config, "queueDepth", 1)
-    pixel_format = 1111970369  # kCVPixelFormatType_32BGRA
-    if CoreVideo is not None:
-        try:
-            pixel_format = CoreVideo.kCVPixelFormatType_32BGRA
-        except Exception:
-            pass
-    _set_config_attr(config, "pixelFormat", pixel_format)
-
-    output = _SCKStreamOutput.alloc().init()
-    stream = SCK.SCStream.alloc().initWithFilter_configuration_delegate_(
-        filter_obj,
-        config,
-        None,
-    )
-    try:
-        stream.addStreamOutput_type_sampleHandlerQueue_(
-            output,
-            SCK.SCStreamOutputTypeScreen,
-            None,
-        )
-    except Exception:
-        stream.addStreamOutput_type_sampleHandlerQueue_error_(
-            output,
-            SCK.SCStreamOutputTypeScreen,
-            None,
-            None,
-        )
-
-    start_error = None
-
-    def start_handler(error):
-        nonlocal start_error
-        start_error = error
-
-    stream.startCaptureWithCompletionHandler_(start_handler)
-
-    deadline = time.time() + timeout
-    while (
-        time.time() < deadline and output.sample_buffer is None and output.error is None
-    ):
-        run_loop.runUntilDate_(NSDate.dateWithTimeIntervalSinceNow_(0.05))
-
-    stream.stopCaptureWithCompletionHandler_(lambda error: None)
-
-    if start_error is not None:
-        raise RuntimeError(f"ScreenCaptureKit start error: {start_error}")
-    if output.error is not None:
-        raise RuntimeError(f"ScreenCaptureKit stream error: {output.error}")
-    if output.sample_buffer is None:
-        raise RuntimeError("ScreenCaptureKit timed out waiting for frame")
-
-    image_buffer = CoreMedia.CMSampleBufferGetImageBuffer(output.sample_buffer)
-    ci_image = Quartz.CIImage.imageWithCVImageBuffer_(image_buffer)
-    context = Quartz.CIContext.contextWithOptions_(None)
-    cg_image = context.createCGImage_fromRect_(ci_image, ci_image.extent())
-    if cg_image is None:
-        raise RuntimeError("ScreenCaptureKit failed to create image")
-
-    output_url = NSURL.fileURLWithPath_(str(output_path))
-    png_type = _get_png_type()
-    destination = Quartz.CGImageDestinationCreateWithURL(output_url, png_type, 1, None)
-    if destination is None:
-        raise RuntimeError("ScreenCaptureKit failed to create image destination")
-    Quartz.CGImageDestinationAddImage(destination, cg_image, None)
-    if not Quartz.CGImageDestinationFinalize(destination):
-        raise RuntimeError("ScreenCaptureKit failed to write image")
-
-
 def _capture_window(
     output_path: Path,
     window_id: str | None,
@@ -543,56 +352,6 @@ end tell
         return int(_osascript(script))
     except Exception:
         return 0
-
-
-def _applescript_string(value: str) -> str:
-    return json.dumps(value)
-
-
-def _matching_presentation_script(pptx_path: Path) -> str:
-    target_posix = _applescript_string(str(pptx_path.resolve()))
-    target_name = _applescript_string(pptx_path.name)
-    return f"""
-set targetPosix to {target_posix}
-set targetName to {target_name}
-set targetHfs to ""
-try
-    set targetHfs to ((POSIX file targetPosix) as text)
-end try
-
-on presentationMatches(presRef, targetPosix, targetHfs, targetName)
-    -- Callers MUST use index-based iteration (repeat with i from 1 to count).
-    -- "repeat with presRef in presentations" + this nested tell causes infinite loops.
-    tell application "Microsoft PowerPoint"
-    try
-        set presFullName to (full name of presRef) as text
-        if presFullName is targetPosix then
-            return true
-        end if
-        if targetHfs is not "" and presFullName is targetHfs then
-            return true
-        end if
-    end try
-    try
-        set presPath to (path of presRef) as text
-        set presName to (name of presRef) as text
-        set combinedPath to presPath & presName
-        if combinedPath is targetPosix then
-            return true
-        end if
-        if targetHfs is not "" and combinedPath is targetHfs then
-            return true
-        end if
-    end try
-    try
-        if ((name of presRef) as text) is targetName then
-            return true
-        end if
-    end try
-    end tell
-    return false
-end presentationMatches
-"""
 
 
 def _has_matching_powerpoint_presentation(pptx_path: Path) -> bool:
@@ -802,7 +561,6 @@ def _start_slideshow(
     allow_reopen: bool,
 ) -> None:
     pptx_path = pptx_path.resolve()
-    selector_script = _matching_presentation_script(pptx_path)
     open_attempts = 2 if allow_reopen else 1
     did_open = False
     saw_window = False
@@ -828,193 +586,12 @@ def _start_slideshow(
         # The object-model slideshow path can start from the presentation ref
         # even when PowerPoint has not materialized an edit window yet.
         saw_window = _wait_for_powerpoint_window(min(open_timeout, 10.0))
-    script = selector_script + f"""
-on slideShowWindowCount()
-    tell application "Microsoft PowerPoint"
-        try
-            return count of slide show windows
-        on error
-            return 0
-        end try
-    end tell
-end slideShowWindowCount
-
-on findTargetPresentation(targetPosix, targetHfs, targetName)
-    tell application "Microsoft PowerPoint"
-        set presCount to count of presentations
-        repeat with i from 1 to presCount
-            set presRef to presentation i
-            if my presentationMatches(presRef, targetPosix, targetHfs, targetName) then
-                return presRef
-            end if
-        end repeat
-    end tell
-    return missing value
-end findTargetPresentation
-
-on focusTargetPresentationWindow(targetPosix, targetHfs, targetName)
-    set foundTarget to false
-    tell application "Microsoft PowerPoint"
-        activate
-        set presRef to my findTargetPresentation(targetPosix, targetHfs, targetName)
-        if presRef is missing value then
-            return false
-        end if
-        set foundTarget to true
-        try
-            if (count of document windows of presRef) > 0 then
-                set targetWindow to document window 1 of presRef
-                try
-                    set index of targetWindow to 1
-                end try
-            end if
-        end try
-    end tell
-    if not foundTarget then
-        return false
-    end if
-    try
-        tell application "System Events"
-            tell process "Microsoft PowerPoint"
-                set frontmost to true
-                repeat with uiWindow in windows
-                    try
-                        if (name of uiWindow) contains targetName then
-                            try
-                                perform action "AXRaise" of uiWindow
-                            end try
-                            try
-                                click uiWindow
-                            end try
-                            try
-                                set value of attribute "AXMain" of uiWindow to true
-                            end try
-                            try
-                                set value of attribute "AXFocused" of uiWindow to true
-                            end try
-                            exit repeat
-                        end if
-                    end try
-                end repeat
-            end tell
-        end tell
-    end try
-    return true
-end focusTargetPresentationWindow
-
-on tryObjectModelStart(targetPosix, targetHfs, targetName)
-    if not my focusTargetPresentationWindow(targetPosix, targetHfs, targetName) then
-        return false
-    end if
-    tell application "Microsoft PowerPoint"
-        if (count of presentations) is 0 then
-            return false
-        end if
-        try
-            set pres to my findTargetPresentation(targetPosix, targetHfs, targetName)
-            if pres is missing value then
-                return false
-            end if
-            set ss to slide show settings of pres
-            try
-                set show type of ss to slide show type window
-            end try
-            try
-                set show with presenter of ss to false
-            end try
-            try
-                set loop until stopped of ss to true
-            end try
-            run slide show ss
-            return true
-        on error
-            return false
-        end try
-    end tell
-end tryObjectModelStart
-
-on sendSlideshowKeys()
-    delay 0.2
-    try
-        tell application "System Events"
-            tell process "Microsoft PowerPoint"
-                set frontmost to true
-            end tell
-            keystroke return using {{command down, shift down}}
-        end tell
-    on error
-        return false
-    end try
-    return true
-end sendSlideshowKeys
-
-on tryDirectOpen(targetPosix)
-    tell application "Microsoft PowerPoint"
-        try
-            open (POSIX file targetPosix)
-            delay 1.0
-        end try
-    end tell
-end tryDirectOpen
-
-on tryMenuStart()
-    try
-        tell application "System Events"
-            tell process "Microsoft PowerPoint"
-                set frontmost to true
-                try
-                    click menu item "Play from Start" of menu 1 of menu bar item "Slide Show" of menu bar 1
-                    return true
-                end try
-                try
-                    click menu item "Play From Start" of menu 1 of menu bar item "Slide Show" of menu bar 1
-                    return true
-                end try
-                try
-                    click menu item "From Beginning" of menu 1 of menu bar item "Slide Show" of menu bar 1
-                    return true
-                end try
-            end tell
-        end tell
-    on error
-        return false
-    end try
-    return false
-end tryMenuStart
-
-set useKeys to {str(use_keys).lower()}
-delay {delay}
-repeat with attemptIndex from 1 to 8
-    if my findTargetPresentation(targetPosix, targetHfs, targetName) is missing value then
-        my tryDirectOpen(targetPosix)
-    end if
-    if my tryObjectModelStart(targetPosix, targetHfs, targetName) then
-        delay {slideshow_delay}
-        if my slideShowWindowCount() > 0 then
-            return "object-model"
-        end if
-    end if
-
-    if my tryMenuStart() then
-        delay {slideshow_delay}
-        if my slideShowWindowCount() > 0 then
-            return "menu"
-        end if
-    end if
-
-    if useKeys then
-        if my sendSlideshowKeys() then
-            delay {slideshow_delay}
-            if my slideShowWindowCount() > 0 then
-                return "keystroke"
-            end if
-        end if
-    end if
-    delay 0.35
-end repeat
-
-error "Unable to request slideshow start."
-"""
+    script = build_start_slideshow_script(
+        pptx_path,
+        delay=delay,
+        slideshow_delay=slideshow_delay,
+        use_keys=use_keys,
+    )
     timeout = max(60.0, open_timeout + 30.0)
     _osascript(script, timeout=timeout)
 
@@ -1310,131 +887,9 @@ def capture_live_animation(
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(
-        description="Capture PowerPoint window screenshot."
-    )
-    parser.add_argument("pptx", type=Path, help="Path to the PPTX file to open.")
-    parser.add_argument(
-        "output",
-        type=Path,
-        help="Output PNG path (window/slideshow) or output directory (slideshow-all/live).",
-    )
-    parser.add_argument(
-        "--mode",
-        choices=("window", "slideshow", "slideshow-all", "live"),
-        default="window",
-        help="Capture mode: live records a single slide's animation.",
-    )
-    parser.add_argument(
-        "--duration", type=float, default=5.0, help="Duration for live recording."
-    )
-    parser.add_argument(
-        "--fps", type=float, default=10.0, help="FPS for live recording."
-    )
-    parser.add_argument(
-        "--delay", type=float, default=1.5, help="Delay after opening (seconds)."
-    )
-    parser.add_argument(
-        "--slideshow-delay",
-        type=float,
-        default=1.0,
-        help="Delay after slideshow starts (seconds).",
-    )
-    parser.add_argument(
-        "--slide-delay",
-        type=float,
-        default=0.15,
-        help="Delay between slides (seconds) for slideshow-all.",
-    )
-    parser.add_argument(
-        "--backend",
-        choices=("auto", "screencapture", "sckit"),
-        default="auto",
-        help="Capture backend: auto uses ScreenCaptureKit when available.",
-    )
-    parser.add_argument(
-        "--capture-timeout",
-        type=float,
-        default=5.0,
-        help="Max seconds to wait for ScreenCaptureKit frame capture.",
-    )
-    parser.add_argument(
-        "--open-timeout",
-        type=float,
-        default=120.0,
-        help="Max seconds to wait for PowerPoint to open/repair the file.",
-    )
-    parser.add_argument(
-        "--no-reopen",
-        action="store_true",
-        help="Disable periodic reopen attempts while waiting for slides.",
-    )
-    parser.add_argument(
-        "--no-keys",
-        action="store_true",
-        help="Disable keystroke fallbacks; only click visible buttons.",
-    )
-    parser.add_argument(
-        "--keep-open",
-        action="store_true",
-        help="Leave the slideshow running after capture.",
-    )
-    args = parser.parse_args()
+    from tools.ppt_research.powerpoint_capture_cli import main as cli_main
 
-    try:
-        if args.mode == "live":
-            capture_live_animation(
-                args.pptx,
-                args.output,
-                args.duration,
-                fps=args.fps,
-                delay=args.delay,
-                slideshow_delay=args.slideshow_delay,
-                open_timeout=args.open_timeout,
-                capture_timeout=args.capture_timeout,
-                use_keys=not args.no_keys,
-                allow_reopen=not args.no_reopen,
-                backend=args.backend,
-            )
-        elif args.mode == "slideshow":
-            capture_pptx_slideshow(
-                args.pptx,
-                args.output,
-                args.delay,
-                args.slideshow_delay,
-                args.open_timeout,
-                args.capture_timeout,
-                exit_after=not args.keep_open,
-                use_keys=not args.no_keys,
-                allow_reopen=not args.no_reopen,
-                backend=args.backend,
-            )
-        elif args.mode == "slideshow-all":
-            capture_pptx_slideshow_all(
-                args.pptx,
-                args.output,
-                args.delay,
-                args.slideshow_delay,
-                args.slide_delay,
-                args.open_timeout,
-                args.capture_timeout,
-                exit_after=not args.keep_open,
-                use_keys=not args.no_keys,
-                allow_reopen=not args.no_reopen,
-                backend=args.backend,
-            )
-        else:
-            capture_pptx_window(
-                args.pptx,
-                args.output,
-                args.delay,
-                backend=args.backend,
-                capture_timeout=args.capture_timeout,
-            )
-    except Exception as exc:
-        print(f"PowerPoint capture failed: {exc}", file=sys.stderr)
-        return 1
-    return 0
+    return cli_main()
 
 
 if __name__ == "__main__":

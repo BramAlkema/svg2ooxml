@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import uuid
 from dataclasses import asdict
 from pathlib import Path
@@ -23,6 +24,19 @@ from svg2ooxml.io.pptx_assembly import (
 from svg2ooxml.ir.text import EmbeddedFontPlan
 
 ENV_BUNDLE_DIR = "SVG2OOXML_BUNDLE_DIR"
+_SAFE_JOB_ID_RE = re.compile(r"\A[A-Za-z0-9][A-Za-z0-9._-]*\Z")
+
+
+def _validate_job_id(job_id: str) -> str:
+    value = str(job_id or "").strip()
+    if not _SAFE_JOB_ID_RE.fullmatch(value):
+        raise ValueError(f"Unsafe batch job id: {job_id!r}")
+    return value
+
+
+def _safe_job_prefix(prefix: str) -> str:
+    cleaned = re.sub(r"[^A-Za-z0-9._-]+", "-", str(prefix or "job")).strip(".-_")
+    return cleaned or "job"
 
 
 def bundle_root(base_dir: Path | None = None) -> Path:
@@ -39,13 +53,54 @@ def bundle_root(base_dir: Path | None = None) -> Path:
 
 
 def job_dir(job_id: str, base_dir: Path | None = None) -> Path:
-    path = bundle_root(base_dir) / job_id
+    path = bundle_root(base_dir) / _validate_job_id(job_id)
     path.mkdir(parents=True, exist_ok=True)
     return path
 
 
 def new_job_id(prefix: str = "job") -> str:
-    return f"{prefix}-{uuid.uuid4().hex}"
+    return f"{_safe_job_prefix(prefix)}-{uuid.uuid4().hex}"
+
+
+def _resolve_bundle_asset_path(
+    bundle_dir: Path,
+    path_value: object,
+    *,
+    required_prefix: Path | None = None,
+) -> Path:
+    if not isinstance(path_value, str) or not path_value:
+        raise ValueError("Bundle asset path must be a non-empty relative string.")
+
+    relative_path = Path(path_value)
+    if relative_path.is_absolute():
+        raise ValueError(f"Bundle asset path must be relative: {path_value!r}")
+
+    bundle_root_path = bundle_dir.resolve(strict=False)
+    candidate = (bundle_dir / relative_path).resolve(strict=False)
+    try:
+        candidate.relative_to(bundle_root_path)
+    except ValueError as exc:
+        raise ValueError(f"Bundle asset path escapes bundle directory: {path_value!r}") from exc
+
+    if required_prefix is not None:
+        prefix = (bundle_dir / required_prefix).resolve(strict=False)
+        try:
+            candidate.relative_to(prefix)
+        except ValueError as exc:
+            raise ValueError(
+                f"Bundle asset path is outside {required_prefix.as_posix()}: {path_value!r}"
+            ) from exc
+
+    return candidate
+
+
+def _coerce_slide_size(value: object) -> tuple[int, int]:
+    if not isinstance(value, (list, tuple)) or len(value) < 2:
+        return (0, 0)
+    try:
+        return (max(0, int(value[0])), max(0, int(value[1])))
+    except (TypeError, ValueError):
+        return (0, 0)
 
 
 def write_slide_bundle(
@@ -71,7 +126,7 @@ def write_slide_bundle(
 
     media_entries: list[dict[str, Any]] = []
     for index, asset in enumerate(result.assets.iter_media(), start=1):
-        suffix = Path(asset.filename).suffix or _suffix_for_content_type(asset.content_type)
+        suffix = _suffix_for_content_type(asset.content_type)
         stored_name = f"media_{index}{suffix}"
         data_path = media_dir / stored_name
         data_path.write_bytes(asset.data)
@@ -147,18 +202,28 @@ def read_slide_bundle(bundle_dir: Path) -> DrawingMLRenderResult:
     data = json.loads(metadata_path.read_text(encoding="utf-8"))
 
     slide_xml = (bundle_dir / "slide.xml").read_text(encoding="utf-8")
-    slide_size_raw = data.get("slide_size") or [0, 0]
-    slide_size = (int(slide_size_raw[0]), int(slide_size_raw[1]))
-    shape_xml = tuple(str(fragment) for fragment in data.get("shape_xml", []))
+    slide_size = _coerce_slide_size(data.get("slide_size"))
+    shape_xml_raw = data.get("shape_xml") or []
+    shape_xml = (
+        tuple(str(fragment) for fragment in shape_xml_raw)
+        if isinstance(shape_xml_raw, (list, tuple))
+        else ()
+    )
 
     media_assets: list[MediaAsset] = []
     for entry in data.get("media", []):
-        data_path = bundle_dir / entry["data_path"]
+        if not isinstance(entry, dict):
+            continue
+        data_path = _resolve_bundle_asset_path(
+            bundle_dir,
+            entry.get("data_path"),
+            required_prefix=Path("assets") / "media",
+        )
         media_assets.append(
             MediaAsset(
-                relationship_id=entry["relationship_id"],
+                relationship_id=str(entry.get("relationship_id") or ""),
                 filename=entry.get("filename") or "",
-                content_type=entry["content_type"],
+                content_type=str(entry.get("content_type") or "application/octet-stream"),
                 data=data_path.read_bytes(),
                 width_emu=entry.get("width_emu"),
                 height_emu=entry.get("height_emu"),
@@ -168,30 +233,50 @@ def read_slide_bundle(bundle_dir: Path) -> DrawingMLRenderResult:
 
     font_assets: list[FontAsset] = []
     for entry in data.get("fonts", []):
-        plan_dict = entry["plan"]
+        if not isinstance(entry, dict):
+            continue
+        plan_dict = entry.get("plan") if isinstance(entry.get("plan"), dict) else {}
         metadata = _decode_json(plan_dict.get("metadata") or {}, bundle_dir)
         plan = EmbeddedFontPlan(
-            font_family=plan_dict["font_family"],
-            requires_embedding=bool(plan_dict["requires_embedding"]),
-            subset_strategy=plan_dict["subset_strategy"],
+            font_family=str(plan_dict.get("font_family") or ""),
+            requires_embedding=bool(plan_dict.get("requires_embedding")),
+            subset_strategy=str(plan_dict.get("subset_strategy") or ""),
             glyph_count=int(plan_dict.get("glyph_count") or 0),
             relationship_hint=plan_dict.get("relationship_hint"),
             metadata=metadata,
         )
         font_assets.append(FontAsset(shape_id=int(entry["shape_id"]), plan=plan))
 
-    navigation_assets = [
-        NavigationAsset(**entry) for entry in data.get("navigation", [])
-    ]
+    navigation_fields = NavigationAsset.__dataclass_fields__
+    navigation_assets = []
+    for entry in data.get("navigation", []):
+        if isinstance(entry, dict):
+            payload = {
+                "relationship_id": None,
+                "relationship_type": None,
+                "target": None,
+            }
+            payload.update(
+                {key: value for key, value in entry.items() if key in navigation_fields}
+            )
+            navigation_assets.append(
+                NavigationAsset(**payload)
+            )
 
     mask_entries: list[dict[str, object]] = []
     for entry in data.get("masks", []):
-        data_path = bundle_dir / entry["data_path"]
+        if not isinstance(entry, dict):
+            continue
+        data_path = _resolve_bundle_asset_path(
+            bundle_dir,
+            entry.get("data_path"),
+            required_prefix=Path("assets") / "masks",
+        )
         mask_entries.append(
             {
-                "relationship_id": entry["relationship_id"],
-                "part_name": entry["part_name"],
-                "content_type": entry["content_type"],
+                "relationship_id": str(entry.get("relationship_id") or ""),
+                "part_name": str(entry.get("part_name") or ""),
+                "content_type": str(entry.get("content_type") or "application/octet-stream"),
                 "data": data_path.read_bytes(),
             }
         )
@@ -256,8 +341,12 @@ def _encode_json(value: Any, assets_dir: Path, prefix: str) -> Any:
 
 def _decode_json(value: Any, bundle_dir: Path) -> Any:
     if isinstance(value, dict) and "__bytes__" in value:
-        rel = Path(value["__bytes__"])
-        return (bundle_dir / rel).read_bytes()
+        path = _resolve_bundle_asset_path(
+            bundle_dir,
+            value["__bytes__"],
+            required_prefix=Path("assets") / "fonts",
+        )
+        return path.read_bytes()
     if isinstance(value, list):
         return [_decode_json(item, bundle_dir) for item in value]
     if isinstance(value, dict):

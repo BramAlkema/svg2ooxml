@@ -370,6 +370,10 @@ def _flatten_quadratic(p0: Point, p1: Point, p2: Point, tolerance: float) -> lis
 
 def _arc_to_cubic_segments(current: Point, arc: tuple[float, float, float, bool, bool, float, float]) -> list[tuple[Point, Point, Point, Point]]:
     rx, ry, rotation, large, sweep, x, y = arc
+    rx = abs(rx)
+    ry = abs(ry)
+    if current == (x, y):
+        return []
     if rx == 0 or ry == 0:
         return [(current, current, (x, y), (x, y))]
     rotation = math.radians(rotation % 360.0)
@@ -379,11 +383,21 @@ def _arc_to_cubic_segments(current: Point, arc: tuple[float, float, float, bool,
     dy2 = (current[1] - y) / 2.0
     x1p = cos_rot * dx2 + sin_rot * dy2
     y1p = -sin_rot * dx2 + cos_rot * dy2
+
+    radius_scale = (x1p * x1p) / (rx * rx) + (y1p * y1p) / (ry * ry)
+    if radius_scale > 1.0:
+        scale = math.sqrt(radius_scale)
+        rx *= scale
+        ry *= scale
+
     rx_sq = rx * rx
     ry_sq = ry * ry
     x1p_sq = x1p * x1p
     y1p_sq = y1p * y1p
-    radicant = max(0.0, (rx_sq * ry_sq - rx_sq * y1p_sq - ry_sq * x1p_sq) / (rx_sq * y1p_sq + ry_sq * x1p_sq))
+    denominator = rx_sq * y1p_sq + ry_sq * x1p_sq
+    if denominator == 0:
+        return [(current, current, (x, y), (x, y))]
+    radicant = max(0.0, (rx_sq * ry_sq - rx_sq * y1p_sq - ry_sq * x1p_sq) / denominator)
     coef = math.sqrt(radicant) * (1 if large != sweep else -1)
     cxp = coef * ((rx * y1p) / ry)
     cyp = coef * (-(ry * x1p) / rx)
@@ -411,18 +425,18 @@ def _arc_to_cubic_segments(current: Point, arc: tuple[float, float, float, bool,
         cos_end = math.cos(end)
 
         p0 = (
-            cx + rx * (cos_rot * cos_start - sin_rot * sin_start),
-            cy + ry * (sin_rot * cos_start + cos_rot * sin_start),
+            cx + rx * cos_rot * cos_start - ry * sin_rot * sin_start,
+            cy + rx * sin_rot * cos_start + ry * cos_rot * sin_start,
         )
         p3 = (
-            cx + rx * (cos_rot * cos_end - sin_rot * sin_end),
-            cy + ry * (sin_rot * cos_end + cos_rot * sin_end),
+            cx + rx * cos_rot * cos_end - ry * sin_rot * sin_end,
+            cy + rx * sin_rot * cos_end + ry * cos_rot * sin_end,
         )
-        dx = -rx * (cos_rot * sin_start + sin_rot * cos_start)
-        dy = -ry * (sin_rot * sin_start - cos_rot * cos_start)
+        dx = -rx * cos_rot * sin_start - ry * sin_rot * cos_start
+        dy = -rx * sin_rot * sin_start + ry * cos_rot * cos_start
         p1 = (p0[0] + dx * t, p0[1] + dy * t)
-        dx = -rx * (cos_rot * sin_end + sin_rot * cos_end)
-        dy = -ry * (sin_rot * sin_end - cos_rot * cos_end)
+        dx = -rx * cos_rot * sin_end - ry * sin_rot * cos_end
+        dy = -rx * sin_rot * sin_end + ry * cos_rot * cos_end
         p2 = (p3[0] - dx * t, p3[1] - dy * t)
         result.append((p0, p1, p2, p3))
         angle = end

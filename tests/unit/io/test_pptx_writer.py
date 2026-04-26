@@ -18,8 +18,16 @@ from svg2ooxml.core.pipeline.navigation import (
     NavigationSpec,
     SlideTarget,
 )
-from svg2ooxml.io.pptx_assembly import PPTXPackageBuilder
-from svg2ooxml.io.pptx_writer import StreamingPackageWriter
+from svg2ooxml.drawingml.assets import FontAsset, MediaAsset, NavigationAsset
+from svg2ooxml.drawingml.navigation import REL_TYPE_HYPERLINK, REL_TYPE_SLIDE
+from svg2ooxml.io.pptx_assembly import (
+    MaskAsset,
+    PackagedMedia,
+    PackagingContext,
+    PPTXPackageBuilder,
+    SlideAssembly,
+)
+from svg2ooxml.io.pptx_writer import PackageWriter, StreamingPackageWriter
 from svg2ooxml.ir.effects import CustomEffect
 from svg2ooxml.ir.geometry import Point, Rect
 from svg2ooxml.ir.paint import PatternPaint, SolidPaint
@@ -286,6 +294,326 @@ def _render_simple_scene(builder: PPTXPackageBuilder, width: int = 160, height: 
         height_px=height,
     )
     return builder._writer.render_scene_from_ir(scene)
+
+
+def test_packaged_media_sanitizes_filename_and_relationship_target() -> None:
+    media = PackagedMedia(
+        relationship_id="rIdMedia1",
+        filename="../nested/evil file?.txt",
+        content_type="image/png",
+        data=b"png",
+    )
+
+    assert media.filename == "evil_file.png"
+    assert media.package_path.as_posix() == "ppt/media/evil_file.png"
+    assert media.relationship_target == "../media/evil_file.png"
+
+
+def test_mask_asset_sanitizes_part_name_to_masks_directory() -> None:
+    mask = MaskAsset(
+        relationship_id="rIdMask1",
+        part_name="/../../mask asset?.bin",
+        content_type="image/png",
+        data=b"mask",
+    )
+
+    assert mask.part_name == "/ppt/masks/mask_asset.png"
+    assert mask.package_path.as_posix() == "ppt/masks/mask_asset.png"
+    assert mask.relationship_target == "../masks/mask_asset.png"
+
+
+def test_packaging_context_sanitizes_media_asset_filename() -> None:
+    context = PackagingContext()
+    filename = context.assign_media_filename(
+        MediaAsset(
+            relationship_id="rIdMedia1",
+            filename="../bad name?.txt",
+            content_type="image/png",
+            data=b"payload",
+        ),
+        slide_index=1,
+    )
+
+    assert filename == "bad_name.png"
+
+
+def test_package_writer_never_emits_unsafe_media_or_mask_paths() -> None:
+    builder = PPTXPackageBuilder()
+    rendered = _render_simple_scene(builder)
+    media = PackagedMedia(
+        relationship_id="rIdUnsafeMedia",
+        filename="../outside?.txt",
+        content_type="image/png",
+        data=b"png",
+    )
+    mask = MaskAsset(
+        relationship_id="rIdUnsafeMask",
+        part_name="../../outside-mask?.bin",
+        content_type="image/png",
+        data=b"mask",
+    )
+    slide = SlideAssembly(
+        index=1,
+        filename="slide1.xml",
+        rel_id="rId2",
+        slide_id=256,
+        slide_xml=rendered.slide_xml,
+        slide_size=rendered.slide_size,
+        media=[media],
+        masks=[mask],
+    )
+    writer = PackageWriter(
+        base_template=builder._base_template,
+        content_types_template=builder._content_types_template,
+        slide_rels_template=builder._slide_rels_template,
+    )
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        output = Path(tmpdir) / "unsafe_paths.pptx"
+        writer.write_package([slide], output)
+
+        with zipfile.ZipFile(output, "r") as archive:
+            names = set(archive.namelist())
+            assert all(".." not in name.split("/") for name in names)
+            assert "ppt/media/outside.png" in names
+            assert "ppt/masks/outside-mask.png" in names
+
+            rels_xml = archive.read("ppt/slides/_rels/slide1.xml.rels").decode("utf-8")
+            assert 'Target="../media/outside.png"' in rels_xml
+            assert 'Target="../masks/outside-mask.png"' in rels_xml
+
+            content_types = archive.read("[Content_Types].xml").decode("utf-8")
+            assert 'PartName="/ppt/masks/outside-mask.png"' in content_types
+            assert 'ContentType="image/png"' in content_types
+
+
+def test_package_writer_filters_unsafe_navigation_relationships() -> None:
+    builder = PPTXPackageBuilder()
+    rendered = _render_simple_scene(builder)
+    slide = SlideAssembly(
+        index=1,
+        filename="slide1.xml",
+        rel_id="rId2",
+        slide_id=256,
+        slide_xml=rendered.slide_xml,
+        slide_size=rendered.slide_size,
+        media=[],
+        navigation=[
+            NavigationAsset(
+                relationship_id="rIdNavGood",
+                relationship_type=REL_TYPE_HYPERLINK,
+                target=" https://example.com/docs ",
+                target_mode="External",
+            ),
+            NavigationAsset(
+                relationship_id="bad id",
+                relationship_type=REL_TYPE_HYPERLINK,
+                target="https://example.com/bad-id",
+                target_mode="External",
+            ),
+            NavigationAsset(
+                relationship_id="rIdNavScript",
+                relationship_type=REL_TYPE_HYPERLINK,
+                target="javascript:alert(1)",
+                target_mode="External",
+            ),
+            NavigationAsset(
+                relationship_id="rIdNavMode",
+                relationship_type=REL_TYPE_HYPERLINK,
+                target="https://example.com/mode",
+            ),
+            NavigationAsset(
+                relationship_id="rIdNavType",
+                relationship_type="http://example.com/relationships/evil",
+                target="https://example.com/evil",
+                target_mode="External",
+            ),
+            NavigationAsset(
+                relationship_id="rIdNavSlide0",
+                relationship_type=REL_TYPE_SLIDE,
+                target="../slides/slide0.xml",
+            ),
+            NavigationAsset(
+                relationship_id="rIdNavSlideMode",
+                relationship_type=REL_TYPE_SLIDE,
+                target="../slides/slide3.xml",
+                target_mode="External",
+            ),
+            NavigationAsset(
+                relationship_id="rIdNavSlide",
+                relationship_type=REL_TYPE_SLIDE,
+                target="../slides/slide2.xml",
+            ),
+        ],
+    )
+    writer = PackageWriter(
+        base_template=builder._base_template,
+        content_types_template=builder._content_types_template,
+        slide_rels_template=builder._slide_rels_template,
+    )
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        output = Path(tmpdir) / "unsafe_navigation.pptx"
+        writer.write_package([slide], output)
+
+        with zipfile.ZipFile(output, "r") as archive:
+            rels_xml = archive.read("ppt/slides/_rels/slide1.xml.rels").decode("utf-8")
+
+    assert 'Id="rIdNavGood"' in rels_xml
+    assert 'Target="https://example.com/docs"' in rels_xml
+    assert 'Id="rIdNavSlide"' in rels_xml
+    assert 'Target="../slides/slide2.xml"' in rels_xml
+    assert "bad id" not in rels_xml
+    assert "javascript:" not in rels_xml
+    assert "relationships/evil" not in rels_xml
+    assert "slide0.xml" not in rels_xml
+    assert "slide3.xml" not in rels_xml
+
+
+def test_package_writer_sanitizes_direct_slide_package_metadata() -> None:
+    builder = PPTXPackageBuilder()
+    rendered = _render_simple_scene(builder)
+    slide = SlideAssembly(
+        index=1,
+        filename="../outside.pptx",
+        rel_id="bad id",
+        slide_id=1,
+        slide_xml=rendered.slide_xml,
+        slide_size=rendered.slide_size,
+        media=[],
+    )
+    writer = PackageWriter(
+        base_template=builder._base_template,
+        content_types_template=builder._content_types_template,
+        slide_rels_template=builder._slide_rels_template,
+    )
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        output = Path(tmpdir) / "safe_direct_slide.pptx"
+        writer.write_package([slide], output)
+
+        with zipfile.ZipFile(output, "r") as archive:
+            names = set(archive.namelist())
+            assert "ppt/slides/outside.xml" in names
+            assert "ppt/slides/_rels/outside.xml.rels" in names
+            assert all(".." not in name.split("/") for name in names)
+
+            rels_root = ET.fromstring(archive.read("ppt/_rels/presentation.xml.rels"))
+            slide_rels = [
+                rel
+                for rel in rels_root.findall(
+                    "{http://schemas.openxmlformats.org/package/2006/relationships}Relationship"
+                )
+                if rel.get("Type")
+                == "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide"
+            ]
+            assert len(slide_rels) == 1
+            assert slide_rels[0].get("Id") != "bad id"
+            assert slide_rels[0].get("Target") == "slides/outside.xml"
+
+            presentation_root = ET.fromstring(archive.read("ppt/presentation.xml"))
+            ns = {
+                "p": "http://schemas.openxmlformats.org/presentationml/2006/main",
+                "r": "http://schemas.openxmlformats.org/officeDocument/2006/relationships",
+            }
+            slide_ids = presentation_root.findall("p:sldIdLst/p:sldId", ns)
+            assert len(slide_ids) == 1
+            assert int(slide_ids[0].get("id")) >= 256
+            assert slide_ids[0].get(
+                "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id"
+            ) == slide_rels[0].get("Id")
+
+            content_types = archive.read("[Content_Types].xml").decode("utf-8")
+            assert 'PartName="/ppt/slides/outside.xml"' in content_types
+
+
+def test_package_writer_rekeys_font_relationships_away_from_slide_ids() -> None:
+    builder = PPTXPackageBuilder()
+    rendered = _render_simple_scene(builder)
+    slide = SlideAssembly(
+        index=1,
+        filename="slide1.xml",
+        rel_id="rId2",
+        slide_id=256,
+        slide_xml=rendered.slide_xml,
+        slide_size=rendered.slide_size,
+        media=[],
+        font_assets=[
+            FontAsset(
+                shape_id=1,
+                plan=EmbeddedFontPlan(
+                    font_family="InvalidHint",
+                    requires_embedding=True,
+                    subset_strategy="glyph",
+                    glyph_count=1,
+                    relationship_hint="bad id",
+                    metadata={
+                        "font_data": b"font-one",
+                        "font_style_kind": "regular",
+                    },
+                ),
+            ),
+            FontAsset(
+                shape_id=2,
+                plan=EmbeddedFontPlan(
+                    font_family="ConflictingHint",
+                    requires_embedding=True,
+                    subset_strategy="glyph",
+                    glyph_count=1,
+                    relationship_hint="rId2",
+                    metadata={
+                        "font_data": b"font-two",
+                        "font_style_kind": "regular",
+                    },
+                ),
+            ),
+        ],
+    )
+    writer = PackageWriter(
+        base_template=builder._base_template,
+        content_types_template=builder._content_types_template,
+        slide_rels_template=builder._slide_rels_template,
+    )
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        output = Path(tmpdir) / "safe_font_rels.pptx"
+        writer.write_package([slide], output)
+
+        with zipfile.ZipFile(output, "r") as archive:
+            rels_root = ET.fromstring(archive.read("ppt/_rels/presentation.xml.rels"))
+            rels = rels_root.findall(
+                "{http://schemas.openxmlformats.org/package/2006/relationships}Relationship"
+            )
+            font_rels = [
+                rel
+                for rel in rels
+                if rel.get("Type")
+                == "http://schemas.openxmlformats.org/officeDocument/2006/relationships/font"
+            ]
+            slide_rels = [
+                rel
+                for rel in rels
+                if rel.get("Type")
+                == "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide"
+            ]
+            presentation_root = ET.fromstring(archive.read("ppt/presentation.xml"))
+
+    assert len(font_rels) == 2
+    assert len(slide_rels) == 1
+    assert slide_rels[0].get("Id") == "rId2"
+    font_rel_ids = {rel.get("Id") for rel in font_rels}
+    assert "bad id" not in font_rel_ids
+    assert "rId2" not in font_rel_ids
+
+    ns = {
+        "p": "http://schemas.openxmlformats.org/presentationml/2006/main",
+        "r": "http://schemas.openxmlformats.org/officeDocument/2006/relationships",
+    }
+    embedded_ids = {
+        elem.get("{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id")
+        for elem in presentation_root.findall(".//p:embeddedFont/p:regular", ns)
+    }
+    assert embedded_ids == font_rel_ids
 
 
 def test_streaming_single_slide() -> None:

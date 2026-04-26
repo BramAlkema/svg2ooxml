@@ -906,6 +906,78 @@ def test_leaf_group_with_filter_fallback_renders_single_picture() -> None:
     assert 'r:embed="rIdFilterBlur"' in result.slide_xml
 
 
+def test_leaf_group_filter_fallback_without_relationship_id_avoids_slide_layout_rid() -> None:
+    writer = DrawingMLWriter()
+    group = Group(
+        children=[
+            Rectangle(bounds=Rect(0, 0, 20, 20), fill=SolidPaint("4472C4")),
+        ],
+        metadata={
+            "filters": [{"id": "blur", "fallback": "bitmap"}],
+            "filter_metadata": {
+                "blur": {"bounds": {"x": 0.0, "y": 0.0, "width": 20.0, "height": 20.0}}
+            },
+            "policy": {
+                "media": {
+                    "filter_assets": {
+                        "blur": [
+                            {
+                                "type": "raster",
+                                "data": b"\x89PNG\r\n\x1a\n",
+                            }
+                        ]
+                    }
+                }
+            },
+        },
+    )
+
+    result = writer.render_scene([group])
+
+    media = list(result.assets.media)
+    assert len(media) == 1
+    assert media[0].relationship_id.startswith("rIdFilterMedia")
+    assert media[0].relationship_id != "rId1"
+    assert 'r:embed="rId1"' not in result.slide_xml
+    assert f'r:embed="{media[0].relationship_id}"' in result.slide_xml
+
+
+def test_leaf_group_filter_fallback_rekeys_invalid_relationship_id() -> None:
+    writer = DrawingMLWriter()
+    group = Group(
+        children=[
+            Rectangle(bounds=Rect(0, 0, 20, 20), fill=SolidPaint("4472C4")),
+        ],
+        metadata={
+            "filters": [{"id": "blur", "fallback": "bitmap"}],
+            "filter_metadata": {
+                "blur": {"bounds": {"x": 0.0, "y": 0.0, "width": 20.0, "height": 20.0}}
+            },
+            "policy": {
+                "media": {
+                    "filter_assets": {
+                        "blur": [
+                            {
+                                "type": "raster",
+                                "data": b"\x89PNG\r\n\x1a\n",
+                                "relationship_id": 'bad id" inject="1',
+                            }
+                        ]
+                    }
+                }
+            },
+        },
+    )
+
+    result = writer.render_scene([group])
+
+    media = list(result.assets.media)
+    assert len(media) == 1
+    assert media[0].relationship_id.startswith("rIdFilterMedia")
+    assert 'bad id" inject="1' not in result.slide_xml
+    assert f'r:embed="{media[0].relationship_id}"' in result.slide_xml
+
+
 def test_shape_filter_fallback_uses_filter_expanded_bounds() -> None:
     writer = DrawingMLWriter()
     buffer = BytesIO()
@@ -970,6 +1042,58 @@ def test_writer_preserves_effect_dag_custom_effect() -> None:
 
     assert "<a:effectDag>" in result.slide_xml
     assert "<a:alphaModFix>" in result.slide_xml
+
+
+def test_writer_drops_custom_effect_with_non_drawingml_root() -> None:
+    writer = DrawingMLWriter()
+    rect = Rectangle(bounds=Rect(0, 0, 20, 20), fill=SolidPaint("FFFFFF"))
+    rect.effects.append(
+        CustomEffect(
+            drawingml=(
+                '<p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">'
+                '<p:nvSpPr><p:cNvPr id="99" name="Injected"/></p:nvSpPr>'
+                "</p:sp>"
+            )
+        )
+    )
+
+    result = writer.render_scene([rect])
+
+    ET.fromstring(result.slide_xml.encode("utf-8"))
+    assert "Injected" not in result.slide_xml
+
+
+def test_writer_drops_malformed_custom_effect_fragment() -> None:
+    writer = DrawingMLWriter()
+    rect = Rectangle(bounds=Rect(0, 0, 20, 20), fill=SolidPaint("FFFFFF"))
+    rect.effects.append(
+        CustomEffect(drawingml='<a:effectLst><a:blur rad="1000"></a:effectLst>')
+    )
+
+    result = writer.render_scene([rect])
+
+    ET.fromstring(result.slide_xml.encode("utf-8"))
+    assert 'rad="1000"' not in result.slide_xml
+
+
+def test_writer_drops_effect_dag_with_non_drawingml_child() -> None:
+    writer = DrawingMLWriter()
+    rect = Rectangle(bounds=Rect(0, 0, 20, 20), fill=SolidPaint("FFFFFF"))
+    rect.effects.append(
+        CustomEffect(
+            drawingml=(
+                "<a:effectDag><a:cont/><a:alphaModFix><a:cont/></a:alphaModFix>"
+                '<p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">'
+                '<p:cNvPr id="99" name="Injected"/></p:sp></a:effectDag>'
+            )
+        )
+    )
+
+    result = writer.render_scene([rect])
+
+    ET.fromstring(result.slide_xml.encode("utf-8"))
+    assert "Injected" not in result.slide_xml
+    assert "<a:effectDag>" not in result.slide_xml
 
 
 def test_render_linear_gradient_fill() -> None:

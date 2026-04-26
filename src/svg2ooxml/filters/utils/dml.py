@@ -7,6 +7,10 @@ from collections.abc import Iterable, Mapping
 # Import centralized XML builders for safe DrawingML generation
 from lxml import etree
 
+from svg2ooxml.drawingml.effect_fragments import (
+    extract_safe_effect_children,
+    sanitize_custom_effect_fragment,
+)
 from svg2ooxml.drawingml.xml_builder import NS_A, a_elem, graft_xml_fragment, to_string
 
 
@@ -63,24 +67,15 @@ def extract_effect_children(fragment: str) -> str:
     text = fragment.strip()
     if not text:
         return ""
+    safe_children = extract_safe_effect_children(text)
+    if safe_children:
+        return safe_children
+    if is_effect_container(text):
+        return ""
     try:
         return _flatten_effect_children(text)
     except Exception:
-        # Fallback to the original string parsing logic if XML parsing fails.
-        if not is_effect_container(text):
-            return text
-        if text.endswith("/>"):
-            return ""
-        start = text.find(">")
-        if is_effect_list(text):
-            end = text.rfind("</a:effectLst>")
-            if start == -1 or end == -1 or end <= start:
-                return text
-            return text[start + 1 : end]
-        end = text.rfind("</a:effectDag>")
-        if start == -1 or end == -1 or end <= start:
-            return text
-        return text[start + 1 : end]
+        return sanitize_custom_effect_fragment(text)
 
 
 def _flatten_effect_children(fragment: str) -> str:
@@ -125,9 +120,16 @@ def merge_effect_fragments(
     for fragment in fragments:
         if not fragment:
             continue
-        if target_container != "effectDag" and is_effect_dag(fragment):
+        safe_fragment = sanitize_custom_effect_fragment(fragment)
+        if not safe_fragment:
+            continue
+        if target_container != "effectDag" and is_effect_dag(safe_fragment):
             target_container = "effectDag"
-        inner = extract_effect_children(fragment) if is_effect_container(fragment) else fragment
+        inner = (
+            extract_effect_children(safe_fragment)
+            if is_effect_container(safe_fragment)
+            else safe_fragment
+        )
         if inner:
             children.append(inner)
     if not children:

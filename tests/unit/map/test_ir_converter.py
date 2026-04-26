@@ -616,6 +616,29 @@ def test_image_geometry_resolves_svg_length_units() -> None:
     assert image.size.height == pytest.approx(50.0)
 
 
+def test_image_source_path_fallback_respects_registered_asset_root(tmp_path) -> None:
+    asset_root = tmp_path / "assets"
+    asset_root.mkdir()
+    source_path = asset_root / "scene.svg"
+    outside_path = tmp_path / "outside.png"
+    outside_path.write_bytes(b"png")
+    parse_result = _build_parse_result(
+        "<svg width='20' height='20' xmlns='http://www.w3.org/2000/svg'>"
+        f"<image href='{outside_path}' width='10' height='10'/>"
+        "</svg>"
+    )
+    parse_result.metadata["source_path"] = str(source_path)
+    parse_result.services.register("source_path", str(source_path))
+    parse_result.services.register("asset_root", str(asset_root))
+
+    scene = convert_parser_output(parse_result)
+
+    assert len(scene.elements) == 1
+    image = scene.elements[0]
+    assert isinstance(image, Image)
+    assert image.data is None
+
+
 def test_use_symbol_applies_viewbox_scaling() -> None:
     parse_result = _build_parse_result(
         "<svg width='200' height='200' xmlns='http://www.w3.org/2000/svg'>"

@@ -9,6 +9,7 @@ from typing import Any
 import numpy as np
 from lxml import etree
 
+from svg2ooxml.common.conversions.transforms import parse_numeric_list
 from svg2ooxml.common.geometry import Matrix2D, parse_transform_list
 from svg2ooxml.common.geometry.paths import PathParseError, parse_path_data
 from svg2ooxml.common.units import UnitConverter
@@ -206,12 +207,8 @@ def _to_px(
 
 
 def _parse_viewbox(value: str) -> tuple[float, float, float, float] | None:
-    parts = value.replace(",", " ").split()
-    if len(parts) != 4:
-        return None
-    try:
-        numbers = [float(part) for part in parts]
-    except ValueError:
+    numbers = parse_numeric_list(value)
+    if len(numbers) != 4:
         return None
     return numbers[0], numbers[1], numbers[2], numbers[3]
 
@@ -246,6 +243,7 @@ def _compute_style(element: etree._Element, inherited: Mapping[str, str]) -> dic
         "opacity",
         "fill-opacity",
         "stroke-opacity",
+        "color",
         "stroke-width",
         "stroke-linecap",
         "stroke-linejoin",
@@ -303,9 +301,19 @@ def _rect_geometry(
     y = _to_px(element.get("y"), converter, context, axis="y")
     width = _to_px(element.get("width"), converter, context, axis="x")
     height = _to_px(element.get("height"), converter, context, axis="y")
-    rx = _to_px(element.get("rx"), converter, context, axis="x") or _to_px(
-        element.get("ry"), converter, context, axis="y"
-    )
+    rx_attr = element.get("rx")
+    ry_attr = element.get("ry")
+    if rx_attr is None and ry_attr is None:
+        rx = 0.0
+    elif rx_attr is None:
+        rx = _to_px(ry_attr, converter, context, axis="y")
+    elif ry_attr is None:
+        rx = _to_px(rx_attr, converter, context, axis="x")
+    else:
+        rx = min(
+            _to_px(rx_attr, converter, context, axis="x"),
+            _to_px(ry_attr, converter, context, axis="y"),
+        )
     if width <= 0 or height <= 0:
         return None
     from svg2ooxml.ir.geometry import Rect
@@ -356,14 +364,11 @@ def _poly_geometry(element: etree._Element, *, closed: bool) -> dict[str, Any] |
     points_attr = element.get("points")
     if not points_attr:
         return None
-    coords: list[float] = []
-    for part in points_attr.replace(",", " ").split():
-        try:
-            coords.append(float(part))
-        except ValueError:
-            continue
+    coords = parse_numeric_list(points_attr)
     if len(coords) < 4:
         return None
+    if len(coords) % 2:
+        coords = coords[:-1]
     pts = [(coords[i], coords[i + 1]) for i in range(0, len(coords), 2)]
     return {"type": "polyline", "points": pts, "closed": closed}
 

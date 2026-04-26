@@ -236,9 +236,15 @@ def _color_to_solid(color: Color, opacity: float | None) -> SolidPaint | None:
     hex_value = _color_to_hex(color)
     if hex_value is None:
         return None
-    
+
     alpha = _coerce_float(getattr(color, "a", None), 1.0)
-    effective_opacity = alpha if opacity is None else opacity
+    if opacity is None:
+        effective_opacity = alpha
+    else:
+        # The resvg parser stores effective element/fill opacity on color.a.
+        # Use the smaller value so CSS color alpha is not lost when FillStyle
+        # also carries the paint-level opacity.
+        effective_opacity = min(alpha, _coerce_float(opacity, 1.0))
     return SolidPaint(rgb=hex_value, opacity=_clamp01(effective_opacity))
 
 
@@ -260,9 +266,14 @@ def _color_to_hex(color: Color) -> str | None:
     except (TypeError, ValueError, AttributeError):
         return None
     try:
-        return f"{int(r * 255):02X}{int(g * 255):02X}{int(b * 255):02X}"
+        return f"{_channel_to_hex(r)}{_channel_to_hex(g)}{_channel_to_hex(b)}"
     except (TypeError, ValueError):
         return None
+
+
+def _channel_to_hex(value: float) -> str:
+    channel = value / 255.0 if value > 1.0 else value
+    return f"{int(round(_clamp01(channel) * 255)):02X}"
 
 
 def _coerce_float(value: float | None, default: float) -> float:

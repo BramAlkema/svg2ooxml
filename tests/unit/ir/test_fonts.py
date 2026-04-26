@@ -17,6 +17,11 @@ class TestFontFaceSrc:
         src = FontFaceSrc(url="https://example.com/font.woff2")
         assert src.is_data_uri is False
 
+    def test_is_data_uri_case_insensitive(self):
+        """Detect data URI regardless of case."""
+        src = FontFaceSrc(url="DATA:font/woff2;base64,d09GMgABA...")
+        assert src.is_data_uri is True
+
     def test_is_remote_https(self):
         """Detect HTTPS remote URL."""
         src = FontFaceSrc(url="https://fonts.gstatic.com/font.woff2")
@@ -25,6 +30,11 @@ class TestFontFaceSrc:
     def test_is_remote_http(self):
         """Detect HTTP remote URL."""
         src = FontFaceSrc(url="http://example.com/font.woff")
+        assert src.is_remote is True
+
+    def test_is_remote_case_insensitive(self):
+        """Detect mixed-case HTTP(S) URLs."""
+        src = FontFaceSrc(url="HTTPS://example.com/font.woff")
         assert src.is_remote is True
 
     def test_is_remote_false(self):

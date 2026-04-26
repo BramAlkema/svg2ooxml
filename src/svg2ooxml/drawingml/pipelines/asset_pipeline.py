@@ -8,21 +8,23 @@ from __future__ import annotations
 
 import hashlib
 import logging
+from collections.abc import Callable
 from io import BytesIO
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING, Any
 
+from svg2ooxml.common.ooxml_relationships import is_safe_relationship_id
+from svg2ooxml.drawingml.filter_fallback import resolve_filter_fallback_bounds
+from svg2ooxml.drawingml.generator import px_to_emu
 from svg2ooxml.io.emf import EMFRelationshipManager
 from svg2ooxml.ir.scene import Image
 
-from ..filter_fallback import resolve_filter_fallback_bounds
-from ..generator import px_to_emu
-
 if TYPE_CHECKING:
+    from svg2ooxml.drawingml.assets import AssetRegistry
     from svg2ooxml.ir.scene import Group
 
-    from ..assets import AssetRegistry
-
 logger = logging.getLogger(__name__)
+
+_RESERVED_SLIDE_RELATIONSHIP_IDS = {"rId1"}
 
 __all__ = ["AssetPipeline"]
 
@@ -94,6 +96,11 @@ class AssetPipeline:
         height_emu = None
         if isinstance(emf_meta, dict):
             preferred_id = emf_meta.get("relationship_id")
+            if not is_safe_relationship_id(
+                preferred_id,
+                reserved_ids=_RESERVED_SLIDE_RELATIONSHIP_IDS,
+            ):
+                preferred_id = None
             width_emu = _maybe_int(emf_meta.get("width_emu"))
             height_emu = _maybe_int(emf_meta.get("height_emu"))
         entry, is_new = self._emf_manager.register(
@@ -231,7 +238,10 @@ class AssetPipeline:
 
     def _register_filter_emf(self, asset: dict[str, object], binary: bytes) -> None:
         preferred_id = asset.get("relationship_id")
-        if not isinstance(preferred_id, str) or not preferred_id:
+        if not is_safe_relationship_id(
+            preferred_id,
+            reserved_ids=_RESERVED_SLIDE_RELATIONSHIP_IDS,
+        ):
             preferred_id = None
         width_emu = _maybe_int(asset.get("width_emu"))
         height_emu = _maybe_int(asset.get("height_emu"))
@@ -241,14 +251,12 @@ class AssetPipeline:
             width_emu=width_emu,
             height_emu=height_emu,
         )
-        if preferred_id is None:
-            asset["relationship_id"] = entry.relationship_id
-            preferred_id = entry.relationship_id
+        asset["relationship_id"] = entry.relationship_id
         if entry.width_emu is not None:
             asset["width_emu"] = entry.width_emu
         if entry.height_emu is not None:
             asset["height_emu"] = entry.height_emu
-        rel_id = preferred_id or entry.relationship_id
+        rel_id = entry.relationship_id
         if rel_id in self._seen_filter_relationships:
             return
         self._assets.add_media(
@@ -276,9 +284,13 @@ class AssetPipeline:
         ext = "png"
         content_type = "image/png"
         rel_id = asset.get("relationship_id")
-        if not isinstance(rel_id, str) or not rel_id:
-            rel_id = f"rId{self._next_media_index}"
+        if not is_safe_relationship_id(
+            rel_id,
+            reserved_ids=_RESERVED_SLIDE_RELATIONSHIP_IDS,
+        ):
+            rel_id = self._allocate_filter_media_rel_id()
             asset["relationship_id"] = rel_id
+        assert isinstance(rel_id, str)
         if rel_id in self._seen_filter_relationships:
             return
         if _should_flatten_filter_png(asset):
@@ -366,7 +378,10 @@ class AssetPipeline:
                     for item in assets
                     if isinstance(item, dict)
                     and item.get("type") == asset_type
-                    and isinstance(item.get("relationship_id"), str)
+                    and is_safe_relationship_id(
+                        item.get("relationship_id"),
+                        reserved_ids=_RESERVED_SLIDE_RELATIONSHIP_IDS,
+                    )
                 ),
                 None,
             )
@@ -382,6 +397,7 @@ class AssetPipeline:
                 continue
             if bounds.width <= 0 or bounds.height <= 0:
                 continue
+            assert isinstance(rel_id, str)
             return _build_picture_xml(
                 shape_id, rel_id, bounds.x, bounds.y, bounds.width, bounds.height,
                 name="Picture",
@@ -389,7 +405,7 @@ class AssetPipeline:
         return None
 
     def emit_raster_group(self, raster, group, shape_id, metadata) -> str | None:
-        rid = f"rId{self._next_media_index}"
+        rid = f"rIdRasterGroup{self._next_media_index}"
         filename = f"image{self._next_media_index}.png"
         self._next_media_index += 1
         self._assets.add_media(
@@ -408,6 +424,14 @@ class AssetPipeline:
             shape_id, rid, bounds.x, bounds.y, bounds.width, bounds.height,
             name="Group", blip_children=alpha_attr,
         )
+
+    def _allocate_filter_media_rel_id(self) -> str:
+        index = self._next_media_index
+        while True:
+            rel_id = f"rIdFilterMedia{index}"
+            if rel_id not in self._seen_filter_relationships:
+                return rel_id
+            index += 1
 
 
 def _build_picture_xml(

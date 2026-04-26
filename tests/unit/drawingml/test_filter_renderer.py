@@ -58,6 +58,33 @@ def test_filter_renderer_reuses_existing_raster_asset() -> None:
     assert "rIdRasterExisting" in effect_result.effect.drawingml
 
 
+def test_filter_renderer_rekeys_reserved_raster_relationship_id() -> None:
+    renderer = FilterRenderer()
+    metadata = {
+        "filter_type": "turbulence",
+        "fallback_assets": [
+            {
+                "type": "raster",
+                "relationship_id": "rId1",
+                "width_px": 64,
+                "height_px": 64,
+                "data_hex": "CAFEBABE",
+            }
+        ],
+    }
+    result = FilterResult(success=True, drawingml="", fallback="raster", metadata=metadata)
+
+    effects = renderer.render([result])
+
+    effect_result = effects[0]
+    assets = effect_result.metadata["fallback_assets"]
+    rel_id = assets[0]["relationship_id"]
+    assert rel_id != "rId1"
+    assert rel_id.startswith("rIdRasterReuse")
+    assert 'r:embed="rId1"' not in effect_result.effect.drawingml
+    assert f'r:embed="{rel_id}"' in effect_result.effect.drawingml
+
+
 def test_filter_renderer_generates_emf_asset_when_missing() -> None:
     renderer = FilterRenderer()
     metadata: dict[str, object] = {"filter_type": "blend", "mode": "multiply"}

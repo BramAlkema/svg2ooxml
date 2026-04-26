@@ -10,6 +10,7 @@ from collections.abc import Iterable
 from svg2ooxml.color.utils import color_to_hex
 from svg2ooxml.common.conversions.angles import radians_to_ppt
 from svg2ooxml.common.conversions.opacity import opacity_to_ppt, parse_opacity
+from svg2ooxml.common.ooxml_relationships import is_safe_relationship_id
 from svg2ooxml.common.units import px_to_emu
 from svg2ooxml.common.units.scalars import EMU_PER_INCH
 from svg2ooxml.drawingml.emf_adapter import EMFAdapter, PaletteResolver
@@ -34,6 +35,7 @@ _ALLOWED_BLIP_TAGS = frozenset({
     "tint",
     "shade",
 })
+_RESERVED_SLIDE_RELATIONSHIP_IDS = {"rId1"}
 
 HOOK_PATTERN = re.compile(r"<!--\s*svg2ooxml:(?P<name>\w+)(?P<attrs>[^>]*)-->", re.IGNORECASE)
 ATTR_PATTERN = re.compile(r"(\w+)=\"([^\"]*)\"")
@@ -228,7 +230,7 @@ class FilterRenderer:
 
         if not asset:
             assets = metadata.setdefault("fallback_assets", [])
-            placeholder_id = self._allocate_reuse_id()
+            placeholder_id = self._allocate_reuse_id("rIdEmfReuse")
             placeholder_asset = {
                 "type": "emf",
                 "relationship_id": placeholder_id,
@@ -247,9 +249,13 @@ class FilterRenderer:
 
 
         rel_id = asset.get("relationship_id")
-        if not isinstance(rel_id, str) or not rel_id:
-            rel_id = self._allocate_reuse_id()
+        if not is_safe_relationship_id(
+            rel_id,
+            reserved_ids=_RESERVED_SLIDE_RELATIONSHIP_IDS,
+        ):
+            rel_id = self._allocate_reuse_id("rIdEmfReuse")
             asset["relationship_id"] = rel_id
+        assert isinstance(rel_id, str)
 
         width_emu = asset.get("width_emu")
         height_emu = asset.get("height_emu")
@@ -304,9 +310,13 @@ class FilterRenderer:
 
         if existing_asset is not None:
             rel_id = existing_asset.get("relationship_id")
-            if not isinstance(rel_id, str) or not rel_id:
-                rel_id = f"rIdRasterReuse{self._raster_adapter._counter + 1}"
+            if not is_safe_relationship_id(
+                rel_id,
+                reserved_ids=_RESERVED_SLIDE_RELATIONSHIP_IDS,
+            ):
+                rel_id = self._allocate_reuse_id("rIdRasterReuse")
                 existing_asset["relationship_id"] = rel_id
+            assert isinstance(rel_id, str)
             width_px = existing_asset.get("width_px")
             height_px = existing_asset.get("height_px")
             data_hex = existing_asset.get("data_hex")
@@ -434,9 +444,9 @@ class FilterRenderer:
             return token
         return "generic"
 
-    def _allocate_reuse_id(self) -> str:
+    def _allocate_reuse_id(self, prefix: str) -> str:
         self._reuse_counter += 1
-        return f"rIdEmfReuse{self._reuse_counter}"
+        return f"{prefix}{self._reuse_counter}"
 
     def _policy_from_context(self, context: FilterContext | None) -> dict[str, object] | None:
         if context is None:

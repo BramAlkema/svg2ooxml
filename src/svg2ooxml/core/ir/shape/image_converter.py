@@ -20,7 +20,12 @@ from svg2ooxml.core.traversal.viewbox import (
 )
 from svg2ooxml.ir.geometry import Point, Rect
 from svg2ooxml.ir.scene import Image
-from svg2ooxml.services.image_service import ImageResource, ImageService
+from svg2ooxml.services.image_service import (
+    ImageResource,
+    ImageService,
+    normalize_image_href,
+    resolve_local_image_path,
+)
 
 
 class ShapeImageMixin:
@@ -251,35 +256,34 @@ class ShapeImageMixin:
 
     @staticmethod
     def _normalize_image_href(href: str | None) -> str | None:
-        if href is None:
-            return None
-        token = href.strip()
-        if token.lower().startswith("url(") and token.endswith(")"):
-            token = token[4:-1].strip()
-            if (token.startswith("'") and token.endswith("'")) or (
-                token.startswith('"') and token.endswith('"')
-            ):
-                token = token[1:-1]
-        return token or None
+        return normalize_image_href(href)
 
     def _resolve_image_from_source_path(self, href: str) -> ImageResource | None:
-        token = href.strip().lower()
-        if token.startswith(("http://", "https://", "ftp://", "#")):
-            return None
         source_path = None
         if hasattr(self._services, "resolve"):
             source_path = self._services.resolve("source_path")
         if not isinstance(source_path, str) or not source_path:
             return None
+
+        asset_root = self._resolve_asset_root_option()
         try:
             base_dir = FsPath(source_path).expanduser().resolve().parent
-            target = FsPath(href).expanduser()
-            if not target.is_absolute():
-                target = (base_dir / target).resolve()
-            else:
-                target = target.resolve()
-            if not target.is_file():
+            target = resolve_local_image_path(
+                href,
+                base_dir,
+                asset_root=asset_root,
+            )
+            if target is None:
                 return None
             return ImageResource(data=target.read_bytes(), source="file")
-        except Exception:
+        except OSError:
             return None
+
+    def _resolve_asset_root_option(self) -> str | None:
+        if not hasattr(self._services, "resolve"):
+            return None
+        for key in ("asset_root", "root_dir", "source_root"):
+            value = self._services.resolve(key)
+            if isinstance(value, str) and value:
+                return value
+        return None

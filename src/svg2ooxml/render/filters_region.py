@@ -7,6 +7,7 @@ from typing import Any
 
 import numpy as np
 
+from svg2ooxml.common.units import UnitConverter
 from svg2ooxml.core.resvg.usvg_tree import FilterNode, FilterPrimitive
 from svg2ooxml.render.surface import Surface
 
@@ -72,10 +73,10 @@ def compute_filter_region(
         default_y = min_y - 0.1 * bbox_height
         default_width = bbox_width * 1.2
         default_height = bbox_height * 1.2
-        x = parse_user_length(attrs.get("x"), default_x, viewport_width)
-        y = parse_user_length(attrs.get("y"), default_y, viewport_height)
-        width = parse_user_length(attrs.get("width"), default_width, viewport_width)
-        height = parse_user_length(attrs.get("height"), default_height, viewport_height)
+        x = parse_user_length(attrs.get("x"), default_x, viewport_width, axis="x")
+        y = parse_user_length(attrs.get("y"), default_y, viewport_height, axis="y")
+        width = parse_user_length(attrs.get("width"), default_width, viewport_width, axis="x")
+        height = parse_user_length(attrs.get("height"), default_height, viewport_height, axis="y")
 
     if width <= 0 or height <= 0:
         return (0, 0, viewport.width, viewport.height)
@@ -106,7 +107,13 @@ def parse_fraction(value: str | None, default: float) -> float:
         return default
 
 
-def parse_user_length(value: str | None, default: float, viewport_length: float) -> float:
+def parse_user_length(
+    value: str | None,
+    default: float,
+    viewport_length: float,
+    *,
+    axis: str = "x",
+) -> float:
     if value is None:
         return default
     value = value.strip()
@@ -116,7 +123,16 @@ def parse_user_length(value: str | None, default: float, viewport_length: float)
         if value.endswith("%"):
             pct = float(value[:-1])
             return (pct / 100.0) * viewport_length
-        return float(value)
+        converter = UnitConverter()
+        context = converter.create_context(
+            width=viewport_length,
+            height=viewport_length,
+            parent_width=viewport_length,
+            parent_height=viewport_length,
+            viewport_width=viewport_length,
+            viewport_height=viewport_length,
+        )
+        return converter.to_px(value, context=context, axis=axis)
     except ValueError:
         return default
 

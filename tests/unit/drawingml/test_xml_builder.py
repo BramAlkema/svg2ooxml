@@ -1,6 +1,5 @@
 """Unit tests for drawingml.xml_builder module."""
 
-
 from svg2ooxml.drawingml.xml_builder import (
     NS_A,
     NS_P,
@@ -89,7 +88,6 @@ class TestCoreBuilders:
         assert len(parent) == 1
         assert parent[0] is child
         assert child.tag == f"{{{NS_P}}}bodyPr"
-
 
 class TestToString:
     """Test XML serialization."""

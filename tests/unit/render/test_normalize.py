@@ -111,3 +111,73 @@ def test_normalize_handles_gradients():
     assert fill.start == (0.0, 0.0)
     assert fill.end == (10.0, 0.0)
     assert len(fill.stops) == 2
+
+
+def test_normalize_preserves_case_sensitive_paint_url_ids():
+    svg_markup = """
+    <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"10\" height=\"10\">
+      <defs>
+        <linearGradient id=\"GradA\">
+          <stop offset=\"0\" stop-color=\"red\"
+                style=\"stop-color: rgb(0 0 255 / 75%); stop-opacity: 50%\"/>
+          <stop offset=\"1\" stop-color=\"blue\"/>
+        </linearGradient>
+      </defs>
+      <rect width=\"10\" height=\"10\" fill=\"url(#GradA)\" fill-opacity=\"50%\" />
+    </svg>
+    """
+    root = etree.fromstring(svg_markup)
+
+    tree = normalize_svg(root)
+
+    fill = tree.root.children[1].fill
+    assert isinstance(fill, LinearGradient)
+    assert fill.stops[0].color == pytest.approx((0.0, 0.0, 1.0))
+    assert [stop.opacity for stop in fill.stops] == pytest.approx([0.1875, 0.5])
+
+
+def test_normalize_resolves_css_color_alpha_and_current_color():
+    svg_markup = """
+    <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"10\" height=\"10\" color=\"rebeccapurple\">
+      <rect width=\"10\" height=\"10\"
+            fill=\"currentColor\"
+            stroke=\"rgb(0 0 255 / 75%)\"
+            stroke-opacity=\"50%\" />
+    </svg>
+    """
+    root = etree.fromstring(svg_markup)
+
+    tree = normalize_svg(root)
+
+    rect_node = tree.root.children[0]
+    assert rect_node.fill.color == pytest.approx((0.4, 0.2, 0.6))
+    assert rect_node.fill.opacity == pytest.approx(1.0)
+    assert rect_node.stroke.paint.color == pytest.approx((0.0, 0.0, 1.0))
+    assert rect_node.stroke.paint.opacity == pytest.approx(0.375)
+
+
+def test_normalize_parses_compact_signed_poly_points():
+    svg_markup = """
+    <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"20\" height=\"20\">
+      <polyline points=\"0,0 10-5 20,0\" />
+    </svg>
+    """
+    root = etree.fromstring(svg_markup)
+
+    tree = normalize_svg(root)
+
+    geometry = tree.root.children[0].geometry
+    assert geometry["points"] == [(0.0, 0.0), (10.0, -5.0), (20.0, 0.0)]
+
+
+def test_normalize_rect_explicit_zero_radius_stays_square():
+    svg_markup = """
+    <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"20\" height=\"20\">
+      <rect width=\"10\" height=\"10\" rx=\"0\" ry=\"5\" />
+    </svg>
+    """
+    root = etree.fromstring(svg_markup)
+
+    tree = normalize_svg(root)
+
+    assert tree.root.children[0].geometry.corner_radius == 0.0

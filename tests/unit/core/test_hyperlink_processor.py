@@ -34,6 +34,23 @@ def test_resolve_navigation_parses_data_attributes() -> None:
     assert nav.tooltip == "Go!"
 
 
+def test_resolve_navigation_rejects_zero_slide_index() -> None:
+    svg = """
+        <svg xmlns="http://www.w3.org/2000/svg">
+            <a data-slide="0">
+                <title>Bad slide</title>
+            </a>
+        </svg>
+    """
+    element = _build_element(svg)
+    assert element is not None
+
+    processor = HyperlinkProcessor(logger=_DummyLogger())
+    nav = processor.resolve_navigation(element)
+
+    assert nav is None
+
+
 def test_resolve_inline_navigation_handles_missing_attributes() -> None:
     svg = """
         <svg xmlns="http://www.w3.org/2000/svg">

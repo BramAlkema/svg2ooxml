@@ -3,14 +3,14 @@
 from __future__ import annotations
 
 import html
+import ipaddress
+import re
 from collections.abc import Callable
+from urllib.parse import urlsplit
 
 from lxml import etree
 
-_DANGEROUS_SCHEMES = ("javascript:", "data:", "vbscript:", "file:")
-_SSRF_BLOCKLIST = ("169.254.169.254", "metadata.google", "metadata.azure",
-                   "localhost", "127.0.0.1", "0.0.0.0", "[::1]")
-
+from svg2ooxml.common.ooxml_relationships import is_safe_relationship_id
 from svg2ooxml.core.pipeline.navigation import (
     BookmarkTarget,
     CustomShowTarget,
@@ -22,9 +22,20 @@ from svg2ooxml.core.pipeline.navigation import (
 from svg2ooxml.drawingml.assets import NavigationAsset
 from svg2ooxml.drawingml.xml_builder import a_elem
 
+REL_TYPE_HYPERLINK = (
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink"
+)
+REL_TYPE_SLIDE = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide"
+
+_SLIDE_TARGET_RE = re.compile(r"\A\.\./slides/slide([1-9][0-9]*)\.xml\Z")
+_ALLOWED_EXTERNAL_SCHEMES = {"http", "https", "mailto", "tel"}
+_SSRF_HOST_TOKENS = ("metadata.google", "metadata.azure")
+
 __all__ = [
     "normalize_navigation",
+    "navigation_relationship_attributes",
     "register_navigation",
+    "sanitize_external_hyperlink_target",
 ]
 
 
@@ -84,17 +95,21 @@ def _build_navigation_asset(
     target_mode: str | None = None
 
     if spec.kind == NavigationKind.EXTERNAL and spec.href:
-        href_lower = spec.href.strip().lower()
-        if (href_lower.startswith(_DANGEROUS_SCHEMES)
-                or any(t in href_lower for t in _SSRF_BLOCKLIST)):
+        target = sanitize_external_hyperlink_target(spec.href)
+        if target is None:
             return None
         relationship_id = allocate_rel_id()
-        relationship_type = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink"
-        target = spec.href
+        if not is_safe_relationship_id(relationship_id):
+            return None
+        relationship_type = REL_TYPE_HYPERLINK
         target_mode = "External"
     elif spec.kind == NavigationKind.SLIDE and spec.slide:
+        if spec.slide.index < 1:
+            return None
         relationship_id = allocate_rel_id()
-        relationship_type = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide"
+        if not is_safe_relationship_id(relationship_id):
+            return None
+        relationship_type = REL_TYPE_SLIDE
         target = f"../slides/slide{spec.slide.index}.xml"
 
     action_uri = _action_uri_for_spec(spec)
@@ -209,6 +224,98 @@ def _action_uri_for_spec(spec: NavigationSpec) -> str | None:
     return None
 
 
+def sanitize_external_hyperlink_target(href: str | None) -> str | None:
+    """Return a safe external hyperlink target, or ``None`` if unsupported."""
+    if not isinstance(href, str):
+        return None
+    target = href.strip()
+    if not target or "\\" in target or _has_control_character(target):
+        return None
+
+    try:
+        parsed = urlsplit(target)
+    except ValueError:
+        return None
+
+    scheme = parsed.scheme.lower()
+    if scheme not in _ALLOWED_EXTERNAL_SCHEMES:
+        return None
+
+    if scheme in {"http", "https"}:
+        if not parsed.netloc or not parsed.hostname:
+            return None
+        if _is_blocked_external_host(parsed.hostname):
+            return None
+    elif parsed.netloc:
+        return None
+
+    return target
+
+
+def navigation_relationship_attributes(
+    asset: NavigationAsset,
+    *,
+    existing_ids: set[str] | None = None,
+) -> dict[str, str] | None:
+    """Build validated ``Relationship`` attributes for a navigation asset."""
+    if not asset.requires_relationship():
+        return None
+    rel_id = asset.relationship_id
+    if not is_safe_relationship_id(rel_id):
+        return None
+    assert isinstance(rel_id, str)
+    if existing_ids is not None and rel_id in existing_ids:
+        return None
+
+    if asset.relationship_type == REL_TYPE_HYPERLINK:
+        target = sanitize_external_hyperlink_target(asset.target)
+        if target is None or asset.target_mode != "External":
+            return None
+        return {
+            "Id": rel_id,
+            "Type": REL_TYPE_HYPERLINK,
+            "Target": target,
+            "TargetMode": "External",
+        }
+
+    if asset.relationship_type == REL_TYPE_SLIDE:
+        target = _safe_slide_relationship_target(asset.target)
+        if target is None or asset.target_mode:
+            return None
+        return {
+            "Id": rel_id,
+            "Type": REL_TYPE_SLIDE,
+            "Target": target,
+        }
+
+    return None
+
+
+def _safe_slide_relationship_target(target: str | None) -> str | None:
+    if not isinstance(target, str) or not _SLIDE_TARGET_RE.fullmatch(target):
+        return None
+    return target
+
+
+def _has_control_character(value: str) -> bool:
+    return any(ord(char) < 32 or ord(char) == 127 for char in value)
+
+
+def _is_blocked_external_host(hostname: str) -> bool:
+    host = hostname.strip("[]").rstrip(".").lower()
+    if not host:
+        return True
+    if host == "localhost" or host.endswith(".localhost"):
+        return True
+    if any(token in host for token in _SSRF_HOST_TOKENS):
+        return True
+    try:
+        address = ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    return address.is_loopback or address.is_link_local or address.is_unspecified
+
+
 def _build_navigation_elem(asset: NavigationAsset) -> etree._Element | None:
     """Build an ``a:hlinkClick`` element, or *None* if not applicable."""
     if not asset.relationship_id and not asset.action:
@@ -217,7 +324,12 @@ def _build_navigation_elem(asset: NavigationAsset) -> etree._Element | None:
     hlinkClick = a_elem("hlinkClick")
 
     if asset.relationship_id:
-        hlinkClick.set("{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id", asset.relationship_id)
+        if not is_safe_relationship_id(asset.relationship_id):
+            return None
+        hlinkClick.set(
+            "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id",
+            asset.relationship_id,
+        )
 
     if asset.tooltip:
         hlinkClick.set("tooltip", html.escape(asset.tooltip, quote=False))

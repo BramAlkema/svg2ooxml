@@ -56,7 +56,7 @@ def convert_parser_output(
             # Re-evaluate via engine if it's a known provider target
             # This ensures 'decision' objects are updated
             try:
-                from ..policy.targets import TargetRegistry
+                from svg2ooxml.policy.targets import TargetRegistry
                 target_obj = TargetRegistry.default().get(target)
                 if target_obj:
                     # Merge global options with these specific overrides
@@ -123,7 +123,10 @@ def convert_parser_output(
             image_service = services.image_service
             if image_service is not None:
                 base_dir = Path(source_path).parent
-                image_service.register_resolver(FileResolver(base_dir))
+                asset_root = _resolve_asset_root_option(services)
+                image_service.register_resolver(
+                    FileResolver(base_dir, asset_root=asset_root)
+                )
                 if logger:
                     logger.debug("Registered FileResolver with base_dir: %s", base_dir)
         except Exception as exc:  # pragma: no cover - defensive logging
@@ -187,6 +190,7 @@ def _hydrate_services_from_parser(
                     fetcher=fetcher,
                     allow_network=True,
                     base_dir=_resolve_base_dir(parser_result),
+                    asset_root=_resolve_asset_root_path(services),
                     allow_svg_fonts=_allow_svg_font_conversion(parser_result.policy_context),
                 )
 
@@ -225,6 +229,24 @@ def _hydrate_services_from_parser(
             except Exception as exc:  # pragma: no cover - defensive logging
                 if logger:
                     logger.warning("Failed to register SVG fonts: %s", exc)
+
+
+def _resolve_asset_root_option(services: ConversionServices) -> str | None:
+    for key in ("asset_root", "root_dir", "source_root"):
+        value = services.resolve(key)
+        if isinstance(value, str) and value:
+            return value
+    return None
+
+
+def _resolve_asset_root_path(services: ConversionServices) -> Path | None:
+    value = _resolve_asset_root_option(services)
+    if not value:
+        return None
+    try:
+        return Path(value).expanduser().resolve()
+    except OSError:
+        return None
 
 
 def _allow_svg_font_conversion(policy_context: PolicyContext | None) -> bool:

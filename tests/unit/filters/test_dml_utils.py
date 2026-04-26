@@ -27,3 +27,16 @@ def test_merge_effect_fragments_promotes_to_effect_dag_when_needed() -> None:
     assert "<a:cont/>" in merged
     assert "<a:blur/>" in merged
     assert "<a:alphaModFix>" in merged
+
+
+def test_merge_effect_fragments_drops_non_drawingml_effect_dag_children() -> None:
+    merged = merge_effect_fragments(
+        (
+            '<a:effectDag><a:cont/><p:sp xmlns:p="'
+            'http://schemas.openxmlformats.org/presentationml/2006/main">'
+            '<p:cNvPr id="99" name="Injected"/></p:sp></a:effectDag>'
+        ),
+        prefer_container="effectDag",
+    )
+
+    assert merged == ""

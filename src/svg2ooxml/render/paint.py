@@ -7,6 +7,9 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from svg2ooxml.color.parsers import parse_color
+from svg2ooxml.common.conversions.opacity import parse_opacity
+
 
 @dataclass(slots=True)
 class SolidPaint:
@@ -62,15 +65,16 @@ def compute_paints(
     """Compute fill/stroke paints from style, including gradient/pattern references."""
 
     opacity = _parse_opacity(style.get("opacity"), default=1.0)
+    current_color = _parse_color(style.get("color"), 1.0, current_color=None)
 
     fill_value = style.get("fill")
     fill_opacity = _parse_opacity(style.get("fill-opacity"), default=1.0) * opacity
-    fill_paint = _resolve_paint(fill_value, fill_opacity, definitions, element)
+    fill_paint = _resolve_paint(fill_value, fill_opacity, definitions, element, current_color)
 
     stroke_value = style.get("stroke")
     stroke_opacity = _parse_opacity(style.get("stroke-opacity"), default=1.0) * opacity
     stroke_width = _parse_length(style.get("stroke-width"))
-    stroke_paint_value = _resolve_paint(stroke_value, stroke_opacity, definitions, element)
+    stroke_paint_value = _resolve_paint(stroke_value, stroke_opacity, definitions, element, current_color)
     if stroke_paint_value is None and stroke_width is None:
         stroke_paint = None
     else:
@@ -87,12 +91,7 @@ def compute_paints(
 
 
 def _parse_opacity(value: str | None, *, default: float) -> float:
-    if value is None:
-        return default
-    try:
-        return float(value)
-    except ValueError:
-        return default
+    return parse_opacity(value, default=default)
 
 
 def _parse_length(value: str | None) -> float | None:
@@ -104,13 +103,20 @@ def _parse_length(value: str | None) -> float | None:
         return None
 
 
-def _resolve_paint(value: str | None, opacity: float, definitions: Mapping[str, object], element) -> object | None:
+def _resolve_paint(
+    value: str | None,
+    opacity: float,
+    definitions: Mapping[str, object],
+    element,
+    current_color: object | None,
+) -> object | None:
     if value is None:
         return None
-    value = value.strip().lower()
-    if not value or value in {"none", "transparent"}:
+    value = value.strip()
+    lowered = value.lower()
+    if not value or lowered in {"none", "transparent"}:
         return None
-    if value.startswith("url("):
+    if lowered.startswith("url("):
         ref = _extract_url(value)
         if not ref:
             return None
@@ -121,33 +127,23 @@ def _resolve_paint(value: str | None, opacity: float, definitions: Mapping[str, 
         if source is None:
             return None
         if definition.tag == "linearGradient":
-            return _parse_linear_gradient(source, definitions)
+            return _apply_opacity_to_paint(_parse_linear_gradient(source, definitions), opacity)
         if definition.tag == "radialGradient":
-            return _parse_radial_gradient(source, definitions)
+            return _apply_opacity_to_paint(_parse_radial_gradient(source, definitions), opacity)
         if definition.tag == "pattern":
             return _parse_pattern(source)
         return None
-    if value.startswith("#"):
-        color = _parse_hex_color(value)
-        if color is None:
-            return None
-        return SolidPaint(color=color, opacity=_clamp_opacity(opacity))
+    color = _parse_color(value, opacity, current_color=current_color)
+    if color is not None:
+        return SolidPaint(color=(color.r, color.g, color.b), opacity=color.a)
     return None
 
 
-def _parse_hex_color(token: str) -> tuple[float, float, float] | None:
-    token = token.lstrip("#")
-    if len(token) == 3:
-        token = "".join(ch * 2 for ch in token)
-    if len(token) != 6:
+def _parse_color(value: str | None, opacity: float, *, current_color: object | None):
+    parsed = parse_color(value, current_color=current_color)
+    if parsed is None:
         return None
-    try:
-        r = int(token[0:2], 16) / 255.0
-        g = int(token[2:4], 16) / 255.0
-        b = int(token[4:6], 16) / 255.0
-    except ValueError:
-        return None
-    return (r, g, b)
+    return parsed.with_alpha(_clamp_opacity(parsed.a * opacity))
 
 
 def _clamp_opacity(value: float) -> float:
@@ -215,16 +211,55 @@ def _parse_gradient_stops(element, definitions) -> list[GradientStop]:
             continue
         offset = _parse_coordinate(child.get("offset"), fallback=0.0)
         stop_style = {}
-        stop_style.update(_parse_style_attribute(child.get("style") or ""))
         for attr in ("stop-color", "stop-opacity"):
             if attr in child.attrib:
                 stop_style[attr] = child.attrib[attr]
-        color_value = stop_style.get("stop-color", child.get("stop-color"))
+        stop_style.update(_parse_style_attribute(child.get("style") or ""))
+        color_value = stop_style.get("stop-color")
         opacity = _parse_opacity(stop_style.get("stop-opacity"), default=1.0)
-        paint = _resolve_paint(color_value, opacity, {}, child)
+        paint = _resolve_paint(color_value, opacity, {}, child, None)
         if isinstance(paint, SolidPaint):
-            stops.append(GradientStop(offset=offset, color=paint.color, opacity=paint.opacity))
+            stops.append(
+                GradientStop(
+                    offset=max(0.0, min(1.0, offset)),
+                    color=paint.color,
+                    opacity=paint.opacity,
+                )
+            )
     return stops
+
+
+def _apply_opacity_to_paint(paint: object | None, opacity: float) -> object | None:
+    if isinstance(paint, LinearGradient):
+        return LinearGradient(
+            stops=tuple(
+                GradientStop(
+                    offset=stop.offset,
+                    color=stop.color,
+                    opacity=_clamp_opacity(stop.opacity * opacity),
+                )
+                for stop in paint.stops
+            ),
+            start=paint.start,
+            end=paint.end,
+            transform=paint.transform,
+        )
+    if isinstance(paint, RadialGradient):
+        return RadialGradient(
+            stops=tuple(
+                GradientStop(
+                    offset=stop.offset,
+                    color=stop.color,
+                    opacity=_clamp_opacity(stop.opacity * opacity),
+                )
+                for stop in paint.stops
+            ),
+            center=paint.center,
+            radius=paint.radius,
+            focal_point=paint.focal_point,
+            transform=paint.transform,
+        )
+    return paint
 
 
 def _parse_pattern(element) -> PatternPaint | None:

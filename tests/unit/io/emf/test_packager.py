@@ -51,6 +51,16 @@ def test_register_prefers_supplied_relationship() -> None:
     assert entry.relationship_id == "rIdCustom"
 
 
+def test_register_rekeys_invalid_supplied_relationship() -> None:
+    manager = EMFRelationshipManager()
+    data = bytes.fromhex("ABCD")
+
+    entry, _ = manager.register(data, rel_id='bad id" inject="1')
+
+    assert entry.relationship_id.startswith("rIdEmf")
+    assert entry.relationship_id != 'bad id" inject="1'
+
+
 def test_register_stores_dimensions() -> None:
     manager = EMFRelationshipManager()
     data = bytes.fromhex("01020304")

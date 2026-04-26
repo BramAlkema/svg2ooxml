@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import base64
+import binascii
 import os
 import re
+import urllib.parse
 from collections import OrderedDict
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
@@ -14,7 +16,16 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from svg2ooxml.services import ConversionServices
 
-DATA_URI_RE = re.compile(r"^data:(?P<mime>[^;]+)?(;base64)?,(?P<payload>.+)$")
+DATA_URI_RE = re.compile(
+    r"^data:(?P<mime>[^;,]*)?(?P<params>(?:;[^,]*)*),(?P<payload>.*)$",
+    re.IGNORECASE | re.DOTALL,
+)
+EXTERNAL_IMAGE_PROTOCOLS: tuple[str, ...] = (
+    "http://",
+    "https://",
+    "ftp://",
+    "file://",
+)
 
 
 @dataclass(frozen=True)
@@ -32,28 +43,34 @@ Resolver = Callable[[str], ImageResource | None]
 class FileResolver:
     """Resolve image hrefs from the local filesystem."""
 
-    def __init__(self, base_dir: Path | str) -> None:
-        self._base_dir = Path(base_dir).resolve()
+    def __init__(self, base_dir: Path | str, *, asset_root: Path | str | None = None) -> None:
+        self._base_dir = Path(base_dir).expanduser().resolve()
+        root = asset_root if asset_root is not None else self._base_dir
+        self._asset_root = Path(root).expanduser().resolve()
 
     @property
     def base_dir(self) -> Path:
         return self._base_dir
 
-    def __call__(self, href: str) -> ImageResource | None:
-        if DATA_URI_RE.match(href):
-            return None
+    @property
+    def asset_root(self) -> Path:
+        return self._asset_root
 
-        # Try relative to base dir
-        try:
-            target = (self._base_dir / href).resolve()
-            if target.is_file():
-                return ImageResource(
-                    data=target.read_bytes(),
-                    source="file",
-                )
-        except Exception:
+    def __call__(self, href: str) -> ImageResource | None:
+        target = resolve_local_image_path(
+            href,
+            self._base_dir,
+            asset_root=self._asset_root,
+        )
+        if target is None:
             return None
-        return None
+        try:
+            return ImageResource(
+                data=target.read_bytes(),
+                source="file",
+            )
+        except OSError:
+            return None
 
 
 class ImageService:
@@ -96,13 +113,16 @@ class ImageService:
 
     def resolve(self, href: str) -> ImageResource | None:
         """Try each resolver until one returns a payload."""
-        cached = self._cache_get(href)
+        normalized_href = normalize_image_href(href)
+        if not normalized_href:
+            return None
+        cached = self._cache_get(normalized_href)
         if cached is not None:
             return cached
         for resolver in self._resolvers:
-            result = resolver(href)
+            result = resolver(normalized_href)
             if result is not None:
-                self._cache_put(href, result)
+                self._cache_put(normalized_href, result)
                 return result
         return None
 
@@ -118,15 +138,27 @@ class ImageService:
 
     @staticmethod
     def _data_uri_resolver(href: str) -> ImageResource | None:
-        match = DATA_URI_RE.match(href)
+        normalized_href = normalize_image_href(href)
+        if not normalized_href:
+            return None
+        match = DATA_URI_RE.match(normalized_href)
         if not match:
             return None
-        mime_type = match.group("mime") or None
-        payload = match.group("payload").strip()
-        if ";base64," in href:
-            data = base64.b64decode(payload)
+        mime_type = (match.group("mime") or "").strip() or None
+        params = match.group("params") or ""
+        payload = match.group("payload")
+        is_base64 = any(
+            part.strip().lower() == "base64"
+            for part in params.split(";")
+            if part.strip()
+        )
+        if is_base64:
+            try:
+                data = base64.b64decode(payload.strip(), validate=True)
+            except (ValueError, binascii.Error):
+                return None
         else:
-            data = payload.encode("utf-8")
+            data = urllib.parse.unquote_to_bytes(payload)
         return ImageResource(data=data, mime_type=mime_type, source="data-uri")
 
     def _cache_enabled(self) -> bool:
@@ -176,4 +208,78 @@ def _env_int(key: str, default: int) -> int:
         return default
 
 
-__all__ = ["ImageResource", "ImageService", "Resolver"]
+def normalize_image_href(href: str | None) -> str | None:
+    """Normalize common SVG/CSS href wrappers for image resolution."""
+
+    if href is None:
+        return None
+    token = href.strip()
+    if token.lower().startswith("url(") and token.endswith(")"):
+        token = token[4:-1].strip()
+        if (token.startswith("'") and token.endswith("'")) or (
+            token.startswith('"') and token.endswith('"')
+        ):
+            token = token[1:-1]
+    token = token.strip()
+    return token or None
+
+
+def is_external_image_href(href: str | None) -> bool:
+    """Return true for hrefs that must not be resolved from local disk."""
+
+    token = normalize_image_href(href)
+    if not token:
+        return False
+    lowered = token.lower()
+    return lowered.startswith(EXTERNAL_IMAGE_PROTOCOLS) or lowered.startswith("#")
+
+
+def resolve_local_image_path(
+    href: str | None,
+    base_dir: Path | str,
+    *,
+    asset_root: Path | str | None = None,
+) -> Path | None:
+    """Resolve a local image path without allowing absolute or ``..`` escapes."""
+
+    token = normalize_image_href(href)
+    if not token:
+        return None
+    lowered = token.lower()
+    if lowered.startswith("data:") or is_external_image_href(token):
+        return None
+
+    try:
+        base = Path(base_dir).expanduser().resolve()
+        root = Path(asset_root).expanduser().resolve() if asset_root else base
+        candidate = Path(token).expanduser()
+        target = candidate.resolve() if candidate.is_absolute() else (base / candidate).resolve()
+    except (OSError, RuntimeError, ValueError):
+        return None
+
+    if not _path_is_within(target, root):
+        return None
+    if not target.is_file():
+        return None
+    return target
+
+
+def _path_is_within(path: Path, root: Path) -> bool:
+    try:
+        path.relative_to(root)
+    except ValueError:
+        return False
+    return True
+
+
+__all__ = [
+    "DATA_URI_RE",
+    "EXTERNAL_IMAGE_PROTOCOLS",
+    "FileResolver",
+    "ImageResource",
+    "ImageService",
+    "Resolver",
+    "is_external_image_href",
+    "normalize_image_href",
+    "resolve_local_image_path",
+]

@@ -6,6 +6,8 @@ import hashlib
 from collections.abc import Iterable
 from dataclasses import dataclass
 
+from svg2ooxml.common.ooxml_relationships import is_safe_relationship_id
+
 
 @dataclass(frozen=True)
 class EMFMedia:
@@ -86,7 +88,11 @@ class EMFRelationshipManager:
         return self._hash_to_entry.values()
 
     def _allocate_rel_id(self, preferred: str | None) -> str:
-        if preferred and preferred not in self._rel_to_entry:
+        if (
+            preferred
+            and is_safe_relationship_id(preferred)
+            and preferred not in self._rel_to_entry
+        ):
             return preferred
         while True:
             candidate = f"rIdEmf{self._next_id}"

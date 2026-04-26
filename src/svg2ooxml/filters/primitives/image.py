@@ -4,14 +4,20 @@ from __future__ import annotations
 
 import io
 import struct
-from pathlib import Path
 from dataclasses import dataclass
+from pathlib import Path
 
 from lxml import etree
 
 from svg2ooxml.filters.base import Filter, FilterContext, FilterResult
 from svg2ooxml.filters.utils import build_exporter_hook
-from svg2ooxml.services.image_service import ImageResource, ImageService
+from svg2ooxml.services.image_service import (
+    ImageResource,
+    ImageService,
+    is_external_image_href,
+    normalize_image_href,
+    resolve_local_image_path,
+)
 
 XLINK_HREF = "{http://www.w3.org/1999/xlink}href"
 
@@ -83,11 +89,17 @@ class ImageFilter(Filter):
         if not href:
             return None
         href = self._normalize_href(href)
+        if not href:
+            return None
         services = getattr(context, "services", None)
         image_service = getattr(services, "image_service", None) if services is not None else None
-        resource = image_service.resolve(href) if image_service is not None else None
-        if resource is None:
-            resource = self._resolve_from_context(href, context)
+        resource = self._resolve_from_context(href, context)
+        if (
+            resource is None
+            and image_service is not None
+            and not self._context_should_bound_local_href(href, context)
+        ):
+            resource = image_service.resolve(href)
         if resource is None:
             return None
 
@@ -108,8 +120,17 @@ class ImageFilter(Filter):
             asset["source"] = resource.source
         return asset
 
+    def _context_should_bound_local_href(self, href: str, context: FilterContext) -> bool:
+        if ImageService._data_uri_resolver(href) is not None:
+            return False
+        if self._is_external_href(href):
+            return False
+        return self._resolve_base_dir(context) is not None
+
     def _resolve_from_context(self, href: str, context: FilterContext) -> ImageResource | None:
         href = self._normalize_href(href)
+        if not href:
+            return None
         data_resource = ImageService._data_uri_resolver(href)
         if data_resource is not None:
             return data_resource
@@ -122,19 +143,17 @@ class ImageFilter(Filter):
             return None
 
         try:
-            target = Path(href).expanduser()
-            if not target.is_absolute():
-                target = (base_dir / target).resolve()
-            else:
-                target = target.resolve()
-            if not target.is_file():
-                return None
             allowed_root = self._resolve_asset_root(context, base_dir)
-            if allowed_root is None or self._is_within(target, allowed_root):
-                return ImageResource(data=target.read_bytes(), source="file")
-        except Exception:
+            target = resolve_local_image_path(
+                href,
+                base_dir,
+                asset_root=allowed_root,
+            )
+            if target is None:
+                return None
+            return ImageResource(data=target.read_bytes(), source="file")
+        except OSError:
             return None
-        return None
 
     @staticmethod
     def _resolve_base_dir(context: FilterContext) -> Path | None:
@@ -156,34 +175,11 @@ class ImageFilter(Filter):
 
     @staticmethod
     def _is_external_href(href: str) -> bool:
-        token = href.strip().lower()
-        if token.startswith(("http://", "https://", "ftp://")):
-            return True
-        if token.startswith("#") or token.startswith("url("):
-            return True
-        return False
+        return is_external_image_href(href)
 
     @staticmethod
     def _normalize_href(href: str | None) -> str | None:
-        if href is None:
-            return None
-        token = href.strip()
-        if token.lower().startswith("url(") and token.endswith(")"):
-            token = token[4:-1].strip()
-            if (token.startswith("'") and token.endswith("'")) or (token.startswith('"') and token.endswith('"')):
-                token = token[1:-1]
-        return token or None
-
-    @staticmethod
-    def _is_within(path: Path, root: Path) -> bool:
-        try:
-            return path.is_relative_to(root)
-        except AttributeError:  # pragma: no cover - Python < 3.9
-            try:
-                path.relative_to(root)
-                return True
-            except Exception:
-                return False
+        return normalize_image_href(href)
 
     @staticmethod
     def _resolve_asset_root(context: FilterContext, base_dir: Path) -> Path | None:
@@ -195,8 +191,7 @@ class ImageFilter(Filter):
                     return Path(value).expanduser().resolve()
                 except Exception:
                     continue
-        # Allow one level up for common ../images patterns (e.g., W3C suite)
-        return base_dir.parent
+        return base_dir
 
     def _resource_to_png(
         self,

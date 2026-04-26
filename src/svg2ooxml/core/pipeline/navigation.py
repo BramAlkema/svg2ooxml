@@ -158,8 +158,8 @@ def _parse_positive_int(value: str, name: str) -> int:
         parsed = int(value)
     except ValueError as exc:  # pragma: no cover - defensive
         raise ValueError(f"Invalid {name} value: {value!r}") from exc
-    if parsed < 0:
-        raise ValueError(f"{name} must be non-negative")
+    if parsed < 1:
+        raise ValueError(f"{name} must be positive")
     return parsed
 
 

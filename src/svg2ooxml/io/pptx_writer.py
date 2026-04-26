@@ -7,28 +7,26 @@ import json
 import shutil
 import uuid
 import zipfile
-from collections import OrderedDict
 from collections.abc import Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from lxml import etree as ET
 
+from svg2ooxml.common.ooxml_relationships import (
+    is_safe_relationship_id,
+    next_relationship_id,
+)
 from svg2ooxml.common.tempfiles import temporary_directory
 from svg2ooxml.drawingml.assets import FontAsset, NavigationAsset
+from svg2ooxml.drawingml.navigation import navigation_relationship_attributes
 from svg2ooxml.drawingml.writer import DEFAULT_SLIDE_SIZE
 from svg2ooxml.io.pptx_assembly import (
     ALLOWED_SLIDE_SIZE_MODES,
     CONTENT_NS,
-    FONT_STYLE_ORDER,
-    FONT_STYLE_TAGS,
     MASK_REL_TYPE,
-    P_NS,
-    PackagingContext,
     R_DOC_NS,
     REL_NS,
-    SlideAssembler,
-    SlideAssembly,
     THEME_FAMILY_NS,
     THEME_NS,
     MaskAsset,
@@ -36,15 +34,22 @@ from svg2ooxml.io.pptx_assembly import (
     MediaMeta,
     PackagedFont,
     PackagedMedia,
+    PackagingContext,
+    SlideAssembler,
+    SlideAssembly,
     SlideEntry,
-    content_type_for_extension as _content_type_for_extension,
-    normalize_style_kind as _normalize_style_kind,
-    safe_int as _safe_int,
+    content_type_for_extension,
+    normalize_style_kind,
+    resolve_package_child,
+    safe_int,
+    sanitize_slide_filename,
 )
+from svg2ooxml.io.pptx_presentation import update_presentation_parts
 from svg2ooxml.ir.text import EmbeddedFontPlan
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from svg2ooxml.core.tracing import ConversionTracer
+    from svg2ooxml.drawingml.result import DrawingMLRenderResult
 
 
 _REQUIRED_XML_PARTS: dict[str, str] = {
@@ -123,7 +128,11 @@ class _PackageWriterBase:
         for part in media_parts:
             unique_media.setdefault(part.filename, part)
         for part in unique_media.values():
-            target = media_dir / part.filename
+            target = resolve_package_child(
+                package_root,
+                part.package_path,
+                required_prefix=Path("ppt") / "media",
+            )
             with target.open("wb") as handle:
                 handle.write(part.data)
             self._trace_packaging(
@@ -140,7 +149,11 @@ class _PackageWriterBase:
             return
         written: set[Path] = set()
         for part in mask_parts:
-            path = package_root / part.package_path
+            path = resolve_package_child(
+                package_root,
+                part.package_path,
+                required_prefix=Path("ppt") / "masks",
+            )
             if path in written:
                 continue
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -156,17 +169,21 @@ class _PackageWriterBase:
     def _write_slide_relationships(
         self,
         slides_dir: Path,
-        slide_index: int,
+        slide_filename: str,
         media_parts: Sequence[PackagedMedia],
         navigation_assets: Sequence[NavigationAsset],
         mask_parts: Sequence[MaskAsset],
     ) -> None:
-        rels_path = slides_dir / "_rels" / f"slide{slide_index}.xml.rels"
+        safe_slide_filename = sanitize_slide_filename(slide_filename)
+        rels_path = slides_dir / "_rels" / f"{safe_slide_filename}.rels"
         rels_root = ET.fromstring(self._slide_rels_template.encode("utf-8"))
         existing_ids = {rel.get("Id") for rel in rels_root.findall(f"{{{REL_NS}}}Relationship")}
 
         for part in media_parts:
-            if part.relationship_id in existing_ids:
+            if (
+                not is_safe_relationship_id(part.relationship_id)
+                or part.relationship_id in existing_ids
+            ):
                 continue
             ET.SubElement(
                 rels_root,
@@ -180,7 +197,10 @@ class _PackageWriterBase:
             existing_ids.add(part.relationship_id)
 
         for mask in mask_parts:
-            if mask.relationship_id in existing_ids:
+            if (
+                not is_safe_relationship_id(mask.relationship_id)
+                or mask.relationship_id in existing_ids
+            ):
                 continue
             ET.SubElement(
                 rels_root,
@@ -194,24 +214,15 @@ class _PackageWriterBase:
             existing_ids.add(mask.relationship_id)
 
         for asset in navigation_assets:
-            if not asset.requires_relationship():
+            attributes = navigation_relationship_attributes(asset, existing_ids=existing_ids)
+            if attributes is None:
                 continue
-            rel_id = asset.relationship_id
-            if rel_id in existing_ids or asset.relationship_type is None or asset.target is None:
-                continue
-            attributes = {
-                "Id": rel_id,
-                "Type": asset.relationship_type,
-                "Target": asset.target,
-            }
-            if asset.target_mode:
-                attributes["TargetMode"] = asset.target_mode
             ET.SubElement(
                 rels_root,
                 f"{{{REL_NS}}}Relationship",
                 attributes,
             )
-            existing_ids.add(rel_id)
+            existing_ids.add(attributes["Id"])
 
         ET.ElementTree(rels_root).write(rels_path, encoding="utf-8", xml_declaration=True)
 
@@ -267,13 +278,18 @@ class _PackageWriterBase:
                 or metadata.get("font_family")
                 or "EmbeddedFont"
             )
-            style_kind = _normalize_style_kind(metadata.get("font_style_kind"))
+            style_kind = normalize_style_kind(metadata.get("font_style_kind"))
             style_flags = metadata.get("font_style_flags")
             if not isinstance(style_flags, dict):
                 style_flags = {"style_kind": style_kind}
             extension = "fntdata"
 
-            rel_id = plan.relationship_hint if isinstance(plan.relationship_hint, str) and plan.relationship_hint else None
+            rel_id = (
+                plan.relationship_hint.strip()
+                if isinstance(plan.relationship_hint, str)
+                and is_safe_relationship_id(plan.relationship_hint.strip())
+                else None
+            )
             if rel_id and rel_id in used_relationships:
                 rel_id = None
             if rel_id is None:
@@ -318,14 +334,14 @@ class _PackageWriterBase:
                     relationship_id=rel_id,
                     font_family=font_family,
                     subsetted=bool(plan.glyph_count),
-                    content_type=_content_type_for_extension(extension),
+                    content_type=content_type_for_extension(extension),
                     style_kind=style_kind,
                     style_flags=style_flags,
                     guid=guid_str,
                     root_string=metadata.get("font_root_string"),
                     subset_prefix=metadata.get("subset_prefix"),
-                    pitch_family=_safe_int(metadata.get("font_pitch_family")),
-                    charset=_safe_int(metadata.get("font_charset")),
+                    pitch_family=safe_int(metadata.get("font_pitch_family")),
+                    charset=safe_int(metadata.get("font_charset")),
                 )
             )
 
@@ -338,129 +354,13 @@ class _PackageWriterBase:
         fonts: Sequence[PackagedFont],
         slide_size: tuple[int, int] | None = None,
     ) -> None:
-        presentation_path = package_root / "ppt" / "presentation.xml"
-        tree = ET.parse(presentation_path)
-        root = tree.getroot()
-        ns = {"p": P_NS, "r": R_DOC_NS}
-
-        # Update slide dimensions if provided
-        # ECMA-376: sldSz cx/cy minimum is 914400 EMU (1 inch)
-        _MIN_SLIDE_EMU = 914400
-        if slide_size is not None:
-            slide_sz = root.find("p:sldSz", ns)
-            if slide_sz is not None:
-                cx = max(slide_size[0], _MIN_SLIDE_EMU)
-                cy = max(slide_size[1], _MIN_SLIDE_EMU)
-                slide_sz.set("cx", str(cx))
-                slide_sz.set("cy", str(cy))
-                self._trace_packaging(
-                    "presentation_dimensions_updated",
-                    metadata={
-                        "width_emu": slide_size[0],
-                        "height_emu": slide_size[1],
-                        "width_inches": slide_size[0] / 914400,
-                        "height_inches": slide_size[1] / 914400,
-                    },
-                )
-
-        slide_list = root.find("p:sldIdLst", ns)
-        if slide_list is None:
-            slide_list = ET.SubElement(root, f"{{{P_NS}}}sldIdLst")
-        else:
-            for child in list(slide_list):
-                slide_list.remove(child)
-
-        for entry in slides:
-            attrs = {
-                "id": str(entry.slide_id),
-                f"{{{R_DOC_NS}}}id": entry.rel_id,
-            }
-            ET.SubElement(slide_list, f"{{{P_NS}}}sldId", attrs)
-
-        if fonts:
-            font_list = root.find("p:embeddedFontLst", ns)
-            if font_list is None:
-                font_list = ET.Element(f"{{{P_NS}}}embeddedFontLst")
-                default_text = root.find("p:defaultTextStyle", ns)
-                if default_text is not None:
-                    root.insert(list(root).index(default_text), font_list)
-                else:
-                    root.append(font_list)
-            else:
-                for child in list(font_list):
-                    font_list.remove(child)
-
-            font_groups: OrderedDict[str, dict[str, PackagedFont]] = OrderedDict()
-            for font in fonts:
-                slot = font_groups.setdefault(font.font_family, {})
-                slot[font.style_kind] = font
-
-            for family, style_map in font_groups.items():
-                entry_elem = ET.SubElement(font_list, f"{{{P_NS}}}embeddedFont")
-                representative = (
-                    style_map.get("regular")
-                    or style_map.get("bold")
-                    or style_map.get("italic")
-                    or style_map.get("boldItalic")
-                )
-                font_attrs = {"typeface": family}
-                if representative and representative.pitch_family is not None:
-                    font_attrs["pitchFamily"] = str(representative.pitch_family)
-                else:
-                    font_attrs["pitchFamily"] = "0"
-                if representative and representative.charset is not None:
-                    font_attrs["charset"] = str(representative.charset)
-                else:
-                    font_attrs["charset"] = "0"
-                ET.SubElement(entry_elem, f"{{{P_NS}}}font", font_attrs)
-                for style_kind in FONT_STYLE_ORDER:
-                    tagged = style_map.get(style_kind)
-                    if tagged is None:
-                        continue
-                    attrs = {f"{{{R_DOC_NS}}}id": tagged.relationship_id}
-                    ET.SubElement(entry_elem, f"{{{P_NS}}}{FONT_STYLE_TAGS[style_kind]}", attrs)
-
-        tree.write(presentation_path, encoding="utf-8", xml_declaration=True)
-
-        rels_path = package_root / "ppt" / "_rels" / "presentation.xml.rels"
-        rels_tree = ET.parse(rels_path)
-        rels_root = rels_tree.getroot()
-
-        for rel in list(rels_root.findall(f"{{{REL_NS}}}Relationship")):
-            if rel.get("Type") == f"{R_DOC_NS}/slide":
-                rels_root.remove(rel)
-
-        existing_rel_ids = {rel.get("Id") for rel in rels_root.findall(f"{{{REL_NS}}}Relationship")}
-
-        for entry in slides:
-            if entry.rel_id in existing_rel_ids:
-                continue
-            ET.SubElement(
-                rels_root,
-                f"{{{REL_NS}}}Relationship",
-                {
-                    "Id": entry.rel_id,
-                    "Type": f"{R_DOC_NS}/slide",
-                    "Target": f"slides/{entry.filename}",
-                },
-            )
-            existing_rel_ids.add(entry.rel_id)
-
-        for font in fonts:
-            if font.relationship_id in existing_rel_ids:
-                continue
-            ET.SubElement(
-                rels_root,
-                f"{{{REL_NS}}}Relationship",
-                {
-                    "Id": font.relationship_id,
-                    "Type": f"{R_DOC_NS}/font",
-                    "Target": f"fonts/{font.filename}",
-                },
-            )
-            existing_rel_ids.add(font.relationship_id)
-
-        rels_tree.write(rels_path, encoding="utf-8", xml_declaration=True)
+        update_presentation_parts(
+            package_root=package_root,
+            slides=slides,
+            fonts=fonts,
+            slide_size=slide_size,
+            trace_packaging=self._trace_packaging,
+        )
 
     def _resolve_slide_size_mode(self, override: str | None) -> str:
         resolved = override or self._slide_size_mode or "multipage"
@@ -533,10 +433,7 @@ class _PackageWriterBase:
         for target, rel_type in _REQUIRED_PRES_RELS:
             if target in existing_targets:
                 continue
-            next_id = 1
-            while f"rId{next_id}" in existing_rel_ids:
-                next_id += 1
-            rel_id = f"rId{next_id}"
+            rel_id = next_relationship_id(existing_rel_ids)
             ET.SubElement(
                 rels_root, f"{{{REL_NS}}}Relationship",
                 {"Id": rel_id, "Type": rel_type, "Target": target},
@@ -739,25 +636,25 @@ class StreamingPackageWriter(_PackageWriterBase):
         self._slide_index += 1
         assembly = self._assembler.assemble_one(result, self._slide_index)
 
-        # Write slide XML to disk
-        (self._slides_dir / assembly.filename).write_text(
-            assembly.slide_xml, encoding="utf-8"
+        slide_path = resolve_package_child(
+            self._temp_path,
+            Path("ppt") / "slides" / assembly.filename,
+            required_prefix=Path("ppt") / "slides",
         )
+        slide_path.write_text(assembly.slide_xml, encoding="utf-8")
         self._trace_packaging(
             "slide_xml_written",
             metadata={"filename": assembly.filename, "index": assembly.index},
         )
 
-        # Write slide relationships
         self._write_slide_relationships(
             self._slides_dir,
-            assembly.index,
+            assembly.filename,
             assembly.media,
             assembly.navigation,
             assembly.masks,
         )
 
-        # Write media binary data to disk immediately
         if assembly.media:
             self._write_media_parts(self._temp_path, assembly.media)
             for part in assembly.media:
@@ -765,7 +662,6 @@ class StreamingPackageWriter(_PackageWriterBase):
                     MediaMeta(filename=part.filename, content_type=part.content_type)
                 )
 
-        # Write mask binary data to disk immediately
         if assembly.masks:
             self._write_mask_parts(self._temp_path, assembly.masks)
             for mask in assembly.masks:
@@ -773,11 +669,9 @@ class StreamingPackageWriter(_PackageWriterBase):
                     MaskMeta(part_name=mask.part_name, content_type=mask.content_type)
                 )
 
-        # Accumulate font assets (small, few unique)
         self._font_assets.extend(assembly.font_assets)
         self._packaged_fonts = self._write_font_parts(self._temp_path, self._font_assets)
 
-        # Store lightweight metadata only
         self._slide_entries.append(
             SlideEntry(
                 index=assembly.index,
@@ -895,7 +789,12 @@ class PackageWriter(_PackageWriterBase):
                 packaged_fonts: list[PackagedFont] = []
 
                 for slide in slides:
-                    (slides_dir / slide.filename).write_text(slide.slide_xml, encoding="utf-8")
+                    slide_path = resolve_package_child(
+                        temp_path,
+                        Path("ppt") / "slides" / slide.filename,
+                        required_prefix=Path("ppt") / "slides",
+                    )
+                    slide_path.write_text(slide.slide_xml, encoding="utf-8")
                     self._trace_packaging(
                         "slide_xml_written",
                         metadata={"filename": slide.filename, "index": slide.index},
@@ -922,7 +821,7 @@ class PackageWriter(_PackageWriterBase):
 
                     self._write_slide_relationships(
                         slides_dir,
-                        slide.index,
+                        slide.filename,
                         slide.media,
                         slide.navigation,
                         slide.masks,
