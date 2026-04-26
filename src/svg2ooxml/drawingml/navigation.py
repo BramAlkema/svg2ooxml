@@ -3,14 +3,16 @@
 from __future__ import annotations
 
 import html
-import ipaddress
 import re
 from collections.abc import Callable
-from urllib.parse import urlsplit
 
 from lxml import etree
 
-from svg2ooxml.common.ooxml_relationships import is_safe_relationship_id
+from svg2ooxml.common.boundaries import (
+    has_control_character,
+    is_safe_relationship_id,
+    sanitize_external_hyperlink_target,
+)
 from svg2ooxml.core.pipeline.navigation import (
     BookmarkTarget,
     CustomShowTarget,
@@ -28,8 +30,6 @@ REL_TYPE_HYPERLINK = (
 REL_TYPE_SLIDE = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide"
 
 _SLIDE_TARGET_RE = re.compile(r"\A\.\./slides/slide([1-9][0-9]*)\.xml\Z")
-_ALLOWED_EXTERNAL_SCHEMES = {"http", "https", "mailto", "tel"}
-_SSRF_HOST_TOKENS = ("metadata.google", "metadata.azure")
 
 __all__ = [
     "normalize_navigation",
@@ -224,34 +224,6 @@ def _action_uri_for_spec(spec: NavigationSpec) -> str | None:
     return None
 
 
-def sanitize_external_hyperlink_target(href: str | None) -> str | None:
-    """Return a safe external hyperlink target, or ``None`` if unsupported."""
-    if not isinstance(href, str):
-        return None
-    target = href.strip()
-    if not target or "\\" in target or _has_control_character(target):
-        return None
-
-    try:
-        parsed = urlsplit(target)
-    except ValueError:
-        return None
-
-    scheme = parsed.scheme.lower()
-    if scheme not in _ALLOWED_EXTERNAL_SCHEMES:
-        return None
-
-    if scheme in {"http", "https"}:
-        if not parsed.netloc or not parsed.hostname:
-            return None
-        if _is_blocked_external_host(parsed.hostname):
-            return None
-    elif parsed.netloc:
-        return None
-
-    return target
-
-
 def navigation_relationship_attributes(
     asset: NavigationAsset,
     *,
@@ -297,25 +269,6 @@ def _safe_slide_relationship_target(target: str | None) -> str | None:
     return target
 
 
-def _has_control_character(value: str) -> bool:
-    return any(ord(char) < 32 or ord(char) == 127 for char in value)
-
-
-def _is_blocked_external_host(hostname: str) -> bool:
-    host = hostname.strip("[]").rstrip(".").lower()
-    if not host:
-        return True
-    if host == "localhost" or host.endswith(".localhost"):
-        return True
-    if any(token in host for token in _SSRF_HOST_TOKENS):
-        return True
-    try:
-        address = ipaddress.ip_address(host)
-    except ValueError:
-        return False
-    return address.is_loopback or address.is_link_local or address.is_unspecified
-
-
 def _build_navigation_elem(asset: NavigationAsset) -> etree._Element | None:
     """Build an ``a:hlinkClick`` element, or *None* if not applicable."""
     if not asset.relationship_id and not asset.action:
@@ -331,7 +284,7 @@ def _build_navigation_elem(asset: NavigationAsset) -> etree._Element | None:
             asset.relationship_id,
         )
 
-    if asset.tooltip:
+    if asset.tooltip and not has_control_character(asset.tooltip):
         hlinkClick.set("tooltip", html.escape(asset.tooltip, quote=False))
 
     hlinkClick.set("history", "1" if asset.history else "0")

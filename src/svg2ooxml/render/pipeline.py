@@ -12,20 +12,14 @@ try:  # pragma: no cover - optional dependency guard
 except ImportError as exc:  # pragma: no cover
     raise RuntimeError("svg2ooxml.render requires skia-python; install the 'render' extra.") from exc
 
+from svg2ooxml.common.svg_refs import unwrap_url_reference
 from svg2ooxml.core.resvg.geometry.primitives import ClosePath, LineTo, MoveTo
 from svg2ooxml.core.resvg.geometry.tessellation import TessellationResult, Tessellator
-from svg2ooxml.core.resvg.painting.gradients import (
-    GradientStop,
-    LinearGradient,
-    PatternPaint,
-    RadialGradient,
-)
-from svg2ooxml.core.resvg.painting.paint import Color, FillStyle, StrokeStyle
+from svg2ooxml.core.resvg.painting.paint import FillStyle, StrokeStyle
 from svg2ooxml.core.resvg.usvg_tree import (
     BaseNode,
     ImageNode,
     PathNode,
-    PatternNode,
     Tree,
 )
 from svg2ooxml.render.filters import (
@@ -46,6 +40,15 @@ from svg2ooxml.render.mask_clip import (
 )
 from svg2ooxml.render.rasterizer import Rasterizer, Viewport
 from svg2ooxml.render.shapes import node_geometry
+from svg2ooxml.render.skia_paint import (
+    make_fill_paint as _make_fill_paint,
+)
+from svg2ooxml.render.skia_paint import (
+    make_stroke_paint as _make_stroke_paint,
+)
+from svg2ooxml.render.skia_paint import (
+    to_skia_matrix as _to_skia_matrix,
+)
 from svg2ooxml.render.surface import Surface
 
 _DEFINITION_TAGS = {
@@ -117,13 +120,10 @@ def _render_image(
     except Exception:
         return
 
-    try:
-        x = float(node.attributes.get("x", "0"))
-        y = float(node.attributes.get("y", "0"))
-        width = float(node.attributes.get("width", "0"))
-        height = float(node.attributes.get("height", "0"))
-    except ValueError:
-        return
+    x = node.x
+    y = node.y
+    width = node.width or 0.0
+    height = node.height or 0.0
 
     if width <= 0 or height <= 0:
         return
@@ -173,7 +173,7 @@ def _render_image(
     # Apply effects
     mask_ctx = resolve_mask(tree, node.attributes.get("mask"))
     clip_ctx = resolve_clip_path(tree, node.attributes.get("clip-path"))
-    filter_href = _clean_href(node.attributes.get("filter"))
+    filter_href = unwrap_url_reference(node.attributes.get("filter"))
     
     # Calculate bounds for filter
     # We transform (x, y, w, h) by node_matrix to get user-space bounds
@@ -227,7 +227,7 @@ def _render_shape_node(
 
     mask_ctx = resolve_mask(tree, node.attributes.get("mask"))
     clip_ctx = resolve_clip_path(tree, node.attributes.get("clip-path"))
-    filter_href = _clean_href(node.attributes.get("filter"))
+    filter_href = unwrap_url_reference(node.attributes.get("filter"))
     filter_plan = None
     if filter_href:
         filter_node = tree.resolve_filter(filter_href)
@@ -422,246 +422,6 @@ def _transformed_image_bounds(
     return (min(xs), min(ys), max(xs), max(ys))
 
 
-def _make_fill_paint(fill: FillStyle, tree: Tree, bounds: tuple[float, float, float, float] | None) -> skia.Paint | None:
-    paint = skia.Paint(AntiAlias=True)
-    paint.setStyle(skia.Paint.kFill_Style)
-
-    if fill.reference is None:
-        color = fill.color
-        if color is None:
-            return None
-        paint.setColor4f(_color_to_skia(color))
-        return paint
-
-    paint_server = tree.resolve_paint(fill.reference)
-    if paint_server is None:
-        return None
-
-    if isinstance(paint_server, LinearGradient):
-        shader = _make_linear_gradient_shader(paint_server, bounds, fill.opacity)
-    elif isinstance(paint_server, RadialGradient):
-        shader = _make_radial_gradient_shader(paint_server, bounds, fill.opacity)
-    elif isinstance(paint_server, PatternPaint):
-        shader = _make_pattern_shader(fill, tree)
-    else:
-        shader = None
-
-    if shader is None:
-        return None
-    paint.setShader(shader)
-    return paint
-
-
-def _make_stroke_paint(stroke: StrokeStyle, tree: Tree, bounds: tuple[float, float, float, float] | None) -> skia.Paint | None:
-    paint = skia.Paint(AntiAlias=True)
-    paint.setStyle(skia.Paint.kStroke_Style)
-    paint.setStrokeWidth(stroke.width or 0.0)
-    paint.setStrokeCap(skia.Paint.Cap.kButt_Cap)
-    paint.setStrokeJoin(skia.Paint.Join.kMiter_Join)
-
-    if stroke.reference is None:
-        color = stroke.color
-        if color is None:
-            return None
-        paint.setColor4f(_color_to_skia(color))
-        return paint
-
-    paint_server = tree.resolve_paint(stroke.reference)
-    if paint_server is None:
-        return None
-
-    if isinstance(paint_server, LinearGradient):
-        shader = _make_linear_gradient_shader(paint_server, bounds, stroke.opacity)
-    elif isinstance(paint_server, RadialGradient):
-        shader = _make_radial_gradient_shader(paint_server, bounds, stroke.opacity)
-    else:
-        shader = None
-
-    if shader is None:
-        return None
-    paint.setShader(shader)
-    return paint
-
-
-def _prepare_gradient_stops(
-    stops: tuple[GradientStop, ...],
-    opacity: float,
-) -> tuple[list[float], list[skia.Color4f]] | None:
-    if not stops:
-        return None
-    positions: list[float] = []
-    colors: list[skia.Color4f] = []
-    for stop in stops:
-        offset = max(0.0, min(1.0, stop.offset))
-        color = stop.color
-        alpha = color.a * opacity
-        positions.append(offset)
-        colors.append(skia.Color4f(color.r, color.g, color.b, alpha))
-    return positions, colors
-
-
-def _make_linear_gradient_shader(
-    gradient: LinearGradient,
-    bounds: tuple[float, float, float, float] | None,
-    opacity: float,
-) -> skia.Shader | None:
-    if bounds is None:
-        return None
-    prepared = _prepare_gradient_stops(gradient.stops, opacity)
-    if prepared is None:
-        return None
-    positions, colors = prepared
-    x1, y1, x2, y2 = _linear_gradient_points(gradient, bounds)
-    if x1 == x2 and y1 == y2:
-        return None
-    tile_mode = _resolve_tile_mode(gradient.spread_method)
-    matrix = _to_skia_matrix(gradient.transform)
-    return skia.GradientShader.MakeLinear(
-        [skia.Point(x1, y1), skia.Point(x2, y2)],
-        colors,
-        positions,
-        tile_mode,
-        0,
-        matrix,
-    )
-
-
-def _make_radial_gradient_shader(
-    gradient: RadialGradient,
-    bounds: tuple[float, float, float, float] | None,
-    opacity: float,
-) -> skia.Shader | None:
-    if bounds is None:
-        return None
-    prepared = _prepare_gradient_stops(gradient.stops, opacity)
-    if prepared is None:
-        return None
-    positions, colors = prepared
-
-    cx, cy, radius = _radial_gradient_params(gradient, bounds)
-    if radius <= 0:
-        return None
-
-    tile_mode = _resolve_tile_mode(gradient.spread_method)
-    matrix = _to_skia_matrix(gradient.transform)
-
-    fx, fy = _radial_gradient_focus(gradient, bounds)
-    if fx != cx or fy != cy:
-        return skia.GradientShader.MakeTwoPointConical(
-            skia.Point(fx, fy),
-            0.0,
-            skia.Point(cx, cy),
-            radius,
-            colors,
-            positions,
-            tile_mode,
-            0,
-            matrix,
-        )
-
-    return skia.GradientShader.MakeRadial(
-        skia.Point(cx, cy),
-        radius,
-        colors,
-        positions,
-        tile_mode,
-        0,
-        matrix,
-    )
-
-
-def _make_pattern_shader(fill: FillStyle, tree: Tree) -> skia.Shader | None:
-    reference = fill.reference
-    if reference is None or not reference.href.startswith("#"):
-        return None
-    pattern_node = tree.paint_servers.get(reference.href[1:])
-    if not isinstance(pattern_node, PatternNode):
-        return None
-    for child in pattern_node.children:
-        child_fill = getattr(child, "fill", None)
-        if child_fill and child_fill.color:
-            color = child_fill.color
-            alpha = color.a * fill.opacity
-            return skia.Shaders.Color(skia.Color4f(color.r, color.g, color.b, alpha))
-    return None
-
-
-def _resolve_tile_mode(spread_method: str) -> skia.TileMode:
-    if spread_method == "repeat":
-        return skia.TileMode.kRepeat
-    if spread_method == "reflect":
-        return skia.TileMode.kMirror
-    return skia.TileMode.kClamp
-
-
-def _linear_gradient_points(
-    gradient: LinearGradient,
-    bounds: tuple[float, float, float, float],
-) -> tuple[float, float, float, float]:
-    min_x, min_y, max_x, max_y = bounds
-    width = max(max_x - min_x, 0.0)
-    height = max(max_y - min_y, 0.0)
-    if gradient.units == "objectBoundingBox":
-        x1 = min_x + gradient.x1 * width
-        y1 = min_y + gradient.y1 * height
-        x2 = min_x + gradient.x2 * width
-        y2 = min_y + gradient.y2 * height
-    else:
-        x1 = gradient.x1
-        y1 = gradient.y1
-        x2 = gradient.x2
-        y2 = gradient.y2
-    return x1, y1, x2, y2
-
-
-def _radial_gradient_params(
-    gradient: RadialGradient,
-    bounds: tuple[float, float, float, float],
-) -> tuple[float, float, float]:
-    min_x, min_y, max_x, max_y = bounds
-    width = max(max_x - min_x, 0.0)
-    height = max(max_y - min_y, 0.0)
-    if gradient.units == "objectBoundingBox":
-        cx = min_x + gradient.cx * width
-        cy = min_y + gradient.cy * height
-        radius = gradient.r * (width + height) * 0.5
-    else:
-        cx = gradient.cx
-        cy = gradient.cy
-        radius = gradient.r
-    return cx, cy, radius
-
-
-def _radial_gradient_focus(
-    gradient: RadialGradient,
-    bounds: tuple[float, float, float, float],
-) -> tuple[float, float]:
-    min_x, min_y, max_x, max_y = bounds
-    width = max(max_x - min_x, 0.0)
-    height = max(max_y - min_y, 0.0)
-    if gradient.units == "objectBoundingBox":
-        fx = min_x + gradient.fx * width
-        fy = min_y + gradient.fy * height
-    else:
-        fx = gradient.fx
-        fy = gradient.fy
-    return fx, fy
-
-
-def _to_skia_matrix(matrix) -> skia.Matrix:
-    return skia.Matrix.MakeAll(
-        matrix.a,
-        matrix.c,
-        matrix.e,
-        matrix.b,
-        matrix.d,
-        matrix.f,
-        0.0,
-        0.0,
-        1.0,
-    )
-
-
 def _tessellation_bounds(tessellation: TessellationResult) -> tuple[float, float, float, float] | None:
     min_x = math.inf
     min_y = math.inf
@@ -703,21 +463,5 @@ def _resolve_clip_mask(context: ClipPathContext | None, render_context: RenderCo
     if clip_id:
         render_context.clip_cache[clip_id] = mask
     return mask
-
-
-def _color_to_skia(color: Color) -> skia.Color4f:
-    return skia.Color4f(color.r, color.g, color.b, color.a)
-
-
-def _clean_href(raw: str | None) -> str | None:
-    if raw is None:
-        return None
-    value = raw.strip()
-    if not value:
-        return None
-    if value.startswith("url(") and value.endswith(")"):
-        value = value[4:-1].strip()
-    return value
-
 
 __all__ = ["RenderContext", "render"]

@@ -7,6 +7,8 @@ from collections.abc import Iterable, Mapping
 # Import centralized XML builders for safe DrawingML generation
 from lxml import etree
 
+from svg2ooxml.common.boundaries import parse_wrapped_xml_fragment
+from svg2ooxml.common.svg_refs import local_name as _local_name
 from svg2ooxml.drawingml.effect_fragments import (
     extract_safe_effect_children,
     sanitize_custom_effect_fragment,
@@ -81,8 +83,7 @@ def extract_effect_children(fragment: str) -> str:
 def _flatten_effect_children(fragment: str) -> str:
     """Flatten effect container fragments into a single sequence of effect nodes."""
 
-    wrapped = f'<root xmlns:a="{NS_A}">{fragment}</root>'
-    temp = etree.fromstring(wrapped.encode("utf-8"))
+    temp = parse_wrapped_xml_fragment(fragment, namespaces={"a": NS_A})
     parts: list[str] = []
     for child in temp:
         if _local_name(child.tag) in {"effectLst", "effectDag"}:
@@ -99,14 +100,6 @@ def _serialize_node(node: etree._Element) -> str:
     if isinstance(node, (etree._Comment, etree._ProcessingInstruction)):
         return etree.tostring(node, encoding="unicode")
     return to_string(node)
-
-
-def _local_name(tag: str | None) -> str:
-    if not tag:
-        return ""
-    if "}" in tag:
-        return tag.split("}", 1)[1]
-    return tag
 
 
 def merge_effect_fragments(

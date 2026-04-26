@@ -15,11 +15,11 @@ try:  # pragma: no cover - optional dependency guard
 except ImportError:  # pragma: no cover
     skia = None
 
+from svg2ooxml.common.boundaries import classify_resource_href
 from svg2ooxml.core.resvg.usvg_tree import FilterPrimitive
 from svg2ooxml.render.surface import Surface
 from svg2ooxml.services.image_service import (
     ImageService,
-    is_external_image_href,
     normalize_image_href,
     resolve_local_image_path,
 )
@@ -82,12 +82,15 @@ def _decode_image_payload(
     normalized_uri = normalize_image_href(uri)
     if not normalized_uri:
         raise ValueError("feImage requires an href attribute")
-    if normalized_uri.lower().startswith("data:"):
+    reference = classify_resource_href(normalized_uri)
+    if reference is None:
+        raise ValueError("feImage requires an href attribute")
+    if reference.kind == "data":
         return _decode_data_uri(normalized_uri)
 
-    if is_external_image_href(normalized_uri):
-        if normalized_uri.startswith("#"):
-            raise ValueError("fragment feImage references are not yet supported")
+    if reference.kind == "fragment":
+        raise ValueError("fragment feImage references are not yet supported")
+    if not reference.is_local_path:
         raise ValueError("external feImage URL references are not supported")
 
     source_path = _option_string(options, "source_path", "svg_path", "svg_file")
@@ -99,7 +102,7 @@ def _decode_image_payload(
         base_dir = base_dir.parent
     allowed_root = _resolve_asset_root(options, base_dir)
     target = resolve_local_image_path(
-        normalized_uri,
+        reference.path or reference.normalized,
         base_dir,
         asset_root=allowed_root,
     )

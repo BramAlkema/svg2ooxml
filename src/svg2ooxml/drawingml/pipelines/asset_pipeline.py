@@ -12,7 +12,7 @@ from collections.abc import Callable
 from io import BytesIO
 from typing import TYPE_CHECKING, Any
 
-from svg2ooxml.common.ooxml_relationships import is_safe_relationship_id
+from svg2ooxml.common.boundaries import is_safe_relationship_id
 from svg2ooxml.drawingml.filter_fallback import resolve_filter_fallback_bounds
 from svg2ooxml.drawingml.generator import px_to_emu
 from svg2ooxml.io.emf import EMFRelationshipManager

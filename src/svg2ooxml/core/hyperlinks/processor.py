@@ -6,6 +6,7 @@ from collections.abc import Callable, Iterable
 
 from lxml import etree
 
+from svg2ooxml.common.svg_refs import local_name
 from svg2ooxml.core.parser.xml_utils import children
 from svg2ooxml.core.pipeline.navigation import NavigationSpec, parse_svg_navigation
 
@@ -57,7 +58,7 @@ class HyperlinkProcessor:
 
     def _extract_tooltip(self, element: etree._Element) -> str | None:
         for child in self._children(element):
-            tag = self._local_name(child.tag)
+            tag = local_name(child.tag)
             if tag != "title":
                 continue
             tooltip = self._collect_text(child)
@@ -76,14 +77,5 @@ class HyperlinkProcessor:
         if element.tail:
             parts.append(element.tail)
         return "".join(parts).strip()
-
-    @staticmethod
-    def _local_name(tag: str | None) -> str:
-        if not tag:
-            return ""
-        if "}" in tag:
-            return tag.split("}", 1)[1]
-        return tag
-
 
 __all__ = ["HyperlinkProcessor"]

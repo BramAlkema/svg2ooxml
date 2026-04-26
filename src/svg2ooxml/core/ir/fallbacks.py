@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 
 from lxml import etree
 
+from svg2ooxml.common.style.css_values import parse_style_declarations
 from svg2ooxml.common.units import UnitConverter
 from svg2ooxml.drawingml.bridges import EMFPathAdapter, PathStyle
 from svg2ooxml.ir.geometry import Point, Rect, SegmentType
@@ -105,11 +106,9 @@ def _resolve_fill_rule(element: etree._Element, style_metadata: dict[str, object
         return _normalise_fill_rule(attr)
 
     inline = element.get("style")
-    if inline:
-        for chunk in inline.split(";"):
-            name, _, value = chunk.partition(":")
-            if name.strip().lower() == "fill-rule" and value.strip():
-                return _normalise_fill_rule(value)
+    value = parse_style_declarations(inline)[0].get("fill-rule")
+    if value and value.strip():
+        return _normalise_fill_rule(value)
 
     return "nonzero"
 

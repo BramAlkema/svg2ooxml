@@ -6,7 +6,7 @@ import hashlib
 from collections.abc import Iterable
 from dataclasses import dataclass
 
-from svg2ooxml.common.ooxml_relationships import is_safe_relationship_id
+from svg2ooxml.common.boundaries import is_safe_relationship_id
 
 
 @dataclass(frozen=True)

@@ -12,6 +12,8 @@ from lxml import etree
 
 from svg2ooxml.color.models import Color
 from svg2ooxml.color.parsers import parse_color
+from svg2ooxml.common.style.css_values import parse_style_declarations
+from svg2ooxml.common.svg_refs import local_name
 
 
 class GradientComplexity(Enum):
@@ -133,30 +135,17 @@ class GradientProcessor:
         return hashlib.sha1(payload, usedforsecurity=False).hexdigest()
 
     def _gradient_type(self, element: etree._Element) -> str:
-        tag = element.tag
-        if "}" in tag:
-            tag = tag.split("}", 1)[1]
-        return tag
+        return local_name(element.tag)
 
     def _iter_stops(self, element: etree._Element) -> Iterable[etree._Element]:
         for child in element:
             if not hasattr(child, "tag"):
                 continue
-            local = child.tag.split("}", 1)[1] if "}" in child.tag else child.tag
-            if local == "stop":
+            if local_name(child.tag) == "stop":
                 yield child
 
     def _stop_color(self, stop: etree._Element) -> Color | None:
-        style = stop.get("style", "")
-        candidate = None
-        if style:
-            for entry in style.split(";"):
-                if ":" not in entry:
-                    continue
-                key, value = entry.split(":", 1)
-                if key.strip() == "stop-color":
-                    candidate = value.strip()
-                    break
+        candidate = parse_style_declarations(stop.get("style"))[0].get("stop-color")
         if candidate is None:
             candidate = stop.get("stop-color")
         if candidate is None:

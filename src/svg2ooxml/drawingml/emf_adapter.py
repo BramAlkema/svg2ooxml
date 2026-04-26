@@ -8,6 +8,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from svg2ooxml.color.utils import rgb_channels_to_hex
 from svg2ooxml.common.units import px_to_emu
 from svg2ooxml.io.emf import EMFBlob
 
@@ -708,7 +709,7 @@ def _adjust_lightness(hex_color: str, factor: float, *, brighten: bool) -> str:
         r = int(r * (1.0 - factor))
         g = int(g * (1.0 - factor))
         b = int(b * (1.0 - factor))
-    return f"#{_clamp(r):02X}{_clamp(g):02X}{_clamp(b):02X}"
+    return rgb_channels_to_hex(r, g, b, prefix="#", scale="byte")
 
 
 def _hex_to_rgb(value: str) -> tuple[int, int, int]:
@@ -725,26 +726,22 @@ def _hex_to_rgb(value: str) -> tuple[int, int, int]:
     return r, g, b
 
 
-def _clamp(value: int) -> int:
-    return max(0, min(255, value))
-
-
 def _matrix_value_color(value: float) -> str:
     clamped = max(-1.0, min(1.0, value))
     if clamped >= 0:
         blue = int(190 + clamped * 65)
-        return f"#{120:02X}{150:02X}{blue:02X}"
+        return rgb_channels_to_hex(120, 150, blue, prefix="#", scale="byte")
     red = int(190 + abs(clamped) * 65)
-    return f"#{red:02X}{140:02X}{120:02X}"
+    return rgb_channels_to_hex(red, 140, 120, prefix="#", scale="byte")
 
 
 def _kernel_value_color(value: float) -> str:
     clamped = max(-5.0, min(5.0, value))
     if clamped >= 0:
         channel = int(170 + clamped / 5.0 * 70)
-        return f"#{130:02X}{channel:02X}{245:02X}"
+        return rgb_channels_to_hex(130, channel, 245, prefix="#", scale="byte")
     channel = int(170 + abs(clamped) / 5.0 * 70)
-    return f"#{245:02X}{channel:02X}{130:02X}"
+    return rgb_channels_to_hex(245, channel, 130, prefix="#", scale="byte")
 
 
 def _safe_float(token: str) -> float:

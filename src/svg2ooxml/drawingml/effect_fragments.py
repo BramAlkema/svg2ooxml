@@ -6,6 +6,12 @@ from copy import deepcopy
 
 from lxml import etree
 
+from svg2ooxml.common.boundaries import (
+    BoundaryError,
+    parse_wrapped_xml_fragment,
+)
+from svg2ooxml.common.svg_refs import local_name as svg_local_name
+from svg2ooxml.common.svg_refs import namespace_uri
 from svg2ooxml.drawingml.xml_builder import NS_A, NS_R, to_string
 
 _EFFECT_LIST_CHILD_ORDER = (
@@ -27,8 +33,6 @@ _EFFECT_LIST_ORDER = {
         [*_EFFECT_LIST_CHILD_ORDER, *_PROJECT_EFFECT_LIST_PLACEHOLDERS]
     )
 }
-_FORBIDDEN_XML_MARKERS = ("<!doctype", "<!entity", "<?")
-
 
 def sanitize_custom_effect_fragment(fragment: str | None) -> str:
     """Return a DrawingML-only effect fragment, or ``""`` when unsafe.
@@ -143,31 +147,19 @@ def _parse_effect_fragment(fragment: str | None) -> etree._Element | None:
     if not fragment or not fragment.strip():
         return None
 
-    text = fragment.strip()
-    lowered = text.lower()
-    if any(marker in lowered for marker in _FORBIDDEN_XML_MARKERS):
-        return None
-
-    wrapped = f'<root xmlns:a="{NS_A}" xmlns:r="{NS_R}">{text}</root>'
-    parser = etree.XMLParser(
-        resolve_entities=False,
-        no_network=True,
-        recover=False,
-        huge_tree=False,
-    )
     try:
-        return etree.fromstring(wrapped.encode("utf-8"), parser=parser)
-    except (etree.XMLSyntaxError, ValueError):
+        return parse_wrapped_xml_fragment(
+            fragment.strip(),
+            namespaces={"a": NS_A, "r": NS_R},
+        )
+    except (BoundaryError, etree.XMLSyntaxError, ValueError):
         return None
 
 
 def _split_tag(tag: str | None) -> tuple[str, str]:
     if not isinstance(tag, str):
         return "", ""
-    if tag.startswith("{") and "}" in tag:
-        namespace, local_name = tag[1:].split("}", 1)
-        return namespace, local_name
-    return "", tag
+    return namespace_uri(tag) or "", svg_local_name(tag)
 
 
 __all__ = [

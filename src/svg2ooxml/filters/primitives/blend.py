@@ -6,6 +6,7 @@ from dataclasses import dataclass
 
 from lxml import etree
 
+from svg2ooxml.color.utils import rgb_channels_to_hex
 from svg2ooxml.common.conversions.opacity import opacity_to_ppt
 
 # Import centralized XML builders for safe DrawingML generation
@@ -377,7 +378,7 @@ class BlendFilter(Filter):
         g = int(round(sum_g / total_weight))
         b = int(round(sum_b / total_weight))
         avg_opacity = max(0.0, min(1.0, sum_opacity / total_weight))
-        return f"{r:02X}{g:02X}{b:02X}", avg_opacity
+        return rgb_channels_to_hex(r, g, b, scale="byte"), avg_opacity
 
     @staticmethod
     def _collect_fallback_assets(*results: FilterResult | None) -> list[dict[str, object]]:

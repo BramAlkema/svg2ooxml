@@ -251,6 +251,8 @@ def test_external_hyperlink_rejects_unsafe_targets():
         "http://localhost:8000",
         "http://127.0.0.2/status",
         "http://0.0.0.0/status",
+        "http://10.0.0.1/status",
+        "http://192.168.1.1/status",
         "http://[::1]/status",
         "http://169.254.169.254/latest",
         "http://metadata.google.internal/computeMetadata/v1/",

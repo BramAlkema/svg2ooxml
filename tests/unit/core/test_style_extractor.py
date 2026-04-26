@@ -1,10 +1,16 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+
+import pytest
 from lxml import etree
 
 from svg2ooxml.common.style.resolver import StyleResolver
+from svg2ooxml.common.units import UnitConverter
 from svg2ooxml.core.styling.style_extractor import StyleExtractor
-from svg2ooxml.ir.paint import SolidPaint
+from svg2ooxml.drawingml.bridges.resvg_paint_bridge import describe_gradient_element
+from svg2ooxml.ir.paint import LinearGradientPaint, SolidPaint
+from svg2ooxml.services import configure_services
 
 
 class DummyServices:
@@ -59,6 +65,95 @@ def test_style_extractor_respects_inline_override() -> None:
     style = extractor.extract(rect, DummyServices())
     assert isinstance(style.fill, SolidPaint)
     assert style.fill.rgb.upper() == 'FF0000'
+
+
+def test_style_extractor_resolves_absolute_stroke_dash_lengths() -> None:
+    markup = """
+        <svg xmlns='http://www.w3.org/2000/svg'>
+            <rect id='target' width='10' height='10'
+                  fill='none' stroke='#000000' stroke-width='1'
+                  stroke-dasharray='0.25in 6pt' stroke-dashoffset='3pt'/>
+        </svg>
+    """
+    root, rect = _build_svg(markup)
+
+    resolver = StyleResolver()
+    resolver.collect_css(root)
+    extractor = StyleExtractor(resolver)
+
+    style = extractor.extract(rect, DummyServices())
+
+    assert style.stroke is not None
+    assert style.stroke.dash_array == [24.0, 8.0]
+    assert style.stroke.dash_offset == 4.0
+
+
+def test_style_extractor_resolves_userspace_gradient_coordinates() -> None:
+    markup = """
+        <svg xmlns='http://www.w3.org/2000/svg' width='200' height='100'>
+            <defs>
+                <linearGradient id='grad' gradientUnits='userSpaceOnUse'
+                                x1='0.25in' y1='6pt'>
+                    <stop offset='0' stop-color='#000000'/>
+                    <stop offset='1' stop-color='#ffffff'/>
+                </linearGradient>
+            </defs>
+            <rect id='target' width='100' height='50' fill='url(#grad)'/>
+        </svg>
+    """
+    root, rect = _build_svg(markup)
+    gradient = root.xpath(".//*[local-name()='linearGradient']")[0]
+    services = configure_services()
+    assert services.gradient_service is not None
+    services.gradient_service.register_gradient("grad", describe_gradient_element(gradient))
+
+    resolver = StyleResolver()
+    resolver.collect_css(root)
+    extractor = StyleExtractor(resolver)
+    conversion = UnitConverter().create_context(width=200.0, height=100.0)
+    context = SimpleNamespace(conversion=conversion)
+
+    style = extractor.extract(rect, services, context=context)
+
+    assert isinstance(style.fill, LinearGradientPaint)
+    assert style.fill.gradient_units == "userSpaceOnUse"
+    assert style.fill.start == pytest.approx((24.0, 8.0))
+    assert style.fill.end == pytest.approx((200.0, 0.0))
+
+
+def test_style_extractor_preserves_explicit_object_bbox_gradient_override() -> None:
+    markup = """
+        <svg xmlns='http://www.w3.org/2000/svg' width='200' height='100'>
+            <defs>
+                <linearGradient id='base' gradientUnits='userSpaceOnUse' x2='100%'>
+                    <stop offset='0' stop-color='#000000'/>
+                    <stop offset='1' stop-color='#ffffff'/>
+                </linearGradient>
+                <linearGradient id='child' href='#base' gradientUnits='objectBoundingBox'/>
+            </defs>
+            <rect id='target' width='100' height='50' fill='url(#child)'/>
+        </svg>
+    """
+    root, rect = _build_svg(markup)
+    services = configure_services()
+    assert services.gradient_service is not None
+    for gradient in root.xpath(".//*[local-name()='linearGradient']"):
+        services.gradient_service.register_gradient(
+            gradient.get("id"),
+            describe_gradient_element(gradient),
+        )
+
+    resolver = StyleResolver()
+    resolver.collect_css(root)
+    extractor = StyleExtractor(resolver)
+    conversion = UnitConverter().create_context(width=200.0, height=100.0)
+    context = SimpleNamespace(conversion=conversion)
+
+    style = extractor.extract(rect, services, context=context)
+
+    assert isinstance(style.fill, LinearGradientPaint)
+    assert style.fill.gradient_units == "objectBoundingBox"
+    assert style.fill.end == pytest.approx((1.0, 0.0))
 
 
 def test_style_extractor_normalizes_filter_url_before_resolution() -> None:

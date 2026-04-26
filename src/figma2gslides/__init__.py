@@ -1,7 +1,11 @@
-"""App-layer package for Figma and Google Slides workflows.
+"""Tool-layer package for Figma and Google Slides workflows.
 
-This package is kept in the svg2ooxml repository for now, but it is not part
-of the supported svg2ooxml converter API surface.
+``figma2gslides`` is intentionally packaged from this repository as a tool on
+top of ``svg2ooxml``. Importing this package stays lightweight; runtime entry
+points such as ``figma2gslides.app:app`` may require the ``figma2gslides`` extra.
 """
 
-__all__ = []
+TOOL_NAME = "figma2gslides"
+TOOL_SURFACE = "svg2ooxml-tool"
+
+__all__ = ["TOOL_NAME", "TOOL_SURFACE"]

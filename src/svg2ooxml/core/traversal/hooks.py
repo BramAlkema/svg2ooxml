@@ -9,6 +9,7 @@ from lxml import etree
 
 from svg2ooxml.common.geometry import Matrix2D
 from svg2ooxml.common.style.resolver import StyleContext as CSSStyleContext
+from svg2ooxml.common.svg_refs import local_url_id, namespace_uri
 from svg2ooxml.core.parser.switch_evaluator import SwitchEvaluator
 from svg2ooxml.core.styling import style_runtime, use_expander
 from svg2ooxml.core.traversal.clipping_hooks import ClippingHooksMixin
@@ -324,22 +325,14 @@ class TraversalHooksMixin(ShapeCreationMixin, StylingHooksMixin, ClippingHooksMi
 
     @staticmethod
     def _normalize_href_reference(href: str | None) -> str | None:
-        if not href:
-            return None
-        token = href.strip()
-        if token.startswith("url(") and token.endswith(")"):
-            token = token[4:-1].strip().strip("\"'")
-        if token.startswith("#"):
-            return token[1:]
-        return None
+        return local_url_id(href)
 
     _local_name = staticmethod(local_name)
 
     @staticmethod
     def _make_namespaced_tag(reference: etree._Element, local: str) -> str:
-        tag = reference.tag
-        if isinstance(tag, str) and "}" in tag:
-            namespace = tag.split("}", 1)[0][1:]
+        namespace = namespace_uri(reference.tag)
+        if namespace:
             return f"{{{namespace}}}{local}"
         return local
 

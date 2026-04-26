@@ -89,7 +89,8 @@ def test_style_resolver_scales_unitless_font_size() -> None:
 def test_style_resolver_resolves_current_color() -> None:
     resolver = StyleResolver()
     parent = resolver.default_text_style()
-    parent["fill"] = "#112233"
+    parent["color"] = "#112233"
+    parent["fill"] = "#FF0000"
     element = etree.fromstring("<text style='fill: currentColor'>Hello</text>")
 
     style = resolver.compute_text_style(element, parent_style=parent)
@@ -110,6 +111,18 @@ def test_paint_style_handles_url_and_percentage_width() -> None:
     assert paint["stroke"] is None
     assert paint["stroke_width_px"] == pytest.approx(100.0)
     assert paint["opacity"] == pytest.approx(0.5)
+
+
+def test_paint_style_resolves_current_color_from_color_not_fill() -> None:
+    resolver = StyleResolver()
+    group = etree.fromstring("<g color='#112233' fill='#ff0000'><rect fill='currentColor'/></g>")
+    rect = group.find("rect")
+    assert rect is not None
+
+    parent_style = resolver.compute_paint_style(group)
+    paint = resolver.compute_paint_style(rect, parent_style=parent_style)
+
+    assert paint["fill"] == "#112233"
 
 
 def test_paint_style_resolves_percentage_opacity_values() -> None:
@@ -210,6 +223,105 @@ def test_stylesheet_rules_apply_to_text_elements() -> None:
 
     assert style["fill"] == "#008000"
     assert style["font_weight"] == "bold"
+
+
+def test_stylesheet_important_beats_more_specific_normal_rule() -> None:
+    resolver = StyleResolver()
+    svg_markup = """
+        <svg xmlns='http://www.w3.org/2000/svg'>
+            <style>
+                rect { fill: #008000 !important; }
+                #target { fill: #ff0000; }
+            </style>
+            <rect id='target'/>
+        </svg>
+    """
+    root = etree.fromstring(svg_markup)
+    resolver.collect_css(root)
+    rect = root.find("{http://www.w3.org/2000/svg}rect")
+    assert rect is not None
+
+    paint = resolver.compute_paint_style(rect)
+
+    assert paint["fill"] == "#008000"
+
+
+def test_stylesheet_color_feeds_current_color_fill() -> None:
+    resolver = StyleResolver()
+    svg_markup = """
+        <svg xmlns='http://www.w3.org/2000/svg'>
+            <style>
+                .target { color: #112233; fill: currentColor; }
+            </style>
+            <rect class='target' fill='#ff0000'/>
+        </svg>
+    """
+    root = etree.fromstring(svg_markup)
+    resolver.collect_css(root)
+    rect = root.find("{http://www.w3.org/2000/svg}rect")
+    assert rect is not None
+
+    paint = resolver.compute_paint_style(rect)
+
+    assert paint["fill"] == "#112233"
+
+
+def test_collect_css_resets_custom_properties_between_roots() -> None:
+    resolver = StyleResolver()
+    first = etree.fromstring(
+        """
+        <svg xmlns='http://www.w3.org/2000/svg'>
+            <style>
+                :root { --accent: #008000; }
+                rect { fill: var(--accent); }
+            </style>
+            <rect/>
+        </svg>
+        """
+    )
+    resolver.collect_css(first)
+    first_rect = first.find("{http://www.w3.org/2000/svg}rect")
+    assert first_rect is not None
+    assert resolver.compute_paint_style(first_rect)["fill"] == "#008000"
+
+    second = etree.fromstring(
+        """
+        <svg xmlns='http://www.w3.org/2000/svg'>
+            <style>
+                rect { fill: var(--accent, #112233); }
+            </style>
+            <rect/>
+        </svg>
+        """
+    )
+    resolver.collect_css(second)
+    second_rect = second.find("{http://www.w3.org/2000/svg}rect")
+    assert second_rect is not None
+
+    paint = resolver.compute_paint_style(second_rect)
+
+    assert paint["fill"] == "#112233"
+
+
+def test_text_stylesheet_important_beats_more_specific_normal_rule() -> None:
+    resolver = StyleResolver()
+    svg_markup = """
+        <svg xmlns='http://www.w3.org/2000/svg'>
+            <style>
+                text { fill: #008000 !important; }
+                #target { fill: #ff0000; }
+            </style>
+            <text id='target'>Hello</text>
+        </svg>
+    """
+    root = etree.fromstring(svg_markup)
+    resolver.collect_css(root)
+    text_node = root.find("{http://www.w3.org/2000/svg}text")
+    assert text_node is not None
+
+    style = resolver.compute_text_style(text_node)
+
+    assert style["fill"] == "#008000"
 
 
 def test_inline_style_respects_stylesheet_important() -> None:

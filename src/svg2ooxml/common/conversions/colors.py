@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from svg2ooxml.color.parsers import parse_color as _parse_color
-from svg2ooxml.color.utils import color_to_hex
+from svg2ooxml.color.utils import color_to_hex, rgb_channels_to_hex
 
 __all__ = [
     "color_to_hex",
@@ -82,9 +82,4 @@ def rgb_to_hex(r: int, g: int, b: int) -> str:
         >>> rgb_to_hex(0, 255, 0)
         '00FF00'
     """
-    # Clamp values to 0-255 range
-    r = max(0, min(255, int(r)))
-    g = max(0, min(255, int(g)))
-    b = max(0, min(255, int(b)))
-
-    return f"{r:02X}{g:02X}{b:02X}"
+    return rgb_channels_to_hex(r, g, b, scale="byte")

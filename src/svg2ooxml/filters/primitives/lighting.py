@@ -7,9 +7,10 @@ from dataclasses import dataclass
 
 from lxml import etree
 
-from svg2ooxml.color.utils import color_to_hex
+from svg2ooxml.color.utils import color_to_hex, rgb_channels_to_hex
 from svg2ooxml.common.conversions.angles import radians_to_ppt
 from svg2ooxml.common.conversions.opacity import opacity_to_ppt
+from svg2ooxml.common.svg_refs import local_name
 from svg2ooxml.common.units import px_to_emu
 
 # Import centralized XML builders for safe DrawingML generation
@@ -29,7 +30,7 @@ def _parse_light_source(primitive: etree._Element) -> LightSource | None:
     for node in primitive:
         if not hasattr(node, "tag"):
             continue
-        local = node.tag.split("}", 1)[-1] if "}" in node.tag else node.tag
+        local = local_name(node.tag)
         if local == "feDistantLight":
             return LightSource(
                 kind="distant",
@@ -343,7 +344,7 @@ def _mix_toward_white(token: str, weight: float) -> str:
     red = int(round(red + (255 - red) * weight))
     green = int(round(green + (255 - green) * weight))
     blue = int(round(blue + (255 - blue) * weight))
-    return f"{red:02X}{green:02X}{blue:02X}"
+    return rgb_channels_to_hex(red, green, blue, scale="byte")
 
 
 def _lighting_direction_ppt(light: LightSource | None) -> int:
@@ -388,8 +389,7 @@ def _source_is_svg_image(context: FilterContext) -> bool:
     element = options.get("element")
     tag = getattr(element, "tag", None)
     if isinstance(tag, str):
-        local = tag.split("}", 1)[-1] if "}" in tag else tag
-        if local == "image":
+        if local_name(tag) == "image":
             return True
 
     filter_inputs = options.get("filter_inputs")

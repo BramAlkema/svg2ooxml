@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
+from svg2ooxml.drawingml.effects_runtime import effect_block
 from svg2ooxml.drawingml.generator import px_to_emu
+from svg2ooxml.drawingml.shape_attrs import descr_attr
 from svg2ooxml.ir.scene import Image
 
 _ALLOWED_BLIP_TAGS = frozenset(
@@ -63,8 +65,6 @@ def render_picture(
     geometry_xml: str = "",
 ) -> str | None:
     """Render an IR image element into a picture shape."""
-    from .shapes_runtime import _descr_attr, _effect_block  # lazy to avoid cycle
-
     if image.data is None and image.href is None:
         return None
 
@@ -80,7 +80,7 @@ def render_picture(
 
     effects_xml = ""
     if isinstance(getattr(image, "effects", []), list):
-        effects_xml = _indent_block(_effect_block(getattr(image, "effects", [])))
+        effects_xml = _indent_block(effect_block(getattr(image, "effects", [])))
 
     # srcRect from clip bounds (thousandths of percent).
     src_rect = image.metadata.get("_src_rect")
@@ -122,7 +122,7 @@ def render_picture(
         HYPERLINK_XML=_indent_block(hyperlink_xml),
         SRC_RECT_XML=src_rect_xml,
         GEOMETRY_XML=geometry_xml,
-        DESCR_ATTR=_descr_attr(image.metadata),
+        DESCR_ATTR=descr_attr(image.metadata),
     )
 
 

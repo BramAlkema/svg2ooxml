@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-import re
-from collections.abc import Iterable
 from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any
 
 from lxml import etree
+
+from svg2ooxml.common.svg_refs import local_name
 
 try:  # pragma: no cover - skia optional during transition
     import skia  # type: ignore
@@ -16,19 +16,17 @@ except Exception:  # pragma: no cover - gracefully degrade without skia
     skia = None
 
 from svg2ooxml.drawingml.paint_converter import _coerce_positive, _is_number
+from svg2ooxml.drawingml.raster_preview import RasterPreviewBuilder
 from svg2ooxml.drawingml.skia_bridge import (
     NUMPY_AVAILABLE,
     _solid_gray_png,
     _surface_to_png,
-    color_from_seed,
     draw_bounds,
     palette_for_primitives,
     render_caption,
     render_gradient_passes,
     render_surface_from_descriptor,
 )
-
-_URL_REF_RE = re.compile(r"url\(\s*#([^)]+?)\s*\)")
 
 
 @dataclass
@@ -45,6 +43,7 @@ class RasterAdapter:
 
     def __init__(self) -> None:
         self._counter = 0
+        self._preview_builder = RasterPreviewBuilder()
 
     # ------------------------------------------------------------------ #
     # Public API                                                         #
@@ -249,6 +248,7 @@ class RasterAdapter:
             return None
 
         resources_dir = None
+        asset_root = None
         if context and context.services:
             image_service = getattr(context.services, "image_service", None)
             if image_service:
@@ -257,10 +257,14 @@ class RasterAdapter:
                 for resolver in image_service.resolvers():
                     if isinstance(resolver, FileResolver):
                         resources_dir = resolver.base_dir
+                        asset_root = resolver.asset_root
                         break
 
         try:
-            options = build_default_options(resources_dir=resources_dir)
+            options = build_default_options(
+                resources_dir=resources_dir,
+                asset_root=asset_root,
+            )
             normalized = normalize_svg_string(svg_markup, options=options)
             return render(normalized.tree)
         except Exception:  # pragma: no cover - renderer failure
@@ -343,6 +347,7 @@ class RasterAdapter:
         )
 
         resources_dir = None
+        asset_root = None
         if context and context.services:
             image_service = getattr(context.services, "image_service", None)
             if image_service:
@@ -350,10 +355,14 @@ class RasterAdapter:
                 for resolver in image_service.resolvers():
                     if isinstance(resolver, FileResolver):
                         resources_dir = resolver.base_dir
+                        asset_root = resolver.asset_root
                         break
 
         try:
-            options = build_default_options(resources_dir=resources_dir)
+            options = build_default_options(
+                resources_dir=resources_dir,
+                asset_root=asset_root,
+            )
             normalized = normalize_svg_string(svg_markup, options=options)
             return render(normalized.tree)
         except Exception:  # pragma: no cover - renderer failure
@@ -368,85 +377,21 @@ class RasterAdapter:
         height_px: int,
         context,
     ) -> str:
-        svg_ns = "http://www.w3.org/2000/svg"
-        xlink_ns = "http://www.w3.org/1999/xlink"
         descriptor, bounds = self._descriptor_payload(context)
-        source_element = self._source_element_from_context(context)
-        source_root = None
-        if source_element is not None:
-            try:
-                source_root = source_element.getroottree().getroot()
-            except Exception:
-                source_root = None
-
         resolved_bounds = self._resolved_filter_bounds(
             descriptor=descriptor,
             bounds=bounds,
             default_width=width_px,
             default_height=height_px,
         )
-        svg_root = etree.Element(
-            f"{{{svg_ns}}}svg",
-            nsmap={None: svg_ns, "xlink": xlink_ns},
-            attrib={
-                "width": str(max(1, int(width_px))),
-                "height": str(max(1, int(height_px))),
-            },
-        )
-        defs = etree.SubElement(svg_root, f"{{{svg_ns}}}defs")
-        if isinstance(source_root, etree._Element):
-            for defs_child in self._iter_defs_children(source_root):
-                defs.append(defs_child)
-        defs.append(filter_clone)
-
-        source_subtree = self._build_source_subtree(
-            source_element=source_element,
-            source_root=source_root,
+        return self._preview_builder.build_preview_svg_markup(
+            filter_clone=filter_clone,
             preview_filter_id=preview_filter_id,
-            svg_ns=svg_ns,
+            width_px=width_px,
+            height_px=height_px,
+            context=context,
+            resolved_bounds=resolved_bounds,
         )
-        if source_subtree is not None:
-            preserve_user_space = self._requires_original_user_space(
-                source_subtree,
-                source_root,
-            )
-            svg_root.set(
-                "viewBox",
-                self._preview_viewbox(
-                    bounds=resolved_bounds,
-                    width_px=width_px,
-                    height_px=height_px,
-                    preserve_user_space=preserve_user_space,
-                ),
-            )
-            svg_root.append(
-                self._localize_source_subtree(
-                    source_subtree,
-                    resolved_bounds,
-                    svg_ns,
-                    preserve_user_space=preserve_user_space,
-                )
-            )
-        else:
-            svg_root.set(
-                "viewBox",
-                self._preview_viewbox(bounds=resolved_bounds, width_px=width_px, height_px=height_px),
-            )
-            rect = etree.SubElement(
-                svg_root,
-                f"{{{svg_ns}}}rect",
-                attrib={
-                    "x": "0",
-                    "y": "0",
-                    "width": "100%",
-                    "height": "100%",
-                    "fill": "#7F8CFF",
-                    "filter": f"url(#{preview_filter_id})",
-                },
-            )
-            rect.set("opacity", "1")
-
-        return etree.tostring(svg_root, encoding="unicode")
 
     def _build_source_svg_markup(
         self,
@@ -458,74 +403,25 @@ class RasterAdapter:
         width_px: int,
         height_px: int,
     ) -> str | None:
-        svg_ns = "http://www.w3.org/2000/svg"
-        xlink_ns = "http://www.w3.org/1999/xlink"
         resolved_bounds = self._resolved_filter_bounds(
             descriptor=descriptor,
             bounds=bounds,
             default_width=width_px,
             default_height=height_px,
         )
-        svg_root = etree.Element(
-            f"{{{svg_ns}}}svg",
-            nsmap={None: svg_ns, "xlink": xlink_ns},
-            attrib={
-                "width": str(max(1, int(width_px))),
-                "height": str(max(1, int(height_px))),
-            },
-        )
-        defs = etree.SubElement(svg_root, f"{{{svg_ns}}}defs")
-        if isinstance(source_root, etree._Element):
-            for defs_child in self._iter_defs_children(source_root):
-                defs.append(defs_child)
-        source_subtree = self._build_source_subtree(
+        return self._preview_builder.build_source_svg_markup(
             source_element=source_element,
             source_root=source_root,
-            preview_filter_id=None,
-            svg_ns=svg_ns,
+            resolved_bounds=resolved_bounds,
+            width_px=width_px,
+            height_px=height_px,
         )
-        if source_subtree is None:
-            return None
-        preserve_user_space = self._requires_original_user_space(
-            source_subtree,
-            source_root,
-        )
-        svg_root.set(
-            "viewBox",
-            self._preview_viewbox(
-                bounds=resolved_bounds,
-                width_px=width_px,
-                height_px=height_px,
-                preserve_user_space=preserve_user_space,
-            ),
-        )
-        svg_root.append(
-            self._localize_source_subtree(
-                source_subtree,
-                resolved_bounds,
-                svg_ns,
-                preserve_user_space=preserve_user_space,
-            )
-        )
-        return etree.tostring(svg_root, encoding="unicode")
 
     def _source_element_from_context(self, context) -> etree._Element | None:
-        options = getattr(context, "options", None)
-        if not isinstance(options, dict):
-            return None
-        candidate = options.get("element")
-        if isinstance(candidate, etree._Element):
-            return candidate
-        return None
+        return self._preview_builder.source_element_from_context(context)
 
     def _iter_defs_children(self, source_root: etree._Element) -> list[etree._Element]:
-        svg_ns = "http://www.w3.org/2000/svg"
-        children: list[etree._Element] = []
-        for defs in source_root.findall(f".//{{{svg_ns}}}defs"):
-            for child in defs:
-                if isinstance(child.tag, str):
-                    children.append(deepcopy(child))
-        return children
+        return self._preview_builder.iter_defs_children(source_root)
 
     def _build_source_subtree(
         self,
@@ -535,51 +431,17 @@ class RasterAdapter:
         preview_filter_id: str | None,
         svg_ns: str,
     ) -> etree._Element | None:
-        if source_element is None:
-            return None
-        node = deepcopy(source_element)
-        self._rewrite_filter_reference(node, preview_filter_id)
-        ancestors: list[etree._Element] = []
-        current = source_element.getparent()
-        while current is not None and current is not source_root:
-            local = current.tag.split("}", 1)[-1] if isinstance(current.tag, str) and "}" in current.tag else str(current.tag)
-            if local.lower() != "defs":
-                ancestors.append(current)
-            current = current.getparent()
-        for ancestor in reversed(ancestors):
-            wrapper = etree.Element(ancestor.tag, attrib=dict(ancestor.attrib))
-            wrapper.append(node)
-            node = wrapper
-        self._flatten_transforms_in_place(node)
-        return node
+        return self._preview_builder.build_source_subtree(
+            source_element=source_element,
+            source_root=source_root,
+            preview_filter_id=preview_filter_id,
+            svg_ns=svg_ns,
+        )
 
     def _rewrite_filter_reference(
         self, element: etree._Element, preview_filter_id: str | None
     ) -> None:
-        if preview_filter_id:
-            element.set("filter", f"url(#{preview_filter_id})")
-        else:
-            element.attrib.pop("filter", None)
-        style_attr = element.get("style")
-        if not style_attr or "filter" not in style_attr:
-            return
-        if preview_filter_id:
-            style_attr = re.sub(
-                r"filter\s*:\s*url\([^)]+\)",
-                f"filter:url(#{preview_filter_id})",
-                style_attr,
-            )
-        else:
-            style_attr = re.sub(
-                r"(?:^|;)\s*filter\s*:\s*url\([^)]+\)\s*;?",
-                ";",
-                style_attr,
-            )
-            style_attr = re.sub(r";{2,}", ";", style_attr).strip(" ;")
-        if style_attr:
-            element.set("style", style_attr)
-        else:
-            element.attrib.pop("style", None)
+        self._preview_builder.rewrite_filter_reference(element, preview_filter_id)
 
     def _preview_viewbox(
         self,
@@ -589,17 +451,12 @@ class RasterAdapter:
         height_px: int,
         preserve_user_space: bool = False,
     ) -> str:
-        if not bounds:
-            return f"0 0 {max(1, int(width_px))} {max(1, int(height_px))}"
-
-        x = float(bounds.get("x", 0.0))
-        y = float(bounds.get("y", 0.0))
-        width = max(1.0, float(bounds.get("width", width_px)))
-        height = max(1.0, float(bounds.get("height", height_px)))
-
-        if preserve_user_space:
-            return f"{x:g} {y:g} {width:g} {height:g}"
-        return f"0 0 {width:g} {height:g}"
+        return self._preview_builder.preview_viewbox(
+            bounds=bounds,
+            width_px=width_px,
+            height_px=height_px,
+            preserve_user_space=preserve_user_space,
+        )
 
     def _localize_source_subtree(
         self,
@@ -609,110 +466,29 @@ class RasterAdapter:
         *,
         preserve_user_space: bool = False,
     ) -> etree._Element:
-        if preserve_user_space or not isinstance(bounds, dict):
-            return source_subtree
-        try:
-            x = float(bounds.get("x", 0.0))
-            y = float(bounds.get("y", 0.0))
-        except (TypeError, ValueError):
-            return source_subtree
-        if abs(x) <= 1e-6 and abs(y) <= 1e-6:
-            return source_subtree
-        self._flatten_transforms_in_place(
+        del svg_ns
+        return self._preview_builder.localize_source_subtree(
             source_subtree,
-            inherited_transform=f"translate({-x:g},{-y:g})",
+            bounds,
+            preserve_user_space=preserve_user_space,
         )
-        return source_subtree
 
     def _flatten_transforms_in_place(
         self,
         element: etree._Element,
         inherited_transform: str = "",
     ) -> None:
-        if not isinstance(element.tag, str):
-            return
-
-        local_tag = element.tag.split("}", 1)[-1] if "}" in element.tag else element.tag
-        current_transform = (element.get("transform") or "").strip()
-        combined_transform = " ".join(
-            part for part in (inherited_transform.strip(), current_transform) if part
-        )
-
-        if local_tag in {"g", "svg"}:
-            element.attrib.pop("transform", None)
-        elif combined_transform:
-            element.set("transform", combined_transform)
-        else:
-            element.attrib.pop("transform", None)
-
-        for child in element:
-            if isinstance(child.tag, str):
-                self._flatten_transforms_in_place(child, combined_transform)
+        self._preview_builder.flatten_transforms_in_place(element, inherited_transform)
 
     def _requires_original_user_space(
         self,
         source_subtree: etree._Element,
         source_root: etree._Element | None,
     ) -> bool:
-        if not isinstance(source_root, etree._Element):
-            return False
-
-        referenced_ids: set[str] = set()
-        for node in source_subtree.iter():
-            if not isinstance(node.tag, str):
-                continue
-            for attr_name, attr_value in node.attrib.items():
-                if not isinstance(attr_value, str):
-                    continue
-                if attr_name in {
-                    "fill",
-                    "stroke",
-                    "filter",
-                    "clip-path",
-                    "mask",
-                    "href",
-                    "{http://www.w3.org/1999/xlink}href",
-                }:
-                    referenced_ids.update(_URL_REF_RE.findall(attr_value))
-                    if attr_value.startswith("#"):
-                        referenced_ids.add(attr_value[1:])
-                elif attr_name == "style":
-                    referenced_ids.update(_URL_REF_RE.findall(attr_value))
-
-        if not referenced_ids:
-            return False
-
-        targets = {
-            element.get("id"): element
-            for element in source_root.xpath(".//*[@id]")
-            if isinstance(element.tag, str) and isinstance(element.get("id"), str)
-        }
-        for ref_id in referenced_ids:
-            target = targets.get(ref_id)
-            if target is None:
-                continue
-            local_tag = target.tag.split("}", 1)[-1] if "}" in target.tag else target.tag
-            if local_tag in {"linearGradient", "radialGradient"}:
-                if (target.get("gradientUnits") or "").strip() == "userSpaceOnUse":
-                    return True
-            elif local_tag == "pattern":
-                if (
-                    (target.get("patternUnits") or "").strip() == "userSpaceOnUse"
-                    or (target.get("patternContentUnits") or "userSpaceOnUse").strip()
-                    == "userSpaceOnUse"
-                ):
-                    return True
-            elif local_tag == "clipPath":
-                if (target.get("clipPathUnits") or "userSpaceOnUse").strip() == "userSpaceOnUse":
-                    return True
-            elif local_tag == "mask":
-                if (
-                    (target.get("maskUnits") or "").strip() == "userSpaceOnUse"
-                    or (target.get("maskContentUnits") or "userSpaceOnUse").strip()
-                    == "userSpaceOnUse"
-                ):
-                    return True
-        return False
+        return self._preview_builder.requires_original_user_space(
+            source_subtree,
+            source_root,
+        )
 
     def _render_placeholder_preview(
         self,
@@ -1005,7 +781,7 @@ class RasterAdapter:
         for child in filter_element:
             if not isinstance(child.tag, str):
                 continue
-            primitive_tags.append(child.tag.split("}", 1)[-1])
+            primitive_tags.append(local_name(child.tag))
         if not region and not primitive_tags and not filter_element.attrib:
             return None
         return {

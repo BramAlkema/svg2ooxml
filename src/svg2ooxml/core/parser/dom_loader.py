@@ -7,14 +7,10 @@ from typing import Any
 
 from lxml import etree
 
+from svg2ooxml.common.boundaries import parse_xml_text
+from svg2ooxml.common.svg_refs import local_name
+
 from .xml_utils import walk
-
-
-class _BlockedExternalResolver(etree.Resolver):
-    """Prevent XML external entities from reading files or network resources."""
-
-    def resolve(self, system_url, public_id, context):  # noqa: ANN001, D102
-        return self.resolve_string("", context)
 
 
 @dataclass(frozen=True)
@@ -48,12 +44,14 @@ class XMLParser:
         self._options = options or ParserOptions()
 
     def parse(self, content: str) -> etree._Element:
-        parser = etree.XMLParser(**self._options.as_lxml_config())
-        parser.resolvers.add(_BlockedExternalResolver())
-        return etree.fromstring(content.encode("utf-8"), parser=parser)
+        return parse_xml_text(
+            content,
+            description="SVG DOM",
+            **self._options.as_lxml_config(),
+        )
 
     def validate_root(self, root: etree._Element) -> None:
-        if root.tag.split("}")[-1].lower() != "svg":
+        if local_name(root.tag).lower() != "svg":
             raise ValueError("Root element is not <svg>.")
 
     def collect_statistics(self, root: etree._Element) -> dict[str, Any]:

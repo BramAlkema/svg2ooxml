@@ -2,30 +2,26 @@
 
 from __future__ import annotations
 
-import base64
-import binascii
 import os
-import re
-import urllib.parse
 from collections import OrderedDict
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from svg2ooxml.common.boundaries import (
+    DATA_URI_RE,
+    EXTERNAL_RESOURCE_SCHEMES,
+    decode_data_uri,
+    is_external_resource_href,
+    normalize_resource_href,
+    resolve_local_resource_path,
+)
+
 if TYPE_CHECKING:
     from svg2ooxml.services import ConversionServices
 
-DATA_URI_RE = re.compile(
-    r"^data:(?P<mime>[^;,]*)?(?P<params>(?:;[^,]*)*),(?P<payload>.*)$",
-    re.IGNORECASE | re.DOTALL,
-)
-EXTERNAL_IMAGE_PROTOCOLS: tuple[str, ...] = (
-    "http://",
-    "https://",
-    "ftp://",
-    "file://",
-)
+EXTERNAL_IMAGE_PROTOCOLS = EXTERNAL_RESOURCE_SCHEMES
 
 
 @dataclass(frozen=True)
@@ -141,25 +137,14 @@ class ImageService:
         normalized_href = normalize_image_href(href)
         if not normalized_href:
             return None
-        match = DATA_URI_RE.match(normalized_href)
-        if not match:
+        decoded = decode_data_uri(normalized_href)
+        if decoded is None:
             return None
-        mime_type = (match.group("mime") or "").strip() or None
-        params = match.group("params") or ""
-        payload = match.group("payload")
-        is_base64 = any(
-            part.strip().lower() == "base64"
-            for part in params.split(";")
-            if part.strip()
+        return ImageResource(
+            data=decoded.data,
+            mime_type=decoded.mime_type,
+            source="data-uri",
         )
-        if is_base64:
-            try:
-                data = base64.b64decode(payload.strip(), validate=True)
-            except (ValueError, binascii.Error):
-                return None
-        else:
-            data = urllib.parse.unquote_to_bytes(payload)
-        return ImageResource(data=data, mime_type=mime_type, source="data-uri")
 
     def _cache_enabled(self) -> bool:
         return self._cache_max_items > 0 and self._cache_max_bytes > 0
@@ -211,27 +196,13 @@ def _env_int(key: str, default: int) -> int:
 def normalize_image_href(href: str | None) -> str | None:
     """Normalize common SVG/CSS href wrappers for image resolution."""
 
-    if href is None:
-        return None
-    token = href.strip()
-    if token.lower().startswith("url(") and token.endswith(")"):
-        token = token[4:-1].strip()
-        if (token.startswith("'") and token.endswith("'")) or (
-            token.startswith('"') and token.endswith('"')
-        ):
-            token = token[1:-1]
-    token = token.strip()
-    return token or None
+    return normalize_resource_href(href)
 
 
 def is_external_image_href(href: str | None) -> bool:
     """Return true for hrefs that must not be resolved from local disk."""
 
-    token = normalize_image_href(href)
-    if not token:
-        return False
-    lowered = token.lower()
-    return lowered.startswith(EXTERNAL_IMAGE_PROTOCOLS) or lowered.startswith("#")
+    return is_external_resource_href(href)
 
 
 def resolve_local_image_path(
@@ -242,34 +213,7 @@ def resolve_local_image_path(
 ) -> Path | None:
     """Resolve a local image path without allowing absolute or ``..`` escapes."""
 
-    token = normalize_image_href(href)
-    if not token:
-        return None
-    lowered = token.lower()
-    if lowered.startswith("data:") or is_external_image_href(token):
-        return None
-
-    try:
-        base = Path(base_dir).expanduser().resolve()
-        root = Path(asset_root).expanduser().resolve() if asset_root else base
-        candidate = Path(token).expanduser()
-        target = candidate.resolve() if candidate.is_absolute() else (base / candidate).resolve()
-    except (OSError, RuntimeError, ValueError):
-        return None
-
-    if not _path_is_within(target, root):
-        return None
-    if not target.is_file():
-        return None
-    return target
-
-
-def _path_is_within(path: Path, root: Path) -> bool:
-    try:
-        path.relative_to(root)
-    except ValueError:
-        return False
-    return True
+    return resolve_local_resource_path(href, base_dir, asset_root=asset_root)
 
 
 __all__ = [

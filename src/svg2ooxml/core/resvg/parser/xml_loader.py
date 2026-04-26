@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-import gzip
 from pathlib import Path
 
-from lxml import etree
-
-from .converter import convert_document
-from .options import Options
-from .tree import SvgDocument
+from svg2ooxml.common.boundaries import decompress_svgz_bytes, parse_xml_bytes
+from svg2ooxml.core.resvg.parser.converter import convert_document
+from svg2ooxml.core.resvg.parser.options import Options
+from svg2ooxml.core.resvg.parser.tree import SvgDocument
 
 
 def _read_bytes(source: Path | str | bytes) -> bytes:
@@ -20,23 +18,16 @@ def _read_bytes(source: Path | str | bytes) -> bytes:
     return path.read_bytes()
 
 
-def _maybe_decompress(data: bytes) -> bytes:
-    if data.startswith(b"\x1f\x8b"):
-        return gzip.decompress(data)
-    return data
-
-
 def parse_svg_bytes(data: bytes, *, options: Options) -> SvgDocument:
     """Parse an SVG document from bytes, handling SVGZ if necessary."""
-    decoded = _maybe_decompress(data)
-    parser = etree.XMLParser(
-        resolve_entities=False,
-        no_network=True,
+    decoded = decompress_svgz_bytes(data)
+    root_element = parse_xml_bytes(
+        decoded,
+        description="resvg SVG XML",
         remove_comments=False,
         remove_pis=False,
-        huge_tree=False,
+        recover=False,
     )
-    root_element = etree.fromstring(decoded, parser=parser)
     return convert_document(root_element, options)
 
 
@@ -49,4 +40,3 @@ def parse_svg_file(path: Path | str, *, options: Options) -> SvgDocument:
     doc = parse_svg_bytes(data, options=options)
     doc.base_dir = str(Path(path).resolve().parent)
     return doc
-

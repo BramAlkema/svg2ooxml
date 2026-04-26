@@ -70,6 +70,7 @@ class Presentation:
     font_weight: str | None
     text_decoration: str | None = None
     letter_spacing: float | None = None
+    font_size_scale: float | None = None
 
 
 def _parse_float(value: str) -> float | None:
@@ -91,6 +92,36 @@ def _parse_optional_positive(value: str | None) -> float | None:
     return number
 
 
+def _default_length_context():
+    return _UNIT_CONVERTER.create_context(
+        width=0.0,
+        height=0.0,
+        font_size=_DEFAULT_FONT_SIZE_PX,
+        root_font_size=_DEFAULT_FONT_SIZE_PX,
+    )
+
+
+def _parse_length(value: str | None) -> float | None:
+    if value is None:
+        return None
+    token = value.strip().lower()
+    if not token or token in {"inherit", "initial", "unset"}:
+        return None
+    if token.endswith("%"):
+        return _parse_float(token.rstrip("%"))
+    try:
+        return _UNIT_CONVERTER.to_px(token, _default_length_context(), axis="font-size")
+    except ValueError:
+        return None
+
+
+def _parse_positive_length(value: str | None) -> float | None:
+    length = _parse_length(value)
+    if length is None or length < 0:
+        return None
+    return length
+
+
 def _parse_font_size(value: str | None) -> float | None:
     if value is None:
         return None
@@ -103,18 +134,24 @@ def _parse_font_size(value: str | None) -> float | None:
         except ValueError:
             return None
     try:
-        context = _UNIT_CONVERTER.create_context(
-            width=0.0,
-            height=0.0,
-            font_size=_DEFAULT_FONT_SIZE_PX,
-            root_font_size=_DEFAULT_FONT_SIZE_PX,
-        )
-        px = _UNIT_CONVERTER.to_px(token, context, axis="font-size")
+        px = _UNIT_CONVERTER.to_px(token, _default_length_context(), axis="font-size")
     except ValueError:
         return None
     if px < 0:
         return None
     return px * _DEFAULT_UNITLESS_FONT_SCALE
+
+
+def _parse_font_size_scale(value: str | None) -> float | None:
+    if value is None:
+        return None
+    token = value.strip().lower()
+    if not token.endswith("%"):
+        return None
+    try:
+        return max(0.0, float(token[:-1])) / 100.0
+    except ValueError:
+        return None
 
 
 def _parse_opacity(value: str | None) -> float | None:
@@ -131,13 +168,7 @@ def _parse_letter_spacing(value: str | None) -> float | None:
     if value in {"normal", "inherit", "initial"}:
         return None
     try:
-        context = _UNIT_CONVERTER.create_context(
-            width=0.0,
-            height=0.0,
-            font_size=_DEFAULT_FONT_SIZE_PX,
-            root_font_size=_DEFAULT_FONT_SIZE_PX,
-        )
-        return _UNIT_CONVERTER.to_px(value, context, axis="font-size")
+        return _UNIT_CONVERTER.to_px(value, _default_length_context(), axis="font-size")
     except ValueError:
         return None
 
@@ -177,9 +208,9 @@ def collect_presentation(node: SvgNode) -> Presentation:
     return Presentation(
         fill=_parse_paint(attrs.get("fill")),
         stroke=_parse_paint(attrs.get("stroke")),
-        stroke_width=_parse_optional_positive(attrs.get("stroke-width")),
+        stroke_width=_parse_positive_length(attrs.get("stroke-width")),
         stroke_dasharray=attrs.get("stroke-dasharray"),
-        stroke_dashoffset=_parse_float(attrs.get("stroke-dashoffset") or ""),
+        stroke_dashoffset=_parse_length(attrs.get("stroke-dashoffset")),
         stroke_linecap=attrs.get("stroke-linecap"),
         stroke_linejoin=attrs.get("stroke-linejoin"),
         stroke_miterlimit=_parse_optional_positive(attrs.get("stroke-miterlimit")),
@@ -193,4 +224,5 @@ def collect_presentation(node: SvgNode) -> Presentation:
         font_weight=attrs.get("font-weight"),
         text_decoration=attrs.get("text-decoration"),
         letter_spacing=_parse_letter_spacing(attrs.get("letter-spacing")),
+        font_size_scale=_parse_font_size_scale(attrs.get("font-size")),
     )

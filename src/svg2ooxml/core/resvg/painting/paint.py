@@ -6,7 +6,7 @@ import re
 from dataclasses import dataclass
 
 from svg2ooxml.color.parsers import parse_color as parse_global_color
-from svg2ooxml.common.conversions.transforms import parse_numeric_list
+from svg2ooxml.common.units import UnitConverter
 
 from .colors import parse_rgb
 
@@ -14,6 +14,13 @@ _HEX_SHORT_RE = re.compile(r"^#([0-9a-fA-F]{3})$")
 _HEX_FULL_RE = re.compile(r"^#([0-9a-fA-F]{6})$")
 _RGB_RE = re.compile(r"^rgb\(([^)]+)\)$")
 _URL_RE = re.compile(r"url\((#[^)]+)\)")
+_UNIT_CONVERTER = UnitConverter()
+_LENGTH_CONTEXT = _UNIT_CONVERTER.create_context(
+    width=0.0,
+    height=0.0,
+    font_size=12.0,
+    root_font_size=12.0,
+)
 
 _FONT_FAMILY_ALIASES = {
     "sans-serif": "Arial",
@@ -163,7 +170,15 @@ def _parse_dash_array(value: str | None) -> list[float] | None:
     token = value.strip()
     if not token or token.lower() == "none":
         return None
-    numbers = parse_numeric_list(token)
+    numbers: list[float] = []
+    for part in token.replace(",", " ").split():
+        try:
+            if part.endswith("%"):
+                numbers.append(float(part[:-1]))
+            else:
+                numbers.append(_UNIT_CONVERTER.to_px(part, _LENGTH_CONTEXT, axis="font-size"))
+        except ValueError:
+            return None
     return numbers or None
 
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from dataclasses import dataclass
 
+from svg2ooxml.color.utils import rgb_channels_to_hex, rgb_object_to_hex
 from svg2ooxml.core.parser.colors import parse_color as parse_svg_color
 from svg2ooxml.core.resvg.geometry.matrix import Matrix as ResvgMatrix
 from svg2ooxml.core.resvg.painting.gradients import (
@@ -184,6 +185,8 @@ def _convert_linear_gradient(definition_id: str, gradient: LinearGradient) -> Li
         end=(gradient.x2, gradient.y2),
         transform=transform,
         gradient_id=definition_id,
+        gradient_units=gradient.units,
+        spread_method=gradient.spread_method,
     )
 
 
@@ -200,6 +203,8 @@ def _convert_radial_gradient(definition_id: str, gradient: RadialGradient) -> Ra
         focal_point=focal,
         transform=transform,
         gradient_id=definition_id,
+        gradient_units=gradient.units,
+        spread_method=gradient.spread_method,
     )
 
 
@@ -259,21 +264,7 @@ def _matrix_to_array(matrix: ResvgMatrix | None):
 
 
 def _color_to_hex(color: Color) -> str | None:
-    try:
-        r = float(color.r)
-        g = float(color.g)
-        b = float(color.b)
-    except (TypeError, ValueError, AttributeError):
-        return None
-    try:
-        return f"{_channel_to_hex(r)}{_channel_to_hex(g)}{_channel_to_hex(b)}"
-    except (TypeError, ValueError):
-        return None
-
-
-def _channel_to_hex(value: float) -> str:
-    channel = value / 255.0 if value > 1.0 else value
-    return f"{int(round(_clamp01(channel) * 255)):02X}"
+    return rgb_object_to_hex(color, default=None, scale="auto")
 
 
 def _coerce_float(value: float | None, default: float) -> float:
@@ -303,18 +294,9 @@ def _solid_paint_from_presentation(
     if element_opacity is not None:
         effective_opacity *= _coerce_float(element_opacity, 1.0)
     return SolidPaint(
-        rgb=_tuple_to_hex(r, g, b),
+        rgb=rgb_channels_to_hex(r, g, b, scale="unit"),
         opacity=_clamp01(effective_opacity),
     )
-
-
-def _tuple_to_hex(r: float, g: float, b: float) -> str:
-    return f"{_float_channel_to_hex(r)}{_float_channel_to_hex(g)}{_float_channel_to_hex(b)}"
-
-
-def _float_channel_to_hex(value: float) -> str:
-    clamped = _clamp01(value)
-    return f"{int(round(clamped * 255)):02X}"
 
 
 def _clamp01(value: float) -> float:

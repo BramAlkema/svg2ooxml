@@ -1,8 +1,9 @@
 # Repository Boundary
 
-This repository currently hosts two code surfaces plus one sibling research
-repo. Keeping the boundary explicit avoids leaking app concerns into the
-converter and avoids treating empirical PowerPoint lab work as product code.
+This repository currently hosts a converter library, a tool built on top of
+that converter, and one sibling research repo. Keeping the boundary explicit
+avoids leaking app concerns into the core converter API and avoids treating
+empirical PowerPoint lab work as product code.
 
 ## Ownership
 
@@ -18,14 +19,15 @@ Owns the converter library and converter-facing CLI:
 
 ### `figma2gslides`
 
-Owns the extracted app/product surface that happens to live in this repo for
-now:
+Owns the Figma and Google Slides tool surface built on the converter:
 
 - FastAPI runtime under `src/figma2gslides/`
 - app assets under `apps/figma2gslides/`
 - API entrypoints and app-local runners under `apps/figma2gslides/`
 - auth, hosting, Firebase, Google Slides publishing, and legal pages
 - app-local helper scripts and app-specific operational notes
+- package runtime dependencies exposed through the `figma2gslides` optional
+  extra
 
 ### `openxml-audit`
 
@@ -44,7 +46,7 @@ new empirical work out of `tools/visual/`.
 
 Put work in `svg2ooxml` when it changes emitted converter behavior.
 
-Put work in `figma2gslides` when it changes app runtime, auth, hosting,
+Put work in `figma2gslides` when it changes the tool runtime, auth, hosting,
 plugin UX, or Google-specific operational flows.
 
 Put work in `openxml-audit` when it discovers or records what PowerPoint does
@@ -53,4 +55,6 @@ with authored XML.
 ## Practical Rule Of Thumb
 
 If a change could disappear without affecting `svg2ooxml convert input.svg -o
-output.pptx`, it probably does not belong in the converter surface.
+output.pptx`, it probably does not belong in the core converter surface. It may
+still belong in the `figma2gslides` tool surface if it affects Figma or Google
+Slides workflows.

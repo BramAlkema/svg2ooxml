@@ -8,6 +8,8 @@ from dataclasses import dataclass
 from lxml import etree
 
 from svg2ooxml.common.geometry import Matrix2D, parse_transform_list
+from svg2ooxml.common.style.css_values import parse_style_declarations
+from svg2ooxml.common.svg_refs import local_url_id
 from svg2ooxml.common.time import parse_time_value
 from svg2ooxml.ir.animation import (
     AnimationDefinition,
@@ -370,12 +372,12 @@ class SMILParser:
         for element in elements:
             # Check if it has a target via href
             href = element.get("href") or element.get("{http://www.w3.org/1999/xlink}href")
-            if href and href.startswith("#"):
+            if local_url_id(href) is not None:
                 continue
 
             # Explicit targets should not cause unrelated parent mutation.
             target = element.get("target")
-            if target and target.startswith("#"):
+            if local_url_id(target) is not None:
                 continue
 
             # Check parent
@@ -392,13 +394,15 @@ class SMILParser:
     def _get_target_element_id(self, element: etree._Element) -> str | None:
         # 1. Standard href or xlink:href
         href = element.get("href") or element.get("{http://www.w3.org/1999/xlink}href")
-        if href and href.startswith("#"):
-            return href[1:]
+        target_id = local_url_id(href)
+        if target_id is not None:
+            return target_id
 
         # 2. Non-standard explicit target attribute
         target = element.get("target")
-        if target and target.startswith("#"):
-            return target[1:]
+        target_id = local_url_id(target)
+        if target_id is not None:
+            return target_id
 
         # 3. Parent fallback (now guaranteed to have an ID if it's an anim parent)
         parent = element.getparent()
@@ -433,12 +437,9 @@ class SMILParser:
         if not style_value:
             return None
 
-        for declaration in style_value.split(";"):
-            if ":" not in declaration:
-                continue
-            property_name, value = declaration.split(":", 1)
-            if property_name.strip() == target_attribute and value.strip():
-                return value.strip()
+        value = parse_style_declarations(style_value)[0].get(target_attribute)
+        if value and value.strip():
+            return value.strip()
 
         return None
 
@@ -451,10 +452,7 @@ class SMILParser:
         href: str,
     ) -> str | None:
         """Resolve <mpath href="#..."> references to path data."""
-        if not href.startswith("#"):
-            return None
-
-        target_id = href[1:].strip()
+        target_id = local_url_id(href)
         if not target_id:
             return None
 
@@ -547,14 +545,16 @@ class SMILParser:
         root = animation_element.getroottree().getroot()
 
         href = animation_element.get("href") or animation_element.get("{http://www.w3.org/1999/xlink}href")
-        if href and href.startswith("#"):
-            target = self._lookup_element_by_id(root, href[1:])
+        target_id = local_url_id(href)
+        if target_id is not None:
+            target = self._lookup_element_by_id(root, target_id)
             if target is not None:
                 return target
 
         target = animation_element.get("target")
-        if target and target.startswith("#"):
-            return self._lookup_element_by_id(root, target[1:])
+        target_id = local_url_id(target)
+        if target_id is not None:
+            return self._lookup_element_by_id(root, target_id)
 
         parent = animation_element.getparent()
         if parent is not None and etree.QName(parent).localname not in self._ANIMATION_TAGS:

@@ -13,6 +13,12 @@ def test_normalize_remote_font_url_rejects_non_http_schemes() -> None:
     assert normalize_remote_font_url("data:font/woff2;base64,AA==") is None
 
 
+def test_normalize_remote_font_url_rejects_private_network_hosts() -> None:
+    assert normalize_remote_font_url("http://localhost/font.woff2") is None
+    assert normalize_remote_font_url("http://127.0.0.1/font.woff2") is None
+    assert normalize_remote_font_url("http://169.254.169.254/font.woff2") is None
+
+
 def test_fetch_rejects_non_http_source_without_network(tmp_path) -> None:
     source = FontSource(url="file:///tmp/font.woff2", font_family="Bad")
     fetcher = FontFetcher(cache_directory=tmp_path, allow_network=True)

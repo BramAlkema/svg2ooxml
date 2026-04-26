@@ -7,9 +7,15 @@ from collections.abc import Iterable
 
 from lxml import etree
 
+from svg2ooxml.common.boundaries import (
+    EXTERNAL_RESOURCE_SCHEMES,
+    classify_resource_href,
+)
+from svg2ooxml.common.svg_refs import local_name
+
 from .validators import ensure_namespaces
 
-EXTERNAL_PROTOCOLS: tuple[str, ...] = ("http://", "https://", "ftp://", "file://")
+EXTERNAL_PROTOCOLS: tuple[str, ...] = EXTERNAL_RESOURCE_SCHEMES
 URL_REFERENCE_RE = re.compile(r"url\(\s*['\"]?(?P<url>[^'\"\)]+)", re.IGNORECASE)
 
 
@@ -33,8 +39,7 @@ def has_external_references(root: etree._Element) -> bool:
         if style and _contains_external_url(style):
             return True
 
-        local_tag = element.tag.split("}")[-1]
-        if local_tag == "style":
+        if local_name(element.tag) == "style":
             style_content = element.text or ""
             if _contains_external_url(style_content):
                 return True
@@ -48,7 +53,8 @@ def _iter_elements(root: etree._Element) -> Iterable[etree._Element]:
 
 
 def _is_external_reference(value: str) -> bool:
-    return value.strip().lower().startswith(EXTERNAL_PROTOCOLS)
+    reference = classify_resource_href(value)
+    return bool(reference and reference.kind in {"remote", "file-uri", "external"})
 
 
 def _contains_url_reference(value: str) -> bool:

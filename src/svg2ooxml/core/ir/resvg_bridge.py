@@ -8,6 +8,8 @@ from typing import TYPE_CHECKING, Any
 from lxml import etree
 
 from svg2ooxml.clipmask.types import ClipDefinition, MaskInfo
+from svg2ooxml.common.svg_refs import local_name as svg_local_name
+from svg2ooxml.common.svg_refs import local_url_id
 from svg2ooxml.core.traversal.bridges import (
     collect_resvg_clip_definitions,
     collect_resvg_mask_info,
@@ -179,9 +181,9 @@ class ResvgBridge:
             if self._local_name(element.tag).lower() != "use":
                 continue
             href = element.get("href") or element.get("{http://www.w3.org/1999/xlink}href")
-            if not href or not href.startswith("#"):
+            ref_id = local_url_id(href)
+            if ref_id is None:
                 continue
-            ref_id = href[1:]
             resvg_node = id_map.get(ref_id) if id_map else None
             if resvg_node is None:
                 try:
@@ -280,11 +282,7 @@ class ResvgBridge:
 
     @staticmethod
     def _local_name(tag: Any) -> str:
-        if not isinstance(tag, str):
-            return ""
-        if "}" in tag:
-            return tag.split("}", 1)[1]
-        return tag
+        return svg_local_name(tag)
 
     @classmethod
     def _element_signature(cls, element: etree._Element) -> tuple[tuple[str, int], ...] | None:

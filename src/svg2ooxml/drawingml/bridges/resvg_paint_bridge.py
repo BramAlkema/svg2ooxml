@@ -4,13 +4,21 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
 from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from lxml import etree
 
 from svg2ooxml.color.parsers import parse_color
+from svg2ooxml.color.utils import rgb_object_to_hex
 from svg2ooxml.common.conversions.colors import color_to_hex
 from svg2ooxml.common.conversions.opacity import parse_opacity
+from svg2ooxml.common.gradient_units import (
+    normalize_gradient_units,
+    parse_gradient_coordinate,
+    parse_gradient_offset,
+)
+from svg2ooxml.common.style.css_values import parse_style_declarations
+from svg2ooxml.common.svg_refs import local_name as _local_name
 from svg2ooxml.core.resvg.geometry.matrix import Matrix
 from svg2ooxml.core.resvg.painting.gradients import (
     GradientStop,
@@ -47,6 +55,8 @@ class LinearGradientDescriptor:
     transform: MatrixTuple
     stops: tuple[GradientStopDescriptor, ...]
     href: str | None = None
+    specified: tuple[str, ...] = ("x1", "y1", "x2", "y2")
+    raw_attributes: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass(slots=True)
@@ -62,6 +72,8 @@ class RadialGradientDescriptor:
     transform: MatrixTuple
     stops: tuple[GradientStopDescriptor, ...]
     href: str | None = None
+    specified: tuple[str, ...] = ("cx", "cy", "r", "fx", "fy")
+    raw_attributes: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass(slots=True)
@@ -112,6 +124,8 @@ def describe_linear_gradient(gradient_id: str, gradient: LinearGradient) -> Line
         transform=_matrix_to_tuple(gradient.transform),
         stops=_describe_stops(gradient.stops),
         href=gradient.href,
+        specified=gradient.specified,
+        raw_attributes=dict(gradient.raw_attributes),
     )
 
 
@@ -128,6 +142,8 @@ def describe_radial_gradient(gradient_id: str, gradient: RadialGradient) -> Radi
         transform=_matrix_to_tuple(gradient.transform),
         stops=_describe_stops(gradient.stops),
         href=gradient.href,
+        specified=gradient.specified,
+        raw_attributes=dict(gradient.raw_attributes),
     )
 
 
@@ -236,10 +252,11 @@ def build_linear_gradient_element(descriptor: LinearGradientDescriptor) -> etree
         descriptor.transform,
         descriptor.href,
     )
-    element.set("x1", _format_number(descriptor.x1))
-    element.set("y1", _format_number(descriptor.y1))
-    element.set("x2", _format_number(descriptor.x2))
-    element.set("y2", _format_number(descriptor.y2))
+    _assign_explicit_common_gradient_attrs(element, descriptor)
+    _set_descriptor_attr(element, descriptor, "x1", descriptor.x1)
+    _set_descriptor_attr(element, descriptor, "y1", descriptor.y1)
+    _set_descriptor_attr(element, descriptor, "x2", descriptor.x2)
+    _set_descriptor_attr(element, descriptor, "y2", descriptor.y2)
     _append_stop_descriptors(element, descriptor.stops)
     return element
 
@@ -255,11 +272,12 @@ def build_radial_gradient_element(descriptor: RadialGradientDescriptor) -> etree
         descriptor.transform,
         descriptor.href,
     )
-    element.set("cx", _format_number(descriptor.cx))
-    element.set("cy", _format_number(descriptor.cy))
-    element.set("r", _format_number(descriptor.r))
-    element.set("fx", _format_number(descriptor.fx))
-    element.set("fy", _format_number(descriptor.fy))
+    _assign_explicit_common_gradient_attrs(element, descriptor)
+    _set_descriptor_attr(element, descriptor, "cx", descriptor.cx)
+    _set_descriptor_attr(element, descriptor, "cy", descriptor.cy)
+    _set_descriptor_attr(element, descriptor, "r", descriptor.r)
+    _set_descriptor_attr(element, descriptor, "fx", descriptor.fx)
+    _set_descriptor_attr(element, descriptor, "fy", descriptor.fy)
     _append_stop_descriptors(element, descriptor.stops)
     return element
 
@@ -333,6 +351,37 @@ def _assign_common_gradient_attrs(
         element.set("{http://www.w3.org/1999/xlink}href", href)
 
 
+def _set_descriptor_attr(
+    element: etree._Element,
+    descriptor: LinearGradientDescriptor | RadialGradientDescriptor,
+    name: str,
+    value: float,
+) -> None:
+    if name not in descriptor.specified:
+        return
+    element.set(name, descriptor.raw_attributes.get(name) or _format_number(value))
+
+
+def _assign_explicit_common_gradient_attrs(
+    element: etree._Element,
+    descriptor: LinearGradientDescriptor | RadialGradientDescriptor,
+) -> None:
+    if "gradientUnits" in descriptor.specified:
+        element.set(
+            "gradientUnits",
+            descriptor.raw_attributes.get("gradientUnits") or descriptor.units,
+        )
+    if "spreadMethod" in descriptor.specified:
+        element.set(
+            "spreadMethod",
+            descriptor.raw_attributes.get("spreadMethod") or descriptor.spread_method,
+        )
+    if "gradientTransform" in descriptor.specified:
+        raw_transform = descriptor.raw_attributes.get("gradientTransform")
+        if raw_transform is not None:
+            element.set("gradientTransform", raw_transform)
+
+
 def _append_stop_descriptors(parent: etree._Element, stops: Iterable[GradientStopDescriptor]) -> None:
     for stop in stops:
         stop_el = etree.SubElement(parent, "stop")
@@ -345,35 +394,51 @@ def _append_stop_descriptors(parent: etree._Element, stops: Iterable[GradientSto
 def _linear_descriptor_from_element(element: etree._Element) -> LinearGradientDescriptor:
     transform = _parse_matrix(element.get("gradientTransform"))
     stops = _parse_stops(element)
+    units = normalize_gradient_units(element.get("gradientUnits"))
     return LinearGradientDescriptor(
         gradient_id=element.get("id"),
-        x1=_parse_float(element.get("x1"), 0.0),
-        y1=_parse_float(element.get("y1"), 0.0),
-        x2=_parse_float(element.get("x2"), 1.0),
-        y2=_parse_float(element.get("y2"), 0.0),
-        units=element.get("gradientUnits") or "objectBoundingBox",
+        x1=parse_gradient_coordinate(element.get("x1"), units=units, axis="x", default="0%"),
+        y1=parse_gradient_coordinate(element.get("y1"), units=units, axis="y", default="0%"),
+        x2=parse_gradient_coordinate(element.get("x2"), units=units, axis="x", default="100%"),
+        y2=parse_gradient_coordinate(element.get("y2"), units=units, axis="y", default="0%"),
+        units=units,
         spread_method=element.get("spreadMethod") or "pad",
         transform=transform,
         stops=stops,
         href=_extract_href(element),
+        specified=tuple(
+            key
+            for key in ("x1", "y1", "x2", "y2", "gradientUnits", "spreadMethod", "gradientTransform")
+            if key in element.attrib
+        ),
+        raw_attributes={name: value for name, value in element.attrib.items() if value is not None},
     )
 
 
 def _radial_descriptor_from_element(element: etree._Element) -> RadialGradientDescriptor:
     transform = _parse_matrix(element.get("gradientTransform"))
     stops = _parse_stops(element)
+    units = normalize_gradient_units(element.get("gradientUnits"))
+    cx = parse_gradient_coordinate(element.get("cx"), units=units, axis="x", default="50%")
+    cy = parse_gradient_coordinate(element.get("cy"), units=units, axis="y", default="50%")
     return RadialGradientDescriptor(
         gradient_id=element.get("id"),
-        cx=_parse_float(element.get("cx"), 0.5),
-        cy=_parse_float(element.get("cy"), 0.5),
-        r=_parse_float(element.get("r"), 0.5),
-        fx=_parse_float(element.get("fx"), _parse_float(element.get("cx"), 0.5)),
-        fy=_parse_float(element.get("fy"), _parse_float(element.get("cy"), 0.5)),
-        units=element.get("gradientUnits") or "objectBoundingBox",
+        cx=cx,
+        cy=cy,
+        r=parse_gradient_coordinate(element.get("r"), units=units, axis="x", default="50%"),
+        fx=parse_gradient_coordinate(element.get("fx"), units=units, axis="x", default=str(cx)),
+        fy=parse_gradient_coordinate(element.get("fy"), units=units, axis="y", default=str(cy)),
+        units=units,
         spread_method=element.get("spreadMethod") or "pad",
         transform=transform,
         stops=stops,
         href=_extract_href(element),
+        specified=tuple(
+            key
+            for key in ("cx", "cy", "r", "fx", "fy", "gradientUnits", "spreadMethod", "gradientTransform")
+            if key in element.attrib
+        ),
+        raw_attributes={name: value for name, value in element.attrib.items() if value is not None},
     )
 
 
@@ -405,7 +470,7 @@ def _parse_stops(element: etree._Element) -> tuple[GradientStopDescriptor, ...]:
         color_alpha = float(getattr(parsed_color, "a", 1.0)) if parsed_color is not None else 1.0
         opacity = color_alpha * parse_opacity(opacity_attr, default=1.0)
         offset_str = stop_el.get("offset", "0")
-        offset = _parse_offset(offset_str)
+        offset = parse_gradient_offset(offset_str)
         stops.append(
             GradientStopDescriptor(
                 offset=max(0.0, min(1.0, offset)),
@@ -447,28 +512,7 @@ def _analyze_mesh_structure(element: etree._Element) -> tuple[int, int, int, int
 
 
 def _parse_style(style: str | None) -> dict[str, str]:
-    declarations: dict[str, str] = {}
-    if not style:
-        return declarations
-    for part in style.split(";"):
-        if ":" not in part:
-            continue
-        name, value = part.split(":", 1)
-        declarations[name.strip()] = value.strip()
-    return declarations
-
-
-def _parse_offset(value: str) -> float:
-    token = value.strip()
-    if token.endswith("%"):
-        try:
-            return float(token[:-1]) / 100.0
-        except ValueError:
-            return 0.0
-    try:
-        return float(token)
-    except ValueError:
-        return 0.0
+    return parse_style_declarations(style)[0]
 
 
 def _parse_float(value: str | None, default: float) -> float:
@@ -512,10 +556,7 @@ def _format_number(value: float) -> str:
 
 
 def _color_to_hex(color: Color) -> str:
-    r = int(round(max(0.0, min(1.0, color.r)) * 255))
-    g = int(round(max(0.0, min(1.0, color.g)) * 255))
-    b = int(round(max(0.0, min(1.0, color.b)) * 255))
-    return f"#{r:02X}{g:02X}{b:02X}"
+    return rgb_object_to_hex(color, prefix="#", scale="unit") or "#000000"
 
 
 def _normalize_hex(value: str | None) -> str | None:
@@ -554,7 +595,7 @@ def _copy_presentation_attributes(source: etree._Element | None, target: etree._
     for name, value in source.attrib.items():
         if value is None:
             continue
-        local = name.split("}", 1)[-1]
+        local = _local_name(name)
         if local in {"href", "width", "height", "x", "y"}:
             continue
         if local == "style":
@@ -563,14 +604,6 @@ def _copy_presentation_attributes(source: etree._Element | None, target: etree._
             continue
         if name not in target.attrib:
             target.set(name, value)
-
-
-def _local_name(tag: str | None) -> str:
-    if not tag:
-        return ""
-    if "}" in tag:
-        return tag.split("}", 1)[1]
-    return tag
 
 
 __all__ = [

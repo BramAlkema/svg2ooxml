@@ -123,6 +123,26 @@ def test_apply_filter_merge_layers() -> None:
     assert pixel[3] == pytest.approx(1.0)
 
 
+def test_apply_filter_flood_accepts_percent_opacity() -> None:
+    flood = FilterPrimitive(
+        tag="feFlood",
+        attributes={"flood-color": "#00ff00", "flood-opacity": "50%"},
+        styles={},
+    )
+    filter_node = _make_filter_node([flood])
+    plan = plan_filter(filter_node)
+    assert plan is not None
+
+    surface = Surface.make(2, 2)
+    bounds = (0.0, 0.0, 2.0, 2.0)
+    viewport = Viewport(width=2, height=2, min_x=0.0, min_y=0.0, scale_x=1.0, scale_y=1.0)
+
+    result = apply_filter(surface, plan, bounds, viewport)
+
+    assert result.data[0, 0, 1] == pytest.approx(0.5)
+    assert result.data[0, 0, 3] == pytest.approx(0.5)
+
+
 def test_apply_filter_composite_arithmetic() -> None:
     flood_a = FilterPrimitive(
         tag="feFlood",

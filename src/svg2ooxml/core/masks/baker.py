@@ -7,6 +7,8 @@ from typing import Any
 
 from lxml import etree
 
+from svg2ooxml.common.boundaries import parse_wrapped_xml_fragment
+from svg2ooxml.common.style.css_values import parse_style_declarations
 from svg2ooxml.ir.paint import GradientStop, LinearGradientPaint, Paint, SolidPaint
 from svg2ooxml.ir.scene import MaskRef
 
@@ -27,7 +29,10 @@ def try_bake_mask(fill: Paint, mask_ref: MaskRef | None, services: Any = None, d
         
     try:
         combined_xml = "".join(definition.content_xml)
-        root = etree.fromstring(f"<root xmlns:svg='http://www.w3.org/2000/svg'>{combined_xml}</root>")
+        root = parse_wrapped_xml_fragment(
+            combined_xml,
+            namespaces={"svg": "http://www.w3.org/2000/svg"},
+        )
         
         ns = {"svg": "http://www.w3.org/2000/svg"}
         
@@ -35,18 +40,13 @@ def try_bake_mask(fill: Paint, mask_ref: MaskRef | None, services: Any = None, d
         def find_grad_by_id(grad_id):
             if not grad_id:
                 return None
-            # Search in the mask content itself first
-            g = root.xpath(f"//svg:linearGradient[@id='{grad_id}']", namespaces=ns) or \
-                root.xpath(f"//linearGradient[@id='{grad_id}']")
-            if g:
-                return g[0]
+            found = _find_linear_gradient_by_id(root, grad_id, ns)
+            if found is not None:
+                return found
 
             # Search in document root if available
             if doc_root is not None:
-                g = doc_root.xpath(f"//svg:linearGradient[@id='{grad_id}']", namespaces=ns) or \
-                    doc_root.xpath(f"//linearGradient[@id='{grad_id}']")
-                if g:
-                    return g[0]
+                return _find_linear_gradient_by_id(doc_root, grad_id, ns)
             return None
 
         # 1. Look for linearGradient directly in the mask content
@@ -150,7 +150,18 @@ def _calculate_luminance(color: str) -> float:
         return 1.0
 
 def _parse_style(style_str: str | None) -> dict[str, str]:
-    if not style_str:
-        return {}
-    parts = [p.split(":", 1) for p in style_str.split(";") if ":" in p]
-    return {k.strip(): v.strip() for k, v in parts}
+    return parse_style_declarations(style_str)[0]
+
+
+def _find_linear_gradient_by_id(
+    root: etree._Element,
+    grad_id: str,
+    namespaces: dict[str, str],
+) -> etree._Element | None:
+    gradients = root.xpath("//svg:linearGradient", namespaces=namespaces) or root.xpath(
+        "//*[local-name()='linearGradient']"
+    )
+    for gradient in gradients:
+        if gradient.get("id") == grad_id:
+            return gradient
+    return None

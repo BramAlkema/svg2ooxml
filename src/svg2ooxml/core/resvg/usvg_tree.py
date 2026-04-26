@@ -5,16 +5,26 @@ from __future__ import annotations
 import copy
 from collections.abc import Iterator
 from dataclasses import dataclass, field, replace
-from typing import (
-    TYPE_CHECKING,
-    Any,
-)
+from typing import TYPE_CHECKING, Any
 
 from svg2ooxml.common.conversions.transforms import parse_numeric_list
+from svg2ooxml.common.svg_refs import local_url_id
+from svg2ooxml.common.units.conversion import ConversionContext
 
 from .geometry.matrix import Matrix, matrix_from_commands
+from .gradient_resolution import (
+    parse_linear_gradient as _parse_linear_gradient,
+)
+from .gradient_resolution import (
+    parse_radial_gradient as _parse_radial_gradient,
+)
+from .gradient_resolution import (
+    resolve_linear_gradient_reference as _resolve_linear_gradient_reference,
+)
+from .gradient_resolution import (
+    resolve_radial_gradient_reference as _resolve_radial_gradient_reference,
+)
 from .painting.gradients import (
-    GradientStop,
     LinearGradient,
     PatternPaint,
     RadialGradient,
@@ -24,7 +34,6 @@ from .painting.paint import (
     PaintReference,
     StrokeStyle,
     TextStyle,
-    parse_color,
     resolve_fill,
     resolve_stroke,
     resolve_text_style,
@@ -32,11 +41,17 @@ from .painting.paint import (
 from .parser.options import Options
 from .parser.presentation import Presentation, collect_presentation, parse_transform
 from .parser.tree import SvgDocument, SvgNode
+from .viewport_units import (
+    derive_svg_viewport_context,
+    initial_viewport_context,
+    parse_length_px,
+)
 
 if TYPE_CHECKING:  # pragma: no cover
     from .geometry.path_normalizer import NormalizedPath
 
 SVG_NAMESPACE = "http://www.w3.org/2000/svg"
+_DEFAULT_TEXT_FONT_SIZE_PT = 12.0
 
 
 def _strip_namespace(tag: Any) -> str:
@@ -126,8 +141,10 @@ class PolyNode(BaseNode):
 @dataclass(slots=True)
 class ImageNode(BaseNode):
     href: str | None = None
-    width: str | None = None
-    height: str | None = None
+    x: float = 0.0
+    y: float = 0.0
+    width: float | None = None
+    height: float | None = None
     data: bytes | None = None
 
 
@@ -223,9 +240,8 @@ class Tree:
         return bool(self.text_nodes)
 
     def paint_server(self, href: str) -> PaintServerNode | None:
-        if href.startswith("#"):
-            return self.paint_servers.get(href[1:])
-        return None
+        ref_id = local_url_id(href)
+        return self.paint_servers.get(ref_id) if ref_id else None
 
     def resolve_paint(self, reference: PaintReference) -> PaintServer | None:
         if not reference.href:
@@ -243,32 +259,20 @@ class Tree:
         return None
 
     def resolve_mask(self, href: str) -> MaskNode | None:
-        if not href:
-            return None
-        if href.startswith("#"):
-            return self.masks.get(href[1:])
-        return None
+        ref_id = local_url_id(href)
+        return self.masks.get(ref_id) if ref_id else None
 
     def resolve_clip_path(self, href: str) -> ClipPathNode | None:
-        if not href:
-            return None
-        if href.startswith("#"):
-            return self.clip_paths.get(href[1:])
-        return None
+        ref_id = local_url_id(href)
+        return self.clip_paths.get(ref_id) if ref_id else None
 
     def resolve_marker(self, href: str) -> MarkerNode | None:
-        if not href:
-            return None
-        if href.startswith("#"):
-            return self.markers.get(href[1:])
-        return None
+        ref_id = local_url_id(href)
+        return self.markers.get(ref_id) if ref_id else None
 
     def resolve_filter(self, href: str) -> FilterNode | None:
-        if not href:
-            return None
-        if href.startswith("#"):
-            return self.filters.get(href[1:])
-        return None
+        ref_id = local_url_id(href)
+        return self.filters.get(ref_id) if ref_id else None
 
 
 def _gather_text(node: SvgNode) -> str | None:
@@ -308,40 +312,6 @@ def _parse_number(value: str | None, default: float = 0.0) -> float:
         return default
 
 
-def _parse_offset(value: str | None) -> float:
-    offset = _parse_number(value, 0.0)
-    if offset < 0.0:
-        return 0.0
-    if offset > 1.0:
-        return 1.0
-    return offset
-
-
-def _parse_stop(node: SvgNode) -> GradientStop | None:
-    offset = _parse_offset(node.attributes.get("offset"))
-    color_value = node.styles.get("stop-color") or node.attributes.get("stop-color")
-    opacity_value = node.styles.get("stop-opacity") or node.attributes.get("stop-opacity")
-    opacity = _parse_number(opacity_value, 1.0)
-    color = parse_color(color_value or "#000000", opacity)
-    if color is None:
-        color = parse_color("#000000", opacity)  # guaranteed fallback
-    return GradientStop(offset=offset, color=color)
-
-
-def _optional_number(value: str | None) -> float | None:
-    if value is None:
-        return None
-    value = value.strip()
-    if not value:
-        return None
-    try:
-        if value.endswith("%"):
-            return float(value[:-1]) / 100.0
-        return float(value)
-    except ValueError:
-        return None
-
-
 def _parse_points(raw: str) -> tuple[float, ...]:
     if not raw:
         return ()
@@ -355,71 +325,6 @@ def _parse_view_box(raw: str | None) -> tuple[float, float, float, float] | None
     if len(numbers) != 4:
         return None
     return numbers[0], numbers[1], numbers[2], numbers[3]
-
-
-def _parse_linear_gradient(node: SvgNode) -> LinearGradient:
-    attributes = node.attributes
-    transform_matrix = matrix_from_commands(parse_transform(attributes.get("gradientTransform")))
-    stops_list: list[GradientStop] = []
-    for child in node.children:
-        if _strip_namespace(child.tag) != "stop":
-            continue
-        stop = _parse_stop(child)
-        if stop:
-            stops_list.append(stop)
-    stops_list.sort(key=lambda s: s.offset)
-    href = _extract_href(attributes)
-    specified = tuple(
-        key
-        for key in ("x1", "y1", "x2", "y2", "gradientUnits", "spreadMethod", "gradientTransform")
-        if key in attributes
-    )
-    return LinearGradient(
-        x1=_parse_number(attributes.get("x1"), 0.0),
-        y1=_parse_number(attributes.get("y1"), 0.0),
-        x2=_parse_number(attributes.get("x2"), 1.0),
-        y2=_parse_number(attributes.get("y2"), 0.0),
-        units=attributes.get("gradientUnits") or "objectBoundingBox",
-        spread_method=attributes.get("spreadMethod") or "pad",
-        transform=transform_matrix,
-        stops=tuple(stops_list),
-        href=href,
-        specified=specified,
-    )
-
-
-def _parse_radial_gradient(node: SvgNode) -> RadialGradient:
-    attributes = node.attributes
-    transform_matrix = matrix_from_commands(parse_transform(attributes.get("gradientTransform")))
-    stops_list: list[GradientStop] = []
-    for child in node.children:
-        if _strip_namespace(child.tag) != "stop":
-            continue
-        stop = _parse_stop(child)
-        if stop:
-            stops_list.append(stop)
-    stops_list.sort(key=lambda s: s.offset)
-    href = _extract_href(attributes)
-    specified = tuple(
-        key
-        for key in ("cx", "cy", "r", "fx", "fy", "gradientUnits", "spreadMethod", "gradientTransform")
-        if key in attributes
-    )
-    default_cx = _parse_number(attributes.get("cx"), 0.5)
-    default_cy = _parse_number(attributes.get("cy"), 0.5)
-    return RadialGradient(
-        cx=default_cx,
-        cy=default_cy,
-        r=_parse_number(attributes.get("r"), 0.5),
-        fx=_parse_number(attributes.get("fx"), default_cx),
-        fy=_parse_number(attributes.get("fy"), default_cy),
-        units=attributes.get("gradientUnits") or "objectBoundingBox",
-        spread_method=attributes.get("spreadMethod") or "pad",
-        transform=transform_matrix,
-        stops=tuple(stops_list),
-        href=href,
-        specified=specified,
-    )
 
 
 def _parse_pattern(node: SvgNode) -> PatternPaint:
@@ -444,73 +349,6 @@ def _parse_pattern(node: SvgNode) -> PatternPaint:
     )
 
 
-def _resolve_linear_gradient_reference(
-    node: LinearGradientNode,
-    paint_servers: dict[str, PaintServerNode],
-    visited: set[str],
-) -> LinearGradient:
-    gradient = node.gradient
-    assert gradient is not None
-    href = gradient.href
-    if not href or not href.startswith("#"):
-        return gradient
-    ref_id = href[1:]
-    if ref_id in visited:
-        return gradient
-    visited.add(ref_id)
-    parent = paint_servers.get(ref_id)
-    if not isinstance(parent, LinearGradientNode) or parent.gradient is None:
-        return gradient
-    parent_gradient = _resolve_linear_gradient_reference(parent, paint_servers, visited)
-    stops = gradient.stops if gradient.stops else parent_gradient.stops
-    return LinearGradient(
-        x1=gradient.x1 if "x1" in gradient.specified else parent_gradient.x1,
-        y1=gradient.y1 if "y1" in gradient.specified else parent_gradient.y1,
-        x2=gradient.x2 if "x2" in gradient.specified else parent_gradient.x2,
-        y2=gradient.y2 if "y2" in gradient.specified else parent_gradient.y2,
-        units=gradient.units if "gradientUnits" in gradient.specified else parent_gradient.units,
-        spread_method=gradient.spread_method if "spreadMethod" in gradient.specified else parent_gradient.spread_method,
-        transform=gradient.transform if "gradientTransform" in gradient.specified else parent_gradient.transform,
-        stops=stops,
-        href=None,
-        specified=tuple(sorted(set(parent_gradient.specified) | set(gradient.specified))),
-    )
-
-
-def _resolve_radial_gradient_reference(
-    node: RadialGradientNode,
-    paint_servers: dict[str, PaintServerNode],
-    visited: set[str],
-) -> RadialGradient:
-    gradient = node.gradient
-    assert gradient is not None
-    href = gradient.href
-    if not href or not href.startswith("#"):
-        return gradient
-    ref_id = href[1:]
-    if ref_id in visited:
-        return gradient
-    visited.add(ref_id)
-    parent = paint_servers.get(ref_id)
-    if not isinstance(parent, RadialGradientNode) or parent.gradient is None:
-        return gradient
-    parent_gradient = _resolve_radial_gradient_reference(parent, paint_servers, visited)
-    stops = gradient.stops if gradient.stops else parent_gradient.stops
-    return RadialGradient(
-        cx=gradient.cx if "cx" in gradient.specified else parent_gradient.cx,
-        cy=gradient.cy if "cy" in gradient.specified else parent_gradient.cy,
-        r=gradient.r if "r" in gradient.specified else parent_gradient.r,
-        fx=gradient.fx if "fx" in gradient.specified else parent_gradient.fx,
-        fy=gradient.fy if "fy" in gradient.specified else parent_gradient.fy,
-        units=gradient.units if "gradientUnits" in gradient.specified else parent_gradient.units,
-        spread_method=gradient.spread_method if "spreadMethod" in gradient.specified else parent_gradient.spread_method,
-        transform=gradient.transform if "gradientTransform" in gradient.specified else parent_gradient.transform,
-        stops=stops,
-        href=None,
-        specified=tuple(sorted(set(parent_gradient.specified) | set(gradient.specified))),
-    )
-
-
 def _resolve_pattern_reference(
     node: PatternNode,
     paint_servers: dict[str, PaintServerNode],
@@ -519,9 +357,9 @@ def _resolve_pattern_reference(
     pattern = node.pattern
     assert pattern is not None
     href = pattern.href
-    if not href or not href.startswith("#"):
+    ref_id = local_url_id(href)
+    if ref_id is None:
         return pattern
-    ref_id = href[1:]
     if ref_id in visited:
         return pattern
     visited.add(ref_id)
@@ -542,7 +380,14 @@ def _resolve_pattern_reference(
     )
 
 
-def _convert_node(node: SvgNode, parent: BaseNode | None = None, options: Options | None = None) -> BaseNode:
+def _convert_node(
+    node: SvgNode,
+    parent: BaseNode | None = None,
+    options: Options | None = None,
+    context: ConversionContext | None = None,
+) -> BaseNode:
+    if context is None:
+        context = initial_viewport_context(node, options)
     presentation = collect_presentation(node)
     attributes = dict(node.attributes)
     styles = dict(node.styles)
@@ -580,9 +425,20 @@ def _convert_node(node: SvgNode, parent: BaseNode | None = None, options: Option
         and not explicit_no_stroke
     ):
         stroke_style = None
+    presentation_font_size = presentation.font_size
+    if presentation.font_size_scale is not None:
+        parent_font_size = (
+            parent.text_style.font_size
+            if parent is not None
+            and parent.text_style is not None
+            and parent.text_style.font_size is not None
+            else _DEFAULT_TEXT_FONT_SIZE_PT
+        )
+        presentation_font_size = parent_font_size * presentation.font_size_scale
+
     resolved_text_style = resolve_text_style(
         presentation.font_family,
-        presentation.font_size,
+        presentation_font_size,
         presentation.font_style,
         presentation.font_weight,
         text_decoration=getattr(presentation, "text_decoration", None),
@@ -615,12 +471,21 @@ def _convert_node(node: SvgNode, parent: BaseNode | None = None, options: Option
     }
 
     if tag_local in {"g", "svg"}:
+        child_context = (
+            derive_svg_viewport_context(attributes, context, options)
+            if tag_local == "svg"
+            else context
+        )
         group = GroupNode(**base_kwargs)
-        group.children = [_convert_node(child, group, options) for child in node.children]
+        group.children = [
+            _convert_node(child, group, options, child_context) for child in node.children
+        ]
         return group
     if tag_local == "path":
         path_node = PathNode(d=attributes.get("d"), **base_kwargs)
-        path_node.children = [_convert_node(child, path_node, options) for child in node.children]
+        path_node.children = [
+            _convert_node(child, path_node, options, context) for child in node.children
+        ]
         from .geometry.path_normalizer import (
             normalize_path,  # local import to avoid cycle
         )
@@ -630,65 +495,65 @@ def _convert_node(node: SvgNode, parent: BaseNode | None = None, options: Option
         return path_node
     if tag_local == "rect":
         rect = RectNode(
-            x=_parse_number(attributes.get("x"), 0.0),
-            y=_parse_number(attributes.get("y"), 0.0),
-            width=_parse_number(attributes.get("width"), 0.0),
-            height=_parse_number(attributes.get("height"), 0.0),
-            rx=_parse_number(attributes.get("rx"), 0.0),
-            ry=_parse_number(attributes.get("ry"), 0.0),
+            x=parse_length_px(attributes.get("x"), context, axis="x"),
+            y=parse_length_px(attributes.get("y"), context, axis="y"),
+            width=parse_length_px(attributes.get("width"), context, axis="x"),
+            height=parse_length_px(attributes.get("height"), context, axis="y"),
+            rx=parse_length_px(attributes.get("rx"), context, axis="x"),
+            ry=parse_length_px(attributes.get("ry"), context, axis="y"),
             **base_kwargs,
         )
-        rect.children = [_convert_node(child, rect, options) for child in node.children]
+        rect.children = [_convert_node(child, rect, options, context) for child in node.children]
         return rect
     if tag_local == "circle":
         circle = CircleNode(
-            cx=_parse_number(attributes.get("cx"), 0.0),
-            cy=_parse_number(attributes.get("cy"), 0.0),
-            r=_parse_number(attributes.get("r"), 0.0),
+            cx=parse_length_px(attributes.get("cx"), context, axis="x"),
+            cy=parse_length_px(attributes.get("cy"), context, axis="y"),
+            r=parse_length_px(attributes.get("r"), context, axis="x"),
             **base_kwargs,
         )
-        circle.children = [_convert_node(child, circle, options) for child in node.children]
+        circle.children = [_convert_node(child, circle, options, context) for child in node.children]
         return circle
     if tag_local == "ellipse":
         ellipse = EllipseNode(
-            cx=_parse_number(attributes.get("cx"), 0.0),
-            cy=_parse_number(attributes.get("cy"), 0.0),
-            rx=_parse_number(attributes.get("rx"), 0.0),
-            ry=_parse_number(attributes.get("ry"), 0.0),
+            cx=parse_length_px(attributes.get("cx"), context, axis="x"),
+            cy=parse_length_px(attributes.get("cy"), context, axis="y"),
+            rx=parse_length_px(attributes.get("rx"), context, axis="x"),
+            ry=parse_length_px(attributes.get("ry"), context, axis="y"),
             **base_kwargs,
         )
-        ellipse.children = [_convert_node(child, ellipse, options) for child in node.children]
+        ellipse.children = [_convert_node(child, ellipse, options, context) for child in node.children]
         return ellipse
     if tag_local == "line":
         line = LineNode(
-            x1=_parse_number(attributes.get("x1"), 0.0),
-            y1=_parse_number(attributes.get("y1"), 0.0),
-            x2=_parse_number(attributes.get("x2"), 0.0),
-            y2=_parse_number(attributes.get("y2"), 0.0),
+            x1=parse_length_px(attributes.get("x1"), context, axis="x"),
+            y1=parse_length_px(attributes.get("y1"), context, axis="y"),
+            x2=parse_length_px(attributes.get("x2"), context, axis="x"),
+            y2=parse_length_px(attributes.get("y2"), context, axis="y"),
             **base_kwargs,
         )
-        line.children = [_convert_node(child, line, options) for child in node.children]
+        line.children = [_convert_node(child, line, options, context) for child in node.children]
         return line
     if tag_local in {"polyline", "polygon"}:
         points = _parse_points(attributes.get("points", ""))
         poly = PolyNode(points=points, **base_kwargs)
-        poly.children = [_convert_node(child, poly, options) for child in node.children]
+        poly.children = [_convert_node(child, poly, options, context) for child in node.children]
         return poly
     if tag_local == "linearGradient":
-        gradient = _parse_linear_gradient(node)
+        gradient = _parse_linear_gradient(node, context)
         base_kwargs["fill"] = None
         base_kwargs["stroke"] = None
         base_kwargs["text_style"] = None
         node_obj = LinearGradientNode(gradient=gradient, **base_kwargs)
-        node_obj.children = [_convert_node(child, node_obj, options) for child in node.children]
+        node_obj.children = [_convert_node(child, node_obj, options, context) for child in node.children]
         return node_obj
     if tag_local == "radialGradient":
-        gradient = _parse_radial_gradient(node)
+        gradient = _parse_radial_gradient(node, context)
         base_kwargs["fill"] = None
         base_kwargs["stroke"] = None
         base_kwargs["text_style"] = None
         node_obj = RadialGradientNode(gradient=gradient, **base_kwargs)
-        node_obj.children = [_convert_node(child, node_obj, options) for child in node.children]
+        node_obj.children = [_convert_node(child, node_obj, options, context) for child in node.children]
         return node_obj
     if tag_local == "pattern":
         pattern = _parse_pattern(node)
@@ -696,7 +561,7 @@ def _convert_node(node: SvgNode, parent: BaseNode | None = None, options: Option
         base_kwargs["stroke"] = None
         base_kwargs["text_style"] = None
         node_obj = PatternNode(pattern=pattern, **base_kwargs)
-        node_obj.children = [_convert_node(child, node_obj, options) for child in node.children]
+        node_obj.children = [_convert_node(child, node_obj, options, context) for child in node.children]
         return node_obj
     if tag_local == "image":
         href = _extract_href(attributes)
@@ -713,16 +578,22 @@ def _convert_node(node: SvgNode, parent: BaseNode | None = None, options: Option
 
         image = ImageNode(
             href=href,
-            width=attributes.get("width"),
-            height=attributes.get("height"),
+            x=parse_length_px(attributes.get("x"), context, axis="x"),
+            y=parse_length_px(attributes.get("y"), context, axis="y"),
+            width=parse_length_px(attributes.get("width"), context, axis="x")
+            if attributes.get("width") is not None
+            else None,
+            height=parse_length_px(attributes.get("height"), context, axis="y")
+            if attributes.get("height") is not None
+            else None,
             data=image_data,
             **base_kwargs,
         )
-        image.children = [_convert_node(child, image, options) for child in node.children]
+        image.children = [_convert_node(child, image, options, context) for child in node.children]
         return image
     if tag_local == "text":
         text_node = TextNode(text_content=_gather_text(node), **base_kwargs)
-        text_node.children = [_convert_node(child, text_node, options) for child in node.children]
+        text_node.children = [_convert_node(child, text_node, options, context) for child in node.children]
         return text_node
     if tag_local == "mask":
         mask = MaskNode(
@@ -730,24 +601,24 @@ def _convert_node(node: SvgNode, parent: BaseNode | None = None, options: Option
             mask_content_units=attributes.get("maskContentUnits", "userSpaceOnUse"),
             **base_kwargs,
         )
-        mask.children = [_convert_node(child, mask, options) for child in node.children]
+        mask.children = [_convert_node(child, mask, options, context) for child in node.children]
         return mask
     if tag_local == "clipPath":
         clip = ClipPathNode(
             clip_path_units=attributes.get("clipPathUnits", "userSpaceOnUse"),
             **base_kwargs,
         )
-        clip.children = [_convert_node(child, clip, options) for child in node.children]
+        clip.children = [_convert_node(child, clip, options, context) for child in node.children]
         return clip
     if tag_local == "marker":
         marker = MarkerNode(
-            ref_x=_parse_number(attributes.get("refX"), 0.0),
-            ref_y=_parse_number(attributes.get("refY"), 0.0),
+            ref_x=parse_length_px(attributes.get("refX"), context, axis="x"),
+            ref_y=parse_length_px(attributes.get("refY"), context, axis="y"),
             marker_units=attributes.get("markerUnits", "strokeWidth"),
             orient=attributes.get("orient", "auto"),
             **base_kwargs,
         )
-        marker.children = [_convert_node(child, marker, options) for child in node.children]
+        marker.children = [_convert_node(child, marker, options, context) for child in node.children]
         return marker
     if tag_local == "filter":
         primitives_list = [_build_filter_primitive(child) for child in node.children]
@@ -760,17 +631,21 @@ def _convert_node(node: SvgNode, parent: BaseNode | None = None, options: Option
     if tag_local == "use":
         use_node = UseNode(
             href=_extract_href(attributes),
-            x=_parse_number(attributes.get("x"), 0.0),
-            y=_parse_number(attributes.get("y"), 0.0),
-            width=_optional_number(attributes.get("width")),
-            height=_optional_number(attributes.get("height")),
+            x=parse_length_px(attributes.get("x"), context, axis="x"),
+            y=parse_length_px(attributes.get("y"), context, axis="y"),
+            width=parse_length_px(attributes.get("width"), context, axis="x")
+            if attributes.get("width") is not None
+            else None,
+            height=parse_length_px(attributes.get("height"), context, axis="y")
+            if attributes.get("height") is not None
+            else None,
             **base_kwargs,
         )
-        use_node.children = [_convert_node(child, use_node, options) for child in node.children]
+        use_node.children = [_convert_node(child, use_node, options, context) for child in node.children]
         return use_node
 
     generic = GenericNode(**base_kwargs)
-    generic.children = [_convert_node(child, generic, options) for child in node.children]
+    generic.children = [_convert_node(child, generic, options, context) for child in node.children]
     return generic
 
 

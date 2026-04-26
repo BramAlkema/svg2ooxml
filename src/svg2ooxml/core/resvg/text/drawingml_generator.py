@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING
 
 from lxml import etree  # For type annotations
 
-from svg2ooxml.color.models import Color as CentralizedColor
+from svg2ooxml.color.utils import rgb_object_to_hex
 
 # Import centralized unit conversion constants
 from svg2ooxml.common.conversions.bidi import is_rtl_text
@@ -129,17 +129,7 @@ def _color_to_hex(color: ResvgColor | None) -> str:
     Returns:
         6-character uppercase hex color string (e.g., "FF0000" for red)
     """
-    if color is None:
-        return "000000"  # Default to black
-
-    # Convert resvg Color to centralized Color model
-    centralized = CentralizedColor(r=color.r, g=color.g, b=color.b, a=color.a)
-
-    # Use centralized to_hex() method (returns "#rrggbb" in lowercase)
-    hex_with_hash = centralized.to_hex(include_alpha=False)
-
-    # Remove "#" prefix and convert to uppercase for DrawingML
-    return hex_with_hash[1:].upper()
+    return rgb_object_to_hex(color, scale="unit") or "000000"
 
 
 def _font_size_pt_to_drawingml(size_pt: float) -> int:

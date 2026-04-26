@@ -2,33 +2,31 @@
 
 from __future__ import annotations
 
-import base64
-import binascii
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
-from urllib.parse import unquote_to_bytes
 
-from ..config import DEFAULT_CONFIG, Config
-from ..constants import DEFAULT_DPI
-from ..text.fonts import FontResolver, default_font_resolver
-from ..utils.mimesniff import sniff_image_mime
+from svg2ooxml.common.boundaries import decode_data_uri, resolve_local_resource_path
+from svg2ooxml.core.resvg.config import DEFAULT_CONFIG, Config
+from svg2ooxml.core.resvg.constants import DEFAULT_DPI
+from svg2ooxml.core.resvg.text.fonts import FontResolver, default_font_resolver
+from svg2ooxml.core.resvg.utils.mimesniff import sniff_image_mime
 
 
-class ShapeRendering(str, Enum):
+class ShapeRendering(StrEnum):
     GEOMETRIC_PRECISION = "geometricPrecision"
     CRISP_EDGES = "crispEdges"
     OPTIMIZE_SPEED = "optimizeSpeed"
 
 
-class TextRendering(str, Enum):
+class TextRendering(StrEnum):
     OPTIMIZE_LEGIBILITY = "optimizeLegibility"
     OPTIMIZE_SPEED = "optimizeSpeed"
     GEOMETRIC_PRECISION = "geometricPrecision"
 
 
-class ImageRendering(str, Enum):
+class ImageRendering(StrEnum):
     OPTIMIZE_QUALITY = "optimizeQuality"
     OPTIMIZE_SPEED = "optimizeSpeed"
     AUTO = "auto"
@@ -75,6 +73,7 @@ class Options:
     """Configuration object roughly equivalent to `usvg::Options`."""
 
     resources_dir: Path | None = None
+    asset_root: Path | None = None
     dpi: float = DEFAULT_DPI
     font_family: str = "Times New Roman"
     font_size: float = 12.0
@@ -116,6 +115,7 @@ class Options:
     def clone(self, **updates: object) -> Options:
         data = {
             "resources_dir": self.resources_dir,
+            "asset_root": self.asset_root,
             "dpi": self.dpi,
             "font_family": self.font_family,
             "font_size": self.font_size,
@@ -139,37 +139,30 @@ def _noop_image_resolver() -> ImageHrefResolver:
     )
 
 
-def _build_image_resolver(config: Config, resources_dir: Path | None) -> ImageHrefResolver:
+def _build_image_resolver(
+    config: Config,
+    resources_dir: Path | None,
+    asset_root: Path | None,
+) -> ImageHrefResolver:
     if not config.feature_enabled("raster-images"):
         return _noop_image_resolver()
 
     def resolve_file(href: str) -> Path | None:
-        path = Path(href)
-        if not path.is_absolute() and resources_dir is not None:
-            path = (resources_dir / path).resolve()
-        if not path.exists():
+        if resources_dir is None:
             return None
-        if not path.is_file():
-            return None
-        if path.stat().st_size == 0:
+        path = resolve_local_resource_path(
+            href,
+            resources_dir,
+            asset_root=asset_root or resources_dir,
+        )
+        if path is None or path.stat().st_size == 0:
             return None
         mime = sniff_image_mime(path)
         return path if mime else None
 
     def resolve_data(href: str) -> bytes | None:
-        if href.startswith("data:"):
-            payload = href[5:]
-            try:
-                header, data_str = payload.split(",", 1)
-            except ValueError:
-                return None
-            if ";base64" in header:
-                try:
-                    return base64.b64decode(data_str.strip())
-                except (binascii.Error, ValueError):
-                    return None
-            return unquote_to_bytes(data_str)
-        return None
+        decoded = decode_data_uri(href)
+        return decoded.data if decoded is not None else None
 
     return ImageHrefResolver(resolve_data=resolve_data, resolve_file=resolve_file)
 
@@ -178,13 +171,18 @@ def build_default_options(
     config: Config | None = None,
     *,
     resources_dir: Path | None = None,
+    asset_root: Path | None = None,
     **overrides: object,
 ) -> Options:
     cfg = config or DEFAULT_CONFIG
-    options = Options(resources_dir=resources_dir or None)
+    options = Options(resources_dir=resources_dir or None, asset_root=asset_root or None)
 
     if cfg.feature_enabled("raster-images"):
-        options.image_href_resolver = _build_image_resolver(cfg, options.resources_dir)
+        options.image_href_resolver = _build_image_resolver(
+            cfg,
+            options.resources_dir,
+            options.asset_root,
+        )
     else:
         options.image_href_resolver = _noop_image_resolver()
 

@@ -21,9 +21,9 @@ svg2ooxml parses SVG markup, builds a typed intermediate representation, renders
 
 svg2ooxml is the converter package. PowerPoint behavior research, authored control decks, and durable oracle evidence are maintained in the companion repository `openxml-audit` so the package documentation can stay focused on conversion.
 
-The same Git repository currently also carries an extracted `figma2gslides`
-app surface for local development, but that app code is not part of the
-supported `svg2ooxml` converter API.
+The same distribution also carries `figma2gslides`, a tool package built on top
+of the converter for Figma and Google Slides workflows. It is intentionally
+separate from the supported `svg2ooxml` converter API.
 
 ## Features
 
@@ -46,10 +46,8 @@ Optional extras:
 ```bash
 pip install svg2ooxml[render]    # Skia rendering + visual comparison
 pip install svg2ooxml[color]     # Advanced color space support
+pip install svg2ooxml[figma2gslides]  # Figma/Google Slides tool runtime
 ```
-
-Figma and Google Slides product integrations are intentionally kept out of the
-published converter surface.
 
 ## Quick Start
 

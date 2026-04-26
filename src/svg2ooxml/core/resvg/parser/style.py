@@ -2,21 +2,12 @@
 
 from __future__ import annotations
 
+from svg2ooxml.common.style.css_values import parse_style_declarations
+
 
 def parse_inline_style(style: str | None) -> dict[str, str]:
-    if not style:
-        return {}
+    return parse_inline_style_with_importance(style)[0]
 
-    declarations: dict[str, str] = {}
-    for part in style.split(";"):
-        if not part.strip():
-            continue
-        if ":" not in part:
-            continue
-        name, value = part.split(":", 1)
-        name = name.strip()
-        value = value.strip()
-        if not name or not value:
-            continue
-        declarations[name] = value
-    return declarations
+
+def parse_inline_style_with_importance(style: str | None) -> tuple[dict[str, str], dict[str, bool]]:
+    return parse_style_declarations(style)

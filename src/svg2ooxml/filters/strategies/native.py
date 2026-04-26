@@ -10,6 +10,7 @@ from lxml import etree
 
 from svg2ooxml.common.conversions.angles import radians_to_ppt
 from svg2ooxml.common.conversions.opacity import opacity_to_ppt
+from svg2ooxml.common.svg_refs import local_name
 from svg2ooxml.common.units import px_to_emu
 from svg2ooxml.drawingml.xml_builder import a_elem, a_sub, to_string
 from svg2ooxml.filters.base import FilterContext, FilterResult
@@ -39,10 +40,7 @@ def match_flood_blur_merge_stack(
     if len(primitives) != 3:
         return None
 
-    tags = [
-        child.tag.split("}", 1)[-1].lower() if "}" in child.tag else child.tag.lower()
-        for child in primitives
-    ]
+    tags = [primitive_local_name(child) for child in primitives]
     if tags != ["feflood", "fegaussianblur", "femerge"]:
         return None
 
@@ -77,10 +75,7 @@ def match_shadow_stack(
     if len(primitives) != 5:
         return None
 
-    tags = [
-        child.tag.split("}", 1)[-1].lower() if "}" in child.tag else child.tag.lower()
-        for child in primitives
-    ]
+    tags = [primitive_local_name(child) for child in primitives]
     if tags != ["feoffset", "fegaussianblur", "feflood", "fecomposite", "femerge"]:
         return None
 
@@ -133,16 +128,8 @@ def match_lighting_composite_stack(
         return None
 
     lighting_primitive, composite_primitive = primitives
-    lighting_tag = (
-        lighting_primitive.tag.split("}", 1)[-1].lower()
-        if "}" in lighting_primitive.tag
-        else lighting_primitive.tag.lower()
-    )
-    composite_tag = (
-        composite_primitive.tag.split("}", 1)[-1].lower()
-        if "}" in composite_primitive.tag
-        else composite_primitive.tag.lower()
-    )
+    lighting_tag = primitive_local_name(lighting_primitive)
+    composite_tag = primitive_local_name(composite_primitive)
     if lighting_tag not in {"fediffuselighting", "fespecularlighting"}:
         return None
     if composite_tag != "fecomposite":
@@ -407,11 +394,7 @@ def build_lighting_composite_effect(
     composite_primitive: etree._Element,
 ) -> FilterEffectResult | None:
     """Build a native lighting composite effect."""
-    lighting_tag = (
-        lighting_primitive.tag.split("}", 1)[-1].lower()
-        if "}" in lighting_primitive.tag
-        else lighting_primitive.tag.lower()
-    )
+    lighting_tag = primitive_local_name(lighting_primitive)
     lighting_filter = (
         DiffuseLightingFilter() if lighting_tag == "fediffuselighting" else SpecularLightingFilter()
     )
@@ -678,10 +661,7 @@ def render_color_transform_stack(
 
 
 def primitive_local_name(primitive: etree._Element) -> str:
-    tag = primitive.tag
-    if "}" in tag:
-        return tag.split("}", 1)[-1].lower()
-    return tag.lower()
+    return local_name(getattr(primitive, "tag", None)).lower()
 
 
 def component_transfer_alpha_scale(

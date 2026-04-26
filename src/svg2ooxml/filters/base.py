@@ -9,6 +9,8 @@ from typing import TYPE_CHECKING, Any
 
 from lxml import etree
 
+from svg2ooxml.common.svg_refs import local_name
+
 if TYPE_CHECKING:
     from svg2ooxml.telemetry import RenderTracer
 
@@ -95,11 +97,7 @@ class Filter(ABC):
 
     @staticmethod
     def _local_name(tag: str | None) -> str:
-        if not tag:
-            return ""
-        if "}" in tag:
-            return tag.split("}", 1)[1]
-        return tag
+        return local_name(tag)
 
 
 def stitch_blip_transforms(

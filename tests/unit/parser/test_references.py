@@ -39,6 +39,20 @@ def test_has_external_references_detects_uppercase_href_protocol() -> None:
     assert has_external_references(root) is True
 
 
+def test_has_external_references_detects_unsupported_uri_schemes() -> None:
+    root = _make_element("<svg><a href='javascript:alert(1)'/></svg>")
+
+    assert has_external_references(root) is True
+
+
+def test_has_external_references_ignores_local_fragments_and_data_uris() -> None:
+    root = _make_element(
+        "<svg><use href='#symbol'/><image href='data:image/png;base64,AA=='/></svg>"
+    )
+
+    assert has_external_references(root) is False
+
+
 def test_has_external_references_detects_external_style_attribute_url() -> None:
     root = _make_element(
         "<svg><rect style=\"fill:url('file:///tmp/pattern.png')\"/></svg>"

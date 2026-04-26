@@ -92,6 +92,8 @@ def test_resolve_paints_for_linear_gradient() -> None:
     fill_paint = resolve_fill_paint(rect.fill, result.tree)
     assert isinstance(fill_paint, LinearGradientPaint)
     assert fill_paint.gradient_id == "grad1"
+    assert fill_paint.gradient_units == "objectBoundingBox"
+    assert fill_paint.spread_method == "pad"
     assert fill_paint.start == (0.0, 0.0)
     assert fill_paint.end == (0.0, 1.0)
     assert len(fill_paint.stops) == 2
@@ -102,3 +104,28 @@ def test_resolve_paints_for_linear_gradient() -> None:
     matrix = transform.tolist() if hasattr(transform, "tolist") else transform
     assert matrix[0][0] == pytest.approx(1.0)
     assert matrix[1][1] == pytest.approx(1.0)
+
+
+def test_resolve_paints_for_userspace_gradient_units() -> None:
+    svg_markup = """
+        <svg xmlns="http://www.w3.org/2000/svg" width="200" height="100">
+            <defs>
+                <linearGradient id="grad1" gradientUnits="userSpaceOnUse"
+                                x1="0.25in" y1="6pt">
+                    <stop offset="0" stop-color="#000000"/>
+                    <stop offset="1" stop-color="#ffffff"/>
+                </linearGradient>
+            </defs>
+            <rect width="100" height="50" fill="url(#grad1)"/>
+        </svg>
+    """
+    result = normalize_svg_string(svg_markup)
+    rect = _find_rect_node(result.tree)
+    assert rect is not None, "expected rectangle node in normalized tree"
+
+    fill_paint = resolve_fill_paint(rect.fill, result.tree)
+
+    assert isinstance(fill_paint, LinearGradientPaint)
+    assert fill_paint.gradient_units == "userSpaceOnUse"
+    assert fill_paint.start == pytest.approx((24.0, 8.0))
+    assert fill_paint.end == pytest.approx((200.0, 0.0))

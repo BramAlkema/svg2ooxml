@@ -2,20 +2,22 @@
 
 from __future__ import annotations
 
-import base64
-import binascii
 import logging
-import re
 from dataclasses import dataclass
 from io import BytesIO
 from pathlib import Path
 from typing import TYPE_CHECKING, TypedDict
-from urllib.parse import unquote, unquote_to_bytes, urldefrag, urlparse
+from urllib.parse import urldefrag
 
 if TYPE_CHECKING:  # pragma: no cover - type checking only
     from svg2ooxml.ir.fonts import FontFaceSrc
     from svg2ooxml.services.fonts.fetcher import FontFetcher
 
+from svg2ooxml.common.boundaries import (
+    classify_resource_href,
+    decode_data_uri,
+    resolve_local_resource_path,
+)
 from svg2ooxml.services.fonts.fontforge_utils import (
     FONTFORGE_AVAILABLE,
     generate_font_bytes,
@@ -26,10 +28,6 @@ from svg2ooxml.services.fonts.svg_font_converter import convert_svg_font
 logger = logging.getLogger(__name__)
 
 MAX_FONT_SIZE = 10 * 1024 * 1024  # 10 MiB safety limit
-DATA_URI_PATTERN = re.compile(
-    r"^data:(?P<mime>[^;,]+)?(?:;(?P<encoding>base64))?,(?P<data>.*)$",
-    re.IGNORECASE
-)
 
 
 class WOFFTableEntry(TypedDict):
@@ -142,29 +140,12 @@ class FontLoader:
             LoadedFont if successful, None if parsing failed
         """
         data_uri, fragment = urldefrag(data_uri)
-        match = DATA_URI_PATTERN.match(data_uri)
-        if not match:
+        decoded = decode_data_uri(data_uri, max_bytes=self.max_size)
+        if decoded is None:
             self._logger.warning("Invalid data URI format")
             return None
-
-        mime_type = match.group("mime") or "application/octet-stream"
-        encoding = match.group("encoding")
-        data_str = match.group("data")
-
-        # Decode base64
-        if encoding and encoding.lower() == "base64":
-            try:
-                raw_data = base64.b64decode(data_str.strip(), validate=True)
-            except (ValueError, binascii.Error) as exc:
-                self._logger.warning("Failed to decode base64 data URI: %s", exc)
-                return None
-        else:
-            # URL-encoded or plain text (rare for fonts)
-            try:
-                raw_data = unquote_to_bytes(data_str)
-            except Exception as exc:
-                self._logger.warning("Failed to encode data URI: %s", exc)
-                return None
+        mime_type = decoded.mime_type or "application/octet-stream"
+        raw_data = decoded.data
 
         return self._finalize_loaded_font(
             raw_data,
@@ -597,38 +578,18 @@ class FontLoader:
         token = self._normalize_local_font_url(url)
         if not token or self.base_dir is None:
             return None
-        path = Path(token).expanduser()
-        try:
-            target = path.resolve() if path.is_absolute() else (self.base_dir / path).resolve()
-        except (OSError, RuntimeError, ValueError):
-            return None
         root = self.asset_root or self.base_dir
-        if not _path_is_within(target, root):
-            return None
-        if target.is_file():
-            return target
-        return None
+        return resolve_local_resource_path(token, self.base_dir, asset_root=root)
 
     @staticmethod
     def _normalize_local_font_url(url: str) -> str | None:
-        token = unquote(url.strip())
-        if not token or token.startswith("#"):
+        reference = classify_resource_href(url)
+        if reference is None or reference.kind != "local-path":
             return None
-        lowered = token.lower()
-        if lowered.startswith(("data:", "local(")):
-            return None
-        parsed = urlparse(token)
-        if parsed.scheme and not (len(parsed.scheme) == 1 and ":" in token[:3]):
+        token = reference.path or reference.normalized
+        if token.lower().startswith("local("):
             return None
         return token
-
-
-def _path_is_within(path: Path, root: Path) -> bool:
-    try:
-        path.relative_to(root)
-    except ValueError:
-        return False
-    return True
 
 
 __all__ = [

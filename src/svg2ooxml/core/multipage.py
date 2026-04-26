@@ -7,6 +7,8 @@ from dataclasses import dataclass
 
 from lxml import etree as ET
 
+from svg2ooxml.common.svg_refs import namespace_uri
+
 
 @dataclass(frozen=True)
 class SplitPage:
@@ -128,9 +130,7 @@ def _extract_title(element: ET._Element) -> str | None:
 def _namespace(element: ET.Element) -> str:
     """Return the SVG namespace for the provided element."""
 
-    if element.tag.startswith("{"):
-        return element.tag.split("}", 1)[0][1:]
-    return "http://www.w3.org/2000/svg"
+    return namespace_uri(element.tag) or "http://www.w3.org/2000/svg"
 
 
 __all__ = ["split_svg_into_pages", "SplitPage"]

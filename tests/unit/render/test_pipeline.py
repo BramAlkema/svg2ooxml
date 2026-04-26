@@ -26,3 +26,22 @@ def test_render_simple_rectangle_produces_alpha() -> None:
     assert rgba[..., 3].max() > 0
     # central pixel should be filled red with full alpha
     assert rgba[5, 7, 0] > 0 and rgba[5, 7, 3] == 255
+
+
+def test_render_image_uses_resolved_percentage_geometry() -> None:
+    png_data = (
+        "iVBORw0KGgoAAAANSUhEUgAAAAQAAAADCAYAAAC09K7GAAAAFUlEQVR4nGP8z8DwnwEJ"
+        "MCFzsAoAAGFrAgT6YybLAAAAAElFTkSuQmCC"
+    )
+    svg_markup = f"""
+        <svg width="20" height="10">
+            <image href="data:image/png;base64,{png_data}"
+                   x="10%" y="20%" width="50%" height="50%"/>
+        </svg>
+    """
+    result = normalize_svg_string(svg_markup)
+    surface = render(result.tree)
+
+    rgba = surface.to_rgba8()
+    assert rgba[4, 7, 3] > 0
+    assert rgba[0, 0, 3] == 0

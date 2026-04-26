@@ -8,6 +8,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from svg2ooxml.common.units import UnitConverter
 from svg2ooxml.core.resvg.geometry.tessellation import TessellationResult
 from svg2ooxml.core.resvg.usvg_tree import Tree
 
@@ -29,24 +30,29 @@ class Viewport:
     def from_tree(cls, tree: Tree, default_size: float = 256.0) -> Viewport:
         root = tree.root
         view_box = root.view_box
+        converter = UnitConverter()
+        default_context = converter.create_context(
+            width=default_size,
+            height=default_size,
+            parent_width=default_size,
+            parent_height=default_size,
+            viewport_width=default_size,
+            viewport_height=default_size,
+        )
 
-        def _parse_dimension(value: str | None) -> float | None:
+        def _parse_dimension(value: str | None, *, axis: str) -> float | None:
             if value is None:
                 return None
-            value = value.strip()
-            if not value:
+            token = value.strip()
+            if not token:
                 return None
-            for suffix in ("px",):
-                if value.endswith(suffix):
-                    value = value[: -len(suffix)]
-                    break
             try:
-                return float(value)
+                return converter.to_px(token, default_context, axis=axis)
             except ValueError:
                 return None
 
-        width_attr = _parse_dimension(root.attributes.get("width"))
-        height_attr = _parse_dimension(root.attributes.get("height"))
+        width_attr = _parse_dimension(root.attributes.get("width"), axis="x")
+        height_attr = _parse_dimension(root.attributes.get("height"), axis="y")
 
         if view_box:
             min_x, min_y, vb_width, vb_height = view_box

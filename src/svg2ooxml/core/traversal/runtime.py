@@ -5,6 +5,7 @@ from __future__ import annotations
 from lxml import etree
 
 from svg2ooxml.common.geometry import Matrix2D
+from svg2ooxml.common.svg_refs import local_name
 from svg2ooxml.core.traversal.viewbox import (
     resolve_viewbox_dimensions,
     viewbox_matrix_from_element,
@@ -103,14 +104,6 @@ def _to_px(unit_converter, value: str | None, *, axis: str, context=None) -> flo
             return float(value)
         except (TypeError, ValueError):
             return 0.0
-
-
-def local_name(tag: str | None) -> str:
-    if not tag:
-        return ""
-    if "}" in tag:
-        return tag.split("}", 1)[1]
-    return tag
 
 
 def process_anchor(traversal, element: etree._Element, current_navigation, recurse) -> list:

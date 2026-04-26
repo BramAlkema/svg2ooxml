@@ -9,6 +9,7 @@ from typing import Any
 
 from lxml import etree
 
+from svg2ooxml.common.svg_refs import local_name as svg_local_name
 from svg2ooxml.core.parser.xml_utils import children
 from svg2ooxml.core.pipeline.navigation import NavigationSpec, parse_svg_navigation
 from svg2ooxml.core.traversal import runtime as traversal_runtime
@@ -106,11 +107,7 @@ class ElementTraversal:
 
     @staticmethod
     def _local_name(tag: str | None) -> str:
-        if not tag:
-            return ""
-        if "}" in tag:
-            return tag.split("}", 1)[1]
-        return tag
+        return svg_local_name(tag)
 
 
 __all__ = ["ElementTraversal", "TraverseCallback"]

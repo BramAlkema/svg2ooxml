@@ -7,6 +7,9 @@ from dataclasses import dataclass, field
 
 from lxml import etree
 
+from svg2ooxml.common.style.css_values import parse_style_declarations
+from svg2ooxml.common.svg_refs import local_name as _local_name
+from svg2ooxml.common.svg_refs import local_url_id
 from svg2ooxml.core.resvg.parser.presentation import Presentation
 from svg2ooxml.core.resvg.usvg_tree import FilterNode, FilterPrimitive, Tree
 
@@ -166,14 +169,7 @@ def _descriptor_from_element(element: etree._Element) -> FilterPrimitiveDescript
         if key != "style"
     }
     extras = _collect_lighting_metadata_from_element(tag, element)
-    styles: dict[str, str] = {}
-    style_attr = element.get("style")
-    if style_attr:
-        for item in style_attr.split(";"):
-            if not item or ":" not in item:
-                continue
-            key, value = item.split(":", 1)
-            styles[key.strip()] = value.strip()
+    styles = parse_style_declarations(element.get("style"))[0]
     children: list[FilterPrimitiveDescriptor] = []
     for child in element:
         descriptor = _descriptor_from_element(child)
@@ -278,16 +274,7 @@ __all__ = [
 
 
 def _extract_reference_id(value: str | None) -> str | None:
-    if not value:
-        return None
-    trimmed = value.strip()
-    if trimmed.startswith("url(") and trimmed.endswith(")"):
-        inner = trimmed[4:-1].strip()
-        if inner.startswith("#"):
-            return inner[1:]
-    elif trimmed.startswith("#"):
-        return trimmed[1:]
-    return None
+    return local_url_id(value)
 
 
 def _extract_region(filter_node: FilterNode) -> dict[str, float | str | None]:
@@ -309,14 +296,6 @@ def _coerce_dimension(value: str | None) -> float | str | None:
         return float(token)
     except ValueError:
         return token
-
-
-def _local_name(tag: str | None) -> str:
-    if not tag:
-        return ""
-    if "}" in tag:
-        return tag.split("}", 1)[1]
-    return tag
 
 
 __all__ = [

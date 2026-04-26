@@ -31,8 +31,6 @@ from svg2ooxml.core.styling.style_helpers import clean_color
 from svg2ooxml.services import ConversionServices
 
 from .patterns._helpers import (
-    flatten_pattern_children,
-    has_visible_paint,
     is_dot_like_path,
     is_visible_paint_token,
     local_name,

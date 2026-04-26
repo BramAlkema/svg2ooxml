@@ -9,6 +9,7 @@ import numpy as np
 
 from svg2ooxml.common.units import UnitConverter
 from svg2ooxml.core.resvg.usvg_tree import FilterNode, FilterPrimitive
+from svg2ooxml.render.filters_model import PrimitiveUnitScale
 from svg2ooxml.render.surface import Surface
 
 _GAMMA = 2.4
@@ -20,8 +21,6 @@ def primitive_unit_scale(
     bounds: tuple[float, float, float, float],
     viewport: Any,
 ):
-    from svg2ooxml.render.filters import PrimitiveUnitScale
-
     min_x, min_y, max_x, max_y = bounds
     bbox_width = max(max_x - min_x, 0.0)
     bbox_height = max(max_y - min_y, 0.0)

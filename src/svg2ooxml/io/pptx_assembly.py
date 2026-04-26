@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-import re
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -11,7 +10,11 @@ from typing import TYPE_CHECKING
 
 from lxml import etree as ET
 
-from svg2ooxml.common.ooxml_relationships import is_safe_relationship_id
+from svg2ooxml.common.boundaries import (
+    is_safe_relationship_id,
+    resolve_package_child,
+    sanitize_package_filename,
+)
 from svg2ooxml.drawingml.assets import FontAsset, MediaAsset, NavigationAsset
 from svg2ooxml.drawingml.result import DrawingMLRenderResult
 
@@ -36,8 +39,6 @@ FONT_STYLE_TAGS: dict[str, str] = {
 }
 FONT_STYLE_ORDER: tuple[str, ...] = ("regular", "bold", "italic", "boldItalic")
 MASK_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.drawingml.mask+xml"
-_SAFE_PACKAGE_FILENAME_RE = re.compile(r"[^A-Za-z0-9._-]+")
-_SAFE_PACKAGE_SUFFIX_RE = re.compile(r"\.[A-Za-z0-9]{1,16}\Z")
 _CONTENT_TYPE_SUFFIXES: dict[str, tuple[str, ...]] = {
     "image/png": (".png",),
     "image/jpeg": (".jpg", ".jpeg"),
@@ -54,43 +55,6 @@ def _normalized_content_type(content_type: str | None) -> str:
 
 def _suffixes_for_content_type(content_type: str | None) -> tuple[str, ...]:
     return _CONTENT_TYPE_SUFFIXES.get(_normalized_content_type(content_type), (".bin",))
-
-
-def _normalize_package_suffix(suffix: str | None, fallback: str) -> str:
-    fallback_suffix = fallback if fallback.startswith(".") else f".{fallback}"
-    fallback_suffix = fallback_suffix.lower()
-    if not _SAFE_PACKAGE_SUFFIX_RE.fullmatch(fallback_suffix):
-        fallback_suffix = ".bin"
-
-    candidate = (suffix or "").strip()
-    if candidate and not candidate.startswith("."):
-        candidate = f".{candidate}"
-    candidate = candidate.lower()
-    if _SAFE_PACKAGE_SUFFIX_RE.fullmatch(candidate):
-        return candidate
-    return fallback_suffix
-
-
-def sanitize_package_filename(
-    filename: str | None,
-    *,
-    fallback_stem: str = "part",
-    fallback_suffix: str = ".bin",
-) -> str:
-    """Return a single safe OPC filename with no directory components."""
-
-    raw = str(filename or "").replace("\\", "/").rstrip("/")
-    name = raw.rsplit("/", 1)[-1].strip()
-    if name in {"", ".", ".."}:
-        name = ""
-
-    path = Path(name)
-    stem = path.stem if path.stem not in {"", ".", ".."} else ""
-    safe_stem = _SAFE_PACKAGE_FILENAME_RE.sub("_", stem).strip("._")
-    if not safe_stem:
-        safe_stem = fallback_stem
-    suffix = _normalize_package_suffix(path.suffix, fallback_suffix)
-    return f"{safe_stem}{suffix}"
 
 
 def _sanitize_filename_for_content_type(
@@ -148,33 +112,6 @@ def sanitize_slide_filename(filename: str | None, *, fallback_index: object = No
     )
     stem = Path(candidate).stem or fallback_stem
     return f"{stem}.xml"
-
-
-def resolve_package_child(
-    package_root: Path,
-    package_path: Path,
-    *,
-    required_prefix: Path | None = None,
-) -> Path:
-    """Resolve an OPC child path and reject traversal outside the package root."""
-
-    root = package_root.resolve()
-    target = (package_root / package_path).resolve()
-    try:
-        target.relative_to(root)
-    except ValueError as exc:
-        raise ValueError(f"Package part escapes PPTX staging directory: {package_path}") from exc
-
-    if required_prefix is not None:
-        prefix = (package_root / required_prefix).resolve()
-        try:
-            target.relative_to(prefix)
-        except ValueError as exc:
-            raise ValueError(
-                f"Package part is outside required prefix {required_prefix}: {package_path}"
-            ) from exc
-
-    return target
 
 
 def _positive_int(value: object) -> int | None:

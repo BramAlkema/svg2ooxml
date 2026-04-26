@@ -6,6 +6,7 @@ import logging
 from collections.abc import Callable
 from dataclasses import replace
 
+from svg2ooxml.color.utils import rgb_channels_to_hex
 from svg2ooxml.ir.effects import CustomEffect
 from svg2ooxml.ir.geometry import Point, Rect
 from svg2ooxml.ir.paint import PatternPaint, RadialGradientPaint, SolidPaint
@@ -685,7 +686,10 @@ class DrawingMLShapeRenderer:
         avg_g = int(round(total_g / count))
         avg_b = int(round(total_b / count))
         avg_opacity = total_a / count
-        return SolidPaint(rgb=f"{avg_r:02X}{avg_g:02X}{avg_b:02X}", opacity=avg_opacity)
+        return SolidPaint(
+            rgb=rgb_channels_to_hex(avg_r, avg_g, avg_b, scale="byte"),
+            opacity=avg_opacity,
+        )
 
 
 def _intersect_rects(a: Rect, b: Rect) -> Rect | None:

@@ -90,7 +90,9 @@ def _make_w3c_image_filter_context(
 
     services = ConversionServices()
     image_service = ImageService()
-    image_service.register_resolver(FileResolver(svg_path.parent))
+    image_service.register_resolver(
+        FileResolver(svg_path.parent, asset_root=svg_path.parent.parent)
+    )
     services.register("image", image_service)
 
     return filter_element, FilterContext(

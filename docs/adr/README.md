@@ -203,28 +203,212 @@ Consequences:
 
 ### App / Converter Boundary (ADR-034)
 
-The same repository currently contains an extracted `figma2gslides` app layer,
-but that does not make the app part of the converter surface.
+The same repository currently contains `figma2gslides`, a tool built on top of
+the converter. It may ship from the same repository, but its public contract is
+different from the core `svg2ooxml` conversion library.
 
 Decision:
 
-- `svg2ooxml` owns converter code, converter docs, and the public
+- `svg2ooxml` owns converter code, converter docs, and the converter-facing
   `svg2ooxml` CLI
-- `figma2gslides` owns app runtime, auth, hosting, plugin assets, legal
-  pages, and app-local operational tooling
+- `figma2gslides` owns the higher-level tool surface that consumes the
+  converter: app runtime, auth, hosting, plugin assets, legal pages, and
+  app-local operational tooling
 - app-owned materials live under `src/figma2gslides/` and
   `apps/figma2gslides/`
-- root `cli/` remains converter-facing; app entrypoints should not live there
-- shipping `figma2gslides` from the mono-repo is a transitional packaging
-  detail, not a promise that it is part of the supported converter API
+- root `cli/` remains converter-facing unless an entrypoint is deliberately
+  declared as a tool built on the converter
+- shipping `figma2gslides` in the same distribution must be deliberate,
+  documented, and tested as a top-level tool, not accidental package bleed from
+  broad discovery settings
 
 Consequences:
 
 - new Google auth, Firebase, hosting, or plugin UX work should land in the app
-  surface, not in `svg2ooxml`
-- converter docs should link to the app surface rather than absorbing app
-  operational detail
-- stale root entrypoints that point at app code should be removed or moved
+  surface, while shared conversion fixes stay in `svg2ooxml`
+- converter docs may link to the app/tool surface, but should not absorb app
+  operational detail unless it affects converter behavior
+- package contents and public imports must make the library/tool distinction
+  explicit
+
+### Next Hardening Targets (ADR-035)
+
+Status: accepted for the post-0.7.3 cleanup stream.
+
+Context:
+
+The April 2026 review passes were productive because they focused on complete
+end-to-end seams instead of isolated files. They found real defects in URL
+handling, relationship IDs, package paths, raw DrawingML fragment ingestion,
+font/image loading, unit conversion drift, and oversized modules. The next
+passes should keep that seam-based approach, but they need an explicit order so
+we do not keep chasing whichever large file is most visible.
+
+Decision:
+
+Prioritize targets by public blast radius first, then data-boundary risk, then
+visual-fidelity impact, then maintainability drag.
+
+Target order:
+
+1. **Published package and public surface boundary**
+
+   Why: ADR-034 says `figma2gslides` is a tool on top of the converter, not the
+   core converter API. The `0.7.3` local build copied it into the wheel through
+   broad package discovery, but the repo does not yet test or document that
+   surface clearly. That is a public contract bug: users should know which
+   imports and entrypoints are supported converter API, which are supported
+   higher-level tool API, and which are private internals.
+
+   Scope:
+
+   - `pyproject.toml` package discovery
+   - `src/svg2ooxml/__init__.py`, `src/svg2ooxml/public.py`
+   - root `cli/` entrypoints
+   - wheel-content tests for both converter library and top-level tool contents
+   - docs that describe the supported package and tool surfaces
+
+   Exit criteria:
+
+   - wheel contents are intentional and tested, including whether
+     `figma2gslides` ships in the same distribution or a separate one
+   - public import tests define the supported converter API and supported
+     tool API separately
+   - release notes and README do not blur tool internals into converter API
+
+2. **Central trust-boundary registry**
+
+   Why: the recent fixes added safe relationship IDs, safe package paths,
+   safe URL handling, and safe XML-fragment ingestion, but the rules still live
+   near the call sites. Boundary behavior should be obvious, shared, and tested
+   as a system.
+
+   Scope:
+
+   - URL and file-reference policy for SVG, image, font, and CSS resources
+   - package path and relationship-ID generation
+   - XML parser options and raw-fragment admission
+   - size/decompression limits for embedded image/font/filter data
+   - test fixtures for malicious and malformed inputs
+
+   Exit criteria:
+
+   - every external input crosses one named boundary helper before use
+   - no production code calls an unsafe XML parser directly
+   - no package writer accepts raw relationship IDs or package paths without
+     normalization
+   - malicious fixture tests cover SVG, font, image, PPTX packaging, and
+     DrawingML fragment paths
+
+3. **Style, cascade, and unit context**
+
+   Why: many visual bugs look like rendering bugs but originate earlier in
+   style resolution or unit context. This area is also where ad-hoc conversion
+   logic tends to reappear after centralization.
+
+   Scope:
+
+   - `common/style/resolver.py`
+   - parser style context and CSS inheritance
+   - `core/resvg/usvg_tree.py`
+   - `core/resvg/gradient_resolution.py`
+   - `common/gradient_units.py`
+   - conversion-context propagation into gradients, patterns, text, and filters
+
+   Exit criteria:
+
+   - one context object carries viewport, DPI, inherited style, and conversion
+     units through parse -> IR -> render
+   - tests cover `em`, `%`, nested SVG viewport, inherited paint, `currentColor`,
+     and gradient/filter coordinate spaces
+   - duplicate unit/color parsing paths are removed; do not reintroduce render
+     package tree or paint parsers
+
+4. **Filter, mask, raster, and EMF fallback seam**
+
+   Why: filters and masks are where native DrawingML, raster assets, EMF
+   fallbacks, bounds inflation, relationships, and alpha compositing meet. That
+   seam has high visual impact and high packaging risk.
+
+   Scope:
+
+   - `filters/`, especially primitive composition and fallback metadata
+   - `drawingml/filter_renderer.py`
+   - `drawingml/mask_writer.py`
+   - `drawingml/raster_adapter.py`
+   - `drawingml/emf_adapter.py`
+   - asset registration in `drawingml/pipelines/asset_pipeline.py`
+
+   Exit criteria:
+
+   - every fallback asset has a deterministic owner, bounds, content type, and
+     relationship ID before DrawingML emission
+   - mask/filter bounds are tested against SVG filter-region semantics
+   - raster and EMF output have shared validation hooks
+   - PowerPoint package validation is part of focused regression tests
+
+5. **Animation fallback policy after bee-class regressions**
+
+   Why: the bee work proved that group animation fidelity needs conservative,
+   evidence-backed policy rather than optimistic synthesis. We should keep
+   improving animation, but only after the package and trust boundaries are
+   stable.
+
+   Scope:
+
+   - mixed animated groups
+   - transform-origin and hinge/pivot semantics
+   - compound transforms and sampled center motion
+   - generated fallback labels and metadata
+   - openxml-audit capture evidence
+
+   Exit criteria:
+
+   - unsupported parent/child animation combinations degrade explicitly
+   - transform-origin behavior is covered by focused visual or oracle tests
+   - animation fallback metadata says what was preserved and what was dropped
+   - empirical claims point to openxml-audit evidence
+
+6. **Test-suite maintainability**
+
+   Why: several test files are now much larger than the production files they
+   cover. Large tests slow review and hide duplicated fixtures, even when the
+   production code is under the line cap.
+
+   Scope:
+
+   - `tests/unit/map/test_ir_converter.py`
+   - `tests/unit/core/test_pptx_exporter_animation.py`
+   - `tests/unit/drawingml/test_writer.py`
+   - shared fixture builders for scenes, SVG snippets, PPTX packages, and
+     filter assets
+
+   Exit criteria:
+
+   - large test files split by behavior area
+   - fixtures live near the domain they serve
+   - failure output stays local to one behavior seam
+   - maintainability checks include production files first, test files second
+
+Non-targets for this stream:
+
+- Do not start a broad NumPy conversion pass until style/unit context is
+  stable. NumPy should accelerate known-good math, not conceal unclear units.
+- Do not expand PowerPoint research assets in this repo; empirical capture and
+  oracle corpus work belongs in `openxml-audit` per ADR-033.
+- Do not pursue new feature surface before public converter/tool package
+  boundaries are enforceable.
+
+Consequences:
+
+- The next commit should likely address package discovery/public surface before
+  deeper renderer work.
+- Security and package-boundary bugs outrank visual-fidelity bugs when both are
+  available.
+- Large-file splitting remains useful, but only when it follows a behavior seam
+  and comes with targeted tests.
+- Each pass should leave behind a small regression suite for the seam it
+  hardened, not only ad hoc bug tests.
 
 ---
 

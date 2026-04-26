@@ -17,8 +17,19 @@ from .animation_pipeline import AnimationPipeline
 from .assets import AssetRegistry
 from .clipmask import clip_bounds_for
 from .generator import EMU_PER_PX, DrawingMLPathGenerator, px_to_emu
+from .group_runtime import (
+    apply_group_wrapper_semantics,
+    can_remove_group_wrapper,
+    children_overlap,
+    element_ids_for,
+    group_xfrm_xml,
+    metadata_has_bookmark_navigation,
+    should_flatten_group_for_native_animation,
+    translate_group_child_to_local_coordinates,
+)
+from .mask_alpha import apply_mask_alpha as _apply_mask_alpha
 from .mask_pipeline import MaskPipeline
-from .navigation import register_navigation
+from .navigation_runtime import NavigationRegistrar
 from .pipelines.asset_pipeline import AssetPipeline
 from .rasterizer import SKIA_AVAILABLE, Rasterizer
 from .result import DrawingMLRenderResult
@@ -38,217 +49,6 @@ def _assets_root() -> Path:
     return Path(__file__).resolve().parent.parent / "assets" / "pptx_scaffold"
 
 
-def _children_overlap(children) -> bool:
-    """Return True if any two children have overlapping bounding boxes."""
-    bboxes = []
-    for child in children:
-        bbox = getattr(child, "bbox", None)
-        if bbox is not None and bbox.width > 0 and bbox.height > 0:
-            bboxes.append(bbox)
-    for i in range(len(bboxes)):
-        for j in range(i + 1, len(bboxes)):
-            a, b = bboxes[i], bboxes[j]
-            if (a.x < b.x + b.width and a.x + a.width > b.x
-                    and a.y < b.y + b.height and a.y + a.height > b.y):
-                return True
-    return False
-
-
-def _element_ids_for(element: object) -> set[str]:
-    element_ids: set[str] = set()
-    metadata = getattr(element, "metadata", None)
-    if isinstance(metadata, dict):
-        ids = metadata.get("element_ids")
-        if isinstance(ids, (list, tuple, set)):
-            element_ids.update(
-                str(element_id) for element_id in ids if isinstance(element_id, str)
-            )
-    element_id = getattr(element, "element_id", None)
-    if isinstance(element_id, str) and element_id:
-        element_ids.add(element_id)
-    return element_ids
-
-
-def _apply_mask_alpha(element, alpha: float):
-    """Multiply mask alpha into an element's fill and stroke paint opacities.
-
-    Used for uniform-opacity masks where the mask is equivalent to reducing
-    the element's overall alpha.  This avoids complex mask geometry and matches
-    PowerPoint's "Convert to Shape" behavior for simple opacity masks.
-    """
-    from svg2ooxml.ir.paint import (
-        LinearGradientPaint,
-        RadialGradientPaint,
-        SolidPaint,
-    )
-
-    def _scale_stops(stops, a: float):
-        return [
-            replace(s, opacity=s.opacity * a)
-            for s in stops
-        ]
-
-    fill = getattr(element, "fill", None)
-    new_fill = fill
-    if isinstance(fill, SolidPaint):
-        new_fill = replace(fill, opacity=fill.opacity * alpha)
-    elif isinstance(fill, (LinearGradientPaint, RadialGradientPaint)):
-        new_fill = replace(fill, stops=_scale_stops(fill.stops, alpha))
-
-    stroke = getattr(element, "stroke", None)
-    new_stroke = stroke
-    if stroke is not None:
-        paint = getattr(stroke, "paint", None)
-        if isinstance(paint, SolidPaint):
-            new_stroke = replace(stroke, paint=replace(paint, opacity=paint.opacity * alpha))
-        elif isinstance(paint, (LinearGradientPaint, RadialGradientPaint)):
-            new_stroke = replace(stroke, paint=replace(paint, stops=_scale_stops(paint.stops, alpha)))
-
-    try:
-        element = replace(element, fill=new_fill, stroke=new_stroke, mask=None, mask_instance=None)
-    except TypeError:
-        # Element may not have all fields; try partial replacement.
-        try:
-            element = replace(element, fill=new_fill, stroke=new_stroke)
-        except TypeError:
-            pass
-    return element
-
-
-def _translate_group_child_to_local_coordinates(element, dx: float, dy: float):
-    """Return a copy of *element* translated by ``(-dx, -dy)`` for grpSp output.
-
-    PowerPoint group children live in the group's child coordinate space, not
-    the slide coordinate space. Rendering preserved groups with slide-absolute
-    child offsets is tolerated for static layout but breaks grouped animation
-    playback. This helper localises geometry only for XML emission; the source
-    scene and animation metadata remain in slide space.
-    """
-    if abs(dx) <= 1e-9 and abs(dy) <= 1e-9:
-        return element
-
-    from svg2ooxml.ir.geometry import BezierSegment, LineSegment, Point, Rect
-    from svg2ooxml.ir.scene import Group as IRGroup
-    from svg2ooxml.ir.scene import Image as IRImage
-    from svg2ooxml.ir.scene import Path as IRPath
-    from svg2ooxml.ir.shapes import Circle, Ellipse, Line, Polygon, Polyline, Rectangle
-    from svg2ooxml.ir.text import TextFrame as IRTextFrame
-
-    def _move_point(point: Point) -> Point:
-        return Point(point.x - dx, point.y - dy)
-
-    def _move_rect(rect: Rect) -> Rect:
-        return Rect(rect.x - dx, rect.y - dy, rect.width, rect.height)
-
-    if isinstance(element, IRGroup):
-        return replace(
-            element,
-            children=[
-                _translate_group_child_to_local_coordinates(child, dx, dy)
-                for child in element.children
-            ],
-        )
-    if isinstance(element, IRPath):
-        moved_segments = []
-        for segment in element.segments:
-            if isinstance(segment, LineSegment):
-                moved_segments.append(
-                    LineSegment(
-                        start=_move_point(segment.start),
-                        end=_move_point(segment.end),
-                    )
-                )
-            elif isinstance(segment, BezierSegment):
-                moved_segments.append(
-                    BezierSegment(
-                        start=_move_point(segment.start),
-                        control1=_move_point(segment.control1),
-                        control2=_move_point(segment.control2),
-                        end=_move_point(segment.end),
-                    )
-                )
-            else:
-                moved_segments.append(segment)
-        return replace(element, segments=moved_segments)
-    if isinstance(element, Rectangle):
-        return replace(element, bounds=_move_rect(element.bounds))
-    if isinstance(element, Circle):
-        return replace(element, center=_move_point(element.center))
-    if isinstance(element, Ellipse):
-        return replace(element, center=_move_point(element.center))
-    if isinstance(element, Line):
-        return replace(
-            element,
-            start=_move_point(element.start),
-            end=_move_point(element.end),
-        )
-    if isinstance(element, Polyline):
-        return replace(element, points=[_move_point(point) for point in element.points])
-    if isinstance(element, Polygon):
-        return replace(element, points=[_move_point(point) for point in element.points])
-    if isinstance(element, IRTextFrame):
-        return replace(
-            element,
-            origin=_move_point(element.origin),
-            bbox=_move_rect(element.bbox),
-        )
-    if isinstance(element, IRImage):
-        return replace(element, origin=_move_point(element.origin))
-    return element
-
-
-def _multiply_element_opacity(element, opacity: float):
-    if opacity >= 0.999:
-        return element
-    current = getattr(element, "opacity", None)
-    if not isinstance(current, (int, float)):
-        return element
-    try:
-        return replace(element, opacity=max(0.0, min(1.0, float(current) * opacity)))
-    except TypeError:
-        return element
-
-
-def _metadata_with_group_semantics(
-    child_metadata: object,
-    group_metadata: dict[str, object],
-) -> dict[str, object]:
-    metadata = dict(child_metadata) if isinstance(child_metadata, dict) else {}
-    clip_bounds = group_metadata.get("_clip_bounds")
-    if clip_bounds is not None and "_clip_bounds" not in metadata:
-        metadata["_clip_bounds"] = clip_bounds
-    navigation = group_metadata.get("navigation")
-    if navigation is not None and "navigation" not in metadata:
-        metadata["navigation"] = navigation
-    return metadata
-
-
-def _apply_group_wrapper_semantics_to_child(
-    child,
-    group: Group,
-    group_metadata: dict[str, object],
-):
-    wrapped = _multiply_element_opacity(child, group.opacity)
-    metadata = _metadata_with_group_semantics(
-        getattr(wrapped, "metadata", None),
-        group_metadata,
-    )
-    try:
-        return replace(wrapped, metadata=metadata)
-    except TypeError:
-        return wrapped
-
-
-def _apply_group_wrapper_semantics(
-    group: Group,
-    group_metadata: dict[str, object],
-) -> list:
-    return [
-        _apply_group_wrapper_semantics_to_child(child, group, group_metadata)
-        for child in group.children
-    ]
-
-
 class DrawingMLWriter:
     """Render IR scene graphs into DrawingML shape fragments."""
 
@@ -266,7 +66,7 @@ class DrawingMLWriter:
         self._path_generator = DrawingMLPathGenerator()
         self._asset_pipeline = AssetPipeline(image_service=image_service)
         self._asset_registry: AssetRegistry | None = None
-        self._next_navigation_index = 1
+        self._navigation = NavigationRegistrar()
         self._mask_pipeline = MaskPipeline()
         self._rasterizer: Rasterizer | None = None
         self._animation_pipeline = AnimationPipeline(trace_writer=self._trace_writer)
@@ -329,7 +129,7 @@ class DrawingMLWriter:
         prev_tracer = self._tracer
         self._tracer = tracer
         self._asset_registry = AssetRegistry()
-        self._next_navigation_index = 1
+        self._navigation.reset(self._assets)
         scene_background_color = getattr(scene, "background_color", None)
         if scene_background_color is None:
             scene_background_color = self._scene_background_color
@@ -344,7 +144,7 @@ class DrawingMLWriter:
             text_template=self._text_template,
             wordart_template=self._wordart_template,
             policy_for=self._policy_for,
-            register_run_navigation=self._register_run_navigation,
+            register_run_navigation=self._navigation.register_run_navigation,
             trace_writer=self._trace_writer,
             assets=self._assets,
             logger=logger,
@@ -400,6 +200,7 @@ class DrawingMLWriter:
             return result
         finally:
             self._asset_registry = None
+            self._navigation.reset(None)
             self._mask_pipeline.clear()
             self._text_renderer = None
             self._shape_renderer = None
@@ -552,82 +353,7 @@ class DrawingMLWriter:
             or "/tests/svg/" in normalized
         ):
             return False
-        return "test-frame" in _element_ids_for(element)
-
-    @staticmethod
-    def _group_xfrm_xml(group: Group) -> str:
-        bbox = group.bbox
-        x = px_to_emu(bbox.x)
-        y = px_to_emu(bbox.y)
-        width = px_to_emu(bbox.width)
-        height = px_to_emu(bbox.height)
-        return (
-            f'<a:xfrm>'
-            f'<a:off x="{x}" y="{y}"/>'
-            f'<a:ext cx="{width}" cy="{height}"/>'
-            f'<a:chOff x="0" y="0"/>'
-            f'<a:chExt cx="{width}" cy="{height}"/>'
-            f'</a:xfrm>'
-        )
-
-    @staticmethod
-    def _can_remove_group_wrapper(group: Group) -> bool:
-        if abs(group.opacity - 1.0) > 1e-9:
-            return False
-        if group.clip is not None or group.mask is not None or group.mask_instance is not None:
-            return False
-        metadata = group.metadata if isinstance(group.metadata, dict) else {}
-        if metadata.get("filters") or metadata.get("filter_metadata"):
-            return False
-        return True
-
-    def _group_directly_targets_animation(self, group: Group) -> bool:
-        return self._animation_pipeline.metadata_targets_animation(group.metadata)
-
-    def _should_flatten_group_for_native_animation(self, group: Group) -> bool:
-        if not self._can_remove_group_wrapper(group):
-            return False
-        if self._group_directly_targets_animation(group):
-            return False
-        return self._group_contains_bookmark_navigation(
-            group
-        ) or self._group_contains_animation_target(group)
-
-    def _group_contains_animation_target(self, group: Group) -> bool:
-        if self._animation_pipeline.metadata_targets_animation(group.metadata):
-            return True
-        for child in group.children:
-            metadata = getattr(child, "metadata", None)
-            if self._animation_pipeline.metadata_targets_animation(metadata):
-                return True
-            if isinstance(child, Group) and self._group_contains_animation_target(child):
-                return True
-        return False
-
-    @staticmethod
-    def _group_contains_bookmark_navigation(group: Group) -> bool:
-        if DrawingMLWriter._metadata_has_bookmark_navigation(group.metadata):
-            return True
-        for child in group.children:
-            metadata = getattr(child, "metadata", None)
-            if DrawingMLWriter._metadata_has_bookmark_navigation(metadata):
-                return True
-            if isinstance(child, Group) and DrawingMLWriter._group_contains_bookmark_navigation(child):
-                return True
-        return False
-
-    @staticmethod
-    def _metadata_has_bookmark_navigation(metadata: object) -> bool:
-        if not isinstance(metadata, dict):
-            return False
-        navigation = metadata.get("navigation")
-        if navigation is None:
-            return False
-        entries = navigation if isinstance(navigation, list) else [navigation]
-        for entry in entries:
-            if isinstance(entry, dict) and entry.get("kind") == "bookmark":
-                return True
-        return False
+        return "test-frame" in element_ids_for(element)
 
     @staticmethod
     def _policy_for(metadata: dict[str, object] | None, target: str) -> dict[str, object]:
@@ -728,7 +454,7 @@ class DrawingMLWriter:
         hyperlink_xml = ""
 
         if isinstance(metadata, dict) and not isinstance(element, Group):
-            hyperlink_xml = self._navigation_from_metadata(metadata, scope="shape") or ""
+            hyperlink_xml = self._navigation.from_metadata(metadata, scope="shape") or ""
 
         if isinstance(element, TextFrame):
             if self._text_renderer is None:
@@ -763,7 +489,7 @@ class DrawingMLWriter:
             if (
                 element.opacity < 1.0
                 and self._rasterizer is not None
-                and _children_overlap(element.children)
+                and children_overlap(element.children)
             ):
                 raster = self._rasterizer.rasterize(element)
                 if raster is not None:
@@ -783,7 +509,10 @@ class DrawingMLWriter:
                         )
                         return [fragment], shape_id + 1
 
-            if self._should_flatten_group_for_native_animation(element):
+            if should_flatten_group_for_native_animation(
+                element,
+                self._animation_pipeline.metadata_targets_animation,
+            ):
                 self._trace_writer(
                     "group_flattened",
                     stage="writer",
@@ -806,14 +535,14 @@ class DrawingMLWriter:
                 isinstance(c, Group) for c in element.children
             )
 
-            if not has_nested_groups and not self._group_directly_targets_animation(element):
+            if not has_nested_groups and not self._animation_pipeline.metadata_targets_animation(element.metadata):
                 children = element.children
                 if (
-                    not self._can_remove_group_wrapper(element)
-                    or self._metadata_has_bookmark_navigation(metadata)
+                    not can_remove_group_wrapper(element)
+                    or metadata_has_bookmark_navigation(metadata)
                     or metadata.get("navigation") is not None
                 ):
-                    children = _apply_group_wrapper_semantics(element, metadata)
+                    children = apply_group_wrapper_semantics(element, metadata)
                 fragments, next_id = self._render_elements(
                     children, shape_id,
                 )
@@ -823,7 +552,7 @@ class DrawingMLWriter:
 
             group_bbox = element.bbox
             local_children = [
-                _translate_group_child_to_local_coordinates(
+                translate_group_child_to_local_coordinates(
                     child,
                     group_bbox.x,
                     group_bbox.y,
@@ -845,7 +574,7 @@ class DrawingMLWriter:
                 f'<p:nvPr/>'
                 f'</p:nvGrpSpPr>'
                 f'<p:grpSpPr>'
-                f'{self._group_xfrm_xml(element)}'
+                f'{group_xfrm_xml(element)}'
                 f'</p:grpSpPr>'
                 f'{children_xml}'
                 f'</p:grpSp>'
@@ -867,53 +596,11 @@ class DrawingMLWriter:
         logger.debug("Skipping unsupported IR element type: %s", type(element).__name__)
         return None
 
-    def _register_run_navigation(self, navigation, text_segment: str):
-        return self._register_navigation_asset(navigation, scope="text_run", text=text_segment)
-
-    def _navigation_from_metadata(self, metadata: dict[str, object], *, scope: str) -> str:
-        nav_data = metadata.get("navigation")
-        if nav_data is None:
-            return ""
-        entries = nav_data if isinstance(nav_data, list) else [nav_data]
-        for entry in entries:
-            elem = self._register_navigation_asset(entry, scope=scope)
-            if elem is not None:
-                from .xml_builder import to_string as _ts
-                return _ts(elem)
-        return ""
-
-    def _register_navigation_asset(self, navigation, *, scope: str, text: str | None = None):
-        if navigation is None or self._asset_registry is None:
-            return None
-
-        return register_navigation(
-            navigation,
-            scope=scope,
-            text=text,
-            allocate_rel_id=self._allocate_navigation_rid,
-            add_asset=lambda asset: self._assets.add_navigation(
-                relationship_id=asset.relationship_id,
-                relationship_type=asset.relationship_type,
-                target=asset.target,
-                target_mode=asset.target_mode,
-                action=asset.action,
-                tooltip=asset.tooltip,
-                history=asset.history,
-                scope=asset.scope,
-                text=asset.text,
-            ),
-        )
-
     def _emit_raster_group(self, raster, group, shape_id, metadata) -> str | None:
         return self._asset_pipeline.emit_raster_group(raster, group, shape_id, metadata)
 
     def _build_animation_xml(self) -> str:
         return self._animation_pipeline.build(max_shape_id=getattr(self, '_max_shape_id', 0))
-
-    def _allocate_navigation_rid(self) -> str:
-        rid = f"rIdNav{self._next_navigation_index}"
-        self._next_navigation_index += 1
-        return rid
 
 
 __all__ = ["DrawingMLWriter", "DrawingMLRenderResult", "DEFAULT_SLIDE_SIZE", "EMU_PER_PX"]

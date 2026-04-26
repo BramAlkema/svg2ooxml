@@ -9,6 +9,7 @@ from typing import Any
 from lxml import etree
 
 from svg2ooxml.common.geometry import Matrix2D
+from svg2ooxml.common.svg_refs import local_name
 from svg2ooxml.core.ir.shape.fallback_converter import ShapeFallbackPathMixin
 from svg2ooxml.core.ir.shape.image_converter import ShapeImageMixin
 from svg2ooxml.core.ir.shape.resvg_converter import ShapeResvgPathMixin
@@ -65,7 +66,7 @@ class ShapeConversionMixin(
             return
         tag = ""
         if isinstance(element.tag, str):
-            tag = element.tag.split("}", 1)[-1]
+            tag = local_name(element.tag)
         element_id = element.get("id") if hasattr(element, "get") else None
         tracer.record_geometry_decision(
             tag=tag,

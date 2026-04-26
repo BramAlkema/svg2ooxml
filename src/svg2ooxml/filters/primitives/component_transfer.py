@@ -7,7 +7,13 @@ from dataclasses import dataclass, field
 from lxml import etree
 
 from svg2ooxml.common.conversions.scale import PPT_SCALE, scale_to_ppt
-from svg2ooxml.filters.base import Filter, FilterContext, FilterResult, stitch_blip_transforms
+from svg2ooxml.common.svg_refs import local_name
+from svg2ooxml.filters.base import (
+    Filter,
+    FilterContext,
+    FilterResult,
+    stitch_blip_transforms,
+)
 from svg2ooxml.filters.utils import parse_float_list, parse_number
 
 CHANNELS = {"r", "g", "b", "a"}
@@ -90,10 +96,10 @@ class ComponentTransferFilter(Filter):
         return functions
 
     def _channel_for_func(self, node: etree._Element) -> str | None:
-        local_name = node.tag.split("}", 1)[-1] if "}" in node.tag else node.tag
-        if not local_name.lower().startswith("fefunc"):
+        tag_name = local_name(node.tag)
+        if not tag_name.lower().startswith("fefunc"):
             return None
-        suffix = local_name[-1].lower()
+        suffix = tag_name[-1].lower()
         if suffix not in CHANNELS:
             return None
         return suffix

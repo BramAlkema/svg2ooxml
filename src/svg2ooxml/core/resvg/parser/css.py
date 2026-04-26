@@ -10,12 +10,19 @@ SelectorSpecificity = tuple[int, int, int]
 
 
 @dataclass(slots=True)
+class StyleDeclaration:
+    name: str
+    value: str
+    important: bool
+
+
+@dataclass(slots=True)
 class StyleRule:
     selector: str
     selector_type: str
     value: str
     specificity: SelectorSpecificity
-    declarations: dict[str, str]
+    declarations: tuple[StyleDeclaration, ...]
     order: int
 
 
@@ -41,14 +48,20 @@ def parse_stylesheet(css_text: str, *, order_offset: int = 0) -> list[StyleRule]
         selector_text = tinycss2.serialize(rule.prelude).strip()
         if not selector_text:
             continue
-        declarations: dict[str, str] = {}
+        declarations: list[StyleDeclaration] = []
         for decl in tinycss2.parse_declaration_list(
             rule.content, skip_comments=True, skip_whitespace=True
         ):
             if decl.type != "declaration" or decl.name is None:
                 continue
             value = tinycss2.serialize(decl.value).strip()
-            declarations[decl.name] = value
+            declarations.append(
+                StyleDeclaration(
+                    name=decl.name.lower(),
+                    value=value,
+                    important=bool(decl.important),
+                )
+            )
         if not declarations:
             continue
         selectors = [part.strip() for part in selector_text.split(",") if part.strip()]
@@ -67,7 +80,7 @@ def parse_stylesheet(css_text: str, *, order_offset: int = 0) -> list[StyleRule]
                 selector_type=selector_type,
                 value=_normalize_value(value),
                 specificity=_compute_specificity(selector_type),
-                declarations=dict(declarations),
+                declarations=tuple(declarations),
                 order=order,
             )
             rules.append(rule_obj)

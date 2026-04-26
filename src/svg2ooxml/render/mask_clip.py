@@ -6,6 +6,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from svg2ooxml.common.svg_refs import unwrap_url_reference
 from svg2ooxml.core.resvg.geometry.tessellation import Tessellator
 from svg2ooxml.core.resvg.usvg_tree import BaseNode, ClipPathNode, MaskNode, Tree
 from svg2ooxml.render.rasterizer import Rasterizer, Viewport
@@ -23,7 +24,7 @@ class ClipPathContext:
 
 
 def resolve_mask(tree: Tree, href: str | None) -> MaskContext | None:
-    href = _clean_href(href)
+    href = unwrap_url_reference(href)
     if not href:
         return None
     mask_node = tree.resolve_mask(href)
@@ -33,7 +34,7 @@ def resolve_mask(tree: Tree, href: str | None) -> MaskContext | None:
 
 
 def resolve_clip_path(tree: Tree, href: str | None) -> ClipPathContext | None:
-    href = _clean_href(href)
+    href = unwrap_url_reference(href)
     if not href:
         return None
     clip_node = tree.resolve_clip_path(href)
@@ -151,17 +152,6 @@ def _node_opacity(node: BaseNode) -> float:
             return max(0.0, min(1.0, luminance * node.stroke.opacity))
         return node.stroke.opacity
     return 1.0
-
-
-def _clean_href(raw: str | None) -> str | None:
-    if raw is None:
-        return None
-    value = raw.strip()
-    if not value:
-        return None
-    if value.startswith("url(") and value.endswith(")"):
-        value = value[4:-1].strip()
-    return value
 
 
 __all__ = [

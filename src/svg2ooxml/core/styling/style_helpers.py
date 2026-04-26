@@ -8,18 +8,29 @@ from typing import Any
 from svg2ooxml.color.parsers import parse_color
 from svg2ooxml.common.conversions.colors import color_to_hex
 from svg2ooxml.common.conversions.opacity import parse_opacity
-from svg2ooxml.common.conversions.transforms import parse_numeric_list
 from svg2ooxml.common.geometry import Matrix2D
+from svg2ooxml.common.gradient_units import (
+    parse_gradient_offset,
+    parse_number_or_percent,
+)
+from svg2ooxml.common.style.css_values import parse_style_declarations
+from svg2ooxml.common.svg_refs import reference_id
+from svg2ooxml.common.units import UnitConverter
 from svg2ooxml.ir.numpy_compat import NUMPY_AVAILABLE, np
+
+_UNIT_CONVERTER = UnitConverter()
+_LENGTH_CONTEXT = _UNIT_CONVERTER.create_context(
+    width=0.0,
+    height=0.0,
+    font_size=12.0,
+    root_font_size=12.0,
+)
 
 
 def extract_url_id(token: str) -> str | None:
     if not token.startswith("url("):
         return None
-    inner = token[4:-1].strip().strip('"\'')
-    if inner.startswith("#"):
-        return inner[1:]
-    return inner or None
+    return reference_id(token)
 
 
 def normalize_hex(token: str) -> str | None:
@@ -41,8 +52,27 @@ def parse_dash_array(value: str | None) -> list[float] | None:
     token = value.strip()
     if not token or token.lower() == "none":
         return None
-    numbers = parse_numeric_list(token)
+    numbers: list[float] = []
+    for part in token.replace(",", " ").split():
+        length = parse_length(part)
+        if length is None:
+            return None
+        numbers.append(length)
     return numbers or None
+
+
+def parse_length(value: str | None) -> float | None:
+    if value is None:
+        return None
+    token = value.strip()
+    if not token:
+        return None
+    try:
+        if token.endswith("%"):
+            return float(token[:-1])
+        return _UNIT_CONVERTER.to_px(token, _LENGTH_CONTEXT, axis="font-size")
+    except ValueError:
+        return None
 
 
 def parse_optional_float(value: str | None) -> float | None:
@@ -55,28 +85,11 @@ def parse_optional_float(value: str | None) -> float | None:
 
 
 def parse_style_attr(style: str | None) -> dict[str, str]:
-    if not style:
-        return {}
-    declarations = {}
-    for part in style.split(";"):
-        if ":" not in part:
-            continue
-        name, value = part.split(":", 1)
-        declarations[name.strip()] = value.strip()
-    return declarations
+    return parse_style_declarations(style)[0]
 
 
 def parse_percentage(value: str) -> float:
-    token = value.strip()
-    if token.endswith("%"):
-        try:
-            return float(token[:-1]) / 100.0
-        except ValueError:
-            return 0.0
-    try:
-        return float(token)
-    except ValueError:
-        return 0.0
+    return parse_number_or_percent(value, 0.0)
 
 
 def matrix_tuple_is_identity(transform: Any) -> bool:
@@ -120,12 +133,6 @@ def descriptor_stop_colors(descriptor) -> list[str]:
     return sorted(colors)
 
 
-def local_name(tag: str) -> str:
-    if "}" in tag:
-        return tag.split("}", 1)[1]
-    return tag
-
-
 def apply_stroke_opacity(paint, opacity: float):
     from svg2ooxml.ir.paint import (
         LinearGradientPaint,
@@ -165,16 +172,7 @@ def clean_color(value: str | None, fallback: str | None = None) -> str | None:
 
 
 def parse_offset(value: str) -> float:
-    token = value.strip()
-    if token.endswith("%"):
-        try:
-            return max(0.0, min(1.0, float(token[:-1]) / 100.0))
-        except ValueError:
-            return 0.0
-    try:
-        return max(0.0, min(1.0, float(token)))
-    except ValueError:
-        return 0.0
+    return parse_gradient_offset(value)
 
 
 def parse_stop_color(stop_element, style_parser=None) -> tuple[str, float]:

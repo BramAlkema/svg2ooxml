@@ -7,6 +7,7 @@ from copy import deepcopy
 
 from lxml import etree  # type: ignore[import-untyped]
 
+from svg2ooxml.common.boundaries import parse_xml_bytes
 from svg2ooxml.services.fonts.fontforge_utils import (
     FONTFORGE_AVAILABLE,
     generate_font_bytes,
@@ -38,7 +39,7 @@ def convert_svg_font(
 
 def _select_font(svg_bytes: bytes, font_id: str | None) -> bytes | None:
     try:
-        root = etree.fromstring(svg_bytes)
+        root = parse_xml_bytes(svg_bytes, description="SVG font XML")
     except Exception:
         return None
 

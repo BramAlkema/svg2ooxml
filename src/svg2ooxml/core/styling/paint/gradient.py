@@ -7,6 +7,23 @@ from typing import TYPE_CHECKING, Any
 from lxml import etree
 
 from svg2ooxml.common.geometry import Matrix2D, parse_transform_list
+from svg2ooxml.common.gradient_units import (
+    normalize_gradient_units,
+    parse_gradient_coordinate,
+)
+from svg2ooxml.common.svg_refs import local_name
+from svg2ooxml.core.styling.paint import (
+    ensure_paint_policy,
+    maybe_set_geometry_fallback,
+)
+from svg2ooxml.core.styling.style_helpers import (
+    apply_matrix_to_point,
+    descriptor_stop_colors,
+    matrix2d_to_numpy,
+    matrix_tuple_is_identity,
+    parse_offset,
+    parse_stop_color,
+)
 from svg2ooxml.drawingml.bridges.resvg_paint_bridge import (
     GradientDescriptor,
     LinearGradientDescriptor,
@@ -17,20 +34,6 @@ from svg2ooxml.ir.paint import (
     GradientStop,
     LinearGradientPaint,
     RadialGradientPaint,
-)
-from svg2ooxml.core.styling.style_helpers import (
-    apply_matrix_to_point,
-    descriptor_stop_colors,
-    local_name,
-    matrix2d_to_numpy,
-    matrix_tuple_is_identity,
-    parse_offset,
-    parse_percentage,
-    parse_stop_color,
-)
-from svg2ooxml.core.styling.paint import (
-    ensure_paint_policy,
-    maybe_set_geometry_fallback,
 )
 from svg2ooxml.policy.constants import FALLBACK_EMF
 from svg2ooxml.services import ConversionServices
@@ -138,38 +141,14 @@ def resolve_gradient_length(
     value = gradient_attr(chain, attribute, default=default)
     if value is None:
         return 0.0
-    if units == "userSpaceOnUse":
-        px_value = _to_px(value, conversion, axis, unit_converter)
-        if conversion is not None:
-            scale = None
-            axis_lower = axis.lower()
-            if axis_lower.startswith("x") or axis_lower == "width":
-                scale = getattr(conversion, "width", None) or getattr(
-                    conversion, "viewport_width", None
-                )
-            elif axis_lower.startswith("y") or axis_lower == "height":
-                scale = getattr(conversion, "height", None) or getattr(
-                    conversion, "viewport_height", None
-                )
-            if scale:
-                return px_value / scale
-        return px_value
-    return parse_percentage(value)
-
-
-def _to_px(value: str, conversion, axis: str, unit_converter) -> float:
-    if unit_converter is None or conversion is None:
-        try:
-            return float(value)
-        except ValueError:
-            return 0.0
-    try:
-        return unit_converter.to_px(value, conversion, axis=axis)
-    except Exception:
-        try:
-            return float(value)
-        except ValueError:
-            return 0.0
+    return parse_gradient_coordinate(
+        value,
+        units=units,
+        context=conversion,
+        axis=axis,
+        default=default or "0",
+        unit_converter=unit_converter,
+    )
 
 
 def build_gradient_paint(
@@ -205,9 +184,10 @@ def build_gradient_paint(
     if len(stops) < 2:
         return None
 
-    gradient_units = gradient_attr(
-        materialized_chain, "gradientUnits", default="objectBoundingBox"
+    gradient_units = normalize_gradient_units(
+        gradient_attr(materialized_chain, "gradientUnits", default="objectBoundingBox")
     )
+    spread_method = gradient_attr(materialized_chain, "spreadMethod", default="pad")
     gradient_transform = gradient_attr(
         materialized_chain, "gradientTransform"
     )
@@ -253,6 +233,8 @@ def build_gradient_paint(
             end=end,
             transform=transform_np,
             gradient_id=gradient_id,
+            gradient_units=gradient_units,
+            spread_method=spread_method,
         )
 
     # radial gradient
@@ -303,6 +285,8 @@ def build_gradient_paint(
         focal_point=focal,
         transform=transform_np,
         gradient_id=gradient_id,
+        gradient_units=gradient_units,
+        spread_method=spread_method,
     )
 
 

@@ -75,7 +75,8 @@ Empirical PowerPoint behavior research, authored control decks, and durable orac
 - **Extensible pipeline** — service registry with dependency injection for custom providers
 - **Validated** — 525/525 W3C test SVGs pass both Python and .NET OpenXML validators
 
-Figma and Google Slides app workflows now live outside the converter surface in
+Figma and Google Slides workflows are exposed through `figma2gslides`, a tool
+package built on top of the converter. Tool-specific app materials live under
 [`apps/figma2gslides`](apps/figma2gslides/README.md).
 
 ## Repository Boundary
@@ -83,7 +84,8 @@ Figma and Google Slides app workflows now live outside the converter surface in
 This repo currently carries:
 
 - `svg2ooxml` for converter code and the public `svg2ooxml` CLI
-- `figma2gslides` for the extracted app/runtime surface that still lives here
+- `figma2gslides` for the Figma/Google Slides tool surface built on the
+  converter
 - `openxml-audit` as the sibling repo for empirical PowerPoint evidence
 
 The boundary doc is at
@@ -100,6 +102,7 @@ Optional extras for specific features:
 ```bash
 pip install svg2ooxml[render]    # Skia rendering + visual comparison
 pip install svg2ooxml[color]     # Advanced color space support
+pip install svg2ooxml[figma2gslides]  # Figma/Google Slides tool runtime
 ```
 
 ## Quick Start
@@ -144,9 +147,9 @@ SVG text
 source .venv/bin/activate
 ```
 
-The extracted Figma/Slides app may still need `api`, `cloud`, and Google auth
-dependencies during local app work, but that app surface is not part of the
-supported `svg2ooxml` public API. App-specific docs live under
+The Figma/Slides tool runtime can be installed with the `figma2gslides` extra.
+It is supported as a tool on top of the converter, not as part of the core
+`svg2ooxml` library API. App-specific docs live under
 [`apps/figma2gslides`](apps/figma2gslides/README.md).
 
 Use the project venv for all local Python, pytest, and visual-tool commands.

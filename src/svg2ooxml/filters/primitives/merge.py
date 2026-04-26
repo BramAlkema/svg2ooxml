@@ -6,6 +6,7 @@ from dataclasses import dataclass
 
 from lxml import etree
 
+from svg2ooxml.common.svg_refs import local_name
 from svg2ooxml.filters.base import Filter, FilterContext, FilterResult
 
 
@@ -56,8 +57,7 @@ class MergeFilter(Filter):
         for node in primitive:
             if not hasattr(node, "tag"):
                 continue
-            local = node.tag.split("}", 1)[-1] if "}" in node.tag else node.tag
-            if local != "feMergeNode":
+            if local_name(node.tag) != "feMergeNode":
                 continue
             ref = node.get("in") or "SourceGraphic"
             inputs.append(ref)

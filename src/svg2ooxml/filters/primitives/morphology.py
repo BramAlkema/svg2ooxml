@@ -8,6 +8,7 @@ from lxml import etree
 
 from svg2ooxml.color.utils import color_to_hex
 from svg2ooxml.common.conversions.opacity import opacity_to_ppt, parse_opacity
+from svg2ooxml.common.style.css_values import parse_style_declarations
 from svg2ooxml.common.units import px_to_emu
 
 # Import centralized XML builders for safe DrawingML generation
@@ -227,15 +228,7 @@ class MorphologyFilter(Filter):
         return color_hex, alpha, strategy
 
     def _parse_style(self, value: str | None) -> dict[str, str]:
-        if not value:
-            return {}
-        properties: dict[str, str] = {}
-        for part in value.split(";"):
-            if ":" not in part:
-                continue
-            key, val = part.split(":", 1)
-            properties[key.strip()] = val.strip()
-        return properties
+        return parse_style_declarations(value)[0]
 
     def _normalize_colour(self, token: str | None) -> str | None:
         if not token:

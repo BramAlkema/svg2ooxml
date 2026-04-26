@@ -8,9 +8,9 @@ import re
 from collections.abc import Iterable
 
 from svg2ooxml.color.utils import color_to_hex
+from svg2ooxml.common.boundaries import is_safe_relationship_id
 from svg2ooxml.common.conversions.angles import radians_to_ppt
 from svg2ooxml.common.conversions.opacity import opacity_to_ppt, parse_opacity
-from svg2ooxml.common.ooxml_relationships import is_safe_relationship_id
 from svg2ooxml.common.units import px_to_emu
 from svg2ooxml.common.units.scalars import EMU_PER_INCH
 from svg2ooxml.drawingml.emf_adapter import EMFAdapter, PaletteResolver

@@ -7,6 +7,9 @@ from collections.abc import Iterable, Sequence
 from lxml import etree
 
 from svg2ooxml.common.geometry import Matrix2D
+from svg2ooxml.common.style.css_values import parse_style_declarations
+from svg2ooxml.common.svg_refs import local_name as _local_name
+from svg2ooxml.common.svg_refs import namespace_uri
 from svg2ooxml.core.traversal.constants import DEFAULT_TOLERANCE
 from svg2ooxml.ir.geometry import BezierSegment, LineSegment, Point, Rect, SegmentType
 
@@ -139,12 +142,7 @@ def _has_markers(element: etree._Element) -> bool:
     style_attr = element.get("style")
     if not style_attr:
         return False
-    for chunk in style_attr.split(";"):
-        if ":" not in chunk:
-            continue
-        name, value = chunk.split(":", 1)
-        name = name.strip()
-        value = value.strip()
+    for name, value in parse_style_declarations(style_attr)[0].items():
         if name in {"marker-start", "marker-mid", "marker-end"} and value:
             return True
     return False
@@ -180,14 +178,6 @@ def _guess_image_format(href: str | None, data: bytes | None, mime: str | None) 
     return "png"
 
 
-def _local_name(tag: str | None) -> str:
-    if not tag:
-        return ""
-    if "}" in tag:
-        return tag.split("}", 1)[1]
-    return tag
-
-
 def _foreign_object_clip_id(element: etree._Element, bbox: Rect) -> str:
     element_id = element.get("id")
     if element_id:
@@ -206,9 +196,7 @@ def _classify_foreign_payload(payload: etree._Element | None) -> str:
     if payload is None:
         return "empty"
     tag = _local_name(payload.tag).lower()
-    namespace = ""
-    if isinstance(payload.tag, str) and "}" in payload.tag:
-        namespace = payload.tag.split("}", 1)[0][1:]
+    namespace = namespace_uri(payload.tag) or ""
 
     if tag == "svg":
         return "nested_svg"

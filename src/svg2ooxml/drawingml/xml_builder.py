@@ -16,6 +16,8 @@ from __future__ import annotations
 
 from lxml import etree
 
+from svg2ooxml.common.boundaries import parse_wrapped_xml_fragment
+
 # DrawingML namespaces (Office Open XML)
 NS_A = "http://schemas.openxmlformats.org/drawingml/2006/main"
 NS_P = "http://schemas.openxmlformats.org/presentationml/2006/main"
@@ -23,7 +25,6 @@ NS_R = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
 
 # Namespace map for registration
 NSMAP = {"a": NS_A, "p": NS_P, "r": NS_R}
-_FORBIDDEN_FRAGMENT_MARKERS = ("<!doctype", "<!entity", "<?")
 
 # Register preferred prefixes so etree.tostring() uses a:/p:/r: directly
 # instead of auto-generated ns0:/ns1:/ns2: prefixes.
@@ -179,22 +180,9 @@ def graft_xml_fragment(
     """
     if not xml or not xml.strip():
         return
-    lowered = xml.lower()
-    if any(marker in lowered for marker in _FORBIDDEN_FRAGMENT_MARKERS):
-        raise ValueError("XML fragment contains forbidden declarations")
     if namespaces is None:
         namespaces = {"a": NS_A}
-    ns_decls = " ".join(
-        f'xmlns:{prefix}="{uri}"' for prefix, uri in namespaces.items()
-    )
-    wrapped = f"<root {ns_decls}>{xml}</root>"
-    parser = etree.XMLParser(
-        resolve_entities=False,
-        no_network=True,
-        recover=False,
-        huge_tree=False,
-    )
-    temp = etree.fromstring(wrapped.encode("utf-8"), parser=parser)
+    temp = parse_wrapped_xml_fragment(xml, namespaces=namespaces)
     for child in temp:
         parent.append(child)
 

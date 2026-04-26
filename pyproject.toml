@@ -53,6 +53,18 @@ api = [ "fastapi>=0.109.0", "uvicorn[standard]>=0.27.0", "pydantic>=2.5.3", "pyt
 cloud = [ "google-cloud-firestore>=2.14.0", "google-cloud-storage>=2.14.0", "google-cloud-iam>=2.14.0", "google-cloud-tasks>=2.16.0", "google-api-python-client>=2.130", "google-auth>=2.26", "google-auth-oauthlib>=1.2.0",]
 payments = [ "stripe>=8.0.0",]
 visual-testing = [ "scikit-image>=0.21.0", "Pillow>=10.0.0",]
+figma2gslides = [
+  "fastapi>=0.109.0",
+  "uvicorn[standard]>=0.27.0",
+  "python-multipart>=0.0.6",
+  "PyJWT>=2.8.0",
+  "cryptography>=41.0",
+  "google-cloud-firestore>=2.14.0",
+  "google-cloud-storage>=2.14.0",
+  "google-api-python-client>=2.130",
+  "google-auth>=2.26",
+  "google-auth-oauthlib>=1.2.0",
+]
 
 [tool.black]
 line-length = 88
@@ -109,7 +121,7 @@ svg2ooxml = ["assets/pptx_scaffold/**/*"]
 
 [tool.setuptools.packages.find]
 where = [ "src", ".",]
-# `figma2gslides` stays installable from this repo for local app work, but the
-# supported public package surface remains `svg2ooxml`.
+# `figma2gslides` is intentionally packaged as a tool on top of `svg2ooxml`.
+# Keep the converter API and tool API documented and tested as separate surfaces.
 include = [ "svg2ooxml*", "figma2gslides*", "cli*",]
 namespaces = false

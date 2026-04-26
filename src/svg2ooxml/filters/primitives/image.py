@@ -9,12 +9,12 @@ from pathlib import Path
 
 from lxml import etree
 
+from svg2ooxml.common.boundaries import classify_resource_href
 from svg2ooxml.filters.base import Filter, FilterContext, FilterResult
 from svg2ooxml.filters.utils import build_exporter_hook
 from svg2ooxml.services.image_service import (
     ImageResource,
     ImageService,
-    is_external_image_href,
     normalize_image_href,
     resolve_local_image_path,
 )
@@ -121,9 +121,8 @@ class ImageFilter(Filter):
         return asset
 
     def _context_should_bound_local_href(self, href: str, context: FilterContext) -> bool:
-        if ImageService._data_uri_resolver(href) is not None:
-            return False
-        if self._is_external_href(href):
+        reference = classify_resource_href(href)
+        if reference is None or not reference.is_local_path:
             return False
         return self._resolve_base_dir(context) is not None
 
@@ -131,11 +130,12 @@ class ImageFilter(Filter):
         href = self._normalize_href(href)
         if not href:
             return None
-        data_resource = ImageService._data_uri_resolver(href)
-        if data_resource is not None:
-            return data_resource
-
-        if self._is_external_href(href):
+        reference = classify_resource_href(href)
+        if reference is None:
+            return None
+        if reference.kind == "data":
+            return ImageService._data_uri_resolver(reference.normalized)
+        if not reference.is_local_path:
             return None
 
         base_dir = self._resolve_base_dir(context)
@@ -145,7 +145,7 @@ class ImageFilter(Filter):
         try:
             allowed_root = self._resolve_asset_root(context, base_dir)
             target = resolve_local_image_path(
-                href,
+                reference.path or reference.normalized,
                 base_dir,
                 asset_root=allowed_root,
             )
@@ -172,10 +172,6 @@ class ImageFilter(Filter):
                     path = Path(value).expanduser().resolve()
                     return path.parent if path.is_file() else path
         return None
-
-    @staticmethod
-    def _is_external_href(href: str) -> bool:
-        return is_external_image_href(href)
 
     @staticmethod
     def _normalize_href(href: str | None) -> str | None:

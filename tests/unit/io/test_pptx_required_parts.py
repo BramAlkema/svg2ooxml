@@ -9,6 +9,7 @@ from lxml import etree as ET
 from svg2ooxml.core.pptx_exporter import SvgPageSource, SvgToPptxExporter
 from svg2ooxml.drawingml.generator import px_to_emu
 from svg2ooxml.drawingml.writer import DEFAULT_SLIDE_SIZE
+from svg2ooxml.io.pptx_assembly import content_type_for_extension
 
 
 def test_pptx_includes_required_parts():
@@ -183,17 +184,15 @@ def test_font_content_type_is_powerpoint_compliant():
     Per ECMA-376, PowerPoint expects 'application/x-fontdata' for TTF/OTF fonts.
     Using 'application/x-font-ttf' causes PowerPoint to strip all fonts during repair.
     """
-    from svg2ooxml.io.pptx_assembly import content_type_for_extension as _content_type_for_extension
-
     # Test TTF font
-    ttf_type = _content_type_for_extension("ttf")
+    ttf_type = content_type_for_extension("ttf")
     assert ttf_type == "application/x-fontdata", (
         f"TTF content type should be 'application/x-fontdata' (PowerPoint-compliant), "
         f"not '{ttf_type}'"
     )
 
     # Test OTF font
-    otf_type = _content_type_for_extension("otf")
+    otf_type = content_type_for_extension("otf")
     assert otf_type == "application/x-fontdata", (
         f"OTF content type should be 'application/x-fontdata' (PowerPoint-compliant), "
         f"not '{otf_type}'"

@@ -41,6 +41,8 @@ import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from svg2ooxml.color.utils import rgb_object_to_hex
+
 if TYPE_CHECKING:
     from svg2ooxml.core.resvg.painting.gradients import LinearGradient, RadialGradient
     from svg2ooxml.ir.paint import (
@@ -570,11 +572,7 @@ def _color_to_hex(color) -> str:
     Returns:
         Hex string in RRGGBB format (uppercase, no #)
     """
-    # Resvg Color has r, g, b as floats 0-255
-    r = int(max(0, min(255, color.r)))
-    g = int(max(0, min(255, color.g)))
-    b = int(max(0, min(255, color.b)))
-    return f"{r:02X}{g:02X}{b:02X}"
+    return rgb_object_to_hex(color, scale="byte") or "000000"
 
 
 __all__ = [

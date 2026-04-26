@@ -11,14 +11,16 @@ from lxml import etree
 from svg2ooxml.common.conversions.transforms import parse_numeric_list
 from svg2ooxml.common.geometry import Matrix2D
 from svg2ooxml.common.geometry.paths import parse_path_data
+from svg2ooxml.common.style.css_values import parse_style_declarations
+from svg2ooxml.common.svg_refs import local_url_id
 from svg2ooxml.core.styling.style_runtime import extract_style
-from svg2ooxml.core.traversal.runtime import local_name as _local_name
 from svg2ooxml.core.traversal.markers import (
     MarkerDefinition,
     MarkerInstance,
     apply_local_transform,
     build_marker_transform,
 )
+from svg2ooxml.core.traversal.runtime import local_name as _local_name
 from svg2ooxml.ir.geometry import BezierSegment, LineSegment, Point, SegmentType
 from svg2ooxml.ir.paint import GradientPaintRef, PatternPaint, SolidPaint, Stroke
 from svg2ooxml.ir.scene import Path
@@ -43,14 +45,9 @@ def apply_marker_metadata(converter, element: etree._Element, metadata: dict[str
     record_marker(element.get("marker-end"), "end")
 
     style_attr = element.get("style")
-    if style_attr:
-        for chunk in style_attr.split(";"):
-            if ":" not in chunk:
-                continue
-            name, value = chunk.split(":", 1)
-            name = name.strip()
-            if name in {"marker-start", "marker-mid", "marker-end"}:
-                record_marker(value.strip(), name.split("-")[-1])
+    for name, value in parse_style_declarations(style_attr)[0].items():
+        if name in {"marker-start", "marker-mid", "marker-end"}:
+            record_marker(value, name.split("-")[-1])
 
     if markers:
         existing = metadata.setdefault("markers", {})
@@ -794,9 +791,10 @@ def _segment_points(segment: SegmentType) -> list[Point]:
 
 def _expand_marker_use(converter, element: etree._Element) -> list[etree._Element]:
     href = element.get("href") or element.get("{http://www.w3.org/1999/xlink}href")
-    if not href or not href.startswith("#"):
+    ref_id = local_url_id(href)
+    if ref_id is None:
         return []
-    referenced = converter._element_index.get(href[1:])
+    referenced = converter._element_index.get(ref_id)
     if referenced is None:
         return []
     return [converter._clone_element(referenced)]

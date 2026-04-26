@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 from lxml import etree
+
+from svg2ooxml.common.svg_refs import local_name as _local_name
 
 from .css import StyleRule, parse_stylesheet
 from .options import Options
-from .style import parse_inline_style
+from .style import parse_inline_style_with_importance
 from .tree import SvgDocument, SvgNode
 
 
@@ -20,20 +20,13 @@ def _normalize_text(value: str | None) -> str | None:
     return value
 
 
-def _normalize_attributes(elem: etree._Element) -> tuple[dict[str, str], dict[str, str]]:
+def _normalize_attributes(elem: etree._Element) -> tuple[dict[str, str], dict[str, str], dict[str, bool]]:
     attributes = {k: v for k, v in elem.attrib.items()}
-    inline_style = parse_inline_style(attributes.get("style"))
+    inline_style, inline_importance = parse_inline_style_with_importance(attributes.get("style"))
     if "style" in attributes and inline_style:
         # Keep the redundant attribute for potential round-tripping later.
         pass
-    return attributes, inline_style
-
-
-def _local_name(tag: Any) -> str:
-    tag_str = str(tag)
-    if tag_str.startswith("{") and "}" in tag_str:
-        return tag_str.split("}", 1)[1]
-    return tag_str
+    return attributes, inline_style, inline_importance
 
 
 def _convert_element(
@@ -46,12 +39,13 @@ def _convert_element(
         css_text = elem.text or ""
         style_rules.extend(parse_stylesheet(css_text, order_offset=len(style_rules)))
         return None
-    attributes, inline_style = _normalize_attributes(elem)
+    attributes, inline_style, inline_importance = _normalize_attributes(elem)
     node = SvgNode(
         tag=elem.tag,
         source=elem,
         attributes=attributes,
         styles=inline_style,
+        style_importance=inline_importance,
         text=_normalize_text(elem.text),
         tail=_normalize_text(elem.tail),
     )
@@ -86,33 +80,47 @@ def _matches_rule(node: SvgNode, rule: StyleRule) -> bool:
     return False
 
 
-def _resolve_inherit(value: str, inherited: dict[str, str]) -> str | None:
-    if value == "inherit":
-        return inherited.get(value)
-    return value
-
-
 def _apply_cascade(document: SvgDocument) -> None:
     def recurse(node: SvgNode, inherited: dict[str, str]) -> dict[str, str]:
         applicable = [r for r in document.style_rules if _matches_rule(node, r)]
-        applicable.sort(key=lambda r: (r.specificity, r.order))
         merged = dict(inherited)
-        for rule in applicable:
-            merged.update(rule.declarations)
-        merged.update(node.styles)
+        stylesheet_declarations = [
+            (decl, rule.specificity, rule.order, index)
+            for rule in applicable
+            for index, decl in enumerate(rule.declarations)
+        ]
+        stylesheet_declarations.sort(
+            key=lambda item: (
+                int(item[0].important),
+                item[1],
+                item[2],
+                item[3],
+            )
+        )
+        applied_importance: dict[str, bool] = {}
+        for decl, _, _, _ in stylesheet_declarations:
+            merged[decl.name] = decl.value
+            applied_importance[decl.name] = decl.important
+
+        for name, value in node.styles.items():
+            inline_important = node.style_importance.get(name, False)
+            if applied_importance.get(name, False) and not inline_important:
+                continue
+            merged[name] = value
 
         resolved: dict[str, str] = {}
         for prop, value in merged.items():
-            if value == "inherit":
+            lowered = value.lower()
+            if lowered == "inherit":
                 if prop in inherited:
                     resolved[prop] = inherited[prop]
                 continue
             resolved[prop] = value
 
         color_value = resolved.get("color")
-        if color_value == "inherit":
+        if color_value is not None and color_value.lower() == "inherit":
             color_value = inherited.get("color")
-        if color_value == "currentColor":
+        if color_value is not None and color_value.lower() == "currentcolor":
             color_value = inherited.get("color")
         if color_value is not None:
             resolved["color"] = color_value
@@ -122,13 +130,13 @@ def _apply_cascade(document: SvgDocument) -> None:
         color_reference = resolved.get("color") or inherited.get("color")
         for key in ("fill", "stroke"):
             val = resolved.get(key)
-            if val == "inherit":
+            if val is not None and val.lower() == "inherit":
                 if key in inherited:
                     resolved[key] = inherited[key]
                 else:
                     resolved.pop(key, None)
                 continue
-            if val == "currentColor":
+            if val is not None and val.lower() == "currentcolor":
                 if color_reference is not None:
                     resolved[key] = color_reference
                 else:

@@ -9,6 +9,13 @@ from collections.abc import Iterable, Mapping
 from typing import TYPE_CHECKING, Any
 
 from svg2ooxml.common.style.resolver import StyleContext as CSSStyleContext
+from svg2ooxml.common.svg_refs import (
+    local_name as svg_local_name,
+)
+from svg2ooxml.common.svg_refs import (
+    local_url_id,
+    namespace_uri,
+)
 from svg2ooxml.core.masks import MaskProcessor
 from svg2ooxml.core.parser.units import UnitConverter
 from svg2ooxml.core.styling import StyleExtractor
@@ -150,7 +157,7 @@ class IRConverterContext:
             return
         tag = ""
         if hasattr(element, "tag") and isinstance(element.tag, str):
-            tag = element.tag.split("}", 1)[-1]
+            tag = svg_local_name(element.tag)
         element_id = element.get("id") if hasattr(element, "get") else None
         tracer.record_geometry_decision(
             tag=tag,
@@ -221,28 +228,16 @@ class IRConverterContext:
 
     @staticmethod
     def local_name(tag: Any) -> str:
-        if not isinstance(tag, str):
-            return ""
-        if "}" in tag:
-            return tag.split("}", 1)[1]
-        return tag
+        return svg_local_name(tag)
 
     @staticmethod
     def normalize_href_reference(href: str | None) -> str | None:
-        if not href:
-            return None
-        token = href.strip()
-        if token.startswith("url(") and token.endswith(")"):
-            token = token[4:-1].strip().strip("\"'")
-        if token.startswith("#"):
-            return token[1:]
-        return None
+        return local_url_id(href)
 
     @staticmethod
     def make_namespaced_tag(reference, local: str) -> str:
-        tag = reference.tag
-        if isinstance(tag, str) and "}" in tag:
-            namespace = tag.split("}", 1)[0][1:]
+        namespace = namespace_uri(reference.tag)
+        if namespace:
             return f"{{{namespace}}}{local}"
         return local
 

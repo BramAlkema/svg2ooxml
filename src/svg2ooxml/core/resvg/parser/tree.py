@@ -18,6 +18,7 @@ class SvgNode:
     attributes: dict[str, Any] = field(default_factory=dict)
     children: list[SvgNode] = field(default_factory=list)
     styles: dict[str, str] = field(default_factory=dict)
+    style_importance: dict[str, bool] = field(default_factory=dict)
     text: str | None = None
     tail: str | None = None
 

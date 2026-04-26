@@ -2,34 +2,16 @@
 
 from __future__ import annotations
 
-import re
-
 from lxml import etree as ET
 
+from svg2ooxml.common.style.css_values import parse_style_declarations
+from svg2ooxml.common.svg_refs import local_name
 from svg2ooxml.core.styling.style_helpers import parse_percentage
-
-
-def local_name(tag: str | None) -> str:
-    """Extract local name from a possibly Clark-notation tag."""
-    if not tag:
-        return ""
-    if "}" in tag:
-        return tag.split("}", 1)[1]
-    return tag
 
 
 def style_map(element: ET.Element) -> dict[str, str]:
     """Parse an element's inline ``style`` attribute into a dict."""
-    style = element.get("style")
-    if not style:
-        return {}
-    declarations: dict[str, str] = {}
-    for part in style.split(";"):
-        if ":" not in part:
-            continue
-        name, value = part.split(":", 1)
-        declarations[name.strip()] = value.strip()
-    return declarations
+    return parse_style_declarations(element.get("style"))[0]
 
 
 def is_visible_paint_token(value: str | None) -> bool:

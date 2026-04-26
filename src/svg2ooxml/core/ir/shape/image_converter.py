@@ -8,6 +8,8 @@ from typing import Any
 
 from lxml import etree
 
+from svg2ooxml.common.boundaries import parse_xml_bytes
+from svg2ooxml.common.svg_refs import local_name
 from svg2ooxml.core.ir.shape_converters_utils import (
     _compute_bbox,
     _guess_image_format,
@@ -218,10 +220,10 @@ class ShapeImageMixin:
         payload: bytes,
     ) -> tuple[float, float] | None:
         try:
-            root = etree.fromstring(payload)
+            root = parse_xml_bytes(payload, description="embedded SVG image XML")
         except (etree.XMLSyntaxError, ValueError, TypeError):
             return None
-        if not isinstance(root.tag, str) or root.tag.split("}", 1)[-1] != "svg":
+        if local_name(root.tag) != "svg":
             return None
 
         unit_converter = getattr(self._services, "unit_converter", None)

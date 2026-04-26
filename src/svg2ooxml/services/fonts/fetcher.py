@@ -12,6 +12,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlparse
 
+from svg2ooxml.common.boundaries import normalize_remote_resource_url
+
 MAX_FONT_SIZE = 10 * 1024 * 1024  # 10 MiB safety limit
 ENV_FONT_CACHE_DIR = "SVG2OOXML_FONT_CACHE_DIR"
 ENV_WEB_FONT_CACHE_DIR = "SVG2OOXML_WEB_FONT_CACHE"
@@ -165,17 +167,7 @@ class FontFetcher:
 
 
 def normalize_remote_font_url(url: str | None) -> str | None:
-    if not isinstance(url, str):
-        return None
-    token = url.strip()
-    if not token:
-        return None
-    parsed = urlparse(token)
-    if parsed.scheme.lower() not in {"http", "https"}:
-        return None
-    if not parsed.hostname:
-        return None
-    return token
+    return normalize_remote_resource_url(url)
 
 
 def _is_google_fonts_css_host(host: str) -> bool:

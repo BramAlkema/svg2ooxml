@@ -27,6 +27,7 @@ def test_collect_presentation_resolves_font_size_percent_against_default_font() 
     presentation = collect_presentation(_node(**{"font-size": "150%"}))
 
     assert presentation.font_size == pytest.approx(18.0)
+    assert presentation.font_size_scale == pytest.approx(1.5)
 
 
 def test_collect_presentation_parses_transform_compact_signed_numbers() -> None:

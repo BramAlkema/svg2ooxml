@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from lxml import etree
 
 from svg2ooxml.common.conversions.opacity import opacity_to_ppt
+from svg2ooxml.common.svg_refs import local_name
 from svg2ooxml.common.units import px_to_emu
 
 # Import centralized XML builders for safe DrawingML generation
@@ -297,8 +298,7 @@ def _source_is_grouped_reference(context: FilterContext) -> bool:
     element = options.get("element")
     tag = getattr(element, "tag", None)
     if isinstance(tag, str):
-        local = tag.split("}", 1)[-1] if "}" in tag else tag
-        if local in {"use", "g"}:
+        if local_name(tag) in {"use", "g"}:
             return True
     return False
 

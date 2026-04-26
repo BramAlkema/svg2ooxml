@@ -11,6 +11,7 @@ from svg2ooxml.common.geometry.paths import (
     compute_segments_bbox,
     normalize_path_to_segments,
 )
+from svg2ooxml.common.svg_refs import local_url_id
 from svg2ooxml.core.resvg.geometry.matrix import Matrix as ResvgMatrix
 from svg2ooxml.core.resvg.usvg_tree import BaseNode, Tree
 from svg2ooxml.core.traversal.constants import DEFAULT_TOLERANCE
@@ -134,8 +135,8 @@ def _gather_segments(
 
         if tag == "use":
             href = getattr(node, "href", None) or getattr(node, "attributes", {}).get("href")
-            if href and href.startswith("#"):
-                ref_id = href[1:]
+            ref_id = local_url_id(href)
+            if ref_id is not None:
                 if ref_id in visited:
                     continue
                 referenced = getattr(tree, "ids", {}).get(ref_id)

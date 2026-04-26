@@ -6,10 +6,11 @@ from dataclasses import replace
 
 from lxml import etree
 
+from svg2ooxml.common.svg_refs import local_name, local_url_id
 from svg2ooxml.core.styling.style_helpers import parse_style_attr
+from svg2ooxml.ir.paint import PatternPaint
 from svg2ooxml.paint.resvg_bridge import resolve_paints_for_node
 from svg2ooxml.policy.fidelity import FidelityDecision, resolve_fidelity
-from svg2ooxml.ir.paint import PatternPaint
 
 from .style_extractor import StyleResult
 
@@ -42,13 +43,13 @@ def extract_style(converter, element: etree._Element) -> StyleResult:
 
     # Fallback: map <use> elements to their referenced source nodes.
     if resvg_node is None:
-        tag_name = str(element.tag).split("}", 1)[-1]
+        tag_name = local_name(element.tag)
         if tag_name.lower() == "use":
             href_attr = element.get(
                 "{http://www.w3.org/1999/xlink}href"
             ) or element.get("href")
-            if href_attr and href_attr.startswith("#"):
-                reference_id = href_attr[1:]
+            reference_id = local_url_id(href_attr)
+            if reference_id is not None:
                 element_index = getattr(converter, "_element_index", None)
                 if isinstance(element_index, dict):
                     source_element = element_index.get(reference_id)
@@ -60,7 +61,7 @@ def extract_style(converter, element: etree._Element) -> StyleResult:
         if logger is not None:
             # Only warn for drawable elements that SHOULD be in the resvg tree.
             # Elements inside <defs> or other non-drawable containers are expected to be missing.
-            tag_name = str(element.tag).split("}", 1)[-1]
+            tag_name = local_name(element.tag)
             is_drawable = tag_name.lower() in {
                 "path",
                 "rect",
@@ -80,7 +81,7 @@ def extract_style(converter, element: etree._Element) -> StyleResult:
             in_defs = False
             curr = element
             while curr is not None:
-                local_tag = str(curr.tag).split("}", 1)[-1].lower()
+                local_tag = local_name(curr.tag).lower()
                 if local_tag == "defs":
                     in_defs = True
                     break

@@ -42,13 +42,15 @@ Example::
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Iterable, Mapping, Sequence
+from typing import Any
 
 from lxml import etree
 
+from svg2ooxml.common.boundaries import safe_lxml_parser
 from svg2ooxml.drawingml.animation.constants import SVG2_ANIMATION_NS
 from svg2ooxml.drawingml.animation.evidence import (
     EvidenceTier,
@@ -260,7 +262,7 @@ class AnimationOracle:
             raise FileNotFoundError(
                 f"Filter vocabulary SSOT missing: {vocab_path}"
             )
-        parser = etree.XMLParser(remove_blank_text=True, remove_comments=True)
+        parser = safe_lxml_parser(remove_blank_text=True, remove_comments=True)
         root = etree.fromstring(vocab_path.read_bytes(), parser)
         entries: list[FilterEntry] = []
         for filt in root.findall("filter"):
@@ -331,7 +333,7 @@ class AnimationOracle:
             raise FileNotFoundError(
                 f"attrName vocabulary SSOT missing: {vocab_path}"
             )
-        parser = etree.XMLParser(remove_blank_text=True, remove_comments=True)
+        parser = safe_lxml_parser(remove_blank_text=True, remove_comments=True)
         root = etree.fromstring(vocab_path.read_bytes(), parser)
         entries: list[AttrNameEntry] = []
         for attr_el in root.findall("attrname"):
@@ -377,7 +379,7 @@ class AnimationOracle:
             raise FileNotFoundError(
                 f"dead_paths SSOT missing: {dead_path}"
             )
-        parser = etree.XMLParser(remove_blank_text=True, remove_comments=True)
+        parser = safe_lxml_parser(remove_blank_text=True, remove_comments=True)
         root = etree.fromstring(dead_path.read_bytes(), parser)
         entries: list[DeadPath] = []
         for dp_el in root.findall("dead-path"):
@@ -496,7 +498,7 @@ class AnimationOracle:
             f'xmlns:a="{NS_A}">'
             f"{rendered}</root>"
         )
-        parser = etree.XMLParser(remove_blank_text=True)
+        parser = safe_lxml_parser(remove_blank_text=True)
         root = etree.fromstring(wrapped.encode("utf-8"), parser)
         par = root[0]
         par.set(_BUILD_MODE_ATTR, slot.bld_mode)
@@ -675,7 +677,7 @@ class AnimationOracle:
         wrapped = (
             f'<root xmlns:p="{NS_P}" xmlns:a="{NS_A}">{rendered}</root>'
         )
-        parser = etree.XMLParser(remove_blank_text=True)
+        parser = safe_lxml_parser(remove_blank_text=True)
         root = etree.fromstring(wrapped.encode("utf-8"), parser)
         fragment_elem = root.find("fragment")
         if fragment_elem is None:

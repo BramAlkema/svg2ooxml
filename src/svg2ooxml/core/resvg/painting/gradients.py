@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
-from ..geometry.matrix import Matrix
-from .paint import Color
+if TYPE_CHECKING:  # pragma: no cover
+    from svg2ooxml.common.units.conversion import ConversionContext
+
+from svg2ooxml.core.resvg.geometry.matrix import Matrix
+from svg2ooxml.core.resvg.painting.paint import Color
 
 
 @dataclass(slots=True)
@@ -26,6 +30,8 @@ class LinearGradient:
     stops: tuple[GradientStop, ...]
     href: str | None = None
     specified: tuple[str, ...] = ()
+    raw_attributes: dict[str, str] = field(default_factory=dict)
+    context: ConversionContext | None = None
 
 
 @dataclass(slots=True)
@@ -41,6 +47,8 @@ class RadialGradient:
     stops: tuple[GradientStop, ...]
     href: str | None = None
     specified: tuple[str, ...] = ()
+    raw_attributes: dict[str, str] = field(default_factory=dict)
+    context: ConversionContext | None = None
 
 
 @dataclass(slots=True)

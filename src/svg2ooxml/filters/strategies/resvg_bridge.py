@@ -11,6 +11,7 @@ from typing import Any
 import numpy as np
 from lxml import etree
 
+from svg2ooxml.common.svg_refs import local_name
 from svg2ooxml.common.units import px_to_emu
 from svg2ooxml.filters.base import FilterContext, FilterResult
 from svg2ooxml.filters.planner import FilterPlanner
@@ -184,7 +185,7 @@ def match_plan_elements(
     buckets: dict[str, list[etree._Element]] = defaultdict(list)
     results: dict[str, etree._Element] = {}
     for child in filter_element:
-        local = child.tag.split("}", 1)[-1].lower() if "}" in child.tag else child.tag.lower()
+        local = local_name(child.tag).lower()
         buckets[local].append(child)
         result_name = child.get("result")
         if result_name:

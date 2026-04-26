@@ -10,6 +10,7 @@ from lxml import etree
 
 from svg2ooxml.clipmask.types import ClipDefinition, MaskInfo
 from svg2ooxml.common.geometry import Matrix2D
+from svg2ooxml.common.svg_refs import local_url_id
 from svg2ooxml.drawingml.generator import DrawingMLPathGenerator, px_to_emu
 from svg2ooxml.ir.geometry import Rect
 from svg2ooxml.ir.scene import (
@@ -167,16 +168,7 @@ def resolve_mask_ref(
 
 
 def extract_url_id(token: str | None) -> str | None:
-    if not token:
-        return None
-    token = token.strip()
-    if token.startswith("url(") and token.endswith(")"):
-        inner = token[4:-1].strip().strip("\"'")
-    else:
-        inner = token
-    if inner.startswith("#"):
-        return inner[1:]
-    return None
+    return local_url_id(token)
 
 
 def _coerce_mask_mode(value: str | None) -> MaskMode:

@@ -10,6 +10,7 @@ from collections.abc import Iterable, Mapping
 from dataclasses import replace
 from typing import Any
 
+from svg2ooxml.color.utils import rgb_object_to_hex
 from svg2ooxml.ir.text import Run
 from svg2ooxml.policy.text_policy import TextPolicyDecision
 
@@ -45,18 +46,7 @@ def coerce_hex_color(token: str) -> str:
 
 
 def resvg_color_to_hex(color: Any) -> str:
-    try:
-        from svg2ooxml.color.models import Color as CentralizedColor
-    except Exception:
-        return "000000"
-
-    r = float(getattr(color, "r", 0.0))
-    g = float(getattr(color, "g", 0.0))
-    b = float(getattr(color, "b", 0.0))
-    a = float(getattr(color, "a", 1.0))
-    centralized = CentralizedColor(r=r, g=g, b=b, a=a)
-    hex_with_hash = centralized.to_hex(include_alpha=False)
-    return hex_with_hash[1:].upper()
+    return rgb_object_to_hex(color, scale="unit") or "000000"
 
 
 # ---------------------------------------------------------------

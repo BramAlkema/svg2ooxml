@@ -9,7 +9,7 @@ from pathlib import Path
 
 from lxml import etree as ET
 
-from svg2ooxml.common.ooxml_relationships import (
+from svg2ooxml.common.boundaries import (
     is_safe_relationship_id,
     next_relationship_id,
 )

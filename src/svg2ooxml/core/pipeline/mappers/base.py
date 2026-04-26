@@ -7,6 +7,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
+from svg2ooxml.common.boundaries import parse_wrapped_xml_fragment
+
 
 class OutputFormat(Enum):
     """Output format for mapped elements."""
@@ -110,9 +112,7 @@ def validate_mapper_result(result: MapperResult) -> bool:
         raise ValueError("Output size cannot be negative")
 
     try:
-        from lxml import etree
-
-        etree.fromstring(f"<root>{result.xml_content}</root>")
+        parse_wrapped_xml_fragment(result.xml_content)
     except Exception as exc:  # pragma: no cover - defensive validation
         raise ValueError(f"Invalid XML content: {exc}") from exc
 

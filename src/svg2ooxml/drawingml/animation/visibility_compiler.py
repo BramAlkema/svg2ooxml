@@ -7,8 +7,9 @@ from dataclasses import dataclass
 
 from lxml import etree
 
+from svg2ooxml.common.svg_refs import local_name
 from svg2ooxml.core.parser.xml_utils import walk
-from svg2ooxml.core.styling.style_helpers import local_name, parse_style_attr
+from svg2ooxml.core.styling.style_helpers import parse_style_attr
 from svg2ooxml.ir.animation import (
     AnimationDefinition,
     AnimationTiming,

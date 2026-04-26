@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any
 
 from lxml import etree
 
+from svg2ooxml.common.svg_refs import local_name, local_url_id, reference_id
 from svg2ooxml.drawingml.bridges import (
     PatternDescriptor,
     build_pattern_element,
@@ -83,9 +84,10 @@ class PatternService:
             if include_self or current != pattern_id:
                 chain.append(descriptor)
             href = descriptor.href if descriptor.href else descriptor.attributes.get("href")
-            if not href or not href.strip().startswith("#"):
+            next_id = local_url_id(href)
+            if next_id is None:
                 break
-            current = href.strip()[1:]
+            current = next_id
         return chain
 
     def clone(self) -> PatternService:
@@ -121,7 +123,7 @@ class PatternService:
         self._materialized_elements.pop(key, None)
 
     def get_pattern_content(self, pattern_id: str, context: Any | None = None) -> str | None:
-        clean_id = self._strip_url(pattern_id)
+        clean_id = reference_id(pattern_id) or ""
 
         cached = self._conversion_cache.get(clean_id)
         if cached is not None:
@@ -230,7 +232,7 @@ class PatternService:
         if not children:
             return "solid"
 
-        tags = [self._local_name(child.tag) for child in children if hasattr(child, "tag")]
+        tags = [local_name(child.tag) for child in children if hasattr(child, "tag")]
         if any(tag == "circle" for tag in tags):
             return "dots"
         if any(tag == "line" for tag in tags):
@@ -268,22 +270,6 @@ class PatternService:
         if len(token) == 3:
             token = "".join(ch * 2 for ch in token)
         return token.upper()
-
-    def _strip_url(self, identifier: str) -> str:
-        token = identifier.strip()
-        if token.startswith("url(") and token.endswith(")"):
-            token = token[4:-1]
-        if token.startswith("#"):
-            token = token[1:]
-        return token
-
-    @staticmethod
-    def _local_name(tag: str | None) -> str:
-        if not tag:
-            return ""
-        if "}" in tag:
-            return tag.split("}", 1)[1]
-        return tag
 
 
 __all__ = ["PatternService"]

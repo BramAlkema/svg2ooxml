@@ -6,6 +6,7 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+from svg2ooxml.common.svg_refs import local_url_id
 from svg2ooxml.core.traversal.markers import MarkerDefinition, parse_marker_definition
 
 XLINK_HREF = "{http://www.w3.org/1999/xlink}href"
@@ -81,9 +82,10 @@ class MarkerService:
             if include_self or current != marker_id:
                 chain.append(element)
             href = element.get("href") or element.get(XLINK_HREF)
-            if not href or not href.startswith("#"):
+            next_id = local_url_id(href)
+            if next_id is None:
                 break
-            current = href[1:]
+            current = next_id
         return chain
 
     def clone(self) -> MarkerService:

@@ -11,9 +11,12 @@ from lxml import etree
 
 from svg2ooxml.color.models import Color
 from svg2ooxml.color.parsers import parse_color
+from svg2ooxml.color.utils import rgb_object_to_hex
 from svg2ooxml.common.conversions.angles import degrees_to_ppt
 from svg2ooxml.common.conversions.opacity import opacity_to_ppt, parse_opacity
 from svg2ooxml.common.conversions.scale import position_to_ppt
+from svg2ooxml.common.style.css_values import parse_style_declarations
+from svg2ooxml.common.svg_refs import local_name, local_url_id, reference_id
 from svg2ooxml.drawingml.bridges.resvg_paint_bridge import (
     GradientDescriptor,
     LinearGradientDescriptor,
@@ -107,9 +110,10 @@ class GradientService:
             if include_self or current_id != gradient_id:
                 chain.append(descriptor)
             href = getattr(descriptor, "href", None)
-            if not href or not href.lstrip().startswith("#"):
+            next_id = local_url_id(href)
+            if next_id is None:
                 break
-            current_id = href.strip()[1:]
+            current_id = next_id
         return chain
 
     def clone(self) -> GradientService:
@@ -160,7 +164,7 @@ class GradientService:
         self._materialized_elements.pop(key, None)
 
     def get_gradient_content(self, gradient_id: str, context: Any | None = None) -> str | None:
-        clean_id = self._strip_url(gradient_id)
+        clean_id = reference_id(gradient_id) or ""
 
         cached = self._conversion_cache.get(clean_id)
         if cached is not None:
@@ -186,7 +190,7 @@ class GradientService:
             if isinstance(descriptor, LinearGradientDescriptor)
             else "radialGradient"
             if isinstance(descriptor, RadialGradientDescriptor)
-            else self._local_name(element.tag)
+            else local_name(element.tag)
         )
 
         if gradient_type == "linearGradient":
@@ -232,10 +236,7 @@ class GradientService:
         return gs
 
     def _color_to_hex(self, color: Color) -> str:
-        r = int(self._clamp(color.r) * 255 + 0.5)
-        g = int(self._clamp(color.g) * 255 + 0.5)
-        b = int(self._clamp(color.b) * 255 + 0.5)
-        return f"{r:02X}{g:02X}{b:02X}"
+        return rgb_object_to_hex(color, scale="unit") or "000000"
 
     def _analysis_comment(self, analysis: GradientAnalysis | None) -> str:
         if analysis is None:
@@ -374,19 +375,11 @@ class GradientService:
     # Support functions                                                  #
     # ------------------------------------------------------------------ #
 
-    def _strip_url(self, identifier: str) -> str:
-        token = identifier.strip()
-        if token.startswith("url(") and token.endswith(")"):
-            token = token[4:-1]
-        if token.startswith("#"):
-            token = token[1:]
-        return token
-
     def _iter_stops(self, element: etree._Element) -> Iterator[etree._Element]:
         for node in element.iter():
             if not hasattr(node, "tag"):
                 continue
-            if self._local_name(getattr(node, "tag", "")) == "stop":
+            if local_name(getattr(node, "tag", "")) == "stop":
                 yield node
 
     def _parse_offset(self, value: str | None) -> int:
@@ -414,15 +407,7 @@ class GradientService:
         return color
 
     def _parse_style(self, payload: str | None) -> dict[str, str]:
-        if not payload:
-            return {}
-        entries: dict[str, str] = {}
-        for declaration in payload.split(";"):
-            if ":" not in declaration:
-                continue
-            key, value = declaration.split(":", 1)
-            entries[key.strip()] = value.strip()
-        return entries
+        return parse_style_declarations(payload)[0]
 
     def _resolve_linear_angle(self, element: etree._Element) -> int:
         # Map SVG x1/y1/x2/y2 into DrawingML degrees; fall back to 180° (top-to-bottom)
@@ -450,18 +435,6 @@ class GradientService:
             rows += 1
             cols = max(cols, len(list(patch)))
         return rows or 1, cols or 1
-
-    @staticmethod
-    def _local_name(tag: str | None) -> str:
-        if not tag:
-            return ""
-        if "}" in tag:
-            return tag.split("}", 1)[1]
-        return tag
-
-    @staticmethod
-    def _clamp(value: float) -> float:
-        return max(0.0, min(1.0, value))
 
 
 __all__ = ["GradientService"]

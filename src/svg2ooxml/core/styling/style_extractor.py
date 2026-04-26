@@ -28,6 +28,9 @@ from svg2ooxml.core.styling.style_helpers import (
     parse_dash_array as _parse_dash_array,
 )
 from svg2ooxml.core.styling.style_helpers import (
+    parse_length as _parse_length,
+)
+from svg2ooxml.core.styling.style_helpers import (
     parse_optional_float as _parse_optional_float,
 )
 from svg2ooxml.drawingml.bridges.resvg_paint_bridge import (
@@ -324,7 +327,7 @@ class StyleExtractor:
         }.get(cap_attr, StrokeCap.BUTT)
 
         dash_array = _parse_dash_array(element.get("stroke-dasharray"))
-        dash_offset = _parse_optional_float(element.get("stroke-dashoffset")) or 0.0
+        dash_offset = _parse_length(element.get("stroke-dashoffset")) or 0.0
         miter_limit = _parse_optional_float(element.get("stroke-miterlimit")) or 4.0
         stroke_opacity = float(paint_style.get("stroke_opacity", 1.0) or 0.0)
         stroke_opacity = max(0.0, min(1.0, stroke_opacity))
