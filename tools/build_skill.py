@@ -57,7 +57,7 @@ def build(output_dir: Path) -> None:
     _generate_references(output_dir)
     _make_scripts_executable(output_dir)
 
-    print(f"Done. Skill contents:")
+    print("Done. Skill contents:")
     for path in sorted(output_dir.rglob("*")):
         if path.is_file():
             rel = path.relative_to(output_dir)
@@ -76,7 +76,11 @@ def _copy_hand_written(output_dir: Path) -> None:
     src_scripts = SKILL_SOURCES / "scripts"
     if not src_scripts.is_dir():
         raise FileNotFoundError(f"scripts/ missing at {src_scripts}")
-    shutil.copytree(src_scripts, output_dir / "scripts")
+    shutil.copytree(
+        src_scripts,
+        output_dir / "scripts",
+        ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
+    )
 
     # references_static → references (hand-written markdown docs).
     src_refs = SKILL_SOURCES / "references_static"
@@ -246,7 +250,8 @@ def _render_dead_paths(dead_paths: tuple[DeadPath, ...]) -> str:
         lines.append(f"### `{dp.id}`")
         lines.append("")
         attrs = ", ".join(
-            f"`{k}={v}`" for k, v in zip(dp.attribute_names, dp.attribute_values)
+            f"`{k}={v}`"
+            for k, v in zip(dp.attribute_names, dp.attribute_values, strict=True)
         )
         lines.append(f"**Shape:** `{dp.element}` with {attrs}")
         if dp.context:

@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import math
 import re
+from functools import lru_cache
 
 from svg2ooxml.ir.geometry import BezierSegment, LineSegment, Point, SegmentType
 
 _COMMAND_RE = re.compile(r"[MmLlHhVvCcSsQqTtAaZz]")
 _TOKEN_RE = re.compile(r"([MmLlHhVvCcSsQqTtAaZz])|([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)")
+_MAX_CACHED_PATH_CHARS = 8192
 
 
 class PathParseError(ValueError):
@@ -17,6 +19,17 @@ class PathParseError(ValueError):
 
 def parse_path_data(data: str) -> list[SegmentType]:
     """Parse SVG path ``d`` strings into IR segments."""
+    if len(data) > _MAX_CACHED_PATH_CHARS:
+        return list(_parse_path_data(data))
+    return list(_parse_path_data_cached(data))
+
+
+@lru_cache(maxsize=2048)
+def _parse_path_data_cached(data: str) -> tuple[SegmentType, ...]:
+    return _parse_path_data(data)
+
+
+def _parse_path_data(data: str) -> tuple[SegmentType, ...]:
     tokens = _tokenize(data)
     segments: list[SegmentType] = []
 
@@ -84,18 +97,31 @@ def parse_path_data(data: str) -> list[SegmentType]:
         if command in {"Z", "z"}:
             start_point = cursor
 
-    return segments
+    return tuple(segments)
 
 
 def _tokenize(data: str) -> list[str | float]:
-    matches = _TOKEN_RE.findall(data)
     tokens: list[str | float] = []
-    for cmd, number in matches:
+    position = 0
+    for match in _TOKEN_RE.finditer(data):
+        _raise_for_invalid_path_gap(data, position, match.start())
+        cmd, number = match.groups()
         if cmd:
             tokens.append(cmd)
         elif number:
-            tokens.append(float(number))
+            value = float(number)
+            if not math.isfinite(value):
+                raise PathParseError("Path data contains non-finite numbers")
+            tokens.append(value)
+        position = match.end()
+    _raise_for_invalid_path_gap(data, position, len(data))
     return tokens
+
+
+def _raise_for_invalid_path_gap(data: str, start: int, end: int) -> None:
+    if all(char == "," or char.isspace() for char in data[start:end]):
+        return
+    raise PathParseError("Path data contains invalid tokens")
 
 
 def _parse_moveto(

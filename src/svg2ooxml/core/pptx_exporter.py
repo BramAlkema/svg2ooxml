@@ -18,11 +18,13 @@ from svg2ooxml.core.export.animation_processor import (
     _prepare_scene_for_native_opacity_effects,
 )
 from svg2ooxml.core.export.motion_geometry import _apply_immediate_motion_starts
+from svg2ooxml.core.export.polyline_materialization import (
+    _materialize_stroked_polyline_groups,
+)
 from svg2ooxml.core.export.variant_expansion import (
     _coalesce_simple_position_motions,
     _compose_simple_line_endpoint_animations,
     _materialize_simple_line_paths,
-    _materialize_stroked_polyline_groups,
     _merge_trace_reports,
 )
 from svg2ooxml.core.ir.converter import IRScene

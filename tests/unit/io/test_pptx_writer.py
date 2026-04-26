@@ -18,8 +18,14 @@ from svg2ooxml.core.pipeline.navigation import (
     NavigationSpec,
     SlideTarget,
 )
-from svg2ooxml.drawingml.assets import FontAsset, MediaAsset, NavigationAsset
+from svg2ooxml.drawingml.assets import (
+    AssetRegistrySnapshot,
+    FontAsset,
+    MediaAsset,
+    NavigationAsset,
+)
 from svg2ooxml.drawingml.navigation import REL_TYPE_HYPERLINK, REL_TYPE_SLIDE
+from svg2ooxml.drawingml.result import DrawingMLRenderResult
 from svg2ooxml.io.pptx_assembly import (
     MaskAsset,
     PackagedMedia,
@@ -296,6 +302,36 @@ def _render_simple_scene(builder: PPTXPackageBuilder, width: int = 160, height: 
     return builder._writer.render_scene_from_ir(scene)
 
 
+def _render_result_with_media_relationship(relationship_id: str) -> DrawingMLRenderResult:
+    slide_xml = f'''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<p:sld xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+       xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+       xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <p:cSld>
+    <p:spTree>
+      <p:pic>
+        <p:blipFill><a:blip r:embed="{relationship_id}"/></p:blipFill>
+      </p:pic>
+    </p:spTree>
+  </p:cSld>
+</p:sld>
+'''
+    return DrawingMLRenderResult(
+        slide_xml=slide_xml,
+        slide_size=(160, 90),
+        assets=AssetRegistrySnapshot(
+            media=(
+                MediaAsset(
+                    relationship_id=relationship_id,
+                    filename="image.png",
+                    content_type="image/png",
+                    data=b"png",
+                ),
+            )
+        ),
+    )
+
+
 def test_packaged_media_sanitizes_filename_and_relationship_target() -> None:
     media = PackagedMedia(
         relationship_id="rIdMedia1",
@@ -335,6 +371,40 @@ def test_packaging_context_sanitizes_media_asset_filename() -> None:
     )
 
     assert filename == "bad_name.png"
+
+
+@pytest.mark.parametrize("relationship_id", ["bad id", "rId1"])
+def test_build_from_results_rekeys_packaged_media_relationship_ids(
+    relationship_id: str,
+) -> None:
+    builder = PPTXPackageBuilder()
+    rendered = _render_result_with_media_relationship(relationship_id)
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        output = Path(tmpdir) / "rekey_media.pptx"
+        builder.build_from_results([rendered], output)
+
+        with zipfile.ZipFile(output, "r") as archive:
+            slide_xml = archive.read("ppt/slides/slide1.xml").decode("utf-8")
+            rels_root = ET.fromstring(
+                archive.read("ppt/slides/_rels/slide1.xml.rels")
+            )
+
+    rels = rels_root.findall(
+        "{http://schemas.openxmlformats.org/package/2006/relationships}Relationship"
+    )
+    image_rels = [
+        rel
+        for rel in rels
+        if rel.get("Type")
+        == "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image"
+    ]
+
+    assert len(image_rels) == 1
+    packaged_id = image_rels[0].get("Id")
+    assert packaged_id != relationship_id
+    assert f'r:embed="{packaged_id}"' in slide_xml
+    assert f'r:embed="{relationship_id}"' not in slide_xml
 
 
 def test_package_writer_never_emits_unsafe_media_or_mask_paths() -> None:

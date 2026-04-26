@@ -1,13 +1,14 @@
-"""Affine, rotation, projection, and element translation utilities for animation motion."""
+"""Affine, rotation, and heading utilities for animation motion."""
 
 from __future__ import annotations
 
 import math
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from typing import Any
 
+from svg2ooxml.core.export.element_translation import _translate_element_to_motion_start
 from svg2ooxml.core.ir.converter import IRScene
-from svg2ooxml.ir.animation import AnimationDefinition, AnimationType, CalcMode
+from svg2ooxml.ir.animation import AnimationDefinition, AnimationType
 
 # ---------------------------------------------------------------------------
 # Sampling & interpolation
@@ -153,12 +154,6 @@ def _project_linear_motion_delta(
     return (a * dx + c * dy, b * dx + d * dy)
 
 
-def _format_motion_delta(value: float) -> str:
-    if abs(value) < 1e-10:
-        return "0"
-    return f"{value:.6g}"
-
-
 # ---------------------------------------------------------------------------
 # Element heading inference
 # ---------------------------------------------------------------------------
@@ -259,183 +254,6 @@ def _angle_deg(dx: float, dy: float) -> float:
 
 
 # ---------------------------------------------------------------------------
-# Motion path parsing & sampling
-# ---------------------------------------------------------------------------
-
-
-def _parse_sampled_motion_points(path_value: str) -> list[tuple[float, float]]:
-    from svg2ooxml.common.geometry.paths import PathParseError, parse_path_data
-    from svg2ooxml.common.geometry.paths.segments import BezierSegment, LineSegment
-    from svg2ooxml.ir.geometry import Point
-
-    try:
-        segments = parse_path_data(path_value)
-    except PathParseError:
-        return []
-    if not segments:
-        return []
-
-    points: list[Point] = [segments[0].start]
-    for segment in segments:
-        if isinstance(segment, LineSegment):
-            points.append(segment.end)
-        elif isinstance(segment, BezierSegment):
-            for step in range(1, 21):
-                t = step / 20.0
-                mt = 1.0 - t
-                points.append(
-                    Point(
-                        x=(
-                            mt**3 * segment.start.x
-                            + 3 * mt**2 * t * segment.control1.x
-                            + 3 * mt * t**2 * segment.control2.x
-                            + t**3 * segment.end.x
-                        ),
-                        y=(
-                            mt**3 * segment.start.y
-                            + 3 * mt**2 * t * segment.control1.y
-                            + 3 * mt * t**2 * segment.control2.y
-                            + t**3 * segment.end.y
-                        ),
-                    )
-                )
-
-    deduped: list[tuple[float, float]] = []
-    for point in points:
-        pair = (float(point.x), float(point.y))
-        if (
-            not deduped
-            or abs(deduped[-1][0] - pair[0]) > 1e-6
-            or abs(deduped[-1][1] - pair[1]) > 1e-6
-        ):
-            deduped.append(pair)
-    return deduped
-
-
-def _sample_polyline_at_fraction(
-    points: list[tuple[float, float]],
-    fraction: float,
-) -> tuple[float, float]:
-    if fraction <= 0.0:
-        return points[0]
-    if fraction >= 1.0:
-        return points[-1]
-
-    cumulative = [0.0]
-    total = 0.0
-    for index in range(1, len(points)):
-        x0, y0 = points[index - 1]
-        x1, y1 = points[index]
-        total += math.hypot(x1 - x0, y1 - y0)
-        cumulative.append(total)
-    if total <= 1e-9:
-        return points[0]
-
-    target = total * fraction
-    for index in range(1, len(points)):
-        prev_dist = cumulative[index - 1]
-        curr_dist = cumulative[index]
-        if target <= curr_dist:
-            span = curr_dist - prev_dist
-            if span <= 1e-9:
-                return points[index]
-            t = (target - prev_dist) / span
-            x0, y0 = points[index - 1]
-            x1, y1 = points[index]
-            return (x0 + (x1 - x0) * t, y0 + (y1 - y0) * t)
-    return points[-1]
-
-
-# ---------------------------------------------------------------------------
-# Sampled motion path builder
-# ---------------------------------------------------------------------------
-
-
-def _build_sampled_motion_replacement(
-    *,
-    template: AnimationDefinition,
-    points: list[tuple[float, float]],
-    key_times: list[float] | None = None,
-) -> AnimationDefinition:
-    from dataclasses import replace as _replace
-
-    relative_points = _relative_motion_points(points)
-    path = _build_motion_path_from_relative_points(relative_points)
-    key_points = (
-        _path_progress_key_points(relative_points)
-        if key_times is not None and len(key_times) == len(relative_points)
-        else None
-    )
-    return _replace(
-        template,
-        animation_type=AnimationType.ANIMATE_MOTION,
-        target_attribute="position",
-        values=[path],
-        key_times=list(key_times) if key_points is not None else None,
-        key_points=key_points,
-        key_splines=None,
-        calc_mode=CalcMode.LINEAR,
-        transform_type=None,
-        additive="replace",
-        accumulate="none",
-        motion_rotate=None,
-        element_motion_offset_px=None,
-        motion_space_matrix=None,
-    )
-
-
-def _relative_motion_points(
-    points: list[tuple[float, float]],
-) -> list[tuple[float, float]]:
-    deduped: list[tuple[float, float]] = []
-    start_x, start_y = points[0]
-    for x, y in points:
-        pair = (x - start_x, y - start_y)
-        if (
-            not deduped
-            or abs(deduped[-1][0] - pair[0]) > 1e-6
-            or abs(deduped[-1][1] - pair[1]) > 1e-6
-        ):
-            deduped.append(pair)
-    if len(deduped) == 1:
-        deduped.append(deduped[0])
-    return deduped
-
-
-def _build_motion_path_from_relative_points(
-    points: list[tuple[float, float]],
-) -> str:
-    segments = []
-    for index, (x, y) in enumerate(points):
-        command = "M" if index == 0 else "L"
-        segments.append(
-            f"{command} {_format_motion_delta(x)} {_format_motion_delta(y)}"
-        )
-    return " ".join(segments) + " E"
-
-
-def _path_progress_key_points(
-    points: list[tuple[float, float]],
-) -> list[float]:
-    if len(points) <= 1:
-        return [0.0]
-
-    lengths = [0.0]
-    total = 0.0
-    for index in range(1, len(points)):
-        x0, y0 = points[index - 1]
-        x1, y1 = points[index]
-        total += math.hypot(x1 - x0, y1 - y0)
-        lengths.append(total)
-
-    if total <= 1e-9:
-        step = 1.0 / (len(points) - 1)
-        return [index * step for index in range(len(points))]
-
-    return [length / total for length in lengths]
-
-
-# ---------------------------------------------------------------------------
 # Motion start extraction & projection
 # ---------------------------------------------------------------------------
 
@@ -443,7 +261,8 @@ def _path_progress_key_points(
 def _first_motion_point(
     animation: AnimationDefinition,
 ) -> tuple[float, float] | None:
-    from svg2ooxml.common.geometry.paths import PathParseError, parse_path_data
+    from svg2ooxml.common.geometry.paths import PathParseError
+    from svg2ooxml.common.geometry.paths.motion import parse_motion_path_data
 
     if not animation.values:
         return None
@@ -453,7 +272,7 @@ def _first_motion_point(
         return None
 
     try:
-        segments = parse_path_data(path_value)
+        segments = parse_motion_path_data(path_value)
     except PathParseError:
         return None
 
@@ -480,287 +299,6 @@ def _project_motion_point(
         y += offset_y
 
     return (x, y)
-
-
-# ---------------------------------------------------------------------------
-# Element translation helpers
-# ---------------------------------------------------------------------------
-
-
-def _translate_element_to_center_target(
-    element: Any,
-    center_targets: Mapping[str, tuple[float, float]],
-):
-    from dataclasses import replace as _replace
-
-    from svg2ooxml.ir.geometry import BezierSegment, LineSegment, Point, Rect
-    from svg2ooxml.ir.scene import Group, Image
-    from svg2ooxml.ir.scene import Path as IRPath
-    from svg2ooxml.ir.shapes import Circle, Ellipse, Line, Polygon, Polyline, Rectangle
-    from svg2ooxml.ir.text import TextFrame
-
-    metadata = getattr(element, "metadata", None)
-    element_ids = metadata.get("element_ids", []) if isinstance(metadata, dict) else []
-    bbox = getattr(element, "bbox", None)
-
-    dx = 0.0
-    dy = 0.0
-    if bbox is not None:
-        current_center = (bbox.x + bbox.width / 2.0, bbox.y + bbox.height / 2.0)
-        for element_id in element_ids:
-            if element_id in center_targets:
-                target_x, target_y = center_targets[element_id]
-                dx = target_x - current_center[0]
-                dy = target_y - current_center[1]
-                break
-
-    def _move_point(point: Point) -> Point:
-        return Point(point.x + dx, point.y + dy)
-
-    def _move_rect(rect: Rect) -> Rect:
-        return Rect(rect.x + dx, rect.y + dy, rect.width, rect.height)
-
-    if isinstance(element, Group):
-        moved_children = [
-            _translate_element_to_center_target(child, center_targets)
-            for child in element.children
-        ]
-        if abs(dx) > 1e-9 or abs(dy) > 1e-9:
-            moved_children = [
-                _translate_element_by_delta(child, dx, dy)
-                for child in moved_children
-            ]
-        return _replace(element, children=moved_children)
-
-    if abs(dx) <= 1e-9 and abs(dy) <= 1e-9:
-        return element
-
-    if isinstance(element, IRPath):
-        moved_segments = []
-        for segment in element.segments:
-            if isinstance(segment, LineSegment):
-                moved_segments.append(
-                    LineSegment(
-                        start=_move_point(segment.start),
-                        end=_move_point(segment.end),
-                    )
-                )
-            elif isinstance(segment, BezierSegment):
-                moved_segments.append(
-                    BezierSegment(
-                        start=_move_point(segment.start),
-                        control1=_move_point(segment.control1),
-                        control2=_move_point(segment.control2),
-                        end=_move_point(segment.end),
-                    )
-                )
-            else:
-                moved_segments.append(segment)
-        return _replace(element, segments=moved_segments)
-    if isinstance(element, Rectangle):
-        return _replace(element, bounds=_move_rect(element.bounds))
-    if isinstance(element, Circle):
-        return _replace(element, center=_move_point(element.center))
-    if isinstance(element, Ellipse):
-        return _replace(element, center=_move_point(element.center))
-    if isinstance(element, Line):
-        return _replace(
-            element,
-            start=_move_point(element.start),
-            end=_move_point(element.end),
-        )
-    if isinstance(element, Polyline):
-        return _replace(
-            element,
-            points=[_move_point(point) for point in element.points],
-        )
-    if isinstance(element, Polygon):
-        return _replace(
-            element,
-            points=[_move_point(point) for point in element.points],
-        )
-    if isinstance(element, TextFrame):
-        return _replace(
-            element,
-            origin=_move_point(element.origin),
-            bbox=_move_rect(element.bbox),
-        )
-    if isinstance(element, Image):
-        return _replace(
-            element,
-            origin=_move_point(element.origin),
-        )
-    return element
-
-
-def _translate_element_to_motion_start(
-    element: Any,
-    start_positions: Mapping[str, tuple[float, float]],
-):
-    from dataclasses import replace as _replace
-
-    from svg2ooxml.ir.geometry import BezierSegment, LineSegment, Point, Rect
-    from svg2ooxml.ir.scene import Group, Image
-    from svg2ooxml.ir.scene import Path as IRPath
-    from svg2ooxml.ir.shapes import Circle, Ellipse, Line, Polygon, Polyline, Rectangle
-    from svg2ooxml.ir.text import TextFrame
-
-    metadata = getattr(element, "metadata", None)
-    element_ids = metadata.get("element_ids", []) if isinstance(metadata, dict) else []
-    bbox = getattr(element, "bbox", None)
-
-    dx = 0.0
-    dy = 0.0
-    if bbox is not None:
-        for element_id in element_ids:
-            if element_id in start_positions:
-                target_x, target_y = start_positions[element_id]
-                dx = target_x - bbox.x
-                dy = target_y - bbox.y
-                break
-
-    def _move_point(point: Point) -> Point:
-        return Point(point.x + dx, point.y + dy)
-
-    def _move_rect(rect: Rect) -> Rect:
-        return Rect(rect.x + dx, rect.y + dy, rect.width, rect.height)
-
-    if isinstance(element, Group):
-        moved_children = [
-            _translate_element_to_motion_start(child, start_positions)
-            for child in element.children
-        ]
-        if abs(dx) > 1e-9 or abs(dy) > 1e-9:
-            moved_children = [
-                _translate_element_by_delta(child, dx, dy)
-                for child in moved_children
-            ]
-        return _replace(element, children=moved_children)
-
-    if abs(dx) <= 1e-9 and abs(dy) <= 1e-9:
-        return element
-
-    if isinstance(element, IRPath):
-        moved_segments = []
-        for segment in element.segments:
-            if isinstance(segment, LineSegment):
-                moved_segments.append(
-                    LineSegment(
-                        start=_move_point(segment.start),
-                        end=_move_point(segment.end),
-                    )
-                )
-            elif isinstance(segment, BezierSegment):
-                moved_segments.append(
-                    BezierSegment(
-                        start=_move_point(segment.start),
-                        control1=_move_point(segment.control1),
-                        control2=_move_point(segment.control2),
-                        end=_move_point(segment.end),
-                    )
-                )
-            else:
-                moved_segments.append(segment)
-        return _replace(element, segments=moved_segments)
-    if isinstance(element, Rectangle):
-        return _replace(element, bounds=_move_rect(element.bounds))
-    if isinstance(element, Circle):
-        return _replace(element, center=_move_point(element.center))
-    if isinstance(element, Ellipse):
-        return _replace(element, center=_move_point(element.center))
-    if isinstance(element, Line):
-        return _replace(
-            element,
-            start=_move_point(element.start),
-            end=_move_point(element.end),
-        )
-    if isinstance(element, Polyline):
-        return _replace(
-            element,
-            points=[_move_point(point) for point in element.points],
-        )
-    if isinstance(element, Polygon):
-        return _replace(
-            element,
-            points=[_move_point(point) for point in element.points],
-        )
-    if isinstance(element, TextFrame):
-        return _replace(
-            element,
-            origin=_move_point(element.origin),
-            bbox=_move_rect(element.bbox),
-        )
-    if isinstance(element, Image):
-        return _replace(
-            element,
-            origin=_move_point(element.origin),
-        )
-    return element
-
-
-def _translate_element_by_delta(element: Any, dx: float, dy: float):
-    from dataclasses import replace as _replace
-
-    from svg2ooxml.ir.geometry import BezierSegment, LineSegment, Point, Rect
-    from svg2ooxml.ir.scene import Group, Image
-    from svg2ooxml.ir.scene import Path as IRPath
-    from svg2ooxml.ir.shapes import Circle, Ellipse, Line, Polygon, Polyline, Rectangle
-    from svg2ooxml.ir.text import TextFrame
-
-    def _move_point(point: Point) -> Point:
-        return Point(point.x + dx, point.y + dy)
-
-    def _move_rect(rect: Rect) -> Rect:
-        return Rect(rect.x + dx, rect.y + dy, rect.width, rect.height)
-
-    if isinstance(element, Group):
-        return _replace(
-            element,
-            children=[_translate_element_by_delta(child, dx, dy) for child in element.children],
-        )
-    if isinstance(element, IRPath):
-        moved_segments = []
-        for segment in element.segments:
-            if isinstance(segment, LineSegment):
-                moved_segments.append(
-                    LineSegment(
-                        start=_move_point(segment.start),
-                        end=_move_point(segment.end),
-                    )
-                )
-            elif isinstance(segment, BezierSegment):
-                moved_segments.append(
-                    BezierSegment(
-                        start=_move_point(segment.start),
-                        control1=_move_point(segment.control1),
-                        control2=_move_point(segment.control2),
-                        end=_move_point(segment.end),
-                    )
-                )
-            else:
-                moved_segments.append(segment)
-        return _replace(element, segments=moved_segments)
-    if isinstance(element, Rectangle):
-        return _replace(element, bounds=_move_rect(element.bounds))
-    if isinstance(element, Circle):
-        return _replace(element, center=_move_point(element.center))
-    if isinstance(element, Ellipse):
-        return _replace(element, center=_move_point(element.center))
-    if isinstance(element, Line):
-        return _replace(
-            element,
-            start=_move_point(element.start),
-            end=_move_point(element.end),
-        )
-    if isinstance(element, Polyline):
-        return _replace(element, points=[_move_point(point) for point in element.points])
-    if isinstance(element, Polygon):
-        return _replace(element, points=[_move_point(point) for point in element.points])
-    if isinstance(element, TextFrame):
-        return _replace(element, origin=_move_point(element.origin), bbox=_move_rect(element.bbox))
-    if isinstance(element, Image):
-        return _replace(element, origin=_move_point(element.origin))
-    return element
 
 
 # ---------------------------------------------------------------------------

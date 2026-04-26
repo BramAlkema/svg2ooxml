@@ -408,7 +408,10 @@ class StreamingPackageWriter(_PackageWriterBase):
             raise RuntimeError("begin() already called")
 
         self._context = PackagingContext()
-        self._assembler = SlideAssembler(self._context)
+        self._assembler = SlideAssembler(
+            self._context,
+            slide_rels_template=self._slide_rels_template,
+        )
         self._temp_dir_ctx = temporary_directory(prefix="svg2ooxml_pptx_")
         self._temp_path = self._temp_dir_ctx.__enter__()
         shutil.copytree(self._base_template, self._temp_path, dirs_exist_ok=True)

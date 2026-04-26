@@ -2,7 +2,15 @@
 
 import pytest
 
-from svg2ooxml.common.geometry.paths import compute_segments_bbox, parse_path_data
+from svg2ooxml.common.geometry.paths import (
+    PathParseError,
+    compute_segments_bbox,
+    parse_path_data,
+)
+from svg2ooxml.common.geometry.paths.parser import (
+    _MAX_CACHED_PATH_CHARS,
+    _parse_path_data_cached,
+)
 from svg2ooxml.common.geometry.paths.segments import BezierSegment, LineSegment, Point
 
 
@@ -14,6 +22,38 @@ def test_parse_line_commands() -> None:
     assert segments[0].end == Point(10, 0)
     assert isinstance(segments[-1], LineSegment)
     assert segments[-1].end == Point(0, 0)
+
+
+def test_parse_path_data_cache_returns_fresh_lists() -> None:
+    first = parse_path_data("M 0 0 L 10 0")
+    second = parse_path_data("M 0 0 L 10 0")
+
+    assert first == second
+    assert first is not second
+
+    first.clear()
+    assert len(parse_path_data("M 0 0 L 10 0")) == 1
+
+
+def test_parse_path_data_cache_skips_large_paths() -> None:
+    _parse_path_data_cached.cache_clear()
+    large_path = "M 0 0 " + " ".join(
+        f"L {index} {index}" for index in range(_MAX_CACHED_PATH_CHARS // 3)
+    )
+
+    assert len(large_path) > _MAX_CACHED_PATH_CHARS
+    assert parse_path_data(large_path)
+    assert _parse_path_data_cached.cache_info().currsize == 0
+
+
+def test_parse_path_data_rejects_unrecognized_tokens() -> None:
+    with pytest.raises(PathParseError):
+        parse_path_data("M 0 0 nope L 1 1")
+
+
+def test_parse_path_data_rejects_non_finite_numbers() -> None:
+    with pytest.raises(PathParseError):
+        parse_path_data("M 0 0 L 1e999999 1")
 
 
 def test_parse_cubic_curve() -> None:

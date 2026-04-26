@@ -345,8 +345,8 @@ def resolve_initial_tangent_vector(path_value: str) -> PointPair | None:
     try:
         from svg2ooxml.common.geometry.paths import (
             PathParseError,
-            parse_path_data,
         )
+        from svg2ooxml.common.geometry.paths.motion import parse_motion_path_data
         from svg2ooxml.common.geometry.paths.segments import (
             BezierSegment,
             LineSegment,
@@ -355,7 +355,7 @@ def resolve_initial_tangent_vector(path_value: str) -> PointPair | None:
         return None
 
     try:
-        segments = parse_path_data(path_value)
+        segments = parse_motion_path_data(path_value)
     except PathParseError:
         return None
 
@@ -398,8 +398,8 @@ def parse_motion_path(path_value: str) -> list[PointPair]:
     try:
         from svg2ooxml.common.geometry.paths import (
             PathParseError,
-            parse_path_data,
         )
+        from svg2ooxml.common.geometry.paths.motion import parse_motion_path_data
         from svg2ooxml.common.geometry.paths.segments import (
             BezierSegment,
             LineSegment,
@@ -408,7 +408,7 @@ def parse_motion_path(path_value: str) -> list[PointPair]:
         return simple_path_parse(path_value)
 
     try:
-        segments = parse_path_data(path_value)
+        segments = parse_motion_path_data(path_value)
     except PathParseError:
         return []
 
