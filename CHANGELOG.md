@@ -5,6 +5,63 @@ Empirical PowerPoint behavior research, authored control decks, and durable
 oracle evidence live in the companion repository
 [`openxml-audit`](https://github.com/BramAlkema/openxml-audit).
 
+## 0.7.4 - 2026-04-27
+
+Release focus: animation export decomposition, safer PPTX packaging, and
+cleanup of the converter internals after the 0.7.3 hardening pass.
+
+Full diff: https://github.com/BramAlkema/svg2ooxml/compare/v0.7.3...v0.7.4
+
+### Added
+
+- added the bee animation SVG fixture used for the current PowerPoint animation
+  fidelity pass
+- introduced smaller animation export helpers for metadata, animation
+  predicates, repeat triggers, scene indexing, element translation, motion-path
+  sampling, and polyline materialization
+- added shared DrawingML/render helpers for group runtime, effect runtime,
+  navigation runtime, raster previews, text run/shape rendering, filter
+  planning/execution, and PPTX package parts
+- added common utility modules for geometry boundaries, gradient unit handling,
+  SVG reference normalization, style cascade pieces, resvg gradient resolution,
+  and resvg viewport units
+- expanded unit coverage around path parsing, motion geometry, scene indexing,
+  public API imports, SVG references, filter rendering, resvg normalization,
+  and PPTX media packaging
+
+### Changed
+
+- split PowerPoint motion-path handling out of the generic motion animation
+  handler so path-specific parsing and DrawingML output are easier to reason
+  about
+- decomposed large exporter, writer, render, style, and DrawingML modules into
+  narrower helper modules while preserving the public conversion surface
+- centralized resvg gradient coordinate/unit resolution so paint extraction,
+  resvg parsing, and DrawingML gradient output use the same context rules
+- simplified PPTX writer and assembly responsibilities around package parts,
+  relationship allocation, media registration, and slide assembly
+- updated public docs and package metadata for the current converter boundary
+  and the `figma2slides` tool surface
+
+### Fixed
+
+- fixed packaged media relationship rekeying so rewritten relationship IDs stay
+  synchronized with already-rendered slide XML
+- hardened SVG path parsing by rejecting unknown tokens and non-finite numbers,
+  and by bounding cache use for very large path strings
+- normalized PowerPoint motion-path parsing so terminal `E` markers are handled
+  consistently by export and DrawingML writer code
+- made the skill build helper ignore `__pycache__` and bytecode files during
+  in-tree drift checks
+- ensured newly split helper modules are tracked in the release patch so clean
+  checkouts can import the converter, filter pipeline, and DrawingML writer
+
+### Validation
+
+- local `python -m build` succeeded for `svg2ooxml-0.7.4`
+- unit suite passed before the release bump: `2669 passed`
+- GitHub `Publish to PyPI` workflow completed successfully for `v0.7.4`
+
 ## 0.7.0 - 2026-04-18
 
 Release focus: package boundary cleanup, Python 3.14 standardization, and a
