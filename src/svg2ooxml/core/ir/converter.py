@@ -330,9 +330,7 @@ def _extract_background(
 
     Returns the background color as an RRGGBB hex string, or None.
     """
-    from svg2ooxml.ir.paint import SolidPaint
     from svg2ooxml.ir.scene import Group
-    from svg2ooxml.ir.shapes import Rectangle
 
     if not elements or width_px is None or height_px is None:
         return None

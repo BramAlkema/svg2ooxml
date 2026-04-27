@@ -366,7 +366,6 @@ class TextConversionPipeline:
         base_confidence = max(0.05, decision.wordart.confidence_threshold)
         confidence = base_confidence * 0.75
         preset = "textPlain"
-        is_path_based = False
 
         if text_path_id:
             # Only use non-plain presets for actual <textPath> elements

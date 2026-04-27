@@ -9,15 +9,14 @@ from typing import Any
 
 from lxml import etree
 
-from svg2ooxml.filters.utils import parse_float_list
-
-from svg2ooxml.drawingml.emf_adapter import PaletteResolver
+from svg2ooxml.drawingml.emf_primitives import PaletteResolver
 from svg2ooxml.drawingml.filter_renderer import (
     FilterRenderer as DrawingMLFilterRenderer,
 )
 from svg2ooxml.drawingml.raster_adapter import RasterAdapter
 from svg2ooxml.filters.base import FilterContext, FilterResult
 from svg2ooxml.filters.registry import FilterRegistry
+from svg2ooxml.filters.utils import parse_float_list
 from svg2ooxml.ir.effects import CustomEffect
 from svg2ooxml.services.filter_types import FilterEffectResult
 

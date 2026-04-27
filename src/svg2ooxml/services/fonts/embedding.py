@@ -5,12 +5,30 @@ from __future__ import annotations
 import logging
 import os
 import uuid
-from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass, field, replace
-from enum import Enum
+from collections.abc import Iterable, Mapping
+from dataclasses import replace
 from hashlib import sha1
 from pathlib import Path
 
+from svg2ooxml.services.fonts.embedding_style import (
+    derive_pitch_family as _derive_pitch_family,
+)
+from svg2ooxml.services.fonts.embedding_style import (
+    style_flags_from_metadata as _style_flags_from_metadata,
+)
+from svg2ooxml.services.fonts.embedding_style import (
+    style_kind_from_metadata as _style_kind_from_metadata,
+)
+from svg2ooxml.services.fonts.embedding_style import (
+    style_name_from_kind as _style_name_from_kind,
+)
+from svg2ooxml.services.fonts.embedding_types import (
+    EmbeddedFontPayload,
+    EmbeddingPermission,
+    FontEmbeddingRequest,
+    FontEmbeddingResult,
+    FontOptimisationLevel,
+)
 from svg2ooxml.services.fonts.eot import EOTConversionError, build_eot
 from svg2ooxml.services.fonts.fontforge_utils import (
     FONTFORGE_AVAILABLE,
@@ -48,77 +66,6 @@ def _ensure_truetype_outlines(data: bytes, source: str) -> bytes:
     except Exception as exc:
         logger.warning("OTF→TTF conversion failed for %s: %s", source, exc)
         return data
-
-
-class EmbeddingPermission(Enum):
-    """Embedding permissions derived from the OpenType ``fsType`` flags."""
-
-    INSTALLABLE = "installable"
-    PREVIEW_PRINT = "preview_print"
-    EDITABLE = "editable"
-    NO_SUBSETTING = "no_subsetting"
-    BITMAP_ONLY = "bitmap_only"
-    RESTRICTED = "restricted"
-    UNKNOWN = "unknown"
-
-
-class FontOptimisationLevel(Enum):
-    """High level optimisation targets for subsetting."""
-
-    NONE = "none"
-    BASIC = "basic"
-    BALANCED = "balanced"
-    AGGRESSIVE = "aggressive"
-
-
-@dataclass(frozen=True)
-class FontEmbeddingRequest:
-    """Parameters supplied by the text pipeline when embedding is desired."""
-
-    font_path: str
-    glyph_ids: Sequence[int] = ()
-    characters: Sequence[str] = ()
-    preserve_hinting: bool = False
-    subset_strategy: str = "glyph"
-    optimisation: FontOptimisationLevel = FontOptimisationLevel.BALANCED
-    preserve_layout_tables: bool = True
-    metadata: Mapping[str, object] = field(default_factory=dict)
-
-    def __post_init__(self) -> None:
-        object.__setattr__(self, "glyph_ids", tuple(self.glyph_ids))
-        object.__setattr__(self, "characters", tuple(self.characters))
-
-
-@dataclass(frozen=True)
-class FontEmbeddingResult:
-    """Result produced by the embedding engine."""
-
-    relationship_id: str | None
-    subset_path: str | None
-    glyph_count: int
-    bytes_written: int
-    permission: EmbeddingPermission = EmbeddingPermission.UNKNOWN
-    optimisation: FontOptimisationLevel = FontOptimisationLevel.BALANCED
-    packaging_metadata: Mapping[str, object] = field(default_factory=dict)
-
-
-@dataclass(frozen=True)
-class EmbeddedFontPayload:
-    """EOT packaging data derived from the subsetted font."""
-
-    subset_bytes: bytes
-    eot_bytes: bytes
-    guid: uuid.UUID | None
-    root_string: str
-    style_kind: str
-    style_flags: Mapping[str, bool]
-    subset_prefix: str | None = None
-    charset: int = 1
-    panose: bytes = b""
-    unicode_ranges: tuple[int, int, int, int] = (0, 0, 0, 0)
-    codepage_ranges: tuple[int, int] = (0, 0)
-    fs_type: int = 0
-    pitch_family: int = 0x32
 
 
 class FontEmbeddingEngine:
@@ -675,76 +622,6 @@ class FontEmbeddingEngine:
         digest.update(b"1" if request.preserve_hinting else b"0")
         digest.update(request.optimisation.value.encode("utf-8"))
         return digest.hexdigest()
-
-
-def _style_kind_from_metadata(metadata: Mapping[str, object]) -> str:
-    value = str(metadata.get("font_style_kind") or "").lower()
-    if value == "bolditalic":
-        return "boldItalic"
-    if value in {"regular", "bold", "italic", "boldItalic"}:
-        return "regular" if value == "regular" else value
-    bold = bool(metadata.get("bold"))
-    italic = bool(metadata.get("italic"))
-    if bold and italic:
-        return "boldItalic"
-    if bold:
-        return "bold"
-    if italic:
-        return "italic"
-    return "regular"
-
-
-def _style_name_from_kind(style_kind: str) -> str:
-    mapping = {
-        "regular": "Regular",
-        "bold": "Bold",
-        "italic": "Italic",
-        "boldItalic": "Bold Italic",
-    }
-    return mapping.get(style_kind, "Regular")
-
-
-def _style_flags_from_metadata(metadata: Mapping[str, object], style_kind: str) -> dict[str, bool]:
-    bold = bool(metadata.get("bold"))
-    italic = bool(metadata.get("italic"))
-    if style_kind == "boldItalic":
-        bold = True
-        italic = True
-    elif style_kind == "bold":
-        bold = True
-    elif style_kind == "italic":
-        italic = True
-    return {
-        "bold": bold,
-        "italic": italic,
-        "style_kind": style_kind,
-    }
-
-
-def _derive_pitch_family(panose: bytes, style_flags: Mapping[str, object]) -> int:
-    if not panose:
-        return 0x32  # variable pitch, swiss
-    family_type = panose[0]
-    serif_style = panose[1] if len(panose) > 1 else 0
-
-    family_nibble = 0x20  # default to SWISS
-    if family_type == 2:  # Latin text
-        if serif_style in {11, 12, 13, 14, 15, 16, 17, 18}:  # sans serif styles
-            family_nibble = 0x20
-        else:
-            family_nibble = 0x10  # Roman
-    elif family_type == 3:
-        family_nibble = 0x40  # Script
-    elif family_type == 4:
-        family_nibble = 0x50  # Decorative
-    elif family_type == 5:
-        family_nibble = 0x30  # Symbol/modern
-
-    pitch_bits = 0x2  # Variable pitch
-    if style_flags.get("monospace"):
-        pitch_bits = 0x1
-
-    return (family_nibble & 0xF0) | (pitch_bits & 0x0F)
 
 
 __all__ = [

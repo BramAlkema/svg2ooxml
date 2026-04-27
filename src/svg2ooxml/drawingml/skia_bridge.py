@@ -29,7 +29,6 @@ from svg2ooxml.drawingml.paint_converter import (
     _transform_is_identity,
 )
 
-
 # ------------------------------------------------------------------ #
 # PNG encoding                                                       #
 # ------------------------------------------------------------------ #

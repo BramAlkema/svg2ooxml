@@ -11,6 +11,10 @@ from typing import TYPE_CHECKING, Any
 
 from svg2ooxml.common.conversions.transforms import parse_numeric_list
 from svg2ooxml.common.geometry.algorithms import CurveTextPositioner
+from svg2ooxml.common.units.lengths import (
+    resolve_length_list_px,
+    resolve_length_px,
+)
 from svg2ooxml.core.ir.font_metrics import (
     estimate_run_width as _estimate_run_width,
 )
@@ -136,21 +140,20 @@ def resolve_text_length(
 ) -> float:
     if value in (None, "", "0"):
         return 0.0
-    try:
-        return float(value)  # type: ignore[arg-type]
-    except (TypeError, ValueError):
-        if context is None:
-            return 0.0
-        unit_converter = getattr(context, "unit_converter", None)
-        conversion_context = getattr(context, "conversion_context", None)
-        if unit_converter is None or conversion_context is None:
-            return 0.0
-        font_px = font_size_pt * (96.0 / 72.0)
-        derived = conversion_context.derive(font_size=font_px)
-        try:
-            return unit_converter.to_px(value, derived, axis=axis)
-        except Exception:
-            return 0.0
+    if context is None:
+        return resolve_length_px(value, None, axis=axis)
+    unit_converter = getattr(context, "unit_converter", None)
+    conversion_context = getattr(context, "conversion_context", None)
+    if unit_converter is None or conversion_context is None:
+        return resolve_length_px(value, None, axis=axis)
+    font_px = font_size_pt * (96.0 / 72.0)
+    derived = conversion_context.derive(font_size=font_px)
+    return resolve_length_px(
+        value,
+        derived,
+        axis=axis,
+        unit_converter=unit_converter,
+    )
 
 
 def parse_text_length_list(
@@ -162,13 +165,20 @@ def parse_text_length_list(
 ) -> list[float]:
     if not value:
         return []
-    tokens = [token for token in re.split(r"[ ,]+", value.strip()) if token]
-    return [
-        resolve_text_length(
-            token, axis=axis, font_size_pt=font_size_pt, context=context
-        )
-        for token in tokens
-    ]
+    if context is None:
+        return resolve_length_list_px(value, None, axis=axis)
+    unit_converter = getattr(context, "unit_converter", None)
+    conversion_context = getattr(context, "conversion_context", None)
+    if unit_converter is None or conversion_context is None:
+        return resolve_length_list_px(value, None, axis=axis)
+    font_px = font_size_pt * (96.0 / 72.0)
+    derived = conversion_context.derive(font_size=font_px)
+    return resolve_length_list_px(
+        value,
+        derived,
+        axis=axis,
+        unit_converter=unit_converter,
+    )
 
 
 # ---------------------------------------------------------------

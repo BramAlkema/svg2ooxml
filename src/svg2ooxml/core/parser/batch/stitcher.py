@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Iterable
 
 from svg2ooxml.drawingml.result import DrawingMLRenderResult
 from svg2ooxml.io.pptx_assembly import PPTXPackageBuilder

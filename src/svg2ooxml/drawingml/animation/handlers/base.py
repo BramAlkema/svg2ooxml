@@ -8,21 +8,21 @@ to PowerPoint timing XML.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Mapping
+from collections.abc import Mapping
+from typing import TYPE_CHECKING
 
 from lxml import etree
 
-from svg2ooxml.drawingml.xml_builder import NS_P, p_elem, p_sub
+from svg2ooxml.drawingml.animation.native_fragment import NativeFragment
+from svg2ooxml.drawingml.xml_builder import p_elem, p_sub
 from svg2ooxml.ir.animation import BeginTriggerType
 
 if TYPE_CHECKING:
     from svg2ooxml.common.units import UnitConverter
+    from svg2ooxml.drawingml.animation.tav_builder import TAVBuilder
+    from svg2ooxml.drawingml.animation.value_processors import ValueProcessor
+    from svg2ooxml.drawingml.animation.xml_builders import AnimationXMLBuilder
     from svg2ooxml.ir.animation import AnimationDefinition
-
-    from ..native_fragment import NativeFragment
-    from ..tav_builder import TAVBuilder
-    from ..value_processors import ValueProcessor
-    from ..xml_builders import AnimationXMLBuilder
 
 __all__ = ["AnimationHandler"]
 
@@ -137,10 +137,8 @@ class AnimationHandler(ABC):
         strategy: str,
         metadata: Mapping[str, object] | None = None,
         **extra_metadata: object,
-    ) -> "NativeFragment":
+    ) -> NativeFragment:
         """Wrap a built ``<p:par>`` with explicit emission provenance."""
-        from ..native_fragment import NativeFragment
-
         fragment_metadata = dict(metadata or {})
         fragment_metadata.update(extra_metadata)
         return NativeFragment.from_legacy_par(

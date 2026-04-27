@@ -7,7 +7,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from ..service import FontMatch, FontProvider, FontQuery
+from svg2ooxml.services.fonts.service import FontMatch, FontProvider, FontQuery
 
 if TYPE_CHECKING:  # pragma: no cover - type checking only
     from svg2ooxml.ir.fonts import FontFaceRule

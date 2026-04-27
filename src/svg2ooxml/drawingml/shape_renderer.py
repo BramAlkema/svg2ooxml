@@ -6,10 +6,9 @@ import logging
 from collections.abc import Callable
 from dataclasses import replace
 
-from svg2ooxml.color.utils import rgb_channels_to_hex
 from svg2ooxml.ir.effects import CustomEffect
 from svg2ooxml.ir.geometry import Point, Rect
-from svg2ooxml.ir.paint import PatternPaint, RadialGradientPaint, SolidPaint
+from svg2ooxml.ir.paint import PatternPaint, RadialGradientPaint
 from svg2ooxml.ir.scene import Group, Image
 from svg2ooxml.ir.scene import Path as IRPath
 from svg2ooxml.ir.shapes import Circle, Ellipse, Line, Polygon, Polyline, Rectangle
@@ -21,25 +20,13 @@ from .filter_fallback import resolve_filter_fallback_bounds
 from .generator import DrawingMLPathGenerator
 from .image import render_picture
 from .rasterizer import Rasterizer
-
-
-def _is_stroke_first(metadata: dict[str, object]) -> bool:
-    """Return True when paint-order puts stroke before fill."""
-    po = metadata.get("paint_order")
-    if not isinstance(po, str):
-        return False
-    tokens = po.lower().split()
-    try:
-        si = tokens.index("stroke")
-        fi = tokens.index("fill")
-        return si < fi
-    except ValueError:
-        # "stroke" alone means "stroke fill markers"
-        return tokens[0] == "stroke" if tokens else False
-
-
-def _has_fill_and_stroke(element) -> bool:
-    return getattr(element, "fill", None) is not None and getattr(element, "stroke", None) is not None
+from .shape_renderer_utils import (
+    apply_clip_bounds,
+    average_gradient_paint,
+    has_fill_and_stroke,
+    is_invalid_custom_effect_xml,
+    is_stroke_first,
+)
 
 
 class DrawingMLShapeRenderer:
@@ -103,7 +90,7 @@ class DrawingMLShapeRenderer:
         element = self._strip_invalid_filter_effects(element)
 
         # Apply clip bounds approximation (xfrm intersection).
-        element = _apply_clip_bounds(element, metadata)
+        element = apply_clip_bounds(element, metadata)
 
         # mix-blend-mode: rasterize to PNG since DrawingML has no blend modes.
         if metadata.get("mix_blend_mode") and self._rasterizer is not None:
@@ -115,7 +102,7 @@ class DrawingMLShapeRenderer:
 
         # Paint-order reversal: when "stroke" comes before "fill", emit
         # a stroke-only shape behind a fill-only shape.
-        if _is_stroke_first(metadata) and _has_fill_and_stroke(element):
+        if is_stroke_first(metadata) and has_fill_and_stroke(element):
             return self._render_reversed_paint_order(
                 element, shape_id, metadata, hyperlink_xml=hyperlink_xml,
             )
@@ -472,7 +459,7 @@ class DrawingMLShapeRenderer:
         for effect in effects:
             if isinstance(effect, CustomEffect):
                 xml = effect.drawingml or ""
-                if _is_invalid_custom_effect_xml(
+                if is_invalid_custom_effect_xml(
                     xml,
                     invalid_substrings=self._INVALID_EFFECT_SUBSTRINGS,
                 ):
@@ -621,13 +608,13 @@ class DrawingMLShapeRenderer:
 
         fill = getattr(element, "fill", None)
         if isinstance(fill, RadialGradientPaint) and fill.policy_decision == "rasterize_nonuniform":
-            element.fill = self._average_gradient_paint(fill)
+            element.fill = average_gradient_paint(fill)
 
         stroke = getattr(element, "stroke", None)
         if stroke is not None:
             paint = getattr(stroke, "paint", None)
             if isinstance(paint, RadialGradientPaint) and paint.policy_decision == "rasterize_nonuniform":
-                element.stroke = replace(stroke, paint=self._average_gradient_paint(paint))
+                element.stroke = replace(stroke, paint=average_gradient_paint(paint))
 
     def _maybe_clip_overlay(self, element, overlay_shape_id: int) -> str | None:
         """Generate a white EMF overlay with an even-odd cutout for clip paths."""
@@ -662,107 +649,5 @@ class DrawingMLShapeRenderer:
             register_media=self._register_media,
             hyperlink_xml="",
         )
-
-    @staticmethod
-    def _average_gradient_paint(paint: RadialGradientPaint) -> SolidPaint:
-        if not paint.stops:
-            return SolidPaint(rgb="000000", opacity=1.0)
-        total_r = total_g = total_b = total_a = 0.0
-        for stop in paint.stops:
-            token = (stop.rgb or "000000").strip().lstrip("#")
-            if len(token) != 6:
-                token = "000000"
-            try:
-                total_r += int(token[0:2], 16)
-                total_g += int(token[2:4], 16)
-                total_b += int(token[4:6], 16)
-            except ValueError:
-                total_r += 0.0
-                total_g += 0.0
-                total_b += 0.0
-            total_a += float(stop.opacity)
-        count = max(len(paint.stops), 1)
-        avg_r = int(round(total_r / count))
-        avg_g = int(round(total_g / count))
-        avg_b = int(round(total_b / count))
-        avg_opacity = total_a / count
-        return SolidPaint(
-            rgb=rgb_channels_to_hex(avg_r, avg_g, avg_b, scale="byte"),
-            opacity=avg_opacity,
-        )
-
-
-def _intersect_rects(a: Rect, b: Rect) -> Rect | None:
-    """Return the intersection of two Rects, or None if they don't overlap."""
-    x1 = max(a.x, b.x)
-    y1 = max(a.y, b.y)
-    x2 = min(a.x + a.width, b.x + b.width)
-    y2 = min(a.y + a.height, b.y + b.height)
-    if x2 <= x1 or y2 <= y1:
-        return None
-    return Rect(x1, y1, x2 - x1, y2 - y1)
-
-
-def _apply_clip_bounds(element, metadata: dict[str, object]):
-    """Intersect element bounds with clip bounds for xfrm approximation.
-
-    Consumes ``_clip_bounds`` from *metadata* if present and returns a
-    replacement element with tighter bounds when the element type supports it.
-    """
-    if not isinstance(metadata, dict):
-        return element
-    clip = metadata.pop("_clip_bounds", None)
-    if not isinstance(clip, Rect):
-        return element
-
-    bbox = getattr(element, "bbox", None)
-    if not isinstance(bbox, Rect):
-        return element
-
-    clipped = _intersect_rects(bbox, clip)
-    if clipped is None or clipped == bbox:
-        return element
-
-    if isinstance(element, Rectangle):
-        return replace(element, bounds=clipped)
-
-    if isinstance(element, Image):
-        # Compute srcRect crop percentages (thousandths of percent).
-        w = max(bbox.width, 1e-9)
-        h = max(bbox.height, 1e-9)
-        l_pct = int(max(0.0, (clipped.x - bbox.x) / w) * 100_000)
-        t_pct = int(max(0.0, (clipped.y - bbox.y) / h) * 100_000)
-        r_pct = int(
-            max(0.0, ((bbox.x + bbox.width) - (clipped.x + clipped.width)) / w)
-            * 100_000
-        )
-        b_pct = int(
-            max(0.0, ((bbox.y + bbox.height) - (clipped.y + clipped.height)) / h)
-            * 100_000
-        )
-        new_elem = replace(
-            element,
-            origin=Point(clipped.x, clipped.y),
-            size=Rect(0.0, 0.0, clipped.width, clipped.height),
-        )
-        if any((l_pct, t_pct, r_pct, b_pct)):
-            new_elem.metadata["_src_rect"] = (l_pct, t_pct, r_pct, b_pct)
-        return new_elem
-
-    # Circle, Ellipse, Path — geometry-driven; clip approximation not applied.
-    return element
-
-
-def _is_invalid_custom_effect_xml(
-    xml: str,
-    *,
-    invalid_substrings: tuple[str, ...],
-) -> bool:
-    lowered = xml.lower()
-    stripped = lowered.lstrip()
-    if stripped.startswith("<a:solidfill") or stripped.startswith("<solidfill"):
-        return True
-    return any(marker in lowered for marker in invalid_substrings)
-
 
 __all__ = ["DrawingMLShapeRenderer"]

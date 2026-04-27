@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from svg2ooxml.policy.constants import FALLBACK_EMF, geometry_fallback_for
+from svg2ooxml.policy.constants import FALLBACK_EMF as FALLBACK_EMF
+from svg2ooxml.policy.constants import geometry_fallback_for
 
 if TYPE_CHECKING:  # pragma: no cover - hint only
     from svg2ooxml.core.tracing import ConversionTracer

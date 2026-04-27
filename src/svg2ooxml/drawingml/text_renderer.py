@@ -225,7 +225,6 @@ def _build_overline_shape(element, shape_id: int) -> str:
     x = px_to_emu(bbox.x)
     y = px_to_emu(bbox.y)
     w = px_to_emu(bbox.width)
-    h = px_to_emu(stroke_width)
     sw = px_to_emu(stroke_width)
 
     return (

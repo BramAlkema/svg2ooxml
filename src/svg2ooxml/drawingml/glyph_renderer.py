@@ -6,7 +6,6 @@ import math
 from dataclasses import dataclass
 
 from svg2ooxml.drawingml.generator import px_to_emu
-from svg2ooxml.drawingml.xml_builder import a_elem, a_sub, to_string
 
 try:
     import skia
@@ -63,7 +62,7 @@ def render_positioned_glyphs(
     fragments: list[str] = []
     sid = shape_id_start
 
-    for i, (glyph_id, placement) in enumerate(zip(glyphs, placements)):
+    for i, (glyph_id, placement) in enumerate(zip(glyphs, placements, strict=False)):
         if i >= len(text):
             break
         char = text[i]

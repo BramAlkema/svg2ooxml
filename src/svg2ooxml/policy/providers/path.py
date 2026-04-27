@@ -5,8 +5,8 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-from ..engine import PolicyProvider
-from ..targets import PolicyTarget
+from svg2ooxml.policy.engine import PolicyProvider
+from svg2ooxml.policy.targets import PolicyTarget
 
 
 class PathPolicyProvider(PolicyProvider):

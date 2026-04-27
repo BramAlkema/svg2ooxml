@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from lxml import etree
 
 from svg2ooxml.common.geometry import Matrix2D, parse_transform_list
+from svg2ooxml.common.units.lengths import resolve_length_px
 from svg2ooxml.core.traversal.viewbox import (
     ViewBox,
     ViewportEngine,
@@ -96,18 +97,13 @@ def parse_marker_definition(element: etree._Element) -> MarkerDefinition:
     if not marker_id:
         raise ValueError("marker element is missing an id attribute")
 
-    def _parse_numeric(value: str | None, default: float) -> float:
-        if value is None:
-            return default
-        try:
-            return float(value)
-        except (TypeError, ValueError):
-            return default
+    def _parse_length(value: str | None, default: float, *, axis: str) -> float:
+        return resolve_length_px(value, None, axis=axis, default=default)
 
-    ref_x = _parse_numeric(element.get("refX"), 0.0)
-    ref_y = _parse_numeric(element.get("refY"), 0.0)
-    marker_width = max(_parse_numeric(element.get("markerWidth"), 3.0), 0.0)
-    marker_height = max(_parse_numeric(element.get("markerHeight"), 3.0), 0.0)
+    ref_x = _parse_length(element.get("refX"), 0.0, axis="x")
+    ref_y = _parse_length(element.get("refY"), 0.0, axis="y")
+    marker_width = max(_parse_length(element.get("markerWidth"), 3.0, axis="x"), 0.0)
+    marker_height = max(_parse_length(element.get("markerHeight"), 3.0, axis="y"), 0.0)
     orient = (element.get("orient") or "auto").strip()
     marker_units = (element.get("markerUnits") or "strokeWidth").strip()
     overflow = (element.get("overflow") or element.get("style", "")).strip()
@@ -185,7 +181,7 @@ def build_marker_transform(
         base_height = definition.marker_height if definition.marker_height else 1.0
         scale_x = viewport_width / base_width if base_width else 1.0
         scale_y = viewport_height / base_height if base_height else 1.0
-        matrix = matrix.multiply(_matrix_scale(scale_x, scale_y))
+        matrix = matrix.multiply(Matrix2D.scale(scale_x, scale_y))
         clip_rect = (0.0, 0.0, viewport_width, viewport_height)
 
     orient = definition.orient.lower()
@@ -203,10 +199,10 @@ def build_marker_transform(
     # `matrix` already holds the scale/viewport part from above.
     # Prepend translate(-ref), then prepend rotate, then prepend translate(anchor).
     scale_matrix = matrix
-    matrix = _matrix_translate(anchor.x, anchor.y)
-    matrix = matrix.multiply(_matrix_rotate(orient_angle))
+    matrix = Matrix2D.translate(anchor.x, anchor.y)
+    matrix = matrix.multiply(Matrix2D.rotate(orient_angle))
     matrix = matrix.multiply(scale_matrix)
-    matrix = matrix.multiply(_matrix_translate(-definition.ref_x, -definition.ref_y))
+    matrix = matrix.multiply(Matrix2D.translate(-definition.ref_x, -definition.ref_y))
     return MarkerTransform(matrix=matrix, clip_rect=clip_rect)
 
 
@@ -216,23 +212,6 @@ def apply_local_transform(matrix: Matrix2D, transform_attr: str | None) -> Matri
         return matrix
     local = parse_transform_list(transform_attr)
     return matrix.multiply(local)
-
-
-def _matrix_translate(x: float, y: float) -> Matrix2D:
-    return Matrix2D(1.0, 0.0, 0.0, 1.0, x, y)
-
-
-def _matrix_scale(x: float, y: float) -> Matrix2D:
-    return Matrix2D(x, 0.0, 0.0, y, 0.0, 0.0)
-
-
-def _matrix_rotate(degrees: float) -> Matrix2D:
-    from math import cos, radians, sin
-
-    angle = radians(degrees)
-    cos_a = cos(angle)
-    sin_a = sin(angle)
-    return Matrix2D(cos_a, sin_a, -sin_a, cos_a, 0.0, 0.0)
 
 
 def flatten_points(points: Iterable[Point]) -> list[tuple[float, float]]:

@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from copy import deepcopy
 from collections.abc import Sequence
+from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 

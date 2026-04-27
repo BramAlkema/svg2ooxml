@@ -5,11 +5,11 @@ from __future__ import annotations
 import logging
 from collections.abc import Iterable, Mapping
 from dataclasses import replace
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any
 
 from lxml import etree
 
-from svg2ooxml.drawingml.emf_adapter import PaletteResolver
+from svg2ooxml.drawingml.emf_primitives import PaletteResolver
 from svg2ooxml.drawingml.raster_adapter import RasterAdapter
 from svg2ooxml.filters.base import FilterContext, FilterResult
 from svg2ooxml.filters.registry import FilterRegistry
@@ -18,6 +18,16 @@ from svg2ooxml.filters.resvg_bridge import (
     build_filter_element,
     resolve_filter_element,
 )
+from svg2ooxml.services.filter_palette import extract_palette_resolver
+from svg2ooxml.services.filter_pipeline_runtime import (
+    ALLOWED_STRATEGIES,
+)
+from svg2ooxml.services.filter_pipeline_runtime import (
+    load_filter_pipeline as _load_filter_pipeline,
+)
+from svg2ooxml.services.filter_pipeline_runtime import (
+    pipeline_warning_message as _pipeline_warning_message,
+)
 from svg2ooxml.services.filter_types import FilterEffectResult
 
 if TYPE_CHECKING:  # pragma: no cover - type checking only
@@ -25,43 +35,6 @@ if TYPE_CHECKING:  # pragma: no cover - type checking only
     from svg2ooxml.filters.renderer import FilterRenderer as FilterPipelineRenderer
 
     from .conversion import ConversionServices
-
-
-ALLOWED_STRATEGIES = {
-    "auto",
-    "native",
-    "native-if-neutral",
-    "vector",
-    "raster",
-    "emf",
-    "resvg",
-    "resvg-only",
-}
-
-
-def _load_filter_pipeline():
-    try:
-        from svg2ooxml.filters.planner import FilterPlanner
-        from svg2ooxml.filters.renderer import FilterRenderer as FilterPipelineRenderer
-
-        return FilterPlanner, FilterPipelineRenderer, None
-    except Exception as full_error:  # pragma: no cover - optional dependency missing
-        try:
-            from svg2ooxml.filters.lightweight import (
-                LightweightFilterPlanner as FilterPlanner,
-            )
-            from svg2ooxml.filters.lightweight import (
-                LightweightFilterRenderer as FilterPipelineRenderer,
-            )
-        except Exception as fallback_error:  # pragma: no cover - defensive
-            return None, None, fallback_error
-        return FilterPlanner, FilterPipelineRenderer, full_error
-
-
-def _pipeline_warning_message(error: Exception | None) -> str:
-    if error is None:
-        return "optional filter pipeline dependencies are missing"
-    return f"{type(error).__name__}: {error}"
 
 
 class FilterService:
@@ -477,72 +450,11 @@ class FilterService:
     # ------------------------------------------------------------------ #
 
     def _configure_palette_resolver(self, services: ConversionServices) -> None:
-        resolver = self._extract_palette_resolver(services)
+        resolver = extract_palette_resolver(services)
         if resolver is not None:
             self.set_palette_resolver(resolver)
         elif self._palette_resolver is not None and self._renderer is not None:
             self._renderer.set_palette_resolver(self._palette_resolver)
-
-    def _extract_palette_resolver(
-        self, services: ConversionServices
-    ) -> PaletteResolver | None:
-        candidate_names = (
-            "filter_palette_resolver",
-            "palette_resolver",
-            "filter_palette",
-        )
-        for name in candidate_names:
-            resolver = services.resolve(name)
-            if resolver is None:
-                resolver = getattr(services, name, None)
-            coerced = self._coerce_palette_resolver(resolver)
-            if coerced is not None:
-                return coerced
-
-        theming_candidates = (
-            services.resolve("theme"),
-            services.resolve("theming"),
-            getattr(services, "theme_service", None),
-            getattr(services, "theming_service", None),
-        )
-        for theming in theming_candidates:
-            coerced = self._coerce_palette_resolver(theming)
-            if coerced is not None:
-                return coerced
-            if theming is None:
-                continue
-            attr_names = (
-                "resolve_filter_palette",
-                "get_filter_palette_resolver",
-                "palette_resolver",
-                "resolve_palette",
-                "resolve",
-            )
-            for attr in attr_names:
-                bound = getattr(theming, attr, None)
-                coerced = self._coerce_palette_resolver(bound)
-                if coerced is not None:
-                    return coerced
-
-        return None
-
-    def _coerce_palette_resolver(self, candidate: Any) -> PaletteResolver | None:
-        if candidate is None:
-            return None
-        if callable(candidate):
-            return cast(PaletteResolver, candidate)
-        method_names = (
-            "resolve_filter_palette",
-            "get_filter_palette_resolver",
-            "palette_resolver",
-            "resolve_palette",
-            "resolve",
-        )
-        for name in method_names:
-            method = getattr(candidate, name, None)
-            if callable(method):
-                return cast(PaletteResolver, method)
-        return None
 
     def _resolve_strategy(
         self, context: FilterContext, descriptor: ResolvedFilter | None

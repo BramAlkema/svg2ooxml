@@ -6,9 +6,9 @@ import os
 from collections.abc import Mapping
 from typing import Any
 
-from ..engine import PolicyProvider
-from ..targets import PolicyTarget
-from ..text_policy import TextPolicyDecision, resolve_text_policy
+from svg2ooxml.policy.engine import PolicyProvider
+from svg2ooxml.policy.targets import PolicyTarget
+from svg2ooxml.policy.text_policy import TextPolicyDecision, resolve_text_policy
 
 
 class TextPolicyProvider(PolicyProvider):
@@ -40,4 +40,3 @@ class TextPolicyProvider(PolicyProvider):
 
 
 __all__ = ["TextPolicyProvider"]
-

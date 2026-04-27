@@ -4,11 +4,14 @@ from __future__ import annotations
 
 import os
 import time
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 from svg2ooxml.common.openxml_audit import (
     resolve_openxml_validator as _resolve_openxml_validator,
+)
+from svg2ooxml.common.openxml_audit import (
     run_openxml_audit as _run_openxml_audit,
 )
 

@@ -9,7 +9,6 @@ from svg2ooxml.common.units import UnitConverter
 from svg2ooxml.drawingml.bridges import EMFPathAdapter, PathStyle
 from svg2ooxml.drawingml.mask_generator import compute_mask_geometry
 from svg2ooxml.drawingml.raster_adapter import RasterAdapter
-
 from svg2ooxml.ir.geometry import Rect
 from svg2ooxml.ir.paint import SolidPaint
 from svg2ooxml.ir.scene import MaskInstance, MaskRef

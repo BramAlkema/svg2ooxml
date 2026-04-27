@@ -16,7 +16,6 @@ from ._helpers import (
     style_map,
 )
 
-
 # Avoid circular: import at module level, used by assess_pattern_complexity.
 # PatternComplexity/PatternType/PatternGeometry are defined in the coordinator;
 # we accept them as arguments rather than importing from pattern_processor.

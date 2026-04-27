@@ -13,7 +13,8 @@ from svg2ooxml.common.conversions.angles import radians_to_ppt
 from svg2ooxml.common.conversions.opacity import opacity_to_ppt, parse_opacity
 from svg2ooxml.common.units import px_to_emu
 from svg2ooxml.common.units.scalars import EMU_PER_INCH
-from svg2ooxml.drawingml.emf_adapter import EMFAdapter, PaletteResolver
+from svg2ooxml.drawingml.emf_adapter import EMFAdapter
+from svg2ooxml.drawingml.emf_primitives import PaletteResolver
 from svg2ooxml.drawingml.raster_adapter import RasterAdapter
 
 # Import centralized XML builders for safe DrawingML generation

@@ -7,7 +7,6 @@ See ADR-geometry-ir for the broader migration plan.
 
 from __future__ import annotations
 
-import math
 from collections.abc import Mapping, Sequence
 from typing import Any
 

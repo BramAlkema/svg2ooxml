@@ -11,12 +11,12 @@ from typing import Any
 from uuid import uuid4
 
 from svg2ooxml.common.tempfiles import project_temp_dir
+from svg2ooxml.core.parser.preprocess.services import build_parser_services
+from svg2ooxml.core.parser.svg_parser import ParserConfig, SVGParser
 from svg2ooxml.drawingml.writer import DrawingMLWriter
 from svg2ooxml.io.pptx_assembly import write_pptx
 from svg2ooxml.services.fonts.providers.directory import DirectoryFontProvider
 
-from ..preprocess.services import build_parser_services
-from ..svg_parser import ParserConfig, SVGParser
 from .bundles import new_job_id, write_slide_bundle
 from .stitcher import stitch_job_bundles
 

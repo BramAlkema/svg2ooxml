@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 
 
-class EvidenceTier(str, Enum):
+class EvidenceTier(StrEnum):
     """Project-wide evidence tiers for animation research and native claims."""
 
     SCHEMA_VALID = "schema-valid"

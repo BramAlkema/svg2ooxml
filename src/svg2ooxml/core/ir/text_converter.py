@@ -9,16 +9,11 @@ from typing import TYPE_CHECKING, Any
 from lxml import etree
 
 from svg2ooxml.common.geometry.algorithms import CurveTextPositioner, PathSamplingMethod
-from svg2ooxml.core.ir.font_metrics import (
-    estimate_run_width as _estimate_run_width,
-)
 from svg2ooxml.core.ir.smart_font_bridge import SmartFontBridge
 from svg2ooxml.core.ir.text.font_metrics import (
     FONT_FALLBACKS,
     apply_text_decision,
     coerce_hex_color,
-    create_run_from_style,
-    merge_runs,
     resvg_color_to_hex,
     run_from_resvg_node,
     runs_compatible,
@@ -35,7 +30,6 @@ from svg2ooxml.core.ir.text.layout import (
     normalize_text_segment,
     parse_number_list,
     parse_text_length_list,
-    record_text_path_reference,
     resolve_text_length,
     resvg_text_anchor,
     resvg_text_direction,
@@ -43,16 +37,18 @@ from svg2ooxml.core.ir.text.layout import (
     text_scale_for_coord_space,
 )
 from svg2ooxml.core.ir.text_pipeline import TextConversionPipeline
+from svg2ooxml.core.ir.text_positioned import PositionedTextMixin
+from svg2ooxml.core.ir.text_runs import TextRunsMixin
 from svg2ooxml.core.traversal.coordinate_space import CoordinateSpace
 from svg2ooxml.ir.geometry import Point
-from svg2ooxml.ir.text import Run, TextAnchor, TextFrame
+from svg2ooxml.ir.text import Run, TextFrame
 from svg2ooxml.policy.text_policy import TextPolicyDecision
 
 if TYPE_CHECKING:  # pragma: no cover - type checking only
     from svg2ooxml.core.ir.context import IRConverterContext
 
 
-class TextConverter:
+class TextConverter(PositionedTextMixin, TextRunsMixin):
     """Handle text element extraction, policy application, and metadata."""
 
     def __init__(
@@ -192,25 +188,34 @@ class TextConverter:
                     writing_mode = wm.group(1).strip().lower()
         # Per-character positioning: dx/dy/x/y/rotate arrays
         _per_char_attrs: dict[str, list[float]] = {}
-        for attr_name in ("dx", "dy", "rotate"):
+        for attr_name in ("dx", "dy"):
             raw = element.get(attr_name, "").strip()
             if raw:
-                try:
-                    vals = [float(v) for v in raw.replace(",", " ").split() if v]
-                    if vals:
-                        _per_char_attrs[attr_name] = vals
-                except ValueError:
-                    pass
+                vals = parse_text_length_list(
+                    raw,
+                    updated.font_size_pt,
+                    axis="x" if attr_name == "dx" else "y",
+                    context=self._context,
+                )
+                if vals:
+                    _per_char_attrs[attr_name] = vals
+        raw_rotate = element.get("rotate", "").strip()
+        if raw_rotate:
+            vals = parse_number_list(raw_rotate)
+            if vals:
+                _per_char_attrs["rotate"] = vals
         # x/y arrays (multiple values = per-character absolute positioning)
         for attr_name in ("x", "y"):
             raw = element.get(attr_name, "").strip()
-            if raw and " " in raw:
-                try:
-                    vals = [float(v) for v in raw.replace(",", " ").split() if v]
-                    if len(vals) > 1:
-                        _per_char_attrs[f"abs_{attr_name}"] = vals
-                except ValueError:
-                    pass
+            if raw:
+                vals = parse_text_length_list(
+                    raw,
+                    updated.font_size_pt,
+                    axis=attr_name,
+                    context=self._context,
+                )
+                if len(vals) > 1:
+                    _per_char_attrs[f"abs_{attr_name}"] = vals
         if _per_char_attrs:
             # Uniform rotation -> xfrm rot on shape (keeps text native)
             rotate_vals = _per_char_attrs.get("rotate")
@@ -289,17 +294,20 @@ class TextConverter:
         # textLength -> compute effective letter-spacing
         text_length_attr = element.get("textLength")
         if text_length_attr and text_content.strip():
-            try:
-                target_width = float(text_length_attr) * text_scale
-                char_count = len(text_content.strip())
-                if char_count > 1 and target_width > 0:
-                    metadata["_text_length_target"] = target_width
-                    length_adjust = (
-                        element.get("lengthAdjust", "spacing").strip().lower()
-                    )
-                    metadata["_length_adjust"] = length_adjust
-            except ValueError:
-                pass
+            target_width = (
+                resolve_text_length(
+                    text_length_attr,
+                    axis="x",
+                    font_size_pt=updated.font_size_pt,
+                    context=self._context,
+                )
+                * text_scale
+            )
+            char_count = len(text_content.strip())
+            if char_count > 1 and target_width > 0:
+                metadata["_text_length_target"] = target_width
+                length_adjust = element.get("lengthAdjust", "spacing").strip().lower()
+                metadata["_length_adjust"] = length_adjust
 
         # Apply textLength letter-spacing using the estimated bbox
         target_width = metadata.pop("_text_length_target", None)
@@ -346,212 +354,6 @@ class TextConverter:
             )
         self._context.trace_geometry_decision(element, "resvg", frame.metadata)
         return frame
-
-    # ------------------------------------------------------------------
-    # Positioned text (multi-tspan)
-    # ------------------------------------------------------------------
-
-    def _needs_positioned_text(self, element: etree._Element) -> bool:
-        for node in element.iter():
-            tag = self._context.local_name(getattr(node, "tag", "")).lower()
-            if tag == "tspan":
-                if any(node.get(attr) for attr in ("x", "y", "dx", "dy")):
-                    return True
-                continue
-            if tag != "text":
-                continue
-            if node.get("dx") or node.get("dy"):
-                return True
-            for attr in ("x", "y"):
-                raw = node.get(attr)
-                if raw and len(raw.replace(",", " ").split()) > 1:
-                    return True
-        return False
-
-    def _convert_positioned_text(
-        self,
-        *,
-        element: etree._Element,
-        coord_space: CoordinateSpace,
-        base_style: Mapping[str, Any],
-        run_metadata: Mapping[str, Any],
-    ) -> list[TextFrame]:
-        segments = self._collect_positioned_segments(element, base_style)
-        if not segments:
-            return []
-
-        frames: list[TextFrame] = []
-        font_service = self._context.services.resolve("font")
-        policy_meta_accum: dict[str, Any] = {}
-        decision = self._resolve_policy_decision()
-        text_scale = text_scale_for_coord_space(coord_space)
-
-        # Extract text direction
-        direction = base_style.get("direction") or element.get("direction") or None
-        if isinstance(direction, str):
-            direction = (
-                direction.strip().lower()
-                if direction.strip().lower() in ("rtl", "ltr")
-                else None
-            )
-
-        for text, style, x, y in segments:
-            run = self._create_run_from_style(text, style)
-            if not run.text:
-                continue
-            run = scale_run_metrics(run, text_scale)
-            updated, run_policy = self.apply_policy(run)
-            if run_policy:
-                policy_meta_accum.update(run_policy)
-
-            origin_x, origin_y = coord_space.apply_point(x, y)
-            bbox = estimate_text_bbox(
-                [updated], origin_x, origin_y, font_service=font_service
-            )
-
-            metadata: dict[str, Any] = dict(run_metadata)
-            self._context.attach_policy_metadata(metadata, "text")
-            if policy_meta_accum:
-                policy_meta = metadata.setdefault("policy", {}).setdefault("text", {})
-                policy_meta.update(policy_meta_accum)
-
-            frame = TextFrame(
-                origin=Point(origin_x, origin_y),
-                anchor=TextAnchor.START,
-                bbox=bbox,
-                runs=[updated],
-                baseline_shift=0.0,
-                direction=direction,
-                metadata=metadata,
-            )
-            if self._pipeline is not None:
-                frame = self._pipeline.plan_frame(frame, [updated], decision)
-            if self._smart_font_bridge is not None:
-                frame = self._smart_font_bridge.enhance_frame(
-                    frame, [updated], decision
-                )
-
-            self._context.trace_geometry_decision(element, "native", frame.metadata)
-            frames.append(frame)
-
-        return frames
-
-    def _collect_positioned_segments(
-        self,
-        element: etree._Element,
-        base_style: Mapping[str, Any],
-    ) -> list[tuple[str, Mapping[str, Any], float, float]]:
-        segments: list[tuple[str, Mapping[str, Any], float, float]] = []
-        font_service = self._context.services.resolve("font")
-        current_x = 0.0
-        current_y = 0.0
-
-        def apply_segment(
-            text: str,
-            style: Mapping[str, Any],
-            x_values: list[float],
-            y_values: list[float],
-            dx_values: list[float],
-            dy_values: list[float],
-            *,
-            preserve_space: bool,
-        ) -> None:
-            nonlocal current_x, current_y
-            normalized = normalize_positioned_text(text, preserve_space)
-            if not normalized:
-                return
-
-            run = self._create_run_from_style(normalized, style)
-            per_char = (
-                max(len(x_values), len(y_values), len(dx_values), len(dy_values)) > 1
-            )
-
-            if per_char:
-                for idx, ch in enumerate(normalized):
-                    if idx < len(x_values):
-                        current_x = x_values[idx]
-                    if idx < len(y_values):
-                        current_y = y_values[idx]
-                    if idx < len(dx_values):
-                        current_x += dx_values[idx]
-                    if idx < len(dy_values):
-                        current_y += dy_values[idx]
-
-                    if ch.strip():
-                        segments.append((ch, style, current_x, current_y))
-                    current_x += _estimate_run_width(ch, run, font_service)
-                return
-
-            if x_values:
-                current_x = x_values[0]
-            if y_values:
-                current_y = y_values[0]
-            if dx_values:
-                current_x += dx_values[0]
-            if dy_values:
-                current_y += dy_values[0]
-
-            if normalized.strip():
-                segments.append((normalized, style, current_x, current_y))
-            current_x += _estimate_run_width(normalized, run, font_service)
-
-        def visit(
-            node: etree._Element,
-            style: Mapping[str, Any],
-            preserve_space: bool,
-        ) -> None:
-            nonlocal current_x, current_y
-            local = self._context.local_name(getattr(node, "tag", "")).lower()
-            node_style = style
-            if local == "tspan":
-                node_style = self._context.style_resolver.compute_text_style(
-                    node,
-                    context=self._context.css_context,
-                    parent_style=dict(style),
-                )
-
-            font_size_pt = float(node_style.get("font_size_pt", 12.0))
-            x_values = parse_text_length_list(
-                node.get("x"), font_size_pt, axis="x", context=self._context
-            )
-            y_values = parse_text_length_list(
-                node.get("y"), font_size_pt, axis="y", context=self._context
-            )
-            dx_values = parse_text_length_list(
-                node.get("dx"), font_size_pt, axis="x", context=self._context
-            )
-            dy_values = parse_text_length_list(
-                node.get("dy"), font_size_pt, axis="y", context=self._context
-            )
-
-            xml_space = node.get("{http://www.w3.org/XML/1998/namespace}space")
-            node_preserve = preserve_space or (xml_space == "preserve")
-            if node.text:
-                apply_segment(
-                    node.text,
-                    node_style,
-                    x_values,
-                    y_values,
-                    dx_values,
-                    dy_values,
-                    preserve_space=node_preserve,
-                )
-
-            for child in node:
-                visit(child, node_style, node_preserve)
-                if child.tail:
-                    apply_segment(
-                        child.tail,
-                        node_style,
-                        [],
-                        [],
-                        [],
-                        [],
-                        preserve_space=node_preserve,
-                    )
-
-        visit(element, base_style, False)
-        return segments
 
     # ------------------------------------------------------------------
     # Policy
@@ -616,154 +418,6 @@ class TextConverter:
         if isinstance(candidate, TextPolicyDecision):
             return candidate
         return None
-
-    def _compute_text_style_with_inheritance(
-        self, element: etree._Element
-    ) -> dict[str, Any]:
-        parent_style: dict[str, Any] | None = None
-        parent = element.getparent()
-        if isinstance(parent, etree._Element) and isinstance(parent.tag, str):
-            parent_style = self._compute_text_style_with_inheritance(parent)
-        return self._context.style_resolver.compute_text_style(
-            element,
-            context=self._context.css_context,
-            parent_style=parent_style,
-        )
-
-    def _collect_text_runs(
-        self,
-        element: etree._Element,
-        base_style: Mapping[str, Any],
-    ) -> tuple[list[Run], dict[str, Any]]:
-        segments: list[tuple[Mapping[str, Any], str]] = []
-        metadata: dict[str, Any] = {}
-
-        def visit(
-            node: etree._Element, style: Mapping[str, Any], preserve_space: bool
-        ) -> None:
-            xml_space = node.get("{http://www.w3.org/XML/1998/namespace}space")
-            node_preserve = preserve_space or (xml_space == "preserve")
-            text_segment = normalize_text_segment(
-                node.text, preserve_space=node_preserve
-            )
-            if text_segment:
-                segments.append((dict(style), text_segment))
-
-            for child in node:
-                local = self._context.local_name(getattr(child, "tag", "")).lower()
-                if local == "tspan":
-                    child_style = self._context.style_resolver.compute_text_style(
-                        child,
-                        context=self._context.css_context,
-                        parent_style=style,
-                    )
-                    visit(child, child_style, node_preserve)
-                elif local == "textpath":
-                    child_style = self._context.style_resolver.compute_text_style(
-                        child,
-                        context=self._context.css_context,
-                        parent_style=style,
-                    )
-                    href = child.get("{http://www.w3.org/1999/xlink}href") or child.get(
-                        "href"
-                    )
-                    record_text_path_reference(
-                        href, metadata,
-                        context=self._context,
-                        text_path_positioner=self._text_path_positioner,
-                    )
-                    visit(child, child_style, node_preserve)
-                else:
-                    visit(child, style, node_preserve)
-                tail_segment = normalize_text_segment(
-                    child.tail, preserve_space=node_preserve
-                )
-                if tail_segment:
-                    segments.append((dict(style), tail_segment))
-
-        visit(element, base_style, False)
-
-        runs: list[Run] = []
-        for style, segment in segments:
-            run = self._create_run_from_style(segment, style)
-            if run.text:
-                runs.append(run)
-        runs = merge_runs(runs)
-        return runs, metadata
-
-    def _create_run_from_style(self, text: str, style: Mapping[str, Any]) -> Run:
-        return create_run_from_style(
-            text, style, resolve_text_length_fn=self._resolve_text_length
-        )
-
-    def _resolve_text_length(
-        self,
-        value: str | None,
-        *,
-        axis: str,
-        font_size_pt: float,
-    ) -> float:
-        return resolve_text_length(
-            value, axis=axis, font_size_pt=font_size_pt, context=self._context
-        )
-
-    def _attach_resvg_text_metadata(
-        self,
-        resvg_node: Any,
-        metadata: dict[str, Any],
-        *,
-        text_scale: float = 1.0,
-    ) -> None:
-        if not hasattr(resvg_node, "text_content"):
-            return
-        try:
-            from svg2ooxml.core.resvg.text.drawingml_generator import (
-                DrawingMLTextGenerator,
-            )
-            from svg2ooxml.core.resvg.text.layout_analyzer import TextLayoutAnalyzer
-        except Exception:
-            return
-
-        resvg_meta: dict[str, Any] = metadata.setdefault("resvg_text", {})
-        analysis = TextLayoutAnalyzer().analyze(resvg_node)
-        resvg_meta["complexity"] = analysis.complexity
-        if analysis.details:
-            resvg_meta["details"] = analysis.details
-        resvg_meta["is_plain"] = analysis.is_plain
-
-        if metadata.get("text_path_id"):
-            resvg_meta["strategy"] = "text_path"
-            return
-        if not analysis.is_plain:
-            resvg_meta["strategy"] = "emf"
-            return
-
-        paint_resolver = None
-        tree = getattr(self._context, "resvg_tree", None)
-        if tree is not None:
-            from svg2ooxml.paint.resvg_bridge import _resolve_paint_reference
-
-            def paint_resolver(ref):
-                return _resolve_paint_reference(ref, tree)
-
-        generator = DrawingMLTextGenerator(
-            font_service=self._context.services.resolve("font"),
-            embedding_engine=self._context.services.resolve("font_embedding"),
-            paint_resolver=paint_resolver,
-            text_scale=text_scale,
-        )
-        try:
-            runs_xml = generator.generate_runs_xml(resvg_node)
-        except Exception:
-            resvg_meta["strategy"] = "error"
-            return
-
-        if runs_xml:
-            resvg_meta["strategy"] = "runs"
-            resvg_meta["runs_xml"] = runs_xml
-        else:
-            resvg_meta["strategy"] = "empty"
-
 
 # ---------------------------------------------------------------
 # Module-level backward-compat alias

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from svg2ooxml.drawingml.shape_renderer import _is_invalid_custom_effect_xml
+from svg2ooxml.drawingml.shape_renderer_utils import is_invalid_custom_effect_xml
 
 
 def test_fill_overlay_effect_is_not_rejected_for_nested_solid_fill() -> None:
@@ -16,7 +16,7 @@ def test_fill_overlay_effect_is_not_rejected_for_nested_solid_fill() -> None:
     )
 
     assert (
-        _is_invalid_custom_effect_xml(
+        is_invalid_custom_effect_xml(
             xml,
             invalid_substrings=(
                 "svg2ooxml:sourcegraphic",
@@ -33,7 +33,7 @@ def test_bare_solid_fill_fragment_is_rejected() -> None:
     xml = "<a:solidFill><a:srgbClr val=\"FF0000\"/></a:solidFill>"
 
     assert (
-        _is_invalid_custom_effect_xml(
+        is_invalid_custom_effect_xml(
             xml,
             invalid_substrings=(
                 "svg2ooxml:sourcegraphic",

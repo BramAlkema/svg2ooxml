@@ -10,7 +10,12 @@ from lxml import etree
 from svg2ooxml.common.conversions.angles import degrees_to_ppt
 from svg2ooxml.common.conversions.scale import scale_to_ppt
 from svg2ooxml.drawingml.xml_builder import a_elem, a_sub, to_string
-from svg2ooxml.filters.base import Filter, FilterContext, FilterResult, stitch_blip_transforms
+from svg2ooxml.filters.base import (
+    Filter,
+    FilterContext,
+    FilterResult,
+    stitch_blip_transforms,
+)
 from svg2ooxml.filters.utils import parse_float_list
 
 

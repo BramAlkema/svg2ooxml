@@ -6,7 +6,6 @@ from typing import Any
 
 from lxml import etree
 
-from svg2ooxml.core.ir.shape_converters_utils import _parse_float
 from svg2ooxml.core.styling.style_extractor import StyleResult
 from svg2ooxml.ir.geometry import SegmentType
 from svg2ooxml.ir.scene import ClipRef, MaskInstance, MaskRef, Path

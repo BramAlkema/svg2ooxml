@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any, Mapping
+from typing import Any
 
 from lxml import etree
 
@@ -38,7 +39,7 @@ class NativeFragment:
         source: str = "legacy-handler",
         strategy: str = "prebuilt-par",
         metadata: Mapping[str, Any] | None = None,
-    ) -> "NativeFragment":
+    ) -> NativeFragment:
         """Wrap an existing handler-produced ``<p:par>`` without changing behavior."""
         return cls(
             par=par,

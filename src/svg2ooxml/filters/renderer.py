@@ -9,7 +9,7 @@ from typing import Any
 
 from lxml import etree
 
-from svg2ooxml.drawingml.emf_adapter import PaletteResolver
+from svg2ooxml.drawingml.emf_primitives import PaletteResolver
 from svg2ooxml.drawingml.filter_renderer import (
     FilterRenderer as DrawingMLFilterRenderer,
 )
@@ -17,43 +17,87 @@ from svg2ooxml.drawingml.raster_adapter import RasterAdapter, _surface_to_png
 from svg2ooxml.filters.base import FilterContext, FilterResult
 from svg2ooxml.filters.palette import (
     attach_emf_metadata as _attach_emf_metadata,
+)
+from svg2ooxml.filters.palette import (
     attach_raster_metadata as _attach_raster_metadata,
 )
 from svg2ooxml.filters.planner import FilterPlanner
 from svg2ooxml.filters.registry import FilterRegistry
 from svg2ooxml.filters.resvg_bridge import ResolvedFilter
 from svg2ooxml.filters.strategies.native import (
+    aggregate_blip_color_transforms as _aggregate_blip_color_transforms,
+)
+from svg2ooxml.filters.strategies.native import (
+    build_blip_color_transform_stack_effect as _build_blip_color_transform_stack_effect,
+)
+from svg2ooxml.filters.strategies.native import (
+    build_component_transfer_alpha_stack_effect as _build_component_transfer_alpha_stack_effect,
+)
+from svg2ooxml.filters.strategies.native import (
+    build_flood_blur_merge_effect as _build_flood_blur_merge_effect,
+)
+from svg2ooxml.filters.strategies.native import (
+    build_lighting_composite_effect as _build_lighting_composite_effect,
+)
+from svg2ooxml.filters.strategies.native import (
+    build_shadow_stack_effect as _build_shadow_stack_effect,
+)
+from svg2ooxml.filters.strategies.native import (
+    coerce_non_negative_float as _coerce_non_negative_float,
+)
+from svg2ooxml.filters.strategies.native import (
+    component_transfer_alpha_scale as _component_transfer_alpha_scale,
+)
+from svg2ooxml.filters.strategies.native import (
+    is_additive_composite as _is_additive_composite,
+)
+from svg2ooxml.filters.strategies.native import (
+    match_color_transform_stack as _match_color_transform_stack,
+)
+from svg2ooxml.filters.strategies.native import (
+    match_flood_blur_merge_stack as _match_flood_blur_merge_stack,
+)
+from svg2ooxml.filters.strategies.native import (
+    match_lighting_composite_stack as _match_lighting_composite_stack,
+)
+from svg2ooxml.filters.strategies.native import (
+    match_shadow_stack as _match_shadow_stack,
+)
+from svg2ooxml.filters.strategies.native import (
+    parse_float_attr as _parse_float_attr,
+)
+from svg2ooxml.filters.strategies.native import (
+    primitive_local_name as _primitive_local_name,
+)
+from svg2ooxml.filters.strategies.native import (
+    render_color_transform_stack as _render_color_transform_stack,
+)
+from svg2ooxml.filters.strategies.native import (
     render_editable_stack,
 )
 from svg2ooxml.filters.strategies.raster_fallback import rasterize_filter
 from svg2ooxml.filters.strategies.resvg_bridge import (
+    inject_promotion_metadata as _inject_promotion_metadata,
+)
+from svg2ooxml.filters.strategies.resvg_bridge import (
+    is_identity_matrix as _is_identity_matrix,
+)
+from svg2ooxml.filters.strategies.resvg_bridge import (
+    is_neutral_promotion as _is_neutral_promotion,
+)
+from svg2ooxml.filters.strategies.resvg_bridge import (
+    match_plan_elements as _match_plan_elements,
+)
+from svg2ooxml.filters.strategies.resvg_bridge import (
     promote_resvg_plan,
     seed_source_surface,
     turbulence_emf_effect,
-    is_neutral_promotion as _is_neutral_promotion,
-    is_identity_matrix as _is_identity_matrix,
-    match_plan_elements as _match_plan_elements,
-    inject_promotion_metadata as _inject_promotion_metadata,
-    promotion_filter as _promotion_filter,
-    surface_to_bmp as _surface_to_bmp,
 )
-from svg2ooxml.filters.strategies.native import (
-    coerce_non_negative_float as _coerce_non_negative_float,
-    parse_float_attr as _parse_float_attr,
-    is_additive_composite as _is_additive_composite,
-    primitive_local_name as _primitive_local_name,
-    component_transfer_alpha_scale as _component_transfer_alpha_scale,
-    aggregate_blip_color_transforms as _aggregate_blip_color_transforms,
-    match_flood_blur_merge_stack as _match_flood_blur_merge_stack,
-    match_shadow_stack as _match_shadow_stack,
-    match_lighting_composite_stack as _match_lighting_composite_stack,
-    match_color_transform_stack as _match_color_transform_stack,
-    build_flood_blur_merge_effect as _build_flood_blur_merge_effect,
-    build_shadow_stack_effect as _build_shadow_stack_effect,
-    build_lighting_composite_effect as _build_lighting_composite_effect,
-    build_component_transfer_alpha_stack_effect as _build_component_transfer_alpha_stack_effect,
-    build_blip_color_transform_stack_effect as _build_blip_color_transform_stack_effect,
-    render_color_transform_stack as _render_color_transform_stack,
+from svg2ooxml.filters.strategies.resvg_bridge import (
+    promotion_filter as _promotion_filter,
+)
+from svg2ooxml.filters.strategies.resvg_bridge import (
+    surface_to_bmp as _surface_to_bmp,
 )
 from svg2ooxml.ir.effects import CustomEffect
 from svg2ooxml.render.filters import FilterPlan, UnsupportedPrimitiveError, apply_filter

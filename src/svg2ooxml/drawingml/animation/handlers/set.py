@@ -16,7 +16,7 @@ from svg2ooxml.drawingml.animation.constants import (
 )
 from svg2ooxml.drawingml.animation.handlers.base import AnimationHandler
 from svg2ooxml.drawingml.animation.oracle import default_oracle
-from svg2ooxml.drawingml.xml_builder import NS_P, a_sub, p_elem, p_sub
+from svg2ooxml.drawingml.xml_builder import a_sub, p_elem, p_sub
 from svg2ooxml.ir.animation import AnimationDefinition, AnimationType
 
 if TYPE_CHECKING:
