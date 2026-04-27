@@ -523,6 +523,15 @@ class ResvgSupportMixin:
             opacity=ResvgSupportMixin._clamp_opacity(stroke.opacity * opacity),
         )
 
+    @staticmethod
+    def _is_default_fill_paint(paint) -> bool:
+        return (
+            isinstance(paint, SolidPaint)
+            and paint.rgb.upper() == "000000"
+            and paint.theme_color is None
+            and paint.opacity >= 0.999
+        )
+
     def _materialize_style(
         self,
         element: etree._Element,
@@ -576,7 +585,10 @@ class ResvgSupportMixin:
         source_has_fill_opacity = self._source_has_property(
             source_element, "fill-opacity"
         )
-        if source_has_fill:
+        source_has_authored_fill = source_has_fill or not self._is_default_fill_paint(
+            source_style.fill
+        )
+        if source_has_authored_fill:
             fill = source_style.fill
             if fill is not None and not source_has_fill_opacity:
                 fill = self._paint_with_opacity(

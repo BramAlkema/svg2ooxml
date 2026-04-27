@@ -62,6 +62,20 @@ class ResvgConversionMixin:
         # Keep runtime-style lookup patchable via the legacy module path.
         from svg2ooxml.core.ir import shape_converters as shape_converters_module
 
+        def _canonical_source_element(
+            candidate: etree._Element | None,
+        ) -> etree._Element | None:
+            if not isinstance(candidate, etree._Element):
+                return None
+            source_id = candidate.get("data-svg2ooxml-source-id") or candidate.get(
+                "id"
+            )
+            if isinstance(source_id, str) and source_id:
+                indexed = self._element_index.get(source_id)
+                if isinstance(indexed, etree._Element):
+                    return indexed
+            return candidate
+
         style = shape_converters_module.styles_runtime.extract_style(self, element)
         use_paint_dict: Mapping[str, Any] | None = None
         if element_local == "use":
@@ -93,6 +107,7 @@ class ResvgConversionMixin:
                 source_element = self._element_index.get(reference_id)
         if source_element is None:
             source_element = getattr(resvg_node, "source", None)
+        source_element = _canonical_source_element(source_element)
         source_style: StyleResult | None = None
         if isinstance(source_element, etree._Element):
             self._append_metadata_element_id(metadata, source_element.get("id"))
@@ -167,15 +182,15 @@ class ResvgConversionMixin:
             tree = getattr(self, "_resvg_tree", None)
             if tree is None:
                 return updated
-            source_element = getattr(node, "source", None)
-            if not isinstance(source_element, etree._Element):
-                source_element = None
+            source_element = _canonical_source_element(getattr(node, "source", None))
             if hasattr(node, "stroke") and node.stroke is not None:
                 from svg2ooxml.paint.resvg_bridge import resolve_stroke_style
 
                 resvg_stroke = resolve_stroke_style(node.stroke, tree)
                 if resvg_stroke is not None and resvg_stroke.paint is not None:
-                    if (
+                    if preserve_base_paint_presence and updated.stroke is not None:
+                        pass
+                    elif (
                         preserve_base_paint_presence
                         and updated.stroke is None
                         and not self._source_has_property(source_element, "stroke")
@@ -227,6 +242,8 @@ class ResvgConversionMixin:
 
                 resvg_fill = resolve_fill_paint(node.fill, tree)
                 if resvg_fill is not None:
+                    if preserve_base_paint_presence and updated.fill is not None:
+                        return updated
                     if (
                         preserve_base_paint_presence
                         and updated.fill is None
@@ -338,8 +355,7 @@ class ResvgConversionMixin:
                 )
 
                 def _node_source_element(node) -> etree._Element | None:
-                    source = getattr(node, "source", None)
-                    return source if isinstance(source, etree._Element) else None
+                    return _canonical_source_element(getattr(node, "source", None))
 
                 def _style_for_resvg_node(
                     node,
