@@ -373,6 +373,31 @@ def test_packaging_context_sanitizes_media_asset_filename() -> None:
     assert filename == "bad_name.png"
 
 
+def test_packaging_context_distinguishes_media_content_type_for_same_payload() -> None:
+    context = PackagingContext()
+    png_name = context.assign_media_filename(
+        MediaAsset(
+            relationship_id="rIdMedia1",
+            filename="shared",
+            content_type="image/png",
+            data=b"same-bytes",
+        ),
+        slide_index=1,
+    )
+    jpg_name = context.assign_media_filename(
+        MediaAsset(
+            relationship_id="rIdMedia2",
+            filename="shared",
+            content_type="image/jpeg",
+            data=b"same-bytes",
+        ),
+        slide_index=1,
+    )
+
+    assert png_name == "shared.png"
+    assert jpg_name == "shared.jpg"
+
+
 @pytest.mark.parametrize("relationship_id", ["bad id", "rId1"])
 def test_build_from_results_rekeys_packaged_media_relationship_ids(
     relationship_id: str,
@@ -455,6 +480,77 @@ def test_package_writer_never_emits_unsafe_media_or_mask_paths() -> None:
             content_types = archive.read("[Content_Types].xml").decode("utf-8")
             assert 'PartName="/ppt/masks/outside-mask.png"' in content_types
             assert 'ContentType="image/png"' in content_types
+
+
+@pytest.mark.parametrize("relationship_id", ["bad id", "rId1"])
+def test_package_writer_rejects_direct_slide_invalid_media_relationship_ids(
+    relationship_id: str,
+) -> None:
+    builder = PPTXPackageBuilder()
+    rendered = _render_simple_scene(builder)
+    slide = SlideAssembly(
+        index=1,
+        filename="slide1.xml",
+        rel_id="rId2",
+        slide_id=256,
+        slide_xml=rendered.slide_xml,
+        slide_size=rendered.slide_size,
+        media=[
+            PackagedMedia(
+                relationship_id=relationship_id,
+                filename="image.png",
+                content_type="image/png",
+                data=b"png",
+            )
+        ],
+    )
+    writer = PackageWriter(
+        base_template=builder._base_template,
+        content_types_template=builder._content_types_template,
+        slide_rels_template=builder._slide_rels_template,
+    )
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        output = Path(tmpdir) / "invalid_rel.pptx"
+        with pytest.raises(ValueError, match="relationship ID"):
+            writer.write_package([slide], output)
+
+
+def test_package_writer_rejects_conflicting_direct_media_filenames() -> None:
+    builder = PPTXPackageBuilder()
+    rendered = _render_simple_scene(builder)
+    slide = SlideAssembly(
+        index=1,
+        filename="slide1.xml",
+        rel_id="rId2",
+        slide_id=256,
+        slide_xml=rendered.slide_xml,
+        slide_size=rendered.slide_size,
+        media=[
+            PackagedMedia(
+                relationship_id="rIdMediaA",
+                filename="image.png",
+                content_type="image/png",
+                data=b"first",
+            ),
+            PackagedMedia(
+                relationship_id="rIdMediaB",
+                filename="image.png",
+                content_type="image/png",
+                data=b"second",
+            ),
+        ],
+    )
+    writer = PackageWriter(
+        base_template=builder._base_template,
+        content_types_template=builder._content_types_template,
+        slide_rels_template=builder._slide_rels_template,
+    )
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        output = Path(tmpdir) / "conflicting_media.pptx"
+        with pytest.raises(ValueError, match="Conflicting media payloads"):
+            writer.write_package([slide], output)
 
 
 def test_package_writer_filters_unsafe_navigation_relationships() -> None:
@@ -748,6 +844,44 @@ def test_streaming_media_dedup() -> None:
             # Same content should be deduped to one file
             emf_files = [n for n in media_files if n.endswith(".emf")]
             assert len(emf_files) == 1
+
+
+def test_streaming_font_packaging_dedupes_across_slides() -> None:
+    builder = PPTXPackageBuilder()
+    plan = EmbeddedFontPlan(
+        font_family="StreamFont",
+        requires_embedding=True,
+        subset_strategy="glyph",
+        glyph_count=4,
+        relationship_hint="rIdStreamFont",
+        metadata={
+            "font_data": b"stream-font-bytes",
+            "font_style_kind": "regular",
+        },
+    )
+    result = DrawingMLRenderResult(
+        slide_xml="""<p:sld xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"/>""",
+        slide_size=(160, 90),
+        assets=AssetRegistrySnapshot(
+            fonts=(FontAsset(shape_id=1, plan=plan),),
+        ),
+    )
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        output = Path(tmpdir) / "streaming_fonts.pptx"
+        with builder.begin_streaming() as stream:
+            stream.add_slide(result)
+            stream.add_slide(result)
+            path = stream.finalize(output)
+
+        with zipfile.ZipFile(path, "r") as archive:
+            font_files = [
+                name for name in archive.namelist() if name.startswith("ppt/fonts/")
+            ]
+            rels_xml = archive.read("ppt/_rels/presentation.xml.rels").decode("utf-8")
+
+    assert font_files == ["ppt/fonts/font1.fntdata"]
+    assert rels_xml.count("rIdStreamFont") == 1
 
 
 def test_streaming_slide_size_multipage() -> None:

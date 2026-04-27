@@ -6,6 +6,8 @@ import math
 from collections.abc import Iterable
 from dataclasses import dataclass
 
+from svg2ooxml.common.dash_patterns import normalize_dash_array
+from svg2ooxml.common.gradient_units import normalize_gradient_units
 from svg2ooxml.ir.geometry import BezierSegment, LineSegment, Rect, SegmentType
 from svg2ooxml.ir.paint import (
     GradientStop,
@@ -29,6 +31,7 @@ except Exception:  # pragma: no cover - optional dependency
     SKIA_AVAILABLE = False
 
 from svg2ooxml.common.geometry.paths.drawingml import compute_path_bounds
+from svg2ooxml.core.resvg.geometry.matrix_bridge import matrix_to_tuple
 
 
 @dataclass(frozen=True)
@@ -124,7 +127,7 @@ class Rasterizer:
 
     def _rasterize_group(self, group: Group) -> RasterResult | None:
         """Rasterize a group by drawing all children onto one surface."""
-        bounds = group.bbox
+        bounds = self._group_bounds(group)
         if bounds.width <= 0 or bounds.height <= 0:
             return None
 
@@ -187,18 +190,18 @@ class Rasterizer:
         if isinstance(element, IRPath):
             return self._draw_path(canvas, element, geometry_bounds)
         if isinstance(element, Group):
-            # Nested group: draw children recursively with group opacity
-            canvas.save()
+            drawn_any = False
             if element.opacity < 1.0:
-                paint = skia.Paint()
-                paint.setAlpha(int(round(element.opacity * 255)))
                 canvas.saveLayerAlpha(None, int(round(element.opacity * 255)))
-            for child in element.children:
-                self._draw_element(canvas, child)
-            if element.opacity < 1.0:
-                canvas.restore()  # layer
-            canvas.restore()
-            return True
+            else:
+                canvas.save()
+            try:
+                for child in element.children:
+                    if self._draw_element(canvas, child):
+                        drawn_any = True
+            finally:
+                canvas.restore()
+            return drawn_any
         return False
 
     # ------------------------------------------------------------------ #
@@ -209,12 +212,12 @@ class Rasterizer:
         sk_rect = skia.Rect.MakeXYWH(rect.bounds.x, rect.bounds.y, rect.bounds.width, rect.bounds.height)
         drawn = False
         if rect.fill is not None:
-            paint = self._paint_from_fill(rect.fill, bounds)
+            paint = self._paint_from_fill(rect.fill, bounds, opacity=rect.opacity)
             if paint:
                 canvas.drawRect(sk_rect, paint)
                 drawn = True
         if rect.stroke and rect.stroke.paint is not None:
-            paint = self._paint_from_stroke(rect.stroke, bounds)
+            paint = self._paint_from_stroke(rect.stroke, bounds, opacity=rect.opacity)
             if paint:
                 canvas.drawRect(sk_rect, paint)
                 drawn = True
@@ -229,12 +232,12 @@ class Rasterizer:
         )
         drawn = False
         if circle.fill is not None:
-            paint = self._paint_from_fill(circle.fill, bounds)
+            paint = self._paint_from_fill(circle.fill, bounds, opacity=circle.opacity)
             if paint:
                 canvas.drawOval(rect, paint)
                 drawn = True
         if circle.stroke and circle.stroke.paint is not None:
-            paint = self._paint_from_stroke(circle.stroke, bounds)
+            paint = self._paint_from_stroke(circle.stroke, bounds, opacity=circle.opacity)
             if paint:
                 canvas.drawOval(rect, paint)
                 drawn = True
@@ -249,12 +252,12 @@ class Rasterizer:
         )
         drawn = False
         if ellipse.fill is not None:
-            paint = self._paint_from_fill(ellipse.fill, bounds)
+            paint = self._paint_from_fill(ellipse.fill, bounds, opacity=ellipse.opacity)
             if paint:
                 canvas.drawOval(rect, paint)
                 drawn = True
         if ellipse.stroke and ellipse.stroke.paint is not None:
-            paint = self._paint_from_stroke(ellipse.stroke, bounds)
+            paint = self._paint_from_stroke(ellipse.stroke, bounds, opacity=ellipse.opacity)
             if paint:
                 canvas.drawOval(rect, paint)
                 drawn = True
@@ -266,28 +269,45 @@ class Rasterizer:
         sk_path = self._build_skia_path(path.segments, path.is_closed)
         drawn = False
         if path.fill is not None:
-            paint = self._paint_from_fill(path.fill, bounds)
+            paint = self._paint_from_fill(path.fill, bounds, opacity=path.opacity)
             if paint:
                 canvas.drawPath(sk_path, paint)
                 drawn = True
         if path.stroke and path.stroke.paint is not None:
-            paint = self._paint_from_stroke(path.stroke, bounds)
+            paint = self._paint_from_stroke(path.stroke, bounds, opacity=path.opacity)
             if paint:
                 canvas.drawPath(sk_path, paint)
                 drawn = True
         return drawn
 
-    def _paint_from_fill(self, paint, bounds: Rect) -> skia.Paint | None:
+    def _paint_from_fill(
+        self,
+        paint,
+        bounds: Rect,
+        *,
+        opacity: float = 1.0,
+    ) -> skia.Paint | None:
         sk_paint = skia.Paint(AntiAlias=True)
         sk_paint.setStyle(skia.Paint.kFill_Style)
-        if self._apply_paint(sk_paint, paint, bounds, opacity=1.0):
+        if self._apply_paint(sk_paint, paint, bounds, opacity=opacity):
             return sk_paint
         return None
 
-    def _paint_from_stroke(self, stroke: Stroke, bounds: Rect) -> skia.Paint | None:
+    def _paint_from_stroke(
+        self,
+        stroke: Stroke,
+        bounds: Rect,
+        *,
+        opacity: float = 1.0,
+    ) -> skia.Paint | None:
         sk_paint = skia.Paint(AntiAlias=True)
         sk_paint.setStyle(skia.Paint.kStroke_Style)
-        if not self._apply_paint(sk_paint, stroke.paint, bounds, opacity=stroke.opacity):
+        if not self._apply_paint(
+            sk_paint,
+            stroke.paint,
+            bounds,
+            opacity=stroke.opacity * opacity,
+        ):
             return None
         sk_paint.setStrokeWidth(max(stroke.width, 0.1))
         cap_map = {
@@ -303,7 +323,9 @@ class Rasterizer:
         }
         sk_paint.setStrokeJoin(join_map.get(stroke.join, skia.Paint.Join.kMiter_Join))
         if stroke.dash_array:
-            intervals = [max(0.1, float(value)) for value in stroke.dash_array if value > 0]
+            intervals = [
+                max(0.1, value) for value in normalize_dash_array(stroke.dash_array)
+            ]
             if intervals:
                 effect = skia.DashPathEffect.Make(intervals, stroke.dash_offset or 0.0)
                 if effect:
@@ -456,6 +478,28 @@ class Rasterizer:
             pad = max(pad, stroke.width / 2.0)
         return Rect(bounds.x - pad, bounds.y - pad, bounds.width + pad * 2.0, bounds.height + pad * 2.0)
 
+    def _group_bounds(self, group: Group) -> Rect:
+        boxes: list[Rect] = []
+        for child in group.children:
+            if isinstance(child, Group):
+                child_bounds = self._group_bounds(child)
+                if child_bounds.width > 0 and child_bounds.height > 0:
+                    boxes.append(child_bounds)
+                continue
+            if isinstance(child, Image):
+                continue
+            try:
+                boxes.append(self._expanded_bounds(child))
+            except TypeError:
+                continue
+        if not boxes:
+            return Rect(0.0, 0.0, 0.0, 0.0)
+        min_x = min(box.x for box in boxes)
+        min_y = min(box.y for box in boxes)
+        max_x = max(box.x + box.width for box in boxes)
+        max_y = max(box.y + box.height for box in boxes)
+        return Rect(min_x, min_y, max_x - min_x, max_y - min_y)
+
     def _element_bounds(self, element) -> Rect:
         if isinstance(element, Rectangle):
             return element.bounds
@@ -474,8 +518,11 @@ class Rasterizer:
     ) -> tuple[list[float], list[skia.Color4f]] | None:
         positions: list[float] = []
         colors: list[skia.Color4f] = []
+        last_offset = 0.0
         for stop in stops:
             offset = max(0.0, min(1.0, float(stop.offset)))
+            offset = max(offset, last_offset)
+            last_offset = offset
             color = self._color_from_hex(stop.rgb, float(stop.opacity) * opacity)
             if color is None:
                 continue
@@ -492,7 +539,7 @@ class Rasterizer:
     ) -> tuple[float, float, float, float]:
         x1, y1 = paint.start
         x2, y2 = paint.end
-        if paint.gradient_units == "objectBoundingBox":
+        if normalize_gradient_units(paint.gradient_units) == "objectBoundingBox":
             x1 = bounds.x + x1 * bounds.width
             y1 = bounds.y + y1 * bounds.height
             x2 = bounds.x + x2 * bounds.width
@@ -506,7 +553,7 @@ class Rasterizer:
     ) -> tuple[float, float, float]:
         cx, cy = paint.center
         radius = paint.radius
-        if paint.gradient_units == "objectBoundingBox":
+        if normalize_gradient_units(paint.gradient_units) == "objectBoundingBox":
             cx = bounds.x + cx * bounds.width
             cy = bounds.y + cy * bounds.height
             radius = radius * (bounds.width + bounds.height) * 0.5
@@ -521,7 +568,7 @@ class Rasterizer:
         if paint.focal_point is None:
             return center
         fx, fy = paint.focal_point
-        if paint.gradient_units == "objectBoundingBox":
+        if normalize_gradient_units(paint.gradient_units) == "objectBoundingBox":
             fx = bounds.x + fx * bounds.width
             fy = bounds.y + fy * bounds.height
         return fx, fy
@@ -539,16 +586,17 @@ class Rasterizer:
         if matrix is None:
             return None
         try:
+            a, b, c, d, e, f = matrix_to_tuple(matrix)
             return skia.Matrix.MakeAll(
-                float(matrix[0][0]),
-                float(matrix[0][1]),
-                float(matrix[0][2]),
-                float(matrix[1][0]),
-                float(matrix[1][1]),
-                float(matrix[1][2]),
-                float(matrix[2][0]),
-                float(matrix[2][1]),
-                float(matrix[2][2]),
+                a,
+                c,
+                e,
+                b,
+                d,
+                f,
+                0.0,
+                0.0,
+                1.0,
             )
         except Exception:  # pragma: no cover - defensive for unexpected matrix shapes
             return None

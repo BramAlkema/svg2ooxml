@@ -14,6 +14,11 @@ from svg2ooxml.drawingml.animation.constants import FADE_ATTRIBUTES
 from svg2ooxml.drawingml.animation.handlers.base import AnimationHandler
 from svg2ooxml.drawingml.animation.oracle import default_oracle
 from svg2ooxml.drawingml.animation.timing_utils import sample_spline_keyframes
+from svg2ooxml.drawingml.animation.timing_values import (
+    append_repeat_count,
+    format_delay_ms,
+    format_duration_ms,
+)
 from svg2ooxml.drawingml.animation.value_formatters import format_numeric_value
 from svg2ooxml.drawingml.xml_builder import p_elem, p_sub
 from svg2ooxml.ir.animation import AnimationType, BeginTriggerType, CalcMode
@@ -179,7 +184,7 @@ class OpacityAnimationHandler(AnimationHandler):
             outer_par,
             "cTn",
             id=str(par_id),
-            dur=str(animation.duration_ms),
+            dur=format_duration_ms(animation.duration_ms),
             fill="hold",
             nodeType="clickEffect",
             grpId=str(par_id),
@@ -187,7 +192,7 @@ class OpacityAnimationHandler(AnimationHandler):
             presetClass="emph",
             presetSubtype="0",
         )
-        self._apply_repeat_count(outer_ctn, animation.repeat_count)
+        append_repeat_count(outer_ctn, animation.repeat_count)
 
         st_cond_lst = p_sub(outer_ctn, "stCondLst")
         if animation.begin_triggers:
@@ -198,7 +203,7 @@ class OpacityAnimationHandler(AnimationHandler):
                 default_target_shape=animation.element_id,
             )
         else:
-            p_sub(st_cond_lst, "cond", delay=str(animation.begin_ms))
+            p_sub(st_cond_lst, "cond", delay=format_delay_ms(animation.begin_ms))
 
         child_tn_lst = p_sub(outer_ctn, "childTnLst")
 
@@ -208,7 +213,7 @@ class OpacityAnimationHandler(AnimationHandler):
             set_cbhvr,
             "cTn",
             id=str(behavior_id),
-            dur=str(animation.duration_ms),
+            dur=format_duration_ms(animation.duration_ms),
             fill="hold",
             nodeType="withEffect",
         )
@@ -394,23 +399,3 @@ class OpacityAnimationHandler(AnimationHandler):
         peak = cls._opacity_float(animation.values[1])
         end = cls._opacity_float(animation.values[2])
         return abs(start - end) <= 1e-6 and abs(start - peak) > 1e-6
-
-    @staticmethod
-    def _apply_repeat_count(
-        ctn: etree._Element,
-        repeat_count: int | str | None,
-    ) -> None:
-        if repeat_count == "indefinite":
-            ctn.set("repeatCount", "indefinite")
-            return
-
-        if repeat_count is None:
-            return
-
-        try:
-            count = int(repeat_count)
-        except (TypeError, ValueError):
-            return
-
-        if count > 1:
-            ctn.set("repeatCount", str(count * 1000))

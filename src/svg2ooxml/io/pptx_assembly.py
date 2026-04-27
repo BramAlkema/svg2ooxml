@@ -261,7 +261,7 @@ class PackagingContext:
     def assign_media_filename(self, asset: MediaAsset, slide_index: int) -> str:
         """Return a deterministic filename for the supplied media payload."""
         digest = hashlib.md5(asset.data, usedforsecurity=False).hexdigest()
-        key = (asset.filename, digest)
+        key = (asset.filename, digest, _normalized_content_type(asset.content_type))
         existing = self._media_by_signature.get(key)
         if existing:
             return existing

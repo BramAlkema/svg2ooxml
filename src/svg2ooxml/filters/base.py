@@ -34,7 +34,9 @@ class FilterContext:
     def policy(self) -> dict[str, Any]:
         """Return the policy sub-dict from options, defaulting to empty."""
         if isinstance(self.options, dict):
-            return self.options.get("policy") or {}
+            policy = self.options.get("policy")
+            if isinstance(policy, dict):
+                return policy
         return {}
 
     def with_primitive(self, primitive: etree._Element) -> FilterContext:

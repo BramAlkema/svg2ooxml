@@ -91,6 +91,8 @@ class DrawingMLShapeRenderer:
 
         # Apply clip bounds approximation (xfrm intersection).
         element = apply_clip_bounds(element, metadata)
+        if self._rasterizer is None and self._needs_gradient_raster(element):
+            element = self._apply_gradient_fallback(element, metadata)
 
         # mix-blend-mode: rasterize to PNG since DrawingML has no blend modes.
         if metadata.get("mix_blend_mode") and self._rasterizer is not None:
@@ -118,9 +120,7 @@ class DrawingMLShapeRenderer:
                 return rasterized
 
             # Register for animations
-            element_ids = metadata.get("element_ids")
-            if isinstance(element_ids, list):
-                self._animation_pipeline.register_element_ids(element_ids, shape_id)
+            self._register_animation_ids(metadata, shape_id)
 
             xml = shapes_runtime.render_rectangle(
                 element,
@@ -142,9 +142,7 @@ class DrawingMLShapeRenderer:
                 return rasterized
 
             # Register for animations
-            element_ids = metadata.get("element_ids")
-            if isinstance(element_ids, list):
-                self._animation_pipeline.register_element_ids(element_ids, shape_id)
+            self._register_animation_ids(metadata, shape_id)
 
             xml = shapes_runtime.render_circle(
                 element,
@@ -166,9 +164,7 @@ class DrawingMLShapeRenderer:
                 return rasterized
 
             # Register for animations
-            element_ids = metadata.get("element_ids")
-            if isinstance(element_ids, list):
-                self._animation_pipeline.register_element_ids(element_ids, shape_id)
+            self._register_animation_ids(metadata, shape_id)
 
             xml = shapes_runtime.render_ellipse(
                 element,
@@ -181,9 +177,7 @@ class DrawingMLShapeRenderer:
             return xml, shape_id + 1
         if isinstance(element, Line):
             # Register for animations
-            element_ids = metadata.get("element_ids")
-            if isinstance(element_ids, list):
-                self._animation_pipeline.register_element_ids(element_ids, shape_id)
+            self._register_animation_ids(metadata, shape_id)
 
             xml = shapes_runtime.render_line(
                 element,
@@ -198,9 +192,7 @@ class DrawingMLShapeRenderer:
             return xml, shape_id + 1
         if isinstance(element, Polyline):
             # Register for animations
-            element_ids = metadata.get("element_ids")
-            if isinstance(element_ids, list):
-                self._animation_pipeline.register_element_ids(element_ids, shape_id)
+            self._register_animation_ids(metadata, shape_id)
 
             xml = shapes_runtime.render_polyline(
                 element,
@@ -215,9 +207,7 @@ class DrawingMLShapeRenderer:
             return xml, shape_id + 1
         if isinstance(element, Polygon):
             # Register for animations
-            element_ids = metadata.get("element_ids")
-            if isinstance(element_ids, list):
-                self._animation_pipeline.register_element_ids(element_ids, shape_id)
+            self._register_animation_ids(metadata, shape_id)
 
             xml = shapes_runtime.render_polygon(
                 element,
@@ -241,9 +231,7 @@ class DrawingMLShapeRenderer:
                 return rasterized
 
             # Register for animations
-            element_ids = metadata.get("element_ids")
-            if isinstance(element_ids, list):
-                self._animation_pipeline.register_element_ids(element_ids, shape_id)
+            self._register_animation_ids(metadata, shape_id)
 
             xml = shapes_runtime.render_path(
                 element,
@@ -385,7 +373,10 @@ class DrawingMLShapeRenderer:
             data_hex = asset.get("data_hex")
             raw_data = asset.get("data")
             if isinstance(data_hex, str) and data_hex:
-                image_bytes = bytes.fromhex(data_hex)
+                try:
+                    image_bytes = bytes.fromhex(data_hex)
+                except ValueError:
+                    continue
             elif isinstance(raw_data, (bytes, bytearray)):
                 image_bytes = bytes(raw_data)
             else:
@@ -475,6 +466,7 @@ class DrawingMLShapeRenderer:
             except Exception:  # pragma: no cover - defensive
                 return element
             return element
+
     def _maybe_rasterize(
         self,
         element,
@@ -485,11 +477,8 @@ class DrawingMLShapeRenderer:
     ) -> tuple[str, int] | None:
         gradient_raster = self._needs_gradient_raster(element)
         if self._rasterizer is None:
-            if gradient_raster:
-                self._apply_gradient_fallback(element, metadata)
             return None
-        policy = metadata.setdefault("policy", {}) if isinstance(metadata, dict) else {}
-        geometry_policy = policy.setdefault("geometry", {})
+        geometry_policy = self._geometry_policy(metadata)
         fallback = geometry_policy.get("suggest_fallback")
         if not gradient_raster and fallback not in {FALLBACK_BITMAP, FALLBACK_RASTERIZE}:
             return None
@@ -601,20 +590,54 @@ class DrawingMLShapeRenderer:
                 return True
         return False
 
-    def _apply_gradient_fallback(self, element, metadata: dict[str, object]) -> None:
-        policy = metadata.setdefault("policy", {}) if isinstance(metadata, dict) else {}
-        geometry_policy = policy.setdefault("geometry", {})
+    def _apply_gradient_fallback(self, element, metadata: dict[str, object]):
+        geometry_policy = self._geometry_policy(metadata)
         geometry_policy.setdefault("gradient_fallback", "solid")
 
+        updates = {}
         fill = getattr(element, "fill", None)
         if isinstance(fill, RadialGradientPaint) and fill.policy_decision == "rasterize_nonuniform":
-            element.fill = average_gradient_paint(fill)
+            updates["fill"] = average_gradient_paint(fill)
 
         stroke = getattr(element, "stroke", None)
         if stroke is not None:
             paint = getattr(stroke, "paint", None)
             if isinstance(paint, RadialGradientPaint) and paint.policy_decision == "rasterize_nonuniform":
-                element.stroke = replace(stroke, paint=average_gradient_paint(paint))
+                updates["stroke"] = replace(stroke, paint=average_gradient_paint(paint))
+
+        if not updates:
+            return element
+        try:
+            return replace(element, **updates)
+        except TypeError:
+            for key, value in updates.items():
+                try:
+                    setattr(element, key, value)
+                except Exception:  # pragma: no cover - defensive
+                    return element
+            return element
+
+    def _geometry_policy(self, metadata: dict[str, object]) -> dict[str, object]:
+        if not isinstance(metadata, dict):
+            return {}
+        policy = metadata.get("policy")
+        if not isinstance(policy, dict):
+            policy = {}
+            metadata["policy"] = policy
+        geometry_policy = policy.get("geometry")
+        if not isinstance(geometry_policy, dict):
+            geometry_policy = {}
+            policy["geometry"] = geometry_policy
+        return geometry_policy
+
+    def _register_animation_ids(
+        self,
+        metadata: dict[str, object],
+        shape_id: int,
+    ) -> None:
+        element_ids = metadata.get("element_ids")
+        if isinstance(element_ids, list):
+            self._animation_pipeline.register_element_ids(element_ids, shape_id)
 
     def _maybe_clip_overlay(self, element, overlay_shape_id: int) -> str | None:
         """Generate a white EMF overlay with an even-odd cutout for clip paths."""

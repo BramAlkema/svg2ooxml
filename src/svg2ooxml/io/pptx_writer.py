@@ -94,7 +94,14 @@ class _PackageWriterBase:
         media_dir.mkdir(parents=True, exist_ok=True)
         unique_media: dict[str, PackagedMedia] = {}
         for part in media_parts:
-            unique_media.setdefault(part.filename, part)
+            existing = unique_media.get(part.filename)
+            if existing is None:
+                unique_media[part.filename] = part
+                continue
+            if existing.data != part.data or existing.content_type != part.content_type:
+                raise ValueError(
+                    f"Conflicting media payloads target ppt/media/{part.filename!r}."
+                )
         for part in unique_media.values():
             target = resolve_package_child(
                 package_root,
@@ -115,19 +122,24 @@ class _PackageWriterBase:
     def _write_mask_parts(self, package_root: Path, mask_parts: Sequence[MaskAsset]) -> None:
         if not mask_parts:
             return
-        written: set[Path] = set()
+        written: dict[Path, MaskAsset] = {}
         for part in mask_parts:
             path = resolve_package_child(
                 package_root,
                 part.package_path,
                 required_prefix=Path("ppt") / "masks",
             )
-            if path in written:
+            existing = written.get(path)
+            if existing is not None:
+                if existing.data != part.data or existing.content_type != part.content_type:
+                    raise ValueError(
+                        f"Conflicting mask payloads target {part.part_name!r}."
+                    )
                 continue
             path.parent.mkdir(parents=True, exist_ok=True)
             with path.open("wb") as handle:
                 handle.write(part.data)
-            written.add(path)
+            written[path] = part
             self._trace_packaging(
                 "mask_part_written",
                 metadata={"path": str(part.package_path)},
@@ -148,11 +160,11 @@ class _PackageWriterBase:
         existing_ids = {rel.get("Id") for rel in rels_root.findall(f"{{{REL_NS}}}Relationship")}
 
         for part in media_parts:
-            if (
-                not is_safe_relationship_id(part.relationship_id)
-                or part.relationship_id in existing_ids
-            ):
-                continue
+            self._validate_asset_relationship_id(
+                part.relationship_id,
+                existing_ids,
+                kind="media",
+            )
             ET.SubElement(
                 rels_root,
                 f"{{{REL_NS}}}Relationship",
@@ -165,11 +177,11 @@ class _PackageWriterBase:
             existing_ids.add(part.relationship_id)
 
         for mask in mask_parts:
-            if (
-                not is_safe_relationship_id(mask.relationship_id)
-                or mask.relationship_id in existing_ids
-            ):
-                continue
+            self._validate_asset_relationship_id(
+                mask.relationship_id,
+                existing_ids,
+                kind="mask",
+            )
             ET.SubElement(
                 rels_root,
                 f"{{{REL_NS}}}Relationship",
@@ -193,6 +205,18 @@ class _PackageWriterBase:
             existing_ids.add(attributes["Id"])
 
         ET.ElementTree(rels_root).write(rels_path, encoding="utf-8", xml_declaration=True)
+
+    @staticmethod
+    def _validate_asset_relationship_id(
+        relationship_id: str,
+        existing_ids: set[str | None],
+        *,
+        kind: str,
+    ) -> None:
+        if not is_safe_relationship_id(relationship_id):
+            raise ValueError(f"Unsafe {kind} relationship ID {relationship_id!r}.")
+        if relationship_id in existing_ids:
+            raise ValueError(f"Duplicate {kind} relationship ID {relationship_id!r}.")
 
     def _write_font_parts(
         self,
@@ -471,7 +495,6 @@ class StreamingPackageWriter(_PackageWriterBase):
                 )
 
         self._font_assets.extend(assembly.font_assets)
-        self._packaged_fonts = self._write_font_parts(self._temp_path, self._font_assets)
 
         self._slide_entries.append(
             SlideEntry(
@@ -499,6 +522,10 @@ class StreamingPackageWriter(_PackageWriterBase):
         try:
             presentation_slide_size = self._select_slide_size(
                 self._slide_entries, slide_size_mode=None
+            )
+            self._packaged_fonts = self._write_font_parts(
+                self._temp_path,
+                self._font_assets,
             )
 
             self._update_presentation_parts(

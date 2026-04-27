@@ -8,6 +8,50 @@ from typing import Any
 from svg2ooxml.services.filter_types import FilterEffectResult
 
 
+def _asset_key(asset: dict[str, Any]) -> tuple[object, ...] | None:
+    asset_type = asset.get("type")
+    relationship_id = asset.get("relationship_id")
+    if isinstance(relationship_id, str) and relationship_id:
+        return (asset_type, "relationship_id", relationship_id)
+    data_hex = asset.get("data_hex")
+    if isinstance(data_hex, str) and data_hex:
+        return (asset_type, "data_hex", data_hex)
+    data = asset.get("data")
+    if isinstance(data, (bytes, bytearray)):
+        return (asset_type, "data", bytes(data))
+    return None
+
+
+def _asset_dicts(
+    values: object,
+    *,
+    asset_type: str | None = None,
+) -> list[dict[str, Any]]:
+    if not isinstance(values, list):
+        return []
+    assets: list[dict[str, Any]] = []
+    for value in values:
+        if not isinstance(value, dict):
+            continue
+        if asset_type is not None and value.get("type") != asset_type:
+            continue
+        assets.append(dict(value))
+    return assets
+
+
+def _dedupe_assets(values: object, *, asset_type: str | None = None) -> list[dict[str, Any]]:
+    assets: list[dict[str, Any]] = []
+    seen: set[tuple[object, ...]] = set()
+    for asset in _asset_dicts(values, asset_type=asset_type):
+        key = _asset_key(asset)
+        if key is not None:
+            if key in seen:
+                continue
+            seen.add(key)
+        assets.append(asset)
+    return assets
+
+
 def attach_emf_metadata(
     existing_results: list[FilterEffectResult],
     emf_results: list[FilterEffectResult],
@@ -27,7 +71,7 @@ def attach_emf_metadata(
     base = list(existing_results)
     last_idx, last_result = vector_indexed[-1]
     metadata = dict(last_result.metadata or {})
-    original_assets = list(metadata.get("fallback_assets") or [])
+    original_assets = _dedupe_assets(metadata.get("fallback_assets"))
     assets = list(original_assets)
     descriptor_result = isinstance(last_result.metadata, dict) and last_result.metadata.get("strategy_source") == "resvg_descriptor"
     best_assets: list[dict[str, Any]] | None = None
@@ -36,11 +80,7 @@ def attach_emf_metadata(
         emf_assets = emf_meta.get("fallback_assets")
         if not isinstance(emf_assets, list):
             continue
-        candidates = [
-            asset
-            for asset in emf_assets
-            if isinstance(asset, dict) and asset.get("type") == "emf"
-        ]
+        candidates = _dedupe_assets(emf_assets, asset_type="emf")
         if not candidates:
             continue
         preferred = [asset for asset in candidates if not asset.get("placeholder")]
@@ -76,6 +116,7 @@ def attach_emf_metadata(
             assets = best_assets or original_assets
     else:
         assets = best_assets or original_assets
+    assets = _dedupe_assets(assets)
     metadata["fallback_assets"] = assets
     if assets:
         sample = next((asset for asset in reversed(assets) if isinstance(asset, dict)), None)
@@ -109,7 +150,7 @@ def attach_raster_metadata(
         return
     target = existing_results[-1]
     metadata = dict(target.metadata or {})
-    assets = metadata.setdefault("fallback_assets", [])
+    assets = _dedupe_assets(metadata.get("fallback_assets"))
     had_emf = any(isinstance(asset, dict) and asset.get("type") == "emf" for asset in assets)
     for raster in raster_results:
         raster_meta = raster.metadata if isinstance(raster.metadata, dict) else {}
@@ -118,14 +159,16 @@ def attach_raster_metadata(
         for key in ("width_px", "height_px", "filter_units", "primitive_units", "descriptor"):
             if key in raster_meta and key not in metadata:
                 metadata[key] = raster_meta[key]
-        for asset in raster_meta.get("fallback_assets", []) or []:
-            assets.append(asset)
+        assets.extend(_asset_dicts(raster_meta.get("fallback_assets")))
+        assets = _dedupe_assets(assets)
     if (
         metadata.get("strategy_source") == "resvg_descriptor"
         and isinstance(assets, list)
         and not had_emf
     ):
         assets.sort(key=lambda asset: 0 if isinstance(asset, dict) and asset.get("type") == "raster" else 1)
+    if assets:
+        metadata["fallback_assets"] = assets
     existing_results[-1] = FilterEffectResult(
         effect=target.effect,
         strategy=target.strategy,

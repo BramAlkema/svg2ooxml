@@ -17,6 +17,12 @@ from svg2ooxml.drawingml.animation.constants import (
 )
 from svg2ooxml.drawingml.animation.handlers.base import AnimationHandler
 from svg2ooxml.drawingml.animation.oracle import default_oracle
+from svg2ooxml.drawingml.animation.timing_conditions import append_delay_condition
+from svg2ooxml.drawingml.animation.timing_values import (
+    append_repeat_count,
+    format_delay_ms,
+    format_duration_ms,
+)
 from svg2ooxml.drawingml.xml_builder import NS_P, a_sub, p_elem, p_sub
 from svg2ooxml.ir.animation import AnimationDefinition, AnimationType, CalcMode
 
@@ -269,7 +275,7 @@ class ColorAnimationHandler(AnimationHandler):
         )
         outer_ctn = par.find(f"{{{NS_P}}}cTn")
         if outer_ctn is not None:
-            outer_ctn.set("dur", str(animation.duration_ms))
+            outer_ctn.set("dur", format_duration_ms(animation.duration_ms))
         return par
 
     def _build_anim_clr_element(
@@ -417,14 +423,14 @@ class ColorAnimationHandler(AnimationHandler):
             outer_par,
             "cTn",
             id=str(par_id),
-            dur=str(animation.duration_ms),
+            dur=format_duration_ms(animation.duration_ms),
             fill="hold",
             nodeType="withEffect",
             grpId=str(par_id),
             presetID="7",
             presetClass="emph",
         )
-        self._apply_repeat_count(outer_ctn, animation.repeat_count)
+        append_repeat_count(outer_ctn, animation.repeat_count)
 
         st_cond_lst = p_sub(outer_ctn, "stCondLst")
         if animation.begin_triggers:
@@ -435,7 +441,7 @@ class ColorAnimationHandler(AnimationHandler):
                 default_target_shape=animation.element_id,
             )
         else:
-            p_sub(st_cond_lst, "cond", delay=str(animation.begin_ms))
+            p_sub(st_cond_lst, "cond", delay=format_delay_ms(animation.begin_ms))
 
         outer_children = p_sub(outer_ctn, "childTnLst")
         return outer_par, outer_children
@@ -454,11 +460,11 @@ class ColorAnimationHandler(AnimationHandler):
             seg_par,
             "cTn",
             id=str(segment_id),
-            dur=str(max(1, duration_ms)),
+            dur=format_duration_ms(duration_ms, minimum=1),
             fill="hold",
         )
         seg_st = p_sub(seg_ctn, "stCondLst")
-        p_sub(seg_st, "cond", delay=str(max(0, delay_ms)))
+        append_delay_condition(seg_st, delay_ms)
         seg_children = p_sub(seg_ctn, "childTnLst")
         seg_children.append(child_element)
         outer_children.append(seg_par)
@@ -486,26 +492,6 @@ class ColorAnimationHandler(AnimationHandler):
         raw_durations[-1] += drift
         raw_durations[-1] = max(1, raw_durations[-1])
         return raw_durations
-
-    @staticmethod
-    def _apply_repeat_count(
-        ctn: etree._Element,
-        repeat_count: int | str | None,
-    ) -> None:
-        if repeat_count == "indefinite":
-            ctn.set("repeatCount", "indefinite")
-            return
-
-        if repeat_count is None:
-            return
-
-        try:
-            count = int(repeat_count)
-        except (TypeError, ValueError):
-            return
-
-        if count > 1:
-            ctn.set("repeatCount", str(count * 1000))
 
     def _map_color_attribute(self, attribute: str) -> str:
         """Map SVG color attribute to PowerPoint attribute name."""

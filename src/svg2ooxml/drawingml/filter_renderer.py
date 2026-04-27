@@ -7,6 +7,8 @@ import math
 import re
 from collections.abc import Iterable
 
+from lxml import etree
+
 from svg2ooxml.color.utils import color_to_hex
 from svg2ooxml.common.boundaries import is_safe_relationship_id
 from svg2ooxml.common.conversions.angles import radians_to_ppt
@@ -74,7 +76,7 @@ class FilterRenderer:
                 continue
 
             drawingml = result.drawingml or ""
-            metadata = dict(result.metadata or {})
+            metadata = self._metadata_copy(result.metadata)
 
             hook_name, attrs, remainder = self._extract_hook(drawingml)
             if hook_name:
@@ -204,9 +206,9 @@ class FilterRenderer:
 
     def _build_comment(self, name: str, attrs: dict[str, str]) -> str:
         if not attrs:
-            return f"<!-- svg2ooxml:{name} -->"
+            return self._comment_xml(f"svg2ooxml:{name}")
         pairs = " ".join(f'{key}="{value}"' for key, value in attrs.items())
-        return f"<!-- svg2ooxml:{name} {pairs} -->"
+        return self._comment_xml(f"svg2ooxml:{name} {pairs}")
 
     def _strategy_from_policy(self, result: FilterResult, policy: dict[str, object] | None) -> str:
         if policy is None:
@@ -230,18 +232,22 @@ class FilterRenderer:
             asset = None
 
         if not asset:
-            assets = metadata.setdefault("fallback_assets", [])
+            assets = self._prune_unpackageable_assets(metadata, "emf")
             placeholder_id = self._allocate_reuse_id("rIdEmfReuse")
             placeholder_asset = {
                 "type": "emf",
                 "relationship_id": placeholder_id,
                 "placeholder": True,
             }
-            if isinstance(assets, list):
-                assets.append(placeholder_asset)
-            from lxml import etree
+            assets.append(placeholder_asset)
             effectLst = a_elem("effectLst")
-            effectLst.append(etree.Comment(f' svg2ooxml:emf placeholder="" relationship="{placeholder_id}" '))
+            effectLst.append(
+                etree.Comment(
+                    self._safe_comment_text(
+                        f'svg2ooxml:emf placeholder="" relationship="{placeholder_id}"'
+                    )
+                )
+            )
             blipFill = a_sub(effectLst, "blipFill", rotWithShape="0")
             blip = a_sub(blipFill, "blip")
             blip.set("{http://schemas.openxmlformats.org/officeDocument/2006/relationships}embed", placeholder_id)
@@ -258,26 +264,19 @@ class FilterRenderer:
             asset["relationship_id"] = rel_id
         assert isinstance(rel_id, str)
 
-        width_emu = asset.get("width_emu")
-        height_emu = asset.get("height_emu")
-        data_hex = asset.get("data_hex")
-        if not data_hex:
-            raw = asset.get("data")
-            if isinstance(raw, (bytes, bytearray)):
-                data_hex = bytes(raw).hex()
-                asset["data_hex"] = data_hex
-
-        from lxml import etree
+        width_emu = self._coerce_int(asset.get("width_emu"))
+        height_emu = self._coerce_int(asset.get("height_emu"))
+        data_hex = self._asset_data_hex(asset)
 
         comment_parts = [f'relationship="{rel_id}"']
         if width_emu is not None:
-            comment_parts.append(f'width="{int(width_emu)}"')
+            comment_parts.append(f'width="{width_emu}"')
         if height_emu is not None:
-            comment_parts.append(f'height="{int(height_emu)}"')
+            comment_parts.append(f'height="{height_emu}"')
         comment = " ".join(comment_parts)
 
         effectLst = a_elem("effectLst")
-        effectLst.append(etree.Comment(f' svg2ooxml:emf {comment} '))
+        effectLst.append(etree.Comment(self._safe_comment_text(f"svg2ooxml:emf {comment}")))
 
         # Build blipFill with r:embed attribute
         blipFill = a_sub(effectLst, "blipFill", rotWithShape="0")
@@ -299,13 +298,15 @@ class FilterRenderer:
         *,
         policy: dict[str, object] | None,
     ) -> str:
-        from lxml import etree
-
         assets_list = metadata.get("fallback_assets")
         existing_asset: dict[str, object] | None = None
         if isinstance(assets_list, list):
             for asset in assets_list:
-                if isinstance(asset, dict) and asset.get("type") == "raster":
+                if (
+                    isinstance(asset, dict)
+                    and asset.get("type") == "raster"
+                    and self._asset_data_hex(asset) is not None
+                ):
                     existing_asset = asset
                     break
 
@@ -318,14 +319,9 @@ class FilterRenderer:
                 rel_id = self._allocate_reuse_id("rIdRasterReuse")
                 existing_asset["relationship_id"] = rel_id
             assert isinstance(rel_id, str)
-            width_px = existing_asset.get("width_px")
-            height_px = existing_asset.get("height_px")
-            data_hex = existing_asset.get("data_hex")
-            if not data_hex:
-                raw = existing_asset.get("data")
-                if isinstance(raw, (bytes, bytearray)):
-                    data_hex = bytes(raw).hex()
-                    existing_asset["data_hex"] = data_hex
+            width_px = self._coerce_int(existing_asset.get("width_px"))
+            height_px = self._coerce_int(existing_asset.get("height_px"))
+            data_hex = self._asset_data_hex(existing_asset)
 
             # Build a:effectLst with lxml
             effectLst = a_elem("effectLst")
@@ -333,11 +329,11 @@ class FilterRenderer:
             # Build comment
             comment_parts = [f'relationship="{rel_id}"']
             if width_px is not None:
-                comment_parts.append(f'width="{int(width_px)}"')
+                comment_parts.append(f'width="{width_px}"')
             if height_px is not None:
-                comment_parts.append(f'height="{int(height_px)}"')
+                comment_parts.append(f'height="{height_px}"')
             comment = " ".join(comment_parts)
-            effectLst.append(etree.Comment(f' svg2ooxml:raster {comment} '))
+            effectLst.append(etree.Comment(self._safe_comment_text(f"svg2ooxml:raster {comment}")))
 
             # Build a:blipFill
             blipFill = a_sub(effectLst, "blipFill", rotWithShape="0")
@@ -358,18 +354,17 @@ class FilterRenderer:
                 placeholder_meta[key] = metadata[key]
 
         raster = self._raster_adapter.generate_placeholder(metadata=placeholder_meta)
-        assets = metadata.setdefault("fallback_assets", [])
-        if isinstance(assets, list):
-            assets.append(
-                {
-                    "type": "raster",
-                    "relationship_id": raster.relationship_id,
-                    "width_px": raster.width_px,
-                    "height_px": raster.height_px,
-                    "metadata": raster.metadata,
-                    "data_hex": raster.image_bytes.hex(),
-                }
-            )
+        assets = self._prune_unpackageable_assets(metadata, "raster")
+        assets.append(
+            {
+                "type": "raster",
+                "relationship_id": raster.relationship_id,
+                "width_px": raster.width_px,
+                "height_px": raster.height_px,
+                "metadata": raster.metadata,
+                "data_hex": raster.image_bytes.hex(),
+            }
+        )
         data_hex = raster.image_bytes.hex()
 
         # Build a:effectLst with lxml
@@ -377,7 +372,7 @@ class FilterRenderer:
 
         # Build comment
         comment_text = f' svg2ooxml:raster relationship="{raster.relationship_id}" size="{len(raster.image_bytes)}" '
-        effectLst.append(etree.Comment(comment_text))
+        effectLst.append(etree.Comment(self._safe_comment_text(comment_text)))
 
         # Build a:blipFill
         blipFill = a_sub(effectLst, "blipFill", rotWithShape="0")
@@ -416,9 +411,7 @@ class FilterRenderer:
             "metadata": emf.metadata,
             "data_hex": emf.emf_bytes.hex(),
         }
-        assets = metadata.setdefault("fallback_assets", [])
-        if isinstance(assets, list):
-            assets.append(asset)
+        self._prune_unpackageable_assets(metadata, "emf").append(asset)
         emf_meta = metadata.setdefault("emf_asset", {})
         if isinstance(emf_meta, dict):
             emf_meta.setdefault("width_emu", emf.width_emu)
@@ -430,9 +423,91 @@ class FilterRenderer:
         assets_list = metadata.get("fallback_assets")
         if isinstance(assets_list, list):
             for asset in assets_list:
-                if isinstance(asset, dict) and asset.get("type") == "emf":
+                if (
+                    isinstance(asset, dict)
+                    and asset.get("type") == "emf"
+                    and self._asset_data_hex(asset) is not None
+                ):
                     return asset
         return None
+
+    @staticmethod
+    def _metadata_copy(metadata: dict[str, object] | None) -> dict[str, object]:
+        copied = dict(metadata or {})
+        assets = copied.get("fallback_assets")
+        if isinstance(assets, list):
+            copied["fallback_assets"] = [
+                dict(asset) if isinstance(asset, dict) else asset for asset in assets
+            ]
+        return copied
+
+    @staticmethod
+    def _ensure_asset_list(metadata: dict[str, object]) -> list[dict[str, object]]:
+        assets = metadata.get("fallback_assets")
+        if not isinstance(assets, list):
+            assets = []
+            metadata["fallback_assets"] = assets
+        return assets
+
+    @classmethod
+    def _prune_unpackageable_assets(
+        cls,
+        metadata: dict[str, object],
+        asset_type: str,
+    ) -> list[dict[str, object]]:
+        pruned: list[dict[str, object]] = []
+        assets = metadata.get("fallback_assets")
+        if isinstance(assets, list):
+            for asset in assets:
+                if not isinstance(asset, dict):
+                    continue
+                copied = dict(asset)
+                if copied.get("type") == asset_type and cls._asset_data_hex(copied) is None:
+                    continue
+                pruned.append(copied)
+        metadata["fallback_assets"] = pruned
+        return pruned
+
+    @staticmethod
+    def _asset_data_hex(asset: dict[str, object]) -> str | None:
+        data_hex = asset.get("data_hex")
+        if isinstance(data_hex, str) and data_hex.strip():
+            token = data_hex.strip()
+            try:
+                bytes.fromhex(token)
+            except ValueError:
+                asset.pop("data_hex", None)
+            else:
+                asset["data_hex"] = token
+                return token
+
+        raw = asset.get("data")
+        if isinstance(raw, (bytes, bytearray)):
+            token = bytes(raw).hex()
+            asset["data_hex"] = token
+            return token
+        return None
+
+    @staticmethod
+    def _coerce_int(value: object) -> int | None:
+        try:
+            parsed = float(value)  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            return None
+        if not math.isfinite(parsed):
+            return None
+        return int(parsed)
+
+    @staticmethod
+    def _safe_comment_text(value: str) -> str:
+        text = value.replace("--", "- -")
+        if text.endswith("-"):
+            text += " "
+        return text
+
+    @classmethod
+    def _comment_xml(cls, value: str) -> str:
+        return f"<!-- {cls._safe_comment_text(value)} -->"
 
     def _filter_type(self, metadata: dict[str, object], result: FilterResult) -> str:
         if isinstance(metadata, dict):

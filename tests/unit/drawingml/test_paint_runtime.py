@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from svg2ooxml.common.geometry import Matrix2D
 from svg2ooxml.drawingml import paint_runtime
-from svg2ooxml.drawingml.paint_runtime import _pattern_to_fill_elem
+from svg2ooxml.drawingml.paint_runtime import _dash_elem, _pattern_to_fill_elem
 from svg2ooxml.drawingml.xml_builder import to_string
 from svg2ooxml.ir.paint import (
     GradientStop,
@@ -182,9 +183,6 @@ def test_dashed_stroke_complex_pattern() -> None:
 
 def test_dash_ppt_compat_uses_absolute_units() -> None:
     """ppt_compat mode uses absolute hundredths-of-pt (matching PowerPoint behavior)."""
-    from svg2ooxml.drawingml.paint_runtime import _dash_elem
-    from svg2ooxml.drawingml.xml_builder import to_string
-
     elem = _dash_elem([4.0, 2.0], stroke_width=1.0, ppt_compat=True)
     xml = to_string(elem)
 
@@ -194,13 +192,17 @@ def test_dash_ppt_compat_uses_absolute_units() -> None:
 
 def test_dash_ppt_compat_ignores_stroke_width() -> None:
     """ppt_compat values are absolute, not relative to stroke width."""
-    from svg2ooxml.drawingml.paint_runtime import _dash_elem
-    from svg2ooxml.drawingml.xml_builder import to_string
-
     # Same dash_array with different widths should produce same result in ppt_compat
     elem1 = _dash_elem([4.0, 2.0], stroke_width=1.0, ppt_compat=True)
     elem2 = _dash_elem([4.0, 2.0], stroke_width=3.0, ppt_compat=True)
     assert to_string(elem1) == to_string(elem2)
+
+
+def test_dash_elem_normalizes_negative_and_nonfinite_values() -> None:
+    elem = _dash_elem([-4.0, float("nan"), 2.0], stroke_width=1.0)
+    xml = to_string(elem)
+
+    assert '<a:ds d="400000" sp="200000"/>' in xml
 
 
 def test_gradient_repeat_expands_stops() -> None:
@@ -310,6 +312,24 @@ def test_pattern_tile_applies_simple_transform_to_tile_attrs() -> None:
     assert 'flip="y"' in xml
 
 
+def test_pattern_tile_accepts_matrix2d_transform_to_tile_attrs() -> None:
+    paint = PatternPaint(
+        pattern_id="pat_matrix2d_transform",
+        tile_image=b"fake png",
+        tile_relationship_id="rId14",
+        transform=Matrix2D.from_values(2.0, 0.0, 0.0, -0.5, 0.25, -0.10),
+    )
+    elem = _pattern_to_fill_elem(paint)
+    xml = to_string(elem)
+
+    assert "<a:tile" in xml
+    assert 'sx="200000"' in xml
+    assert 'sy="50000"' in xml
+    assert 'tx="25000"' in xml
+    assert 'ty="-10000"' in xml
+    assert 'flip="y"' in xml
+
+
 def test_pattern_tile_keeps_defaults_for_non_axis_aligned_transform() -> None:
     paint = PatternPaint(
         pattern_id="pat_transform_complex",
@@ -374,6 +394,20 @@ def test_pattern_without_tile_uses_patt_fill() -> None:
     assert "<a:pattFill" in xml
     assert 'prst="horz"' in xml
     assert "blipFill" not in xml
+
+
+def test_pattern_background_opacity_is_clamped_before_global_opacity() -> None:
+    paint = PatternPaint(
+        pattern_id="pat_opacity_clamp",
+        preset="pct20",
+        foreground="000000",
+        background="FFFFFF",
+        background_opacity=1.5,
+    )
+    elem = _pattern_to_fill_elem(paint, opacity=0.8)
+    xml = to_string(elem)
+
+    assert '<a:srgbClr val="FFFFFF"><a:alpha val="80000"/></a:srgbClr>' in xml
 
 
 def test_pattern_tile_in_paint_to_fill() -> None:

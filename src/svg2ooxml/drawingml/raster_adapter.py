@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+import zlib
 from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any
@@ -37,6 +39,9 @@ from svg2ooxml.drawingml.skia_bridge import (
     render_surface_from_descriptor,
 )
 
+_DEFAULT_PLACEHOLDER_SIZE = (64, 64)
+_MAX_RASTER_DIMENSION_PX = 4096
+
 
 @dataclass
 class RasterResult:
@@ -68,26 +73,28 @@ class RasterAdapter:
     ) -> RasterResult:
         """Render a PNG fallback for ``filter_id`` using skia when available."""
 
+        default_size = self._safe_raster_size(
+            default_size,
+            default=(192, 128),
+        )
         descriptor, bounds = self._descriptor_payload(context)
         if descriptor is None:
             descriptor = self._descriptor_from_filter_element(filter_element, filter_id)
-        primitive_tags = tuple(descriptor.get("primitive_tags", ())) if descriptor else ()
+        primitive_tags = (
+            tuple(descriptor.get("primitive_tags", ())) if descriptor else ()
+        )
         filter_units = (descriptor or {}).get("filter_units")
         primitive_units = (descriptor or {}).get("primitive_units")
         complexity = max(1, len(primitive_tags)) if primitive_tags else 1
 
         if skia is None or not NUMPY_AVAILABLE:
-            return self.generate_placeholder(
-                width_px=default_size[0],
-                height_px=default_size[1],
-                metadata={
-                    "filter_id": filter_id,
-                    "renderer": "placeholder",
-                    "primitives": primitive_tags,
-                    "filter_units": filter_units,
-                    "primitive_units": primitive_units,
-                    "complexity": complexity,
-                },
+            return self._generate_filter_placeholder(
+                filter_id=filter_id,
+                primitive_tags=primitive_tags,
+                filter_units=filter_units,
+                primitive_units=primitive_units,
+                complexity=complexity,
+                default_size=default_size,
             )
 
         resolved_bounds = self._resolved_filter_bounds(
@@ -96,7 +103,9 @@ class RasterAdapter:
             default_width=default_size[0],
             default_height=default_size[1],
         )
-        width_px, height_px = self._derive_dimensions(context, default_size, descriptor, resolved_bounds)
+        width_px, height_px = self._derive_dimensions(
+            context, default_size, descriptor, resolved_bounds
+        )
         passes = self._pass_count(descriptor, complexity)
         scale = self._scale_factor(descriptor, bounds, complexity)
 
@@ -116,7 +125,9 @@ class RasterAdapter:
             self._counter += 1
             relationship_id = f"rIdRaster{self._counter}"
             filter_tag = getattr(filter_element, "tag", "")
-            filter_name = filter_tag.split("}")[-1] if isinstance(filter_tag, str) else "filter"
+            filter_name = (
+                filter_tag.split("}")[-1] if isinstance(filter_tag, str) else "filter"
+            )
             metadata = {
                 "filter_id": filter_id,
                 "renderer": "resvg",
@@ -192,6 +203,11 @@ class RasterAdapter:
             viewport = planner.resvg_viewport(bounds)
         except Exception:
             return None
+        if self._safe_raster_size(
+            (viewport.width, viewport.height),
+            default=_DEFAULT_PLACEHOLDER_SIZE,
+        ) != (viewport.width, viewport.height):
+            return None
 
         source_surface = self.render_source_surface(
             width_px=viewport.width,
@@ -217,6 +233,10 @@ class RasterAdapter:
 
         if skia is None or not NUMPY_AVAILABLE:
             return None
+        width_px, height_px = self._safe_raster_size(
+            (width_px, height_px),
+            default=_DEFAULT_PLACEHOLDER_SIZE,
+        )
         source_descriptor = self._source_graphic_descriptor_from_context(context)
         descriptor, bounds = self._descriptor_payload(context)
         if isinstance(source_descriptor, dict):
@@ -256,18 +276,7 @@ class RasterAdapter:
         if svg_markup is None:
             return None
 
-        resources_dir = None
-        asset_root = None
-        if context and context.services:
-            image_service = getattr(context.services, "image_service", None)
-            if image_service:
-                from svg2ooxml.services.image_service import FileResolver
-
-                for resolver in image_service.resolvers():
-                    if isinstance(resolver, FileResolver):
-                        resources_dir = resolver.base_dir
-                        asset_root = resolver.asset_root
-                        break
+        resources_dir, asset_root = self._resource_roots_from_context(context)
 
         try:
             options = build_default_options(
@@ -289,18 +298,25 @@ class RasterAdapter:
         height_px: int = 64,
         metadata: dict[str, Any] | None = None,
     ) -> RasterResult:
+        width_px, height_px = self._safe_raster_size(
+            (width_px, height_px),
+            default=_DEFAULT_PLACEHOLDER_SIZE,
+        )
         self._counter += 1
         gray = 64 + (self._counter % 128)
         payload = _solid_gray_png(width_px, height_px, gray)
-        meta: dict[str, Any] = {
-            "placeholder": True,
-            "width_px": width_px,
-            "height_px": height_px,
-            "render_passes": 0,
-            "scale_factor": 1.0,
-        }
+        meta: dict[str, Any] = {}
         if metadata:
             meta.update(metadata)
+        meta.update(
+            {
+                "placeholder": True,
+                "width_px": width_px,
+                "height_px": height_px,
+                "render_passes": 0,
+                "scale_factor": 1.0,
+            }
+        )
         return RasterResult(
             image_bytes=payload,
             relationship_id=f"rIdRaster{self._counter}",
@@ -319,6 +335,10 @@ class RasterAdapter:
     ):
         if skia is None or not NUMPY_AVAILABLE:
             return None
+        width_px, height_px = self._safe_raster_size(
+            (width_px, height_px),
+            default=_DEFAULT_PLACEHOLDER_SIZE,
+        )
         try:
             from svg2ooxml.core.resvg.normalizer import normalize_svg_string
             from svg2ooxml.core.resvg.parser.options import build_default_options
@@ -335,7 +355,7 @@ class RasterAdapter:
         if not isinstance(filter_clone.tag, str) or "}" not in filter_clone.tag:
             filter_clone.tag = f"{{{svg_ns}}}filter"
 
-        preview_filter_id = filter_clone.get("id") or f"svg2ooxml_filter_{self._counter + 1}"
+        preview_filter_id = f"svg2ooxml_filter_{self._counter + 1}"
         filter_clone.set("id", preview_filter_id)
 
         svg_markup = self._build_preview_svg_markup(
@@ -346,17 +366,7 @@ class RasterAdapter:
             context=context,
         )
 
-        resources_dir = None
-        asset_root = None
-        if context and context.services:
-            image_service = getattr(context.services, "image_service", None)
-            if image_service:
-                from svg2ooxml.services.image_service import FileResolver
-                for resolver in image_service.resolvers():
-                    if isinstance(resolver, FileResolver):
-                        resources_dir = resolver.base_dir
-                        asset_root = resolver.asset_root
-                        break
+        resources_dir, asset_root = self._resource_roots_from_context(context)
 
         try:
             options = build_default_options(
@@ -377,6 +387,10 @@ class RasterAdapter:
         height_px: int,
         context,
     ) -> str:
+        width_px, height_px = self._safe_raster_size(
+            (width_px, height_px),
+            default=_DEFAULT_PLACEHOLDER_SIZE,
+        )
         descriptor, bounds = self._descriptor_payload(context)
         resolved_bounds = self._resolved_filter_bounds(
             descriptor=descriptor,
@@ -403,6 +417,10 @@ class RasterAdapter:
         width_px: int,
         height_px: int,
     ) -> str | None:
+        width_px, height_px = self._safe_raster_size(
+            (width_px, height_px),
+            default=_DEFAULT_PLACEHOLDER_SIZE,
+        )
         resolved_bounds = self._resolved_filter_bounds(
             descriptor=descriptor,
             bounds=bounds,
@@ -507,40 +525,43 @@ class RasterAdapter:
         bounds: dict[str, float | Any] | None,
         default_size: tuple[int, int],
     ) -> RasterResult:
+        default_size = self._safe_raster_size(
+            default_size,
+            default=_DEFAULT_PLACEHOLDER_SIZE,
+        )
+        width_px, height_px = self._safe_raster_size(
+            (width_px, height_px),
+            default=default_size,
+        )
         if skia is None:
-            return self.generate_placeholder(
-                width_px=default_size[0],
-                height_px=default_size[1],
-                metadata={
-                    "filter_id": filter_id,
-                    "renderer": "placeholder",
-                    "primitives": primitive_tags,
-                    "filter_units": filter_units,
-                    "primitive_units": primitive_units,
-                    "complexity": complexity,
-                },
+            return self._generate_filter_placeholder(
+                filter_id=filter_id,
+                primitive_tags=primitive_tags,
+                filter_units=filter_units,
+                primitive_units=primitive_units,
+                complexity=complexity,
+                default_size=default_size,
             )
 
         try:
             surface = skia.Surface(int(max(1, width_px)), int(max(1, height_px)))
         except Exception:  # pragma: no cover - defensive
-            return self.generate_placeholder(
-                width_px=default_size[0],
-                height_px=default_size[1],
-                metadata={
-                    "filter_id": filter_id,
-                    "renderer": "placeholder",
-                    "primitives": primitive_tags,
-                    "filter_units": filter_units,
-                    "primitive_units": primitive_units,
-                    "complexity": complexity,
-                },
+            return self._generate_filter_placeholder(
+                filter_id=filter_id,
+                primitive_tags=primitive_tags,
+                filter_units=filter_units,
+                primitive_units=primitive_units,
+                complexity=complexity,
+                default_size=default_size,
             )
 
         canvas = surface.getCanvas()
         canvas.clear(skia.Color4f(0.0, 0.0, 0.0, 0.0))
 
-        palette = palette_for_primitives(primitive_tags, seed=hash(filter_id))
+        palette = palette_for_primitives(
+            primitive_tags,
+            seed=self._stable_seed(filter_id),
+        )
         render_gradient_passes(
             canvas,
             width_px,
@@ -556,37 +577,31 @@ class RasterAdapter:
             draw_bounds(canvas, bounds, width_px, height_px, palette)
 
         filter_tag = getattr(filter_element, "tag", "")
-        filter_name = filter_tag.split("}")[-1] if isinstance(filter_tag, str) else "filter"
+        filter_name = (
+            filter_tag.split("}")[-1] if isinstance(filter_tag, str) else "filter"
+        )
         render_caption(canvas, width_px, height_px, filter_name, primitive_tags, passes)
 
         image = surface.makeImageSnapshot()
         if image is None:
-            return self.generate_placeholder(
-                width_px=default_size[0],
-                height_px=default_size[1],
-                metadata={
-                    "filter_id": filter_id,
-                    "renderer": "placeholder",
-                    "primitives": primitive_tags,
-                    "filter_units": filter_units,
-                    "primitive_units": primitive_units,
-                    "complexity": complexity,
-                },
+            return self._generate_filter_placeholder(
+                filter_id=filter_id,
+                primitive_tags=primitive_tags,
+                filter_units=filter_units,
+                primitive_units=primitive_units,
+                complexity=complexity,
+                default_size=default_size,
             )
 
         encoded = image.encodeToData()
         if encoded is None:
-            return self.generate_placeholder(
-                width_px=default_size[0],
-                height_px=default_size[1],
-                metadata={
-                    "filter_id": filter_id,
-                    "renderer": "placeholder",
-                    "primitives": primitive_tags,
-                    "filter_units": filter_units,
-                    "primitive_units": primitive_units,
-                    "complexity": complexity,
-                },
+            return self._generate_filter_placeholder(
+                filter_id=filter_id,
+                primitive_tags=primitive_tags,
+                filter_units=filter_units,
+                primitive_units=primitive_units,
+                complexity=complexity,
+                default_size=default_size,
             )
 
         self._counter += 1
@@ -627,7 +642,14 @@ class RasterAdapter:
         descriptor: dict[str, Any] | None,
         bounds: dict[str, float | Any] | None,
     ) -> tuple[int, int]:
-        return derive_dimensions(context, defaults, descriptor, bounds)
+        safe_defaults = self._safe_raster_size(
+            defaults,
+            default=(192, 128),
+        )
+        return self._safe_raster_size(
+            derive_dimensions(context, safe_defaults, descriptor, bounds),
+            default=safe_defaults,
+        )
 
     def _resolved_filter_bounds(
         self,
@@ -684,6 +706,109 @@ class RasterAdapter:
         complexity: int,
     ) -> float:
         return scale_factor(descriptor, bounds, complexity)
+
+    @staticmethod
+    def _coerce_raster_dimension(
+        value: object,
+        *,
+        default: int,
+        maximum: int = _MAX_RASTER_DIMENSION_PX,
+    ) -> int:
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            return default
+        if not math.isfinite(number) or number <= 0:
+            return default
+        return max(1, min(maximum, int(round(number))))
+
+    @classmethod
+    def _safe_raster_size(
+        cls,
+        size: object,
+        *,
+        default: tuple[int, int],
+        maximum: int = _MAX_RASTER_DIMENSION_PX,
+    ) -> tuple[int, int]:
+        if isinstance(size, (list, tuple)) and len(size) >= 2:
+            raw_width, raw_height = size[0], size[1]
+        else:
+            raw_width, raw_height = default
+        return (
+            cls._coerce_raster_dimension(
+                raw_width,
+                default=default[0],
+                maximum=maximum,
+            ),
+            cls._coerce_raster_dimension(
+                raw_height,
+                default=default[1],
+                maximum=maximum,
+            ),
+        )
+
+    @staticmethod
+    def _stable_seed(filter_id: str) -> int:
+        return zlib.crc32(str(filter_id).encode("utf-8")) & 0xFFFFFFFF
+
+    @staticmethod
+    def _filter_placeholder_metadata(
+        *,
+        filter_id: str,
+        primitive_tags: tuple[str, ...],
+        filter_units,
+        primitive_units,
+        complexity: int,
+    ) -> dict[str, Any]:
+        return {
+            "filter_id": filter_id,
+            "renderer": "placeholder",
+            "primitives": primitive_tags,
+            "filter_units": filter_units,
+            "primitive_units": primitive_units,
+            "complexity": complexity,
+        }
+
+    def _generate_filter_placeholder(
+        self,
+        *,
+        filter_id: str,
+        primitive_tags: tuple[str, ...],
+        filter_units,
+        primitive_units,
+        complexity: int,
+        default_size: tuple[int, int],
+    ) -> RasterResult:
+        width_px, height_px = self._safe_raster_size(
+            default_size,
+            default=_DEFAULT_PLACEHOLDER_SIZE,
+        )
+        return self.generate_placeholder(
+            width_px=width_px,
+            height_px=height_px,
+            metadata=self._filter_placeholder_metadata(
+                filter_id=filter_id,
+                primitive_tags=primitive_tags,
+                filter_units=filter_units,
+                primitive_units=primitive_units,
+                complexity=complexity,
+            ),
+        )
+
+    @staticmethod
+    def _resource_roots_from_context(context) -> tuple[Any | None, Any | None]:
+        services = getattr(context, "services", None)
+        image_service = getattr(services, "image_service", None)
+        resolvers = getattr(image_service, "resolvers", None)
+        if not callable(resolvers):
+            return None, None
+
+        from svg2ooxml.services.image_service import FileResolver
+
+        for resolver in resolvers():
+            if isinstance(resolver, FileResolver):
+                return resolver.base_dir, resolver.asset_root
+        return None, None
 
 
 __all__ = ["RasterAdapter", "RasterResult"]

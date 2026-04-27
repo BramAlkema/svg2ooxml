@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Iterable, Mapping
+from collections.abc import Mapping
 from dataclasses import replace
 from typing import Any
 
@@ -14,28 +14,18 @@ from svg2ooxml.drawingml.filter_renderer import (
     FilterRenderer as DrawingMLFilterRenderer,
 )
 from svg2ooxml.drawingml.raster_adapter import RasterAdapter
+from svg2ooxml.filters import planner_common as _common
 from svg2ooxml.filters.base import FilterContext, FilterResult
+from svg2ooxml.filters.palette import (
+    attach_emf_metadata as _attach_emf_metadata,
+)
+from svg2ooxml.filters.palette import (
+    attach_raster_metadata as _attach_raster_metadata,
+)
 from svg2ooxml.filters.registry import FilterRegistry
 from svg2ooxml.filters.utils import parse_float_list
 from svg2ooxml.ir.effects import CustomEffect
 from svg2ooxml.services.filter_types import FilterEffectResult
-
-_VECTOR_HINT_TAGS = {
-    "fecomponenttransfer",
-    "fedisplacementmap",
-    "feturbulence",
-    "feconvolvematrix",
-    "fecolormatrix",
-    "fecomposite",
-    "feblend",
-    "femerge",
-    "fetile",
-    "fediffuselighting",
-    "fespecularlighting",
-}
-_RASTER_HINT_TAGS = {
-    "feimage",
-}
 
 
 class LightweightFilterPlanner:
@@ -65,26 +55,47 @@ class LightweightFilterPlanner:
                 payload = dict(candidate)
             bbox_candidate = options.get("ir_bbox")
             if isinstance(bbox_candidate, dict):
-                bounds = {
-                    key: bbox_candidate[key]
-                    for key in ("x", "y", "width", "height")
-                    if key in bbox_candidate
-                }
+                bounds = _common.finite_bounds(bbox_candidate)
 
         if payload is None and descriptor is not None:
             payload = self.serialize_descriptor(descriptor)
 
         if bounds is None and payload is not None:
-            region = payload.get("filter_region")
-            if isinstance(region, dict):
-                numeric: dict[str, float | Any] = {}
-                for key in ("x", "y", "width", "height"):
-                    if key in region:
-                        numeric[key] = region[key]
-                if numeric:
-                    bounds = numeric
+            bounds = _common.numeric_region(payload.get("filter_region"))
 
         return payload, bounds
+
+    def policy_primitive_overrides(
+        self, context: FilterContext
+    ) -> dict[str, dict[str, Any]]:
+        options = context.options if isinstance(context.options, dict) else {}
+        policy = options.get("policy")
+        if not isinstance(policy, Mapping):
+            return {}
+        primitives = policy.get("primitives")
+        if not isinstance(primitives, Mapping):
+            return {}
+        overrides: dict[str, dict[str, Any]] = {}
+        for name, config in primitives.items():
+            key = str(name).strip().lower()
+            if not key or not isinstance(config, Mapping):
+                continue
+            entry: dict[str, Any] = {}
+            entry.update(_common.policy_flag(config, "allow_resvg"))
+            entry.update(_common.policy_flag(config, "allow_promotion"))
+            entry.update(_common.policy_limit(config, "max_pixels"))
+            entry.update(_common.policy_limit(config, "max_arithmetic_coeff", float))
+            entry.update(_common.policy_limit(config, "max_offset_distance", float))
+            entry.update(_common.policy_limit(config, "max_merge_inputs", int))
+            entry.update(_common.policy_limit(config, "max_component_functions", int))
+            entry.update(
+                _common.policy_limit(config, "max_component_table_values", int)
+            )
+            entry.update(_common.policy_limit(config, "max_convolve_kernel", int))
+            entry.update(_common.policy_limit(config, "max_convolve_order", int))
+            if entry:
+                overrides[key] = entry
+        return overrides
 
     def infer_descriptor_strategy(
         self,
@@ -92,37 +103,14 @@ class LightweightFilterPlanner:
         *,
         strategy_hint: str,
     ) -> str | None:
-        tags = descriptor.get("primitive_tags")
-        if not isinstance(tags, Iterable):
-            return None
-        lowered = {str(tag).strip().lower() for tag in tags if tag}
-        if not lowered:
-            return "vector" if strategy_hint in {"vector", "emf"} else None
-
-        if any(tag in _RASTER_HINT_TAGS for tag in lowered):
-            return "raster"
-        if any(tag in _VECTOR_HINT_TAGS for tag in lowered):
-            return "vector"
-
-        if strategy_hint in {"vector", "emf"}:
-            return "vector"
-        if strategy_hint == "raster":
-            return "raster"
-        return None
+        return _common.infer_descriptor_strategy(
+            descriptor,
+            strategy_hint=strategy_hint,
+        )
 
     @staticmethod
     def serialize_descriptor(descriptor: Any) -> dict[str, Any]:
-        primitives = getattr(descriptor, "primitives", ()) or ()
-        region = getattr(descriptor, "region", {}) or {}
-        return {
-            "filter_id": getattr(descriptor, "filter_id", None),
-            "filter_units": getattr(descriptor, "filter_units", None),
-            "primitive_units": getattr(descriptor, "primitive_units", None),
-            "primitive_count": len(primitives),
-            "primitive_tags": [primitive.tag for primitive in primitives],
-            "filter_region": dict(region),
-            "primitive_metadata": [dict(getattr(primitive, "extras", {}) or {}) for primitive in primitives],
-        }
+        return _common.serialize_descriptor(descriptor)
 
     @staticmethod
     def _attribute(attributes: Mapping[str, Any], name: str) -> str | None:
@@ -148,10 +136,26 @@ class LightweightFilterPlanner:
         if len(values) != 20:
             return False
         identity = [
-            1.0, 0.0, 0.0, 0.0, 0.0,
-            0.0, 1.0, 0.0, 0.0, 0.0,
-            0.0, 0.0, 1.0, 0.0, 0.0,
-            0.0, 0.0, 0.0, 1.0, 0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
         ]
         tol = 1e-6
         return all(abs(a - b) <= tol for a, b in zip(values, identity, strict=True))
@@ -330,7 +334,9 @@ class LightweightFilterRenderer:
     ) -> list[FilterEffectResult] | None:
         if descriptor is None:
             return None
-        inferred = self._planner.infer_descriptor_strategy(descriptor, strategy_hint=strategy_hint)
+        inferred = self._planner.infer_descriptor_strategy(
+            descriptor, strategy_hint=strategy_hint
+        )
         if inferred is None:
             return None
 
@@ -363,54 +369,14 @@ class LightweightFilterRenderer:
         existing_results: list[FilterEffectResult],
         emf_results: list[FilterEffectResult],
     ) -> list[FilterEffectResult]:
-        if not existing_results or not emf_results:
-            return existing_results
-        target = existing_results[-1]
-        if target.fallback != "emf":
-            return existing_results
-
-        metadata = dict(target.metadata or {})
-        assets = list(metadata.get("fallback_assets") or [])
-        for result in emf_results:
-            source = result.metadata if isinstance(result.metadata, dict) else {}
-            source_assets = source.get("fallback_assets")
-            if not isinstance(source_assets, list):
-                continue
-            for asset in source_assets:
-                if isinstance(asset, dict) and asset.get("type") == "emf":
-                    assets.append(dict(asset))
-                    break
-            if assets:
-                break
-        if not assets:
-            return existing_results
-
-        metadata["fallback_assets"] = assets
-        base = list(existing_results)
-        base[-1] = replace(target, metadata=metadata, fallback="emf")
-        return base
+        return _attach_emf_metadata(existing_results, emf_results)
 
     @staticmethod
     def attach_raster_metadata(
         existing_results: list[FilterEffectResult],
         raster_results: list[FilterEffectResult],
     ) -> None:
-        if not existing_results:
-            return
-        target = existing_results[-1]
-        metadata = dict(target.metadata or {})
-        assets = list(metadata.get("fallback_assets") or [])
-        for raster in raster_results:
-            source = raster.metadata if isinstance(raster.metadata, dict) else {}
-            source_assets = source.get("fallback_assets")
-            if isinstance(source_assets, list):
-                for asset in source_assets:
-                    if isinstance(asset, dict):
-                        assets.append(dict(asset))
-        if not assets:
-            return
-        metadata["fallback_assets"] = assets
-        existing_results[-1] = replace(target, metadata=metadata)
+        _attach_raster_metadata(existing_results, raster_results)
 
 
 __all__ = [

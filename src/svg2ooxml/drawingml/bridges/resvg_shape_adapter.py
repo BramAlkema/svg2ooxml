@@ -37,6 +37,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from svg2ooxml.core.resvg.geometry.matrix_bridge import (
+    IDENTITY_MATRIX_TUPLE,
+    matrix_to_tuple,
+    transform_point,
+)
 from svg2ooxml.ir.geometry import BezierSegment, LineSegment, Point, SegmentType
 
 if TYPE_CHECKING:
@@ -94,11 +99,7 @@ class ResvgShapeAdapter:
 
         segments = self._commands_to_segments(node.geometry)
 
-        # Apply node transform to all segments
-        if node.transform is not None and not self._is_identity(node.transform):
-            segments = self._apply_transform_to_segments(segments, node.transform)
-
-        return segments
+        return self._apply_node_transform(segments, node)
 
     def from_rect_node(self, node: RectNode) -> list[SegmentType]:
         """Convert a resvg RectNode to IR segments.
@@ -115,15 +116,11 @@ class ResvgShapeAdapter:
             List of IR segments forming a rectangle with transforms already applied
         """
         x, y, w, h = node.x, node.y, node.width, node.height
-        rx, ry = node.rx, node.ry
+        rx, ry = self._normalized_corner_radii(node.rx, node.ry, w, h)
 
         # Handle zero-size rects
         if w <= 0 or h <= 0:
             return []
-
-        # Clamp corner radii to half dimensions (SVG spec)
-        rx = min(rx, w / 2.0)
-        ry = min(ry, h / 2.0)
 
         segments: list[SegmentType] = []
 
@@ -205,11 +202,7 @@ class ResvgShapeAdapter:
             segments.append(LineSegment(bottom_right, bottom_left))
             segments.append(LineSegment(bottom_left, top_left))  # Close
 
-        # Apply node transform to all segments
-        if node.transform is not None and not self._is_identity(node.transform):
-            segments = self._apply_transform_to_segments(segments, node.transform)
-
-        return segments
+        return self._apply_node_transform(segments, node)
 
     def from_circle_node(self, node: CircleNode) -> list[SegmentType]:
         """Convert a resvg CircleNode to IR segments.
@@ -232,11 +225,7 @@ class ResvgShapeAdapter:
         # Use ellipse converter with equal radii
         segments = self._ellipse_segments(cx, cy, r, r)
 
-        # Apply node transform to all segments
-        if node.transform is not None and not self._is_identity(node.transform):
-            segments = self._apply_transform_to_segments(segments, node.transform)
-
-        return segments
+        return self._apply_node_transform(segments, node)
 
     def from_ellipse_node(self, node: EllipseNode) -> list[SegmentType]:
         """Convert a resvg EllipseNode to IR segments.
@@ -258,11 +247,7 @@ class ResvgShapeAdapter:
 
         segments = self._ellipse_segments(cx, cy, rx, ry)
 
-        # Apply node transform to all segments
-        if node.transform is not None and not self._is_identity(node.transform):
-            segments = self._apply_transform_to_segments(segments, node.transform)
-
-        return segments
+        return self._apply_node_transform(segments, node)
 
     def from_line_node(self, node: LineNode) -> list[SegmentType]:
         """Convert a resvg LineNode to IR segments.
@@ -281,10 +266,7 @@ class ResvgShapeAdapter:
 
         segments = [LineSegment(Point(x1, y1), Point(x2, y2))]
 
-        if node.transform is not None and not self._is_identity(node.transform):
-            segments = self._apply_transform_to_segments(segments, node.transform)
-
-        return segments
+        return self._apply_node_transform(segments, node)
 
     def from_poly_node(self, node: PolyNode) -> list[SegmentType]:
         """Convert a resvg PolyNode to IR segments.
@@ -308,10 +290,21 @@ class ResvgShapeAdapter:
         if node.tag == "polygon" and not self._points_close(points[0], points[-1]):
             segments.append(LineSegment(points[-1], points[0]))
 
-        if node.transform is not None and not self._is_identity(node.transform):
-            segments = self._apply_transform_to_segments(segments, node.transform)
+        return self._apply_node_transform(segments, node)
 
-        return segments
+    @staticmethod
+    def _normalized_corner_radii(
+        rx: float,
+        ry: float,
+        width: float,
+        height: float,
+    ) -> tuple[float, float]:
+        """Apply SVG rounded-rectangle radius fallback and clamping."""
+        if rx > 0 and ry <= 0:
+            ry = rx
+        elif ry > 0 and rx <= 0:
+            rx = ry
+        return (min(rx, width / 2.0), min(ry, height / 2.0))
 
     def _ellipse_segments(self, cx: float, cy: float, rx: float, ry: float) -> list[SegmentType]:
         """Generate IR segments for an ellipse using cubic Bezier approximation.
@@ -602,25 +595,34 @@ class ResvgShapeAdapter:
 
         if isinstance(node, PathNode):
             return self.from_path_node(node)
-        elif isinstance(node, RectNode):
+        if isinstance(node, RectNode):
             return self.from_rect_node(node)
-        elif isinstance(node, CircleNode):
+        if isinstance(node, CircleNode):
             return self.from_circle_node(node)
-        elif isinstance(node, EllipseNode):
+        if isinstance(node, EllipseNode):
             return self.from_ellipse_node(node)
-        elif isinstance(node, LineNode):
+        if isinstance(node, LineNode):
             return self.from_line_node(node)
-        elif isinstance(node, PolyNode):
+        if isinstance(node, PolyNode):
             return self.from_poly_node(node)
-        else:
-            raise ResvgShapeAdapterError(
-                f"Unsupported node type: {type(node).__name__}. "
-                "Only PathNode, RectNode, CircleNode, EllipseNode, LineNode, and PolyNode are supported."
-            )
+        raise ResvgShapeAdapterError(
+            f"Unsupported node type: {type(node).__name__}. "
+            "Only PathNode, RectNode, CircleNode, EllipseNode, LineNode, and PolyNode are supported."
+        )
 
     # -------------------------------------------------------------------------
     # Transform application helpers
     # -------------------------------------------------------------------------
+
+    def _apply_node_transform(
+        self,
+        segments: list[SegmentType],
+        node: BaseNode,
+    ) -> list[SegmentType]:
+        matrix = node.transform
+        if matrix is None or self._is_identity(matrix):
+            return segments
+        return self._apply_transform_to_segments(segments, matrix)
 
     def _is_identity(self, matrix) -> bool:
         """Check if a Matrix is the identity matrix.
@@ -631,14 +633,8 @@ class ResvgShapeAdapter:
         Returns:
             True if matrix is identity (no transformation), False otherwise
         """
-        return (
-            abs(matrix.a - 1.0) < 1e-9
-            and abs(matrix.b) < 1e-9
-            and abs(matrix.c) < 1e-9
-            and abs(matrix.d - 1.0) < 1e-9
-            and abs(matrix.e) < 1e-9
-            and abs(matrix.f) < 1e-9
-        )
+        values = matrix_to_tuple(matrix)
+        return all(abs(value - expected) < 1e-9 for value, expected in zip(values, IDENTITY_MATRIX_TUPLE, strict=True))
 
     def _apply_transform_to_point(self, point: Point, matrix) -> Point:
         """Apply resvg Matrix transform to a Point.
@@ -650,16 +646,7 @@ class ResvgShapeAdapter:
         Returns:
             New Point with transformed coordinates
         """
-        if hasattr(matrix, "apply_to_point"):
-            x, y = matrix.apply_to_point(point.x, point.y)
-            return Point(x, y)
-        if hasattr(matrix, "transform_xy"):
-            x, y = matrix.transform_xy(point.x, point.y)
-            return Point(x, y)
-        if hasattr(matrix, "transform_point"):
-            transformed = matrix.transform_point(point)
-            return Point(transformed.x, transformed.y)
-        return point
+        return transform_point(point, matrix)
 
     def _apply_transform_to_segments(self, segments: list[SegmentType], matrix) -> list[SegmentType]:
         """Apply resvg Matrix transform to all segments.

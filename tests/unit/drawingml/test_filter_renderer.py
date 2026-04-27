@@ -123,7 +123,13 @@ def test_filter_renderer_applies_blip_enrichment_for_raster_fallback() -> None:
     metadata = {
         "filter_type": "color_matrix",
         "blip_color_transforms": [{"tag": "satMod", "val": 50000}],
-        "fallback_assets": [{"type": "raster", "relationship_id": "rIdRasterExisting"}],
+        "fallback_assets": [
+            {
+                "type": "raster",
+                "relationship_id": "rIdRasterExisting",
+                "data_hex": "CAFEBABE",
+            }
+        ],
     }
     result = FilterResult(success=True, drawingml="", fallback="raster", metadata=metadata)
     context = FilterContext(
@@ -145,7 +151,13 @@ def test_filter_renderer_skips_blip_enrichment_when_policy_disabled() -> None:
     metadata = {
         "filter_type": "color_matrix",
         "blip_color_transforms": [{"tag": "satMod", "val": 50000}],
-        "fallback_assets": [{"type": "raster", "relationship_id": "rIdRasterExisting"}],
+        "fallback_assets": [
+            {
+                "type": "raster",
+                "relationship_id": "rIdRasterExisting",
+                "data_hex": "CAFEBABE",
+            }
+        ],
     }
     result = FilterResult(success=True, drawingml="", fallback="raster", metadata=metadata)
     context = FilterContext(
@@ -198,3 +210,110 @@ def test_filter_renderer_materializes_raster_placeholder_from_comment_only_fragm
     assets = effect_result.metadata.get("fallback_assets")
     assert isinstance(assets, list) and assets
     assert assets[0]["type"] == "raster"
+
+
+def test_filter_renderer_ignores_existing_raster_asset_without_payload() -> None:
+    renderer = FilterRenderer()
+    result = FilterResult(
+        success=True,
+        drawingml="",
+        fallback="raster",
+        metadata={
+            "filter_type": "turbulence",
+            "fallback_assets": [
+                {"type": "raster", "relationship_id": "rIdRasterExisting"}
+            ],
+        },
+    )
+
+    effects = renderer.render([result])
+
+    asset = effects[0].metadata["fallback_assets"][0]
+    assert asset["relationship_id"] != "rIdRasterExisting"
+    assert "data_hex" in asset
+    assert 'r:embed="rIdRasterExisting"' not in effects[0].effect.drawingml
+
+
+def test_filter_renderer_ignores_existing_raster_asset_with_invalid_hex() -> None:
+    renderer = FilterRenderer()
+    result = FilterResult(
+        success=True,
+        drawingml="",
+        fallback="raster",
+        metadata={
+            "filter_type": "turbulence",
+            "fallback_assets": [
+                {
+                    "type": "raster",
+                    "relationship_id": "rIdRasterExisting",
+                    "data_hex": "not hex",
+                }
+            ],
+        },
+    )
+
+    effects = renderer.render([result])
+
+    asset = effects[0].metadata["fallback_assets"][0]
+    assert asset["relationship_id"] != "rIdRasterExisting"
+    assert "data_hex" in asset
+    assert "not hex" not in effects[0].effect.drawingml
+
+
+def test_filter_renderer_replaces_non_list_fallback_assets() -> None:
+    renderer = FilterRenderer()
+    result = FilterResult(
+        success=True,
+        drawingml="",
+        fallback="raster",
+        metadata={"filter_type": "gaussian_blur", "fallback_assets": "bad"},
+    )
+
+    effects = renderer.render([result])
+
+    assets = effects[0].metadata["fallback_assets"]
+    assert isinstance(assets, list)
+    assert assets[0]["type"] == "raster"
+
+
+def test_filter_renderer_ignores_malformed_asset_dimensions() -> None:
+    renderer = FilterRenderer()
+    result = FilterResult(
+        success=True,
+        drawingml="",
+        fallback="raster",
+        metadata={
+            "filter_type": "turbulence",
+            "fallback_assets": [
+                {
+                    "type": "raster",
+                    "relationship_id": "rIdRasterExisting",
+                    "width_px": "wide",
+                    "height_px": float("nan"),
+                    "data_hex": "CAFEBABE",
+                }
+            ],
+        },
+    )
+
+    effects = renderer.render([result])
+
+    xml = effects[0].effect.drawingml
+    assert 'r:embed="rIdRasterExisting"' in xml
+    assert 'width="wide"' not in xml
+    assert 'height="nan"' not in xml
+
+
+def test_filter_renderer_sanitizes_generated_comment_text() -> None:
+    renderer = FilterRenderer()
+    result = FilterResult(
+        success=True,
+        drawingml='<!-- svg2ooxml:image label="bad--comment" -->',
+        fallback=None,
+        metadata={},
+    )
+
+    effects = renderer.render([result])
+
+    assert "bad--comment" not in effects[0].effect.drawingml
+    assert "bad- -comment" in effects[0].effect.drawingml

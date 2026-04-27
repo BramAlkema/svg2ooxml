@@ -228,7 +228,10 @@ class AssetPipeline:
                     else:
                         continue
                 else:
-                    binary = bytes.fromhex(data_hex)
+                    try:
+                        binary = bytes.fromhex(data_hex)
+                    except ValueError:
+                        continue
 
                 asset_type = asset.get("type")
                 if asset_type == "emf":

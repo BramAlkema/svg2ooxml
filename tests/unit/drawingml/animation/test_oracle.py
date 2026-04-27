@@ -127,6 +127,33 @@ def test_instantiate_motion_requires_path_data() -> None:
     assert anim_motion.get("path") == "M 0 0 L 0.25 0 E"
 
 
+def test_instantiate_escapes_attribute_token_values() -> None:
+    oracle = default_oracle()
+    path_data = 'M 0 0 L 0.25 0 E" injected="1'
+    shape_id = 'shape-1" injected="1'
+
+    par = oracle.instantiate(
+        "path/motion",
+        shape_id=shape_id,
+        par_id=4,
+        duration_ms=1000,
+        delay_ms=0,
+        BEHAVIOR_ID=5,
+        PATH_DATA=path_data,
+        NODE_TYPE="clickEffect",
+        INNER_FILL="remove",
+    )
+
+    anim_motion = par.find(f".//{{{NS_P}}}animMotion")
+    sp_tgt = par.find(f".//{{{NS_P}}}spTgt")
+    assert anim_motion is not None
+    assert sp_tgt is not None
+    assert anim_motion.get("path") == path_data
+    assert anim_motion.get("injected") is None
+    assert sp_tgt.get("spid") == shape_id
+    assert sp_tgt.get("injected") is None
+
+
 def test_emph_color_substitutes_srgb_values() -> None:
     oracle = default_oracle()
     par = oracle.instantiate(
@@ -145,6 +172,28 @@ def test_emph_color_substitutes_srgb_values() -> None:
     assert 'val="112233"' in xml
     assert 'val="AABBCC"' in xml
     assert ">fill.color<" in xml
+
+
+def test_instantiate_escapes_text_token_values() -> None:
+    oracle = default_oracle()
+    target_attribute = "fill.color</p:attrName><p:attrName>style.opacity"
+
+    par = oracle.instantiate(
+        "emph/color",
+        shape_id="12",
+        par_id=20,
+        duration_ms=500,
+        delay_ms=0,
+        BEHAVIOR_ID=21,
+        FROM_COLOR="112233",
+        TO_COLOR="AABBCC",
+        TARGET_ATTRIBUTE=target_attribute,
+        INNER_FILL="remove",
+    )
+
+    attr_names = par.findall(f".//{{{NS_P}}}attrName")
+    assert len(attr_names) == 1
+    assert attr_names[0].text == target_attribute
 
 
 @pytest.mark.parametrize("slot_name", sorted({
@@ -314,6 +363,48 @@ def test_compound_unknown_fragment_raises() -> None:
             par_id=5,
             duration_ms=1000,
             behaviors=[BehaviorFragment("does_not_exist", {})],
+        )
+
+
+def test_compound_rejects_missing_fragment_tokens() -> None:
+    oracle = default_oracle()
+    with pytest.raises(ValueError, match="Missing oracle template tokens"):
+        oracle.instantiate_compound(
+            shape_id="2",
+            par_id=5,
+            duration_ms=1000,
+            behaviors=[BehaviorFragment("rotate", {})],
+        )
+
+
+def test_compound_rejects_unknown_fragment_tokens() -> None:
+    oracle = default_oracle()
+    with pytest.raises(ValueError, match="unknown tokens"):
+        oracle.instantiate_compound(
+            shape_id="2",
+            par_id=5,
+            duration_ms=1000,
+            behaviors=[
+                BehaviorFragment(
+                    "rotate",
+                    {
+                        "BEHAVIOR_ID": 10,
+                        "ROTATION_BY": "21600000",
+                        "EXTRA_TOKEN": "unused",
+                    },
+                )
+            ],
+        )
+
+
+def test_compound_rejects_fragment_path_escape() -> None:
+    oracle = default_oracle()
+    with pytest.raises(OracleSlotError, match="escapes oracle root"):
+        oracle.instantiate_compound(
+            shape_id="2",
+            par_id=5,
+            duration_ms=1000,
+            behaviors=[BehaviorFragment("../rotate", {})],
         )
 
 

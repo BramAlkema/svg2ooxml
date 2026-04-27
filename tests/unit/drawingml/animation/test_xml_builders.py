@@ -89,10 +89,14 @@ class TestTAVElement:
             value_elem=val,
             accel=0,
             decel=0,
-            metadata={"svg2:spline": "0.42 0 0.58 1", "data-note": "keep"}
+            metadata={
+                "svg2:spline": "0.42 0 0.58 1",
+                "data-note": "drop",
+                "invalid attr": "drop",
+            },
         )
 
-        assert tav.get("data-note") == "keep"
+        assert tav.get("data-note") is None
         assert "svg2:spline" not in tav.attrib
 
     def test_tav_zero_accel_decel_not_added(self):
@@ -466,6 +470,42 @@ class TestBuildParContainerElem:
         assert cond is not None
         assert cond.get("delay") == "250"
 
+    def test_negative_delay_is_clamped(self):
+        builder = AnimationXMLBuilder()
+        from svg2ooxml.drawingml.xml_builder import p_elem as _p
+
+        par = builder.build_par_container_elem(
+            par_id=4,
+            duration_ms=1000,
+            delay_ms=-250,
+            child_element=_p("set"),
+        )
+
+        cond = par.find(f".//{{{NS_P}}}cond")
+        assert cond is not None
+        assert cond.get("delay") == "0"
+
+    def test_negative_begin_trigger_delay_is_clamped(self):
+        builder = AnimationXMLBuilder()
+        from svg2ooxml.drawingml.xml_builder import p_elem as _p
+
+        par = builder.build_par_container_elem(
+            par_id=4,
+            duration_ms=1000,
+            delay_ms=250,
+            child_element=_p("set"),
+            begin_triggers=[
+                BeginTrigger(
+                    trigger_type=BeginTriggerType.TIME_OFFSET,
+                    delay_seconds=-0.5,
+                )
+            ],
+        )
+
+        cond = par.find(f".//{{{NS_P}}}cond")
+        assert cond is not None
+        assert cond.get("delay") == "0"
+
     def test_child_appended(self):
         builder = AnimationXMLBuilder()
         from svg2ooxml.drawingml.xml_builder import p_elem as _p
@@ -561,6 +601,22 @@ class TestBuildParContainerElem:
         assert ctn.get("dur") == "400"
         assert cond.get("delay") == "250"
         assert child_tn_lst[0].tag == f"{{{NS_P}}}animRot"
+
+    def test_build_delayed_child_par_clamps_negative_timing(self):
+        builder = AnimationXMLBuilder()
+        from svg2ooxml.drawingml.xml_builder import p_elem as _p
+
+        par = builder.build_delayed_child_par(
+            par_id=9,
+            delay_ms=-250,
+            duration_ms=0,
+            child_element=_p("animRot"),
+        )
+
+        ctn = par.find(f"{{{NS_P}}}cTn")
+        cond = par.find(f".//{{{NS_P}}}cond")
+        assert ctn.get("dur") == "1"
+        assert cond.get("delay") == "0"
 
 
 class TestBuildBehaviorCoreElem:

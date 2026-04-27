@@ -146,6 +146,30 @@ class TestResvgShapeAdapterRect:
         bezier_segments = [seg for seg in segments if isinstance(seg, BezierSegment)]
         assert len(bezier_segments) == 4
 
+    def test_rounded_rect_single_radius_uses_svg_fallback(self):
+        """If only one corner radius is available, SVG uses it for both axes."""
+        adapter = ResvgShapeAdapter()
+        rect = RectNode(
+            tag="rect",
+            id="rounded-rx-only",
+            presentation=default_presentation(),
+            attributes={},
+            styles={},
+            x=0.0,
+            y=0.0,
+            width=100.0,
+            height=50.0,
+            rx=10.0,
+            ry=0.0,
+        )
+
+        segments = adapter.from_rect_node(rect)
+
+        assert len(segments) == 8
+        first_curve = next(seg for seg in segments if isinstance(seg, BezierSegment))
+        assert first_curve.end.x == pytest.approx(100.0)
+        assert first_curve.end.y == pytest.approx(10.0)
+
 
 class TestResvgShapeAdapterCircle:
     """Test circle conversion."""
@@ -433,7 +457,7 @@ class TestResvgShapeAdapterPath:
         assert len(actual_segments) == len(expected_segments)
         assert all(isinstance(segment, LineSegment) for segment in actual_segments)
 
-        for actual, expected in zip(actual_segments, expected_segments):
+        for actual, expected in zip(actual_segments, expected_segments, strict=True):
             assert isinstance(actual, LineSegment)
             assert isinstance(expected, LineSegment)
             assert actual.start.x == pytest.approx(expected.start.x)
@@ -612,6 +636,39 @@ class TestResvgShapeAdapterTransforms:
         # Top-right: (90, 20) → (140, 120)
         assert segments[0].end.x == pytest.approx(140.0)
         assert segments[0].end.y == pytest.approx(120.0)
+
+    def test_plain_affine_matrix_fields_are_applied(self):
+        """Matrix-like objects with a/b/c/d/e/f fields should transform points."""
+
+        class PlainMatrix:
+            a = 1.0
+            b = 0.0
+            c = 0.0
+            d = 1.0
+            e = 7.0
+            f = 9.0
+
+        adapter = ResvgShapeAdapter()
+        line = LineNode(
+            tag="line",
+            id="line-plain-matrix",
+            presentation=default_presentation(),
+            attributes={},
+            styles={},
+            x1=1.0,
+            y1=2.0,
+            x2=3.0,
+            y2=4.0,
+            transform=PlainMatrix(),
+        )
+
+        segments = adapter.from_line_node(line)
+
+        assert len(segments) == 1
+        assert segments[0].start.x == pytest.approx(8.0)
+        assert segments[0].start.y == pytest.approx(11.0)
+        assert segments[0].end.x == pytest.approx(10.0)
+        assert segments[0].end.y == pytest.approx(13.0)
 
     def test_rect_with_rotation(self):
         """Test rectangle with 90-degree rotation."""

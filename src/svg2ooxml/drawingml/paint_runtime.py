@@ -10,6 +10,8 @@ from typing import Any
 from svg2ooxml.common.conversions.angles import degrees_to_ppt
 from svg2ooxml.common.conversions.opacity import opacity_to_ppt
 from svg2ooxml.common.conversions.scale import PPT_SCALE, position_to_ppt
+from svg2ooxml.common.dash_patterns import normalize_dash_array
+from svg2ooxml.core.resvg.geometry.matrix_bridge import matrix_to_tuple
 from svg2ooxml.drawingml.generator import px_to_emu
 
 # Import centralized XML builders for safe DrawingML generation
@@ -249,13 +251,9 @@ def _dash_elem(
     """
     if not dash_array:
         return None
-    values = [abs(x) for x in dash_array if x > 0]
+    values = normalize_dash_array(dash_array)
     if not values:
         return None
-
-    # SVG spec: odd-length arrays are doubled to make even pairs
-    if len(values) % 2 == 1:
-        values = values + values
 
     # Apply dash offset by rotating the pattern
     if dash_offset and values:
@@ -520,19 +518,12 @@ _RELS_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
 def _as_pattern_affine(
     transform: Any,
 ) -> tuple[float, float, float, float, float, float] | None:
-    """Extract SVG affine matrix values (a,b,c,d,e,f) from a 3x3 transform."""
+    """Extract SVG affine matrix values (a,b,c,d,e,f) from a transform."""
     if transform is None:
         return None
     try:
-        return (
-            float(transform[0][0]),
-            float(transform[1][0]),
-            float(transform[0][1]),
-            float(transform[1][1]),
-            float(transform[0][2]),
-            float(transform[1][2]),
-        )
-    except (IndexError, TypeError, ValueError):
+        return matrix_to_tuple(transform)
+    except (TypeError, ValueError):
         return None
 
 
@@ -600,9 +591,10 @@ def _pattern_to_fill_elem(paint: PatternPaint, *, opacity: float | None = None):
         blipFill = a_elem("blipFill", dpi="0", rotWithShape="1")
         blip = a_sub(blipFill, "blip")
         blip.set(f"{{{_RELS_NS}}}embed", paint.tile_relationship_id)
-        if opacity is not None and opacity < 0.999:
+        tile_opacity = _clamp_opacity(opacity) if opacity is not None else None
+        if tile_opacity is not None and tile_opacity < 0.999:
             alphaModFix = a_sub(blip, "alphaModFix")
-            alphaModFix.set("amt", str(opacity_to_ppt(opacity)))
+            alphaModFix.set("amt", str(opacity_to_ppt(tile_opacity)))
         tile_attrs = _tile_attrs_from_pattern_transform(paint.transform)
         a_sub(blipFill, "tile", **tile_attrs)
         return blipFill
@@ -633,9 +625,9 @@ def _pattern_to_fill_elem(paint: PatternPaint, *, opacity: float | None = None):
     )
 
     # Background color
-    background_opacity = paint.background_opacity
+    background_opacity = _clamp_opacity(paint.background_opacity)
     if opacity is not None:
-        background_opacity *= opacity
+        background_opacity = _clamp_opacity(background_opacity * opacity)
     bgClr = a_sub(pattFill, "bgClr")
     bgClr.append(
         color_choice(

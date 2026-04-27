@@ -139,6 +139,7 @@ class FilterRenderer:
             planner=planner or self._planner,
             logger=self._logger,
             palette_resolver=self._palette_resolver,
+            raster_adapter=self._raster_adapter,
         )
         clone._resvg_counter = self._resvg_counter
         return clone
@@ -157,7 +158,9 @@ class FilterRenderer:
         context: FilterContext,
     ) -> list[FilterEffectResult]:
         context.pipeline_state = context.pipeline_state or {}
-        editable_stack = render_editable_stack(element, context, self._drawingml_renderer)
+        editable_stack = render_editable_stack(
+            element, context, self._drawingml_renderer
+        )
         if editable_stack:
             return editable_stack
         filter_results = self._registry.render_filter_element(element, context)
@@ -200,22 +203,29 @@ class FilterRenderer:
         for index, effect in enumerate(rendered):
             source = source_results[index] if index < len(source_results) else None
             meta = dict(effect.metadata or {})
-            strategy = effect.strategy if effect.strategy in {"vector", "emf"} else "vector"
+            strategy = (
+                effect.strategy if effect.strategy in {"vector", "emf"} else "vector"
+            )
             fallback = effect.fallback
 
             if fallback == "emf":
                 assets = meta.setdefault("fallback_assets", [])
                 if isinstance(assets, list) and not any(
-                    isinstance(asset, dict) and asset.get("type") == "emf" for asset in assets
+                    isinstance(asset, dict) and asset.get("type") == "emf"
+                    for asset in assets
                 ):
                     asset = None
-                    if hasattr(self._drawingml_renderer, "_ensure_emf_asset") and source is not None:
+                    if (
+                        hasattr(self._drawingml_renderer, "_ensure_emf_asset")
+                        and source is not None
+                    ):
                         try:
                             asset = self._drawingml_renderer._ensure_emf_asset(meta, source)  # type: ignore[attr-defined]
                         except Exception:  # pragma: no cover - defensive
                             asset = None
                     if not any(
-                        isinstance(asset, dict) and asset.get("type") == "emf" for asset in assets
+                        isinstance(asset, dict) and asset.get("type") == "emf"
+                        for asset in assets
                     ):
                         if not asset:
                             if hasattr(self._drawingml_renderer, "_allocate_reuse_id"):
@@ -250,7 +260,9 @@ class FilterRenderer:
         strategy: str,
     ) -> list[FilterEffectResult]:
         result = rasterize_filter(
-            element, context, filter_id,
+            element,
+            context,
+            filter_id,
             raster_adapter=self._raster_adapter,
             logger=self._logger,
         )
@@ -305,13 +317,17 @@ class FilterRenderer:
             bounds = self._planner.resvg_bounds(options_map, descriptor)
             viewport = self._planner.resvg_viewport(bounds)
         except Exception as exc:  # pragma: no cover - defensive
-            self._logger.debug("Failed to compute resvg viewport for %s", filter_id, exc_info=True)
+            self._logger.debug(
+                "Failed to compute resvg viewport for %s", filter_id, exc_info=True
+            )
             _trace("resvg_viewport_failed", error=str(exc))
             return None
 
         policy_overrides = self._planner.policy_primitive_overrides(filter_context)
 
-        policy_block_reason = self._planner.resvg_policy_block(plan, viewport, policy_overrides)
+        policy_block_reason = self._planner.resvg_policy_block(
+            plan, viewport, policy_overrides
+        )
         if policy_block_reason is not None:
             _trace("resvg_policy_blocked", reason=policy_block_reason)
             return None
@@ -355,13 +371,17 @@ class FilterRenderer:
             _trace("resvg_unsupported_primitive", primitive=str(exc))
             return None
         except Exception as exc:  # pragma: no cover - defensive
-            self._logger.debug("Resvg filter application failed for %s", filter_id, exc_info=True)
+            self._logger.debug(
+                "Resvg filter application failed for %s", filter_id, exc_info=True
+            )
             _trace("resvg_execution_failed", error=str(exc))
             return None
 
         if self._planner.plan_has_turbulence(plan):
             try:
-                emf_effect = turbulence_emf_effect(result_surface, viewport, plan, filter_id)
+                emf_effect = turbulence_emf_effect(
+                    result_surface, viewport, plan, filter_id
+                )
             except Exception:  # pragma: no cover - fall back to raster
                 _trace("resvg_turbulence_emf_failed")
             else:
@@ -432,7 +452,9 @@ class FilterRenderer:
         if descriptor is None:
             return None
 
-        inferred = self._planner.infer_descriptor_strategy(descriptor, strategy_hint=strategy_hint)
+        inferred = self._planner.infer_descriptor_strategy(
+            descriptor, strategy_hint=strategy_hint
+        )
         if inferred is None:
             return None
 
@@ -504,7 +526,9 @@ class FilterRenderer:
         blur_primitive: etree._Element,
         merge_inputs: list[str],
     ) -> FilterEffectResult | None:
-        return _build_flood_blur_merge_effect(context, flood_primitive, blur_primitive, merge_inputs)
+        return _build_flood_blur_merge_effect(
+            context, flood_primitive, blur_primitive, merge_inputs
+        )
 
     def _build_shadow_stack_effect(
         self,
@@ -514,7 +538,9 @@ class FilterRenderer:
         flood_primitive: etree._Element,
         merge_inputs: list[str],
     ) -> FilterEffectResult:
-        return _build_shadow_stack_effect(context, offset_primitive, blur_primitive, flood_primitive, merge_inputs)
+        return _build_shadow_stack_effect(
+            context, offset_primitive, blur_primitive, flood_primitive, merge_inputs
+        )
 
     def _match_flood_blur_merge_stack(
         self,
@@ -540,7 +566,9 @@ class FilterRenderer:
         lighting_primitive: etree._Element,
         composite_primitive: etree._Element,
     ) -> FilterEffectResult | None:
-        return _build_lighting_composite_effect(context, lighting_primitive, composite_primitive)
+        return _build_lighting_composite_effect(
+            context, lighting_primitive, composite_primitive
+        )
 
     def _build_component_transfer_alpha_stack_effect(
         self,
@@ -553,7 +581,9 @@ class FilterRenderer:
         steps: list[dict[str, Any]],
         context: FilterContext,
     ) -> list[FilterEffectResult]:
-        return _build_blip_color_transform_stack_effect(steps, context, self._drawingml_renderer)
+        return _build_blip_color_transform_stack_effect(
+            steps, context, self._drawingml_renderer
+        )
 
     def _match_color_transform_stack(
         self,
@@ -605,14 +635,21 @@ class FilterRenderer:
         trace: Callable[..., None] | None = None,
     ) -> FilterEffectResult | None:
         return promote_resvg_plan(
-            plan, filter_element, context, viewport, overrides, descriptor,
+            plan,
+            filter_element,
+            context,
+            viewport,
+            overrides,
+            descriptor,
             planner=self._planner,
             drawingml_renderer=self._drawingml_renderer,
             trace=trace,
         )
 
     @staticmethod
-    def _is_neutral_promotion(tag: str, element: etree._Element, result: FilterResult) -> bool:
+    def _is_neutral_promotion(
+        tag: str, element: etree._Element, result: FilterResult
+    ) -> bool:
         return _is_neutral_promotion(tag, element, result)
 
     @staticmethod
@@ -657,7 +694,9 @@ class FilterRenderer:
         filter_id: str,
     ) -> FilterResult | None:
         return rasterize_filter(
-            element, context, filter_id,
+            element,
+            context,
+            filter_id,
             raster_adapter=self._raster_adapter,
             logger=self._logger,
         )

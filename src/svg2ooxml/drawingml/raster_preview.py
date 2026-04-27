@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import re
 from copy import deepcopy
 from typing import Any
@@ -10,7 +11,43 @@ from lxml import etree
 
 from svg2ooxml.common.svg_refs import local_name, local_url_id
 
-_URL_REF_RE = re.compile(r"url\(\s*#([^)]+?)\s*\)")
+_URL_REF_RE = re.compile(r"url\(\s*([^)]+?)\s*\)", re.IGNORECASE)
+
+
+def _finite_float(value: object, default: float | None = None) -> float | None:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return default
+    if not math.isfinite(number):
+        return default
+    return number
+
+
+def _positive_dimension(value: object, default: int = 1) -> int:
+    number = _finite_float(value)
+    if number is None or number <= 0:
+        return default
+    return max(1, int(number))
+
+
+def _positive_float(value: object, default: float) -> float:
+    number = _finite_float(value)
+    if number is None or number <= 0:
+        return default
+    return number
+
+
+def _local_url_ids_from_value(value: str) -> set[str]:
+    ids: set[str] = set()
+    direct_id = local_url_id(value)
+    if direct_id is not None:
+        ids.add(direct_id)
+    for url_value in _URL_REF_RE.findall(value):
+        ref_id = local_url_id(f"url({url_value})")
+        if ref_id is not None:
+            ids.add(ref_id)
+    return ids
 
 
 class RasterPreviewBuilder:
@@ -35,13 +72,15 @@ class RasterPreviewBuilder:
                 source_root = source_element.getroottree().getroot()
             except Exception:
                 source_root = None
+        width_px = _positive_dimension(width_px)
+        height_px = _positive_dimension(height_px)
 
         svg_root = etree.Element(
             f"{{{svg_ns}}}svg",
             nsmap={None: svg_ns, "xlink": xlink_ns},
             attrib={
-                "width": str(max(1, int(width_px))),
-                "height": str(max(1, int(height_px))),
+                "width": str(width_px),
+                "height": str(height_px),
             },
         )
         defs = etree.SubElement(svg_root, f"{{{svg_ns}}}defs")
@@ -113,12 +152,14 @@ class RasterPreviewBuilder:
     ) -> str | None:
         svg_ns = "http://www.w3.org/2000/svg"
         xlink_ns = "http://www.w3.org/1999/xlink"
+        width_px = _positive_dimension(width_px)
+        height_px = _positive_dimension(height_px)
         svg_root = etree.Element(
             f"{{{svg_ns}}}svg",
             nsmap={None: svg_ns, "xlink": xlink_ns},
             attrib={
-                "width": str(max(1, int(width_px))),
-                "height": str(max(1, int(height_px))),
+                "width": str(width_px),
+                "height": str(height_px),
             },
         )
         defs = etree.SubElement(svg_root, f"{{{svg_ns}}}defs")
@@ -235,13 +276,15 @@ class RasterPreviewBuilder:
         height_px: int,
         preserve_user_space: bool = False,
     ) -> str:
+        fallback_width = _positive_dimension(width_px)
+        fallback_height = _positive_dimension(height_px)
         if not bounds:
-            return f"0 0 {max(1, int(width_px))} {max(1, int(height_px))}"
+            return f"0 0 {fallback_width} {fallback_height}"
 
-        x = float(bounds.get("x", 0.0))
-        y = float(bounds.get("y", 0.0))
-        width = max(1.0, float(bounds.get("width", width_px)))
-        height = max(1.0, float(bounds.get("height", height_px)))
+        x = _finite_float(bounds.get("x"), 0.0) or 0.0
+        y = _finite_float(bounds.get("y"), 0.0) or 0.0
+        width = _positive_float(bounds.get("width"), float(fallback_width))
+        height = _positive_float(bounds.get("height"), float(fallback_height))
 
         if preserve_user_space:
             return f"{x:g} {y:g} {width:g} {height:g}"
@@ -256,10 +299,9 @@ class RasterPreviewBuilder:
     ) -> etree._Element:
         if preserve_user_space or not isinstance(bounds, dict):
             return source_subtree
-        try:
-            x = float(bounds.get("x", 0.0))
-            y = float(bounds.get("y", 0.0))
-        except (TypeError, ValueError):
+        x = _finite_float(bounds.get("x"))
+        y = _finite_float(bounds.get("y"))
+        if x is None or y is None:
             return source_subtree
         if abs(x) <= 1e-6 and abs(y) <= 1e-6:
             return source_subtree
@@ -318,12 +360,9 @@ class RasterPreviewBuilder:
                     "href",
                     "{http://www.w3.org/1999/xlink}href",
                 }:
-                    referenced_ids.update(_URL_REF_RE.findall(attr_value))
-                    ref_id = local_url_id(attr_value)
-                    if ref_id is not None:
-                        referenced_ids.add(ref_id)
+                    referenced_ids.update(_local_url_ids_from_value(attr_value))
                 elif attr_name == "style":
-                    referenced_ids.update(_URL_REF_RE.findall(attr_value))
+                    referenced_ids.update(_local_url_ids_from_value(attr_value))
 
         if not referenced_ids:
             return False
@@ -342,21 +381,19 @@ class RasterPreviewBuilder:
                 if (target.get("gradientUnits") or "").strip() == "userSpaceOnUse":
                     return True
             elif local_tag == "pattern":
-                if (
-                    (target.get("patternUnits") or "").strip() == "userSpaceOnUse"
-                    or (target.get("patternContentUnits") or "userSpaceOnUse").strip()
-                    == "userSpaceOnUse"
-                ):
+                if (target.get("patternUnits") or "").strip() == "userSpaceOnUse" or (
+                    target.get("patternContentUnits") or "userSpaceOnUse"
+                ).strip() == "userSpaceOnUse":
                     return True
             elif local_tag == "clipPath":
-                if (target.get("clipPathUnits") or "userSpaceOnUse").strip() == "userSpaceOnUse":
+                if (
+                    target.get("clipPathUnits") or "userSpaceOnUse"
+                ).strip() == "userSpaceOnUse":
                     return True
             elif local_tag == "mask":
-                if (
-                    (target.get("maskUnits") or "").strip() == "userSpaceOnUse"
-                    or (target.get("maskContentUnits") or "userSpaceOnUse").strip()
-                    == "userSpaceOnUse"
-                ):
+                if (target.get("maskUnits") or "").strip() == "userSpaceOnUse" or (
+                    target.get("maskContentUnits") or "userSpaceOnUse"
+                ).strip() == "userSpaceOnUse":
                     return True
         return False
 

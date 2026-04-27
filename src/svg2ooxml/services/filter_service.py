@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Iterable, Mapping
+from copy import deepcopy
 from dataclasses import replace
 from typing import TYPE_CHECKING, Any
 
 from lxml import etree
 
+from svg2ooxml.common.svg_refs import reference_id
 from svg2ooxml.drawingml.emf_primitives import PaletteResolver
 from svg2ooxml.drawingml.raster_adapter import RasterAdapter
 from svg2ooxml.filters.base import FilterContext, FilterResult
@@ -87,7 +89,10 @@ class FilterService:
             palette_resolver=self._palette_resolver,
         )
         clone._descriptors = dict(self._descriptors)
-        clone._materialized_filters = dict(self._materialized_filters)
+        clone._materialized_filters = {
+            key: deepcopy(value) for key, value in self._materialized_filters.items()
+        }
+        clone._strategy = self._strategy
         clone._raster_adapter = self._raster_adapter
         clone._pipeline_error = self._pipeline_error
         clone._pipeline_warned = self._pipeline_warned
@@ -113,28 +118,35 @@ class FilterService:
         self._descriptors.clear()
         self._materialized_filters.clear()
         for filter_id, definition in (filters or {}).items():
-            descriptor = self._coerce_descriptor(filter_id, definition)
+            lookup_id = self._lookup_filter_id(filter_id)
+            if lookup_id is None:
+                continue
+            descriptor = self._coerce_descriptor(lookup_id, definition)
             if descriptor is None:
                 continue
-            key = descriptor.filter_id or filter_id
+            key = self._lookup_filter_id(descriptor.filter_id) or lookup_id
             self._descriptors[key] = descriptor
 
     def register_filter(
         self, filter_id: str, definition: ResolvedFilter | etree._Element
     ) -> None:
         """Register a single filter definition."""
-        if not filter_id:
+        lookup_id = self._lookup_filter_id(filter_id)
+        if not lookup_id:
             raise ValueError("filter id must be non-empty")
-        descriptor = self._coerce_descriptor(filter_id, definition)
+        descriptor = self._coerce_descriptor(lookup_id, definition)
         if descriptor is None:
             return
-        key = descriptor.filter_id or filter_id
+        key = self._lookup_filter_id(descriptor.filter_id) or lookup_id
         self._descriptors[key] = descriptor
         self._materialized_filters.pop(key, None)
 
     def get(self, filter_id: str) -> ResolvedFilter | None:
         """Return the stored filter descriptor if known."""
-        return self._descriptors.get(filter_id)
+        lookup_id = self._lookup_filter_id(filter_id)
+        if lookup_id is None:
+            return None
+        return self._descriptors.get(lookup_id)
 
     def require(self, filter_id: str) -> ResolvedFilter:
         """Return the filter descriptor or raise if missing."""
@@ -155,10 +167,13 @@ class FilterService:
         self, filter_id: str, *, context: Any | None = None
     ) -> str | None:
         """Return DrawingML content for the requested filter reference."""
-        descriptor = self.get(filter_id)
+        lookup_id = self._lookup_filter_id(filter_id)
+        if lookup_id is None:
+            return None
+        descriptor = self.get(lookup_id)
         if descriptor is None:
             return None
-        element = self._materialize_filter(filter_id, descriptor)
+        element = self._materialize_filter(lookup_id, descriptor)
         try:
             return etree.tostring(element, encoding="unicode")
         except Exception:  # pragma: no cover - defensive
@@ -171,6 +186,11 @@ class FilterService:
         self, filter_ref: str, *, context: Any | None = None
     ) -> list[FilterEffectResult]:
         """Resolve a filter reference into IR effect objects."""
+        lookup_id = self._lookup_filter_id(filter_ref)
+        if lookup_id is None:
+            return []
+        filter_ref = lookup_id
+
         if not self._ensure_pipeline():
             return self._finalize_results(
                 filter_ref, self._disabled_effects(filter_ref), context
@@ -193,6 +213,7 @@ class FilterService:
         raster_results_cache: list[FilterEffectResult] = []
         descriptor_results: list[FilterEffectResult] | None = None
         strategy = self._resolve_strategy(filter_context, descriptor)
+        filter_context.options["resolved_strategy"] = strategy
 
         resvg_enabled = strategy not in {"vector", "emf", "raster"}
         resvg_preferred = strategy in {"resvg", "resvg-only"}
@@ -207,6 +228,8 @@ class FilterService:
                 return self._finalize_results(
                     filter_ref, [resvg_result], filter_context
                 )
+            if resvg_result is None and resvg_only:
+                return self._finalize_results(filter_ref, [], filter_context)
 
         if strategy in {"auto", "native", "resvg", "resvg-only"}:
             native_results = self._render_native(filter_element, filter_context)
@@ -366,7 +389,12 @@ class FilterService:
             if tracer is None:
                 return
             payload = dict(meta)
-            payload.setdefault("strategy", self._strategy)
+            resolved_strategy = (
+                options_map.get("resolved_strategy", self._strategy)
+                if isinstance(options_map, dict)
+                else self._strategy
+            )
+            payload.setdefault("strategy", resolved_strategy)
             tracer.record_stage_event(
                 stage="filter",
                 action=action,
@@ -433,7 +461,9 @@ class FilterService:
     def set_strategy(self, strategy: str) -> None:
         """Configure the preferred filter rendering strategy."""
 
-        normalized = strategy.lower()
+        if not isinstance(strategy, str):
+            raise ValueError(f"Unsupported filter strategy '{strategy}'")
+        normalized = strategy.strip().lower()
         if normalized not in ALLOWED_STRATEGIES:
             raise ValueError(f"Unsupported filter strategy '{strategy}'")
         self._strategy = normalized
@@ -506,10 +536,10 @@ class FilterService:
     ) -> etree._Element:
         cached = self._materialized_filters.get(filter_id)
         if cached is not None:
-            return cached
+            return deepcopy(cached)
         element = build_filter_element(descriptor)
         self._materialized_filters[filter_id] = element
-        return element
+        return deepcopy(element)
 
     def _coerce_descriptor(
         self,
@@ -530,6 +560,10 @@ class FilterService:
         if not descriptor.filter_id:
             descriptor = replace(descriptor, filter_id=filter_id)
         return descriptor
+
+    @staticmethod
+    def _lookup_filter_id(filter_ref: str | None) -> str | None:
+        return reference_id(filter_ref)
 
     @staticmethod
     def _promotion_policy_violation(
@@ -653,8 +687,16 @@ class FilterService:
         if isinstance(context, FilterContext):
             options = context.options if isinstance(context.options, dict) else {}
             tracer = options.get("tracer") if isinstance(options, dict) else None
+            strategy = (
+                options.get("resolved_strategy", self._strategy)
+                if isinstance(options, dict)
+                else self._strategy
+            )
         elif isinstance(context, dict):
             tracer = context.get("tracer")
+            strategy = self._strategy
+        else:
+            strategy = self._strategy
         if tracer is None:
             return
         recorder = getattr(tracer, "record_stage_event", None)
@@ -666,7 +708,7 @@ class FilterService:
             subject=filter_ref,
             metadata={
                 "capability": capability,
-                "strategy": self._strategy,
+                "strategy": strategy,
             },
         )
 

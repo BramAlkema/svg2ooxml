@@ -13,6 +13,7 @@ from PIL import Image
 from tests.unit.filters.policy import assert_fallback
 
 from svg2ooxml.core.ir.shape_converters_utils import _ellipse_segments
+from svg2ooxml.drawingml import raster_adapter as raster_adapter_module
 from svg2ooxml.drawingml.raster_adapter import RasterAdapter, _surface_to_png
 from svg2ooxml.filters.base import FilterContext, FilterResult
 from svg2ooxml.filters.planner import FilterPlanner
@@ -27,6 +28,7 @@ from svg2ooxml.render.filters import plan_filter
 from svg2ooxml.render.surface import Surface
 from svg2ooxml.services.conversion import ConversionServices
 from svg2ooxml.services.filter_service import FilterService
+from svg2ooxml.services.filter_types import FilterEffectResult
 from svg2ooxml.services.image_service import FileResolver, ImageService
 
 ASSETS_DIR = Path(__file__).resolve().parents[2] / "assets"
@@ -86,7 +88,9 @@ def _make_w3c_image_filter_context(
     svg = etree.fromstring(svg_path.read_bytes())
     ns = {"svg": "http://www.w3.org/2000/svg"}
     filter_element = svg.xpath(f".//svg:filter[@id='{filter_id}']", namespaces=ns)[0]
-    image_element = svg.xpath(f".//svg:image[@filter='url(#{filter_id})']", namespaces=ns)[0]
+    image_element = svg.xpath(
+        f".//svg:image[@filter='url(#{filter_id})']", namespaces=ns
+    )[0]
 
     services = ConversionServices()
     image_service = ImageService()
@@ -117,8 +121,65 @@ def test_filter_service_registers_and_requires_definitions() -> None:
     assert list(service.ids()) == ["blur"]
 
 
+def test_filter_service_normalizes_url_filter_references() -> None:
+    service = FilterService()
+    descriptor = _make_descriptor("<filter><feFlood/></filter>")
+
+    service.register_filter("url(#shadow)", descriptor)
+
+    assert service.get("shadow") is not None
+    assert service.get("#shadow") is not None
+    assert service.require("url(#shadow)").filter_id == "shadow"
+    assert "feFlood" in (service.get_filter_content("#shadow") or "")
+
+
+def test_filter_service_materialized_cache_returns_fresh_elements() -> None:
+    service = FilterService()
+    descriptor = _make_descriptor("<filter id='cached'><feFlood/></filter>")
+    service.register_filter("cached", descriptor)
+
+    first = service._materialize_filter("cached", descriptor)
+    first.set("id", "mutated")
+    first.append(etree.Element("feOffset"))
+
+    second = service._materialize_filter("cached", descriptor)
+
+    assert second.get("id") == "cached"
+    assert [child.tag for child in second] == ["feFlood"]
+
+
+def test_filter_context_ignores_non_mapping_policy() -> None:
+    element = _make_filter_element("<filter id='blur'/>")
+    context = FilterContext(filter_element=element, options={"policy": "bad"})
+
+    assert context.policy == {}
+
+
+def test_filter_service_resolve_ignores_non_mapping_policy_context() -> None:
+    service = FilterService(registry=_NoopRegistry())
+    service.register_filter(
+        "blur",
+        _make_descriptor(
+            "<filter id='blur'><feGaussianBlur stdDeviation='2'/></filter>"
+        ),
+    )
+
+    results = service.resolve_effects("blur", context={"policy": "bad"})
+
+    assert isinstance(results, list)
+
+
+def test_filter_service_set_strategy_strips_whitespace() -> None:
+    service = FilterService()
+
+    service.set_strategy(" raster ")
+
+    assert service._strategy == "raster"
+
+
 def test_filter_service_clone_preserves_state() -> None:
     service = FilterService()
+    service.set_strategy("raster")
     service.register_filter("shadow", _make_descriptor("<filter id='shadow'/>"))
 
     clone = service.clone()
@@ -127,6 +188,83 @@ def test_filter_service_clone_preserves_state() -> None:
     assert fetched.filter_id == "shadow"
     assert clone.registry is not None
     assert isinstance(clone.registry, FilterRegistry)
+    assert clone._strategy == "raster"
+
+
+def test_resvg_only_returns_empty_when_resvg_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = FilterService(registry=_NoopRegistry())
+    service.set_strategy("resvg-only")
+    service.register_filter(
+        "blur",
+        _make_descriptor(
+            "<filter id='blur'><feGaussianBlur stdDeviation='2'/></filter>"
+        ),
+    )
+    monkeypatch.setattr(service, "_ensure_pipeline", lambda: True)
+    monkeypatch.setattr(service, "_render_resvg_filter", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        service,
+        "_render_native",
+        lambda *args, **kwargs: pytest.fail("resvg-only should not run native"),
+    )
+    monkeypatch.setattr(
+        service,
+        "_render_vector",
+        lambda *args, **kwargs: pytest.fail("resvg-only should not run vector"),
+    )
+    monkeypatch.setattr(
+        service,
+        "_render_raster",
+        lambda *args, **kwargs: pytest.fail("resvg-only should not run raster"),
+    )
+    monkeypatch.setattr(
+        service,
+        "_descriptor_fallback",
+        lambda *args, **kwargs: pytest.fail(
+            "resvg-only should not run descriptor fallback"
+        ),
+    )
+
+    assert service.resolve_effects("blur") == []
+
+
+def test_runtime_trace_uses_policy_resolved_strategy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = FilterService(registry=_NoopRegistry())
+    service.register_filter(
+        "blur",
+        _make_descriptor(
+            "<filter id='blur'><feGaussianBlur stdDeviation='2'/></filter>"
+        ),
+    )
+    tracer = _TraceRecorder()
+
+    monkeypatch.setattr(service, "_ensure_pipeline", lambda: True)
+    monkeypatch.setattr(
+        service,
+        "_render_raster",
+        lambda *args, **kwargs: [
+            FilterEffectResult(
+                effect=None,
+                strategy="raster",
+                fallback="bitmap",
+                metadata={"renderer": "test"},
+            )
+        ],
+    )
+
+    service.resolve_effects(
+        "blur",
+        context={"policy": {"strategy": "raster"}, "tracer": tracer},
+    )
+
+    event = next(
+        event for event in tracer.events if event["action"] == "runtime_capability"
+    )
+    assert event["metadata"]["strategy"] == "raster"
 
 
 def test_filter_service_binds_policy_engine_from_services() -> None:
@@ -239,6 +377,50 @@ def test_raster_adapter_produces_png_asset() -> None:
     assert raw[:8] == b"\x89PNG\r\n\x1a\n"
 
 
+def test_raster_adapter_generate_placeholder_sanitizes_dimensions() -> None:
+    adapter = RasterAdapter()
+
+    result = adapter.generate_placeholder(
+        width_px=-12,
+        height_px=math.nan,
+        metadata={"width_px": "stale", "height_px": "stale"},
+    )
+
+    assert result.width_px == 64
+    assert result.height_px == 64
+    assert result.metadata["width_px"] == 64
+    assert result.metadata["height_px"] == 64
+    assert Image.open(BytesIO(result.image_bytes)).size == (64, 64)
+
+
+def test_raster_adapter_no_skia_placeholder_sanitizes_default_size(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(raster_adapter_module, "skia", None)
+
+    result = RasterAdapter().render_filter(
+        filter_id="blur",
+        filter_element=_make_filter_element("<filter id='blur'/>"),
+        context=None,
+        default_size=(-1, math.inf),
+    )
+
+    assert result.width_px == 192
+    assert result.height_px == 128
+    assert result.metadata["renderer"] == "placeholder"
+
+
+def test_raster_adapter_safe_size_caps_huge_dimensions() -> None:
+    assert RasterAdapter._safe_raster_size(
+        (99_999, 2),
+        default=(64, 64),
+    ) == (4096, 2)
+    assert RasterAdapter._safe_raster_size(
+        ("bad", "worse"),
+        default=(64, 64),
+    ) == (64, 64)
+
+
 def test_raster_adapter_renders_source_element_with_transparent_edges() -> None:
     pytest.importorskip("skia")
 
@@ -255,13 +437,11 @@ def test_raster_adapter_renders_source_element_with_transparent_edges() -> None:
     )
     service.set_strategy("raster")
 
-    svg = etree.fromstring(
-        """
+    svg = etree.fromstring("""
         <svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'>
             <circle id='target' cx='50' cy='50' r='10' filter='url(#lighting)'/>
         </svg>
-        """
-    )
+        """)
     circle = svg.xpath(".//*[@id='target']")[0]
     results = service.resolve_effects(
         "lighting",
@@ -351,7 +531,9 @@ def test_raster_adapter_source_surface_does_not_invent_fill_when_missing() -> No
     assert float(center[3]) == 0.0
 
 
-def test_raster_adapter_source_surface_resolves_relative_images_in_transformed_groups() -> None:
+def test_raster_adapter_source_surface_resolves_relative_images_in_transformed_groups() -> (
+    None
+):
     pytest.importorskip("skia")
 
     adapter = RasterAdapter()
@@ -380,7 +562,9 @@ def test_raster_adapter_preview_resolves_relative_images_in_transformed_groups(
         filter_id="lightingColorA",
         bbox={"x": 90.0, "y": 260.0, "width": 50.0, "height": 30.0},
     )
-    monkeypatch.setattr(adapter, "_render_surface_with_filter_pipeline", lambda **_: None)
+    monkeypatch.setattr(
+        adapter, "_render_surface_with_filter_pipeline", lambda **_: None
+    )
 
     result = adapter.render_filter(
         filter_id="lightingColorA",
@@ -400,8 +584,7 @@ def test_raster_adapter_filter_preview_localizes_nonzero_bounds() -> None:
     pytest.importorskip("skia")
 
     adapter = RasterAdapter()
-    svg = etree.fromstring(
-        """
+    svg = etree.fromstring("""
         <svg xmlns="http://www.w3.org/2000/svg"
              xmlns:xlink="http://www.w3.org/1999/xlink">
           <defs>
@@ -417,8 +600,7 @@ def test_raster_adapter_filter_preview_localizes_nonzero_bounds() -> None:
             <use xlink:href="#rects" filter="url(#blur)"/>
           </g>
         </svg>
-        """
-    )
+        """)
     ns = {
         "svg": "http://www.w3.org/2000/svg",
         "xlink": "http://www.w3.org/1999/xlink",
@@ -484,8 +666,7 @@ def test_raster_adapter_infers_filter_region_from_filter_element() -> None:
     pytest.importorskip("skia")
 
     adapter = RasterAdapter()
-    svg = etree.fromstring(
-        """
+    svg = etree.fromstring("""
         <svg xmlns="http://www.w3.org/2000/svg"
              xmlns:xlink="http://www.w3.org/1999/xlink">
           <defs>
@@ -501,8 +682,7 @@ def test_raster_adapter_infers_filter_region_from_filter_element() -> None:
             <use xlink:href="#rects" filter="url(#blur)"/>
           </g>
         </svg>
-        """
-    )
+        """)
     ns = {
         "svg": "http://www.w3.org/2000/svg",
         "xlink": "http://www.w3.org/1999/xlink",
@@ -557,8 +737,7 @@ def test_raster_adapter_object_bounding_box_numeric_region_scales_by_bbox() -> N
 
 def test_raster_adapter_source_markup_preserves_user_space_viewbox() -> None:
     adapter = RasterAdapter()
-    svg = etree.fromstring(
-        """
+    svg = etree.fromstring("""
         <svg xmlns="http://www.w3.org/2000/svg">
           <defs>
             <linearGradient id="grad" gradientUnits="userSpaceOnUse" x1="310" y1="15" x2="445" y2="150">
@@ -568,8 +747,7 @@ def test_raster_adapter_source_markup_preserves_user_space_viewbox() -> None:
           </defs>
           <rect id="target" x="310" y="15" width="135" height="135" fill="url(#grad)"/>
         </svg>
-        """
-    )
+        """)
     ns = {"svg": "http://www.w3.org/2000/svg"}
     source_element = svg.xpath(".//svg:rect[@id='target']", namespaces=ns)[0]
 
@@ -585,12 +763,18 @@ def test_raster_adapter_source_markup_preserves_user_space_viewbox() -> None:
     assert markup is not None
     preview = etree.fromstring(markup)
     assert preview.get("viewBox") == "310 15 135 135"
-    assert preview.xpath("boolean(.//svg:linearGradient[@gradientUnits='userSpaceOnUse'])", namespaces=ns)
-    assert not preview.xpath(".//svg:g[@transform='translate(-310,-15)']", namespaces=ns)
+    assert preview.xpath(
+        "boolean(.//svg:linearGradient[@gradientUnits='userSpaceOnUse'])", namespaces=ns
+    )
+    assert not preview.xpath(
+        ".//svg:g[@transform='translate(-310,-15)']", namespaces=ns
+    )
 
 
 def test_surface_to_png_unpremultiplies_alpha() -> None:
-    surface = Surface(width=1, height=1, data=np.array([[[0.0, 0.0, 0.1, 0.1]]], dtype=np.float32))
+    surface = Surface(
+        width=1, height=1, data=np.array([[[0.0, 0.0, 0.1, 0.1]]], dtype=np.float32)
+    )
 
     image = Image.open(BytesIO(_surface_to_png(surface))).convert("RGBA")
 
@@ -613,13 +797,11 @@ def test_resvg_lighting_uses_source_element_alpha() -> None:
     )
     service.set_strategy("resvg")
 
-    svg = etree.fromstring(
-        """
+    svg = etree.fromstring("""
         <svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'>
             <circle id='target' cx='50' cy='50' r='10' filter='url(#lighting)'/>
         </svg>
-        """
-    )
+        """)
     circle = svg.xpath(".//*[@id='target']")[0]
     geometry: list[dict[str, object]] = []
     for segment in _ellipse_segments(50.0, 50.0, 10.0, 10.0):
@@ -1436,13 +1618,17 @@ def test_explicit_raster_strategy_bypasses_descriptor_fallback(monkeypatch) -> N
     service.set_strategy("raster")
     service.register_filter(
         "blur",
-        _make_descriptor("<filter id='blur'><feGaussianBlur stdDeviation='6'/></filter>"),
+        _make_descriptor(
+            "<filter id='blur'><feGaussianBlur stdDeviation='6'/></filter>"
+        ),
     )
 
     monkeypatch.setattr(
         service,
         "_descriptor_fallback",
-        lambda *args, **kwargs: pytest.fail("descriptor fallback should not run for explicit raster strategy"),
+        lambda *args, **kwargs: pytest.fail(
+            "descriptor fallback should not run for explicit raster strategy"
+        ),
     )
 
     results = service.resolve_effects("blur")

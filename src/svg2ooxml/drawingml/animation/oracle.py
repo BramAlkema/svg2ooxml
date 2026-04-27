@@ -56,6 +56,19 @@ from svg2ooxml.drawingml.animation.evidence import (
     EvidenceTier,
     evidence_tiers_for_oracle_verification,
 )
+from svg2ooxml.drawingml.animation.oracle_templates import (
+    find_template_tokens,
+    render_xml_template,
+    resolve_oracle_child_path,
+)
+from svg2ooxml.drawingml.animation.oracle_vocabulary import (
+    AttrNameEntry,
+    DeadPath,
+    FilterEntry,
+    load_attrname_vocabulary,
+    load_dead_paths,
+    load_filter_vocabulary,
+)
 from svg2ooxml.drawingml.xml_builder import NS_P
 
 NS_A = "http://schemas.openxmlformats.org/drawingml/2006/main"
@@ -102,92 +115,6 @@ class PresetSlot:
 
 
 @dataclass(frozen=True, slots=True)
-class FilterEntry:
-    """One entry from the animEffect filter vocabulary SSOT.
-
-    Represents a single `<p:animEffect filter="value">` string value that
-    PowerPoint recognises for entrance and exit presets. Loaded from
-    ``filter_vocabulary.xml`` at the oracle root.
-    """
-
-    value: str
-    description: str
-    entrance_preset_id: int | None
-    entrance_preset_subtype: int | None
-    exit_preset_id: int | None
-    exit_preset_subtype: int | None
-    verification: str
-    source: str
-
-    @property
-    def evidence_tiers(self) -> tuple[EvidenceTier, ...]:
-        return evidence_tiers_for_oracle_verification(self.verification)
-
-    @property
-    def is_entrance_only(self) -> bool:
-        return self.entrance_preset_id is not None and self.exit_preset_id is None
-
-    @property
-    def is_exit_only(self) -> bool:
-        return self.exit_preset_id is not None and self.entrance_preset_id is None
-
-    @property
-    def is_pseudo(self) -> bool:
-        """True for filter values not usable as standalone entrance/exit effects.
-
-        Pseudo-entries (e.g. ``image``) appear in the vocabulary because they
-        are valid ``<p:animEffect filter>`` values but carry their semantics
-        through the enclosing preset (opacity in preset 9/27, not a standalone
-        entrance). Their preset IDs are encoded as -1 in the SSOT.
-        """
-        return self.entrance_preset_id == -1 and self.exit_preset_id == -1
-
-
-@dataclass(frozen=True, slots=True)
-class AttrNameEntry:
-    """One entry from the <p:attrName> vocabulary SSOT.
-
-    Represents a single ``<p:attrName>`` string value that PowerPoint emits
-    natively in its own authoring. Loaded from ``attrname_vocabulary.xml``
-    at the oracle root.
-    """
-
-    value: str
-    category: str
-    scope: str
-    description: str
-    used_by: str
-    verification: str
-    source: str
-
-    @property
-    def evidence_tiers(self) -> tuple[EvidenceTier, ...]:
-        return evidence_tiers_for_oracle_verification(self.verification)
-
-
-@dataclass(frozen=True, slots=True)
-class DeadPath:
-    """One empirically falsified animation shape.
-
-    Represents an XML construct that PPT's parser accepts but its playback
-    engine silently drops (or behaves incorrectly). Loaded from
-    ``dead_paths.xml`` at the oracle root. Negative-test invariants can
-    assert that generated timing never matches any of these shapes.
-    """
-
-    id: str
-    element: str
-    attribute_names: tuple[str, ...]
-    attribute_values: tuple[str, ...]
-    context: str
-    description: str
-    verdict: str
-    source: str
-    replacement_slot: str
-    replacement_note: str
-
-
-@dataclass(frozen=True, slots=True)
 class BehaviorFragment:
     """A single behavior fragment to inject into a compound slot.
 
@@ -220,8 +147,11 @@ class AnimationOracle:
         self._index: dict[str, PresetSlot] = {}
         self._templates: dict[str, str] = {}
         self._filter_vocabulary: tuple[FilterEntry, ...] | None = None
+        self._filter_by_value: dict[str, FilterEntry] | None = None
         self._attrname_vocabulary: tuple[AttrNameEntry, ...] | None = None
+        self._attrname_by_value: dict[str, AttrNameEntry] | None = None
         self._dead_paths: tuple[DeadPath, ...] | None = None
+        self._dead_path_by_id: dict[str, DeadPath] | None = None
         self._load_index(index_path)
 
     # ------------------------------------------------------------------ load
@@ -233,7 +163,12 @@ class AnimationOracle:
             raw_path = entry.get("path")
             if raw_path is None:
                 continue
-            template_path = (self._root / raw_path).resolve()
+            try:
+                template_path = resolve_oracle_child_path(self._root, raw_path)
+            except ValueError as exc:
+                raise OracleSlotError(
+                    f"Oracle slot '{name}' references unsafe template path {raw_path!r}"
+                ) from exc
             if not template_path.is_file():
                 raise FileNotFoundError(
                     f"Oracle slot '{name}' references missing template {template_path}"
@@ -256,48 +191,6 @@ class AnimationOracle:
             self._index[name] = slot
             self._templates[name] = template_path.read_text(encoding="utf-8")
 
-    def _load_filter_vocabulary(self) -> tuple[FilterEntry, ...]:
-        vocab_path = self._root / "filter_vocabulary.xml"
-        if not vocab_path.is_file():
-            raise FileNotFoundError(
-                f"Filter vocabulary SSOT missing: {vocab_path}"
-            )
-        parser = safe_lxml_parser(remove_blank_text=True, remove_comments=True)
-        root = etree.fromstring(vocab_path.read_bytes(), parser)
-        entries: list[FilterEntry] = []
-        for filt in root.findall("filter"):
-            value = filt.get("value", "")
-            description = (filt.findtext("description") or "").strip()
-            entrance = filt.find("entrance")
-            exit_el = filt.find("exit")
-            verification = (filt.findtext("verification") or "unknown").strip()
-            source = (filt.findtext("source") or "").strip()
-
-            def _int_or_none(el: etree._Element | None, attr: str) -> int | None:
-                if el is None:
-                    return None
-                raw = el.get(attr)
-                if raw is None:
-                    return None
-                try:
-                    return int(raw)
-                except ValueError:
-                    return None
-
-            entries.append(
-                FilterEntry(
-                    value=value,
-                    description=description,
-                    entrance_preset_id=_int_or_none(entrance, "preset-id"),
-                    entrance_preset_subtype=_int_or_none(entrance, "preset-subtype"),
-                    exit_preset_id=_int_or_none(exit_el, "preset-id"),
-                    exit_preset_subtype=_int_or_none(exit_el, "preset-subtype"),
-                    verification=verification,
-                    source=source,
-                )
-            )
-        return tuple(entries)
-
     # ---------------------------------------------------------------- access
 
     @property
@@ -315,40 +208,20 @@ class AnimationOracle:
         entrance/exit preset-ID mappings, verification state, and source.
         """
         if self._filter_vocabulary is None:
-            self._filter_vocabulary = self._load_filter_vocabulary()
+            self._filter_vocabulary = load_filter_vocabulary(self._root)
+            self._filter_by_value = {
+                entry.value: entry for entry in self._filter_vocabulary
+            }
         return self._filter_vocabulary
 
     def filter_entry(self, value: str) -> FilterEntry:
         """Look up a :class:`FilterEntry` by its ``value`` field."""
-        for entry in self.filter_vocabulary():
-            if entry.value == value:
-                return entry
+        self.filter_vocabulary()
+        if self._filter_by_value is not None and value in self._filter_by_value:
+            return self._filter_by_value[value]
         raise OracleSlotError(f"Unknown filter vocabulary value: {value!r}")
 
     # -------------------------------------------------- attrName vocabulary
-
-    def _load_attrname_vocabulary(self) -> tuple[AttrNameEntry, ...]:
-        vocab_path = self._root / "attrname_vocabulary.xml"
-        if not vocab_path.is_file():
-            raise FileNotFoundError(
-                f"attrName vocabulary SSOT missing: {vocab_path}"
-            )
-        parser = safe_lxml_parser(remove_blank_text=True, remove_comments=True)
-        root = etree.fromstring(vocab_path.read_bytes(), parser)
-        entries: list[AttrNameEntry] = []
-        for attr_el in root.findall("attrname"):
-            entries.append(
-                AttrNameEntry(
-                    value=attr_el.get("value", ""),
-                    category=(attr_el.findtext("category") or "").strip(),
-                    scope=(attr_el.findtext("scope") or "").strip(),
-                    description=(attr_el.findtext("description") or "").strip(),
-                    used_by=(attr_el.findtext("used-by") or "").strip(),
-                    verification=(attr_el.findtext("verification") or "unknown").strip(),
-                    source=(attr_el.findtext("source") or "").strip(),
-                )
-            )
-        return tuple(entries)
 
     def attrname_vocabulary(self) -> tuple[AttrNameEntry, ...]:
         """Return the complete <p:attrName> vocabulary SSOT.
@@ -357,66 +230,25 @@ class AnimationOracle:
         access. Contains every attrName string PowerPoint emits natively.
         """
         if self._attrname_vocabulary is None:
-            self._attrname_vocabulary = self._load_attrname_vocabulary()
+            self._attrname_vocabulary = load_attrname_vocabulary(self._root)
+            self._attrname_by_value = {
+                entry.value: entry for entry in self._attrname_vocabulary
+            }
         return self._attrname_vocabulary
 
     def attrname_entry(self, value: str) -> AttrNameEntry:
         """Look up an :class:`AttrNameEntry` by its ``value`` field."""
-        for entry in self.attrname_vocabulary():
-            if entry.value == value:
-                return entry
+        self.attrname_vocabulary()
+        if self._attrname_by_value is not None and value in self._attrname_by_value:
+            return self._attrname_by_value[value]
         raise OracleSlotError(f"Unknown attrName vocabulary value: {value!r}")
 
     def is_valid_attrname(self, value: str) -> bool:
         """True if *value* appears in the attrName vocabulary SSOT."""
-        return any(e.value == value for e in self.attrname_vocabulary())
+        self.attrname_vocabulary()
+        return self._attrname_by_value is not None and value in self._attrname_by_value
 
     # ---------------------------------------------------------- dead paths
-
-    def _load_dead_paths(self) -> tuple[DeadPath, ...]:
-        dead_path = self._root / "dead_paths.xml"
-        if not dead_path.is_file():
-            raise FileNotFoundError(
-                f"dead_paths SSOT missing: {dead_path}"
-            )
-        parser = safe_lxml_parser(remove_blank_text=True, remove_comments=True)
-        root = etree.fromstring(dead_path.read_bytes(), parser)
-        entries: list[DeadPath] = []
-        for dp_el in root.findall("dead-path"):
-            shape = dp_el.find("shape")
-            element_name = ""
-            attr_names: list[str] = []
-            attr_values: list[str] = []
-            context = ""
-            if shape is not None:
-                element_name = (shape.findtext("element") or "").strip()
-                for attr in shape.findall("attribute"):
-                    name = attr.get("name", "")
-                    if name:
-                        attr_names.append(name)
-                        attr_values.append((attr.text or "").strip())
-                context = (shape.findtext("context") or "").strip()
-            replacement = dp_el.find("replacement")
-            replacement_slot = ""
-            replacement_note = ""
-            if replacement is not None:
-                replacement_slot = (replacement.findtext("slot") or "").strip()
-                replacement_note = (replacement.findtext("note") or "").strip()
-            entries.append(
-                DeadPath(
-                    id=dp_el.get("id", ""),
-                    element=element_name,
-                    attribute_names=tuple(attr_names),
-                    attribute_values=tuple(attr_values),
-                    context=context,
-                    description=(dp_el.findtext("description") or "").strip(),
-                    verdict=(dp_el.findtext("verdict") or "").strip(),
-                    source=(dp_el.findtext("source") or "").strip(),
-                    replacement_slot=replacement_slot,
-                    replacement_note=replacement_note,
-                )
-            )
-        return tuple(entries)
 
     def dead_paths(self) -> tuple[DeadPath, ...]:
         """Return the empirically-falsified animation shape catalog.
@@ -426,14 +258,15 @@ class AnimationOracle:
         generated timing XML never emits any of the listed shapes.
         """
         if self._dead_paths is None:
-            self._dead_paths = self._load_dead_paths()
+            self._dead_paths = load_dead_paths(self._root)
+            self._dead_path_by_id = {entry.id: entry for entry in self._dead_paths}
         return self._dead_paths
 
     def dead_path(self, id: str) -> DeadPath:
         """Look up a :class:`DeadPath` by its ``id`` attribute."""
-        for dp in self.dead_paths():
-            if dp.id == id:
-                return dp
+        self.dead_paths()
+        if self._dead_path_by_id is not None and id in self._dead_path_by_id:
+            return self._dead_path_by_id[id]
         raise OracleSlotError(f"Unknown dead path id: {id!r}")
 
     def slot(self, name: str) -> PresetSlot:
@@ -491,7 +324,7 @@ class AnimationOracle:
             )
 
         text = self.template_text(slot_name)
-        rendered = _render_template(text, substitutions)
+        rendered = render_xml_template(text, substitutions)
 
         wrapped = (
             f'<root xmlns:p="{NS_P}" '
@@ -658,7 +491,16 @@ class AnimationOracle:
         duration_ms: int,
     ) -> list[etree._Element]:
         """Load a behavior fragment file and return its substituted children."""
-        fragment_path = self._root / "emph" / "behaviors" / f"{fragment.name}.xml"
+        try:
+            behavior_root = resolve_oracle_child_path(self._root, "emph", "behaviors")
+            fragment_path = resolve_oracle_child_path(
+                behavior_root,
+                f"{fragment.name}.xml",
+            )
+        except ValueError as exc:
+            raise OracleSlotError(
+                f"Behavior fragment '{fragment.name}' escapes oracle root"
+            ) from exc
         if not fragment_path.is_file():
             raise OracleSlotError(
                 f"Behavior fragment '{fragment.name}' not found at {fragment_path}"
@@ -672,7 +514,14 @@ class AnimationOracle:
         }
         for key, value in fragment.tokens.items():
             substitutions[str(key)] = str(value)
-        rendered = _render_template(text, substitutions)
+        template_tokens = find_template_tokens(text)
+        extra_tokens = set(map(str, fragment.tokens)) - template_tokens
+        if extra_tokens:
+            raise ValueError(
+                f"Behavior fragment '{fragment.name}' got unknown tokens: "
+                f"{', '.join(sorted(extra_tokens))}"
+            )
+        rendered = render_xml_template(text, substitutions)
 
         wrapped = (
             f'<root xmlns:p="{NS_P}" xmlns:a="{NS_A}">{rendered}</root>'
@@ -690,15 +539,6 @@ class AnimationOracle:
         for child in children:
             fragment_elem.remove(child)
         return children
-
-
-def _render_template(text: str, substitutions: Mapping[str, str]) -> str:
-    # Use a targeted replace loop (not str.format) so literal braces in the
-    # template — e.g. within attribute values like JSON blobs — survive.
-    rendered = text
-    for key, value in substitutions.items():
-        rendered = rendered.replace("{" + key + "}", value)
-    return rendered
 
 
 @lru_cache(maxsize=1)
