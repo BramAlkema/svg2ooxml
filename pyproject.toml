@@ -109,6 +109,7 @@ testpaths = [
 ]
 markers = [
   "unit: fast checks that should run in the default developer loop",
+  "e2e: fast end-to-end SVG to PPTX conversion checks",
   "integration: cross-module tests that touch IO or heavier dependencies",
   "visual: visual regression tests that rely on PPTX rendering",
   "slow: long-running tests gated from default workflows",
