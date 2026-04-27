@@ -6,7 +6,12 @@ import math
 
 import pytest
 
-from svg2ooxml.common.geometry.transforms.decompose import decompose_matrix
+from svg2ooxml.common.geometry.transforms.decompose import (
+    classify_affine_matrix,
+    decompose_matrix,
+    dominant_affine_component,
+    identity_payload_for_affine_component,
+)
 from svg2ooxml.common.geometry.transforms.matrix import (
     IDENTITY,
     Matrix,
@@ -59,6 +64,41 @@ def test_decompose_matrix_recovers_components() -> None:
     assert components.scale_x == pytest.approx(2.0, rel=1e-6)
     assert components.scale_y == pytest.approx(3.0, rel=1e-6)
     assert abs(components.shear) < 1e-6
+
+
+def test_classify_affine_matrix_identifies_basic_components() -> None:
+    assert classify_affine_matrix(Matrix(1, 0, 0, 1, 0, 0)) == ("identity", None)
+    assert classify_affine_matrix(Matrix(1, 0, 0, 1, 10, 20)) == (
+        "translate",
+        (10, 20),
+    )
+    assert classify_affine_matrix(Matrix(2, 0, 0, 3, 0, 0)) == (
+        "scale",
+        (2, 3),
+    )
+
+
+def test_classify_affine_matrix_decomposes_composites_by_priority() -> None:
+    composed = translate(10, 20).multiply(rotate(30)).multiply(scale(2, 2))
+
+    assert classify_affine_matrix(composed)[0] == "translate"
+    assert dominant_affine_component(
+        composed,
+        component_priority=("rotate", "scale", "translate"),
+    )[0] == "rotate"
+
+
+def test_classify_affine_matrix_rejects_skew() -> None:
+    skewed = Matrix(1, 0, math.tan(math.radians(30)), 1, 0, 0)
+
+    assert classify_affine_matrix(skewed) == (None, None)
+    assert dominant_affine_component(skewed) is None
+
+
+def test_affine_identity_payloads() -> None:
+    assert identity_payload_for_affine_component("translate") == (0.0, 0.0)
+    assert identity_payload_for_affine_component("scale") == (1.0, 1.0)
+    assert identity_payload_for_affine_component("rotate") == 0.0
 
 
 def test_matrix_transform_xy() -> None:

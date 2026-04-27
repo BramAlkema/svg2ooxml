@@ -5,6 +5,10 @@ from __future__ import annotations
 from typing import Any
 
 from svg2ooxml.common.units import UnitConverter
+from svg2ooxml.common.units.lengths import (
+    parse_number_or_percent,
+    resolve_length_px,
+)
 
 _UNIT_CONVERTER = UnitConverter()
 
@@ -16,22 +20,6 @@ def normalize_gradient_units(value: str | None) -> str:
     if token.lower() == "userspaceonuse":
         return "userSpaceOnUse"
     return "objectBoundingBox"
-
-
-def parse_number_or_percent(value: str | None, default: float = 0.0) -> float:
-    """Parse a bare SVG number or percent fraction."""
-
-    if value is None:
-        return default
-    token = value.strip()
-    if not token:
-        return default
-    try:
-        if token.endswith("%"):
-            return float(token[:-1]) / 100.0
-        return float(token)
-    except ValueError:
-        return default
 
 
 def parse_gradient_coordinate(
@@ -55,11 +43,19 @@ def parse_gradient_coordinate(
     if normalize_gradient_units(units) != "userSpaceOnUse":
         return parse_number_or_percent(token, fallback)
 
+    if context is None:
+        percent_value = _parse_simple_percent(token)
+        if percent_value is not None:
+            return percent_value
+
     converter = unit_converter or _UNIT_CONVERTER
-    try:
-        return float(converter.to_px(token, context, axis=axis))
-    except (AttributeError, TypeError, ValueError):
-        return parse_number_or_percent(token, fallback)
+    return resolve_length_px(
+        token,
+        context,
+        axis=axis,
+        default=fallback,
+        unit_converter=converter,
+    )
 
 
 def parse_gradient_offset(value: str | None) -> float:
@@ -67,3 +63,13 @@ def parse_gradient_offset(value: str | None) -> float:
 
     offset = parse_number_or_percent(value, 0.0)
     return max(0.0, min(1.0, offset))
+
+
+def _parse_simple_percent(value: str) -> float | None:
+    token = value.strip()
+    if not token.endswith("%"):
+        return None
+    try:
+        return float(token[:-1]) / 100.0
+    except ValueError:
+        return None

@@ -9,7 +9,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from ..config import DEFAULT_CONFIG, Config
+from svg2ooxml.core.resvg.config import DEFAULT_CONFIG, Config
 
 _DEFAULT_FALLBACKS = ("DejaVuSans", "NotoSans", "Arial", "LiberationSans")
 _FONT_EXTENSIONS = (".ttf", ".otf", ".ttc")

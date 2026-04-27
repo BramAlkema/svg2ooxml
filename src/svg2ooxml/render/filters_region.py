@@ -7,7 +7,10 @@ from typing import Any
 
 import numpy as np
 
-from svg2ooxml.common.units import UnitConverter
+from svg2ooxml.common.units.lengths import (
+    parse_number_or_percent,
+    resolve_user_length_px,
+)
 from svg2ooxml.core.resvg.usvg_tree import FilterNode, FilterPrimitive
 from svg2ooxml.render.filters_model import PrimitiveUnitScale
 from svg2ooxml.render.surface import Surface
@@ -93,17 +96,7 @@ def compute_filter_region(
 
 
 def parse_fraction(value: str | None, default: float) -> float:
-    if value is None:
-        return default
-    value = value.strip()
-    if not value:
-        return default
-    try:
-        if value.endswith("%"):
-            return float(value[:-1]) / 100.0
-        return float(value)
-    except ValueError:
-        return default
+    return parse_number_or_percent(value, default)
 
 
 def parse_user_length(
@@ -113,27 +106,7 @@ def parse_user_length(
     *,
     axis: str = "x",
 ) -> float:
-    if value is None:
-        return default
-    value = value.strip()
-    if not value:
-        return default
-    try:
-        if value.endswith("%"):
-            pct = float(value[:-1])
-            return (pct / 100.0) * viewport_length
-        converter = UnitConverter()
-        context = converter.create_context(
-            width=viewport_length,
-            height=viewport_length,
-            parent_width=viewport_length,
-            parent_height=viewport_length,
-            viewport_width=viewport_length,
-            viewport_height=viewport_length,
-        )
-        return converter.to_px(value, context=context, axis=axis)
-    except ValueError:
-        return default
+    return resolve_user_length_px(value, default, viewport_length, axis=axis)
 
 
 def apply_filter_region(surface: Surface, region: tuple[int, int, int, int], width: int, height: int) -> None:

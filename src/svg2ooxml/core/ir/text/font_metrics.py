@@ -10,7 +10,7 @@ from collections.abc import Iterable, Mapping
 from dataclasses import replace
 from typing import Any
 
-from svg2ooxml.color.utils import rgb_object_to_hex
+from svg2ooxml.color.adapters import color_object_to_hex
 from svg2ooxml.ir.text import Run
 from svg2ooxml.policy.text_policy import TextPolicyDecision
 
@@ -46,7 +46,7 @@ def coerce_hex_color(token: str) -> str:
 
 
 def resvg_color_to_hex(color: Any) -> str:
-    return rgb_object_to_hex(color, scale="unit") or "000000"
+    return color_object_to_hex(color, scale="unit") or "000000"
 
 
 # ---------------------------------------------------------------

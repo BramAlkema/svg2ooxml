@@ -4,9 +4,13 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from svg2ooxml.color.utils import rgb_channels_to_hex
+from svg2ooxml.color.adapters import (
+    css_color_to_hex,
+    hex_to_rgba_tuple,
+    rgba_tuple_to_hex,
+)
 from svg2ooxml.common.conversions.opacity import parse_opacity
-from svg2ooxml.core.parser.colors import parse_color
+from svg2ooxml.common.units.lengths import resolve_length_px
 
 if TYPE_CHECKING:
     from svg2ooxml.common.style.model import StyleContext
@@ -59,20 +63,16 @@ def parse_font_size_token(
 
 
 def hex_to_rgba(color: str) -> tuple[float, float, float, float]:
-    token = color.lstrip("#")
-    if len(token) == 3:
-        token = "".join(ch * 2 for ch in token)
-    if len(token) != 6:
-        return (0.0, 0.0, 0.0, 1.0)
-    r = int(token[0:2], 16) / 255.0
-    g = int(token[2:4], 16) / 255.0
-    b = int(token[4:6], 16) / 255.0
-    return (r, g, b, 1.0)
+    return hex_to_rgba_tuple(color, default=(0.0, 0.0, 0.0, 1.0)) or (
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+    )
 
 
 def rgba_to_hex(value: tuple[float, float, float, float]) -> str:
-    r, g, b, _ = value
-    return rgb_channels_to_hex(r, g, b, prefix="#", scale="unit")
+    return rgba_tuple_to_hex(value, prefix="#")
 
 
 def resolve_color_token(token: str, current_hex: str) -> str:
@@ -84,10 +84,12 @@ def resolve_color_token(token: str, current_hex: str) -> str:
     if stripped.startswith("url("):
         return stripped
 
-    rgba = parse_color(stripped, current_color=hex_to_rgba(current_hex))
-    if rgba is None:
-        return current_hex
-    return rgba_to_hex(rgba)
+    return css_color_to_hex(
+        stripped,
+        current_color=hex_to_rgba(current_hex),
+        default=current_hex,
+        prefix="#",
+    )
 
 
 def length_to_px(
@@ -103,16 +105,13 @@ def length_to_px(
     if not token:
         return 0.0
 
-    try:
-        return float(token)
-    except ValueError:
-        pass
-
-    try:
-        conversion = context.conversion if context is not None else None
-        return unit_converter.to_px(token, conversion, axis=axis)
-    except Exception:
-        return 0.0
+    conversion = context.conversion if context is not None else None
+    return resolve_length_px(
+        token,
+        conversion,
+        axis=axis,
+        unit_converter=unit_converter,
+    )
 
 
 def parse_style_float(value: str | None, default: float) -> float:

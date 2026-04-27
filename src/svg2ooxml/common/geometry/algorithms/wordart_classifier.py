@@ -10,7 +10,6 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from svg2ooxml.common.math_utils import population_variance
-
 from svg2ooxml.ir.text_path import PathPoint, TextPathFrame, TextPathSide
 
 

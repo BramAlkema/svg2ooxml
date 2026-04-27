@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from svg2ooxml.color.adapters import hex_to_rgb_tuple
 from svg2ooxml.color.parsers import parse_color as _parse_color
 from svg2ooxml.color.utils import color_to_hex, rgb_channels_to_hex
 
@@ -50,18 +51,14 @@ def hex_to_rgb(hex_value: str) -> tuple[int, int, int]:
         >>> hex_to_rgb("#00FF00")
         (0, 255, 0)
     """
-    hex_clean = hex_value.lstrip('#')
+    hex_clean = hex_value.lstrip("#")
     if len(hex_clean) != 6:
         raise ValueError(f"Invalid hex color: {hex_value!r}, expected 6 hex digits")
 
     try:
-        r = int(hex_clean[0:2], 16)
-        g = int(hex_clean[2:4], 16)
-        b = int(hex_clean[4:6], 16)
+        return hex_to_rgb_tuple(hex_clean)
     except ValueError as e:
         raise ValueError(f"Invalid hex color: {hex_value!r}") from e
-
-    return (r, g, b)
 
 
 def rgb_to_hex(r: int, g: int, b: int) -> str:

@@ -8,10 +8,10 @@ from svg2ooxml.common.gradient_units import (
     normalize_gradient_units,
     parse_gradient_coordinate,
     parse_gradient_offset,
-    parse_number_or_percent,
 )
 from svg2ooxml.common.svg_refs import local_url_id
 from svg2ooxml.common.units.conversion import ConversionContext
+from svg2ooxml.common.units.lengths import parse_number_or_percent
 from svg2ooxml.core.resvg.geometry.matrix import Matrix, matrix_from_commands
 from svg2ooxml.core.resvg.painting.gradients import (
     GradientStop,

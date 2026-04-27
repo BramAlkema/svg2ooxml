@@ -9,13 +9,15 @@ from svg2ooxml.color.parsers import parse_color
 from svg2ooxml.common.conversions.colors import color_to_hex
 from svg2ooxml.common.conversions.opacity import parse_opacity
 from svg2ooxml.common.geometry import Matrix2D
-from svg2ooxml.common.gradient_units import (
-    parse_gradient_offset,
-    parse_number_or_percent,
-)
+from svg2ooxml.common.gradient_units import parse_gradient_offset
 from svg2ooxml.common.style.css_values import parse_style_declarations
 from svg2ooxml.common.svg_refs import reference_id
 from svg2ooxml.common.units import UnitConverter
+from svg2ooxml.common.units.lengths import (
+    parse_number_or_percent,
+    resolve_length_px,
+    split_length_list,
+)
 from svg2ooxml.ir.numpy_compat import NUMPY_AVAILABLE, np
 
 _UNIT_CONVERTER = UnitConverter()
@@ -53,7 +55,7 @@ def parse_dash_array(value: str | None) -> list[float] | None:
     if not token or token.lower() == "none":
         return None
     numbers: list[float] = []
-    for part in token.replace(",", " ").split():
+    for part in split_length_list(token):
         length = parse_length(part)
         if length is None:
             return None
@@ -67,12 +69,18 @@ def parse_length(value: str | None) -> float | None:
     token = value.strip()
     if not token:
         return None
-    try:
-        if token.endswith("%"):
-            return float(token[:-1])
-        return _UNIT_CONVERTER.to_px(token, _LENGTH_CONTEXT, axis="font-size")
-    except ValueError:
+    if token.endswith("%"):
+        return parse_number_or_percent(token, 0.0) * 100.0
+    resolved = resolve_length_px(
+        token,
+        _LENGTH_CONTEXT,
+        axis="font-size",
+        default=float("nan"),
+        unit_converter=_UNIT_CONVERTER,
+    )
+    if resolved != resolved:
         return None
+    return resolved
 
 
 def parse_optional_float(value: str | None) -> float | None:

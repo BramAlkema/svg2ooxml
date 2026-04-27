@@ -8,8 +8,8 @@ from dataclasses import dataclass, field
 
 from lxml import etree
 
+from svg2ooxml.color.adapters import color_object_alpha, color_object_to_hex
 from svg2ooxml.color.parsers import parse_color
-from svg2ooxml.color.utils import rgb_object_to_hex
 from svg2ooxml.common.conversions.colors import color_to_hex
 from svg2ooxml.common.conversions.opacity import parse_opacity
 from svg2ooxml.common.gradient_units import (
@@ -19,7 +19,21 @@ from svg2ooxml.common.gradient_units import (
 )
 from svg2ooxml.common.style.css_values import parse_style_declarations
 from svg2ooxml.common.svg_refs import local_name as _local_name
-from svg2ooxml.core.resvg.geometry.matrix import Matrix
+from svg2ooxml.core.resvg.geometry.matrix_bridge import (
+    MatrixTuple,
+)
+from svg2ooxml.core.resvg.geometry.matrix_bridge import (
+    matrix_to_string as _matrix_to_string,
+)
+from svg2ooxml.core.resvg.geometry.matrix_bridge import (
+    matrix_to_tuple as _matrix_to_tuple,
+)
+from svg2ooxml.core.resvg.geometry.matrix_bridge import (
+    matrix_tuple_to_string as _matrix_tuple_to_string,
+)
+from svg2ooxml.core.resvg.geometry.matrix_bridge import (
+    parse_matrix_transform as _parse_matrix,
+)
 from svg2ooxml.core.resvg.painting.gradients import (
     GradientStop,
     LinearGradient,
@@ -31,9 +45,6 @@ from svg2ooxml.core.resvg.usvg_tree import PatternNode, UseNode
 # ---------------------------------------------------------------------------
 # Descriptor dataclasses
 # ---------------------------------------------------------------------------
-
-
-MatrixTuple = tuple[float, float, float, float, float, float]
 
 
 @dataclass(slots=True)
@@ -162,7 +173,7 @@ def describe_pattern(pattern_id: str, node: PatternNode) -> PatternDescriptor:
     content_units = (
         pattern.content_units if pattern is not None and pattern.content_units else "userSpaceOnUse"
     )
-    transform = _matrix_to_tuple(pattern.transform if pattern is not None else Matrix.identity())
+    transform = _matrix_to_tuple(pattern.transform if pattern is not None else None)
     href = pattern.href if pattern is not None else None
 
     children: list[etree._Element] = []
@@ -176,7 +187,7 @@ def describe_pattern(pattern_id: str, node: PatternNode) -> PatternDescriptor:
                 resolved_clone = _clone_element(resolved)
                 resolved_clone.attrib.pop("id", None)
                 _copy_presentation_attributes(child_source, resolved_clone)
-                transform_matrix = getattr(child, "transform", Matrix.identity())
+                transform_matrix = getattr(child, "transform", None)
                 transform_value = _matrix_to_string(transform_matrix)
                 if transform_value:
                     wrapper = etree.Element("g")
@@ -327,7 +338,7 @@ def _describe_stops(stops: Sequence[GradientStop]) -> tuple[GradientStopDescript
             GradientStopDescriptor(
                 offset=max(0.0, min(1.0, stop.offset)),
                 color=_color_to_hex(stop.color),
-                opacity=max(0.0, min(1.0, stop.color.a)),
+                opacity=color_object_alpha(stop.color),
             )
         )
     return tuple(descriptors)
@@ -527,36 +538,12 @@ def _parse_float(value: str | None, default: float) -> float:
         return default
 
 
-def _parse_matrix(value: str | None) -> MatrixTuple:
-    if not value:
-        return _matrix_to_tuple(Matrix.identity())
-    token = value.strip()
-    if token.startswith("matrix(") and token.endswith(")"):
-        numbers = token[7:-1].replace(",", " ").split()
-        if len(numbers) == 6:
-            try:
-                return tuple(float(n) for n in numbers)  # type: ignore[return-value]
-            except ValueError:
-                pass
-    return _matrix_to_tuple(Matrix.identity())
-
-
-def _matrix_to_tuple(matrix: Matrix) -> MatrixTuple:
-    return (matrix.a, matrix.b, matrix.c, matrix.d, matrix.e, matrix.f)
-
-
-def _matrix_tuple_to_string(values: MatrixTuple) -> str | None:
-    if values == (1.0, 0.0, 0.0, 1.0, 0.0, 0.0):
-        return None
-    return f"matrix({_format_number(values[0])} {_format_number(values[1])} {_format_number(values[2])} {_format_number(values[3])} {_format_number(values[4])} {_format_number(values[5])})"
-
-
 def _format_number(value: float) -> str:
     return f"{value:.6f}".rstrip("0").rstrip(".") or "0"
 
 
 def _color_to_hex(color: Color) -> str:
-    return rgb_object_to_hex(color, prefix="#", scale="unit") or "#000000"
+    return color_object_to_hex(color, prefix="#", scale="auto") or "#000000"
 
 
 def _normalize_hex(value: str | None) -> str | None:
@@ -574,10 +561,6 @@ def _normalize_hex(value: str | None) -> str | None:
         except ValueError:
             return None
     return None
-
-
-def _matrix_to_string(matrix: Matrix) -> str | None:
-    return _matrix_tuple_to_string(_matrix_to_tuple(matrix))
 
 
 def _extract_href(element: etree._Element) -> str | None:

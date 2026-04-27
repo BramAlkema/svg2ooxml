@@ -245,7 +245,9 @@ class TextRenderCoordinator:
         # correct embedded font is better than flat text or outlines.
         if classification is None:
             # Default to textArchUp for unclassified curves
-            from svg2ooxml.common.geometry.algorithms.wordart_classifier import WordArtClassificationResult
+            from svg2ooxml.common.geometry.algorithms.wordart_classifier import (
+                WordArtClassificationResult,
+            )
             classification = WordArtClassificationResult(
                 preset="textArchUp",
                 confidence=0.3,

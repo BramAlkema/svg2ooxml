@@ -7,6 +7,7 @@ from typing import Any
 
 from lxml import etree
 
+from svg2ooxml.color.adapters import hex_to_rgb_tuple
 from svg2ooxml.common.geometry import Matrix2D
 from svg2ooxml.common.units import UnitConverter
 from svg2ooxml.core.ir import fallbacks
@@ -142,10 +143,7 @@ class ShapeFallbackMixin:
 
     @staticmethod
     def _hex_to_rgba(rgb: str, opacity: float) -> tuple[int, int, int, int]:
-        rgb = rgb.lstrip("#")
-        r = int(rgb[0:2], 16)
-        g = int(rgb[2:4], 16)
-        b = int(rgb[4:6], 16)
+        r, g, b = hex_to_rgb_tuple(rgb)
         a = max(0, min(255, int(round(opacity * 255))))
         return (r, g, b, a)
 

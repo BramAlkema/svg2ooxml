@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING
 
 from lxml import etree  # For type annotations
 
-from svg2ooxml.color.utils import rgb_object_to_hex
+from svg2ooxml.color.adapters import color_object_to_hex
 
 # Import centralized unit conversion constants
 from svg2ooxml.common.conversions.bidi import is_rtl_text
@@ -129,7 +129,7 @@ def _color_to_hex(color: ResvgColor | None) -> str:
     Returns:
         6-character uppercase hex color string (e.g., "FF0000" for red)
     """
-    return rgb_object_to_hex(color, scale="unit") or "000000"
+    return color_object_to_hex(color, scale="unit") or "000000"
 
 
 def _font_size_pt_to_drawingml(size_pt: float) -> int:

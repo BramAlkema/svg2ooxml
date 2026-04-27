@@ -5,18 +5,18 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from svg2ooxml.common.geometry import parse_transform_list
-from svg2ooxml.drawingml.bridges.resvg_paint_bridge import PatternDescriptor
-from svg2ooxml.elements.pattern_processor import PatternComplexity, PatternType
-from svg2ooxml.ir.paint import PatternPaint
+from svg2ooxml.core.styling.paint import (
+    ensure_paint_policy,
+    maybe_set_geometry_fallback,
+)
 from svg2ooxml.core.styling.style_helpers import (
     clean_color,
     matrix2d_to_numpy,
     matrix_tuple_is_identity,
 )
-from svg2ooxml.core.styling.paint import (
-    ensure_paint_policy,
-    maybe_set_geometry_fallback,
-)
+from svg2ooxml.drawingml.bridges.resvg_paint_bridge import PatternDescriptor
+from svg2ooxml.elements.pattern_processor import PatternComplexity, PatternType
+from svg2ooxml.ir.paint import PatternPaint
 from svg2ooxml.policy.constants import FALLBACK_EMF
 from svg2ooxml.services import ConversionServices
 

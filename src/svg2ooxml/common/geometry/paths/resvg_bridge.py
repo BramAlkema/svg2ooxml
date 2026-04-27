@@ -6,6 +6,7 @@ import math
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 
+from svg2ooxml.common.geometry.matrix import Matrix2D
 from svg2ooxml.core.resvg.geometry.matrix import Matrix as ResvgMatrix
 from svg2ooxml.core.resvg.geometry.path_normalizer import (
     NormalizedPath as ResvgNormalizedPath,
@@ -17,8 +18,6 @@ from svg2ooxml.core.resvg.geometry.primitives import ClosePath, LineTo, MoveTo
 from svg2ooxml.core.resvg.geometry.tessellation import TessellationResult
 from svg2ooxml.core.resvg.geometry.tessellation import Tessellator as ResvgTessellator
 from svg2ooxml.ir.geometry import LineSegment, Point, SegmentType
-
-from ..matrix import Matrix2D
 
 _TESSELLATOR = ResvgTessellator()
 

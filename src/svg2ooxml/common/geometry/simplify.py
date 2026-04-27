@@ -13,7 +13,6 @@ from collections.abc import Callable, Sequence
 
 from svg2ooxml.ir.geometry import BezierSegment, LineSegment, Point, SegmentType
 
-
 # ---------------------------------------------------------------------------
 # Tolerances (in SVG user-space pixels)
 # ---------------------------------------------------------------------------

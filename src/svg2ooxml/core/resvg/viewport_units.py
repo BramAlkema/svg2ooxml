@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 from svg2ooxml.common.conversions.transforms import parse_numeric_list
 from svg2ooxml.common.units import UnitConverter
 from svg2ooxml.common.units.conversion import ConversionContext
+from svg2ooxml.common.units.lengths import parse_number_or_percent, resolve_length_px
 
 from .parser.options import Options
 
@@ -30,10 +31,13 @@ def parse_length_px(
     token = value.strip()
     if not token:
         return default
-    try:
-        return _UNIT_CONVERTER.to_px(token, context, axis=axis)
-    except ValueError:
-        return _parse_number(token, default)
+    return resolve_length_px(
+        token,
+        context,
+        axis=axis,
+        default=_parse_number(token, default),
+        unit_converter=_UNIT_CONVERTER,
+    )
 
 
 def initial_viewport_context(
@@ -101,17 +105,7 @@ def _options_font_size(options: Options | None) -> float:
 
 
 def _parse_number(value: str | None, default: float = 0.0) -> float:
-    if value is None:
-        return default
-    token = value.strip()
-    if not token:
-        return default
-    try:
-        if token.endswith("%"):
-            return float(token[:-1]) / 100.0
-        return float(token)
-    except ValueError:
-        return default
+    return parse_number_or_percent(value, default)
 
 
 def _parse_view_box(raw: str | None) -> tuple[float, float, float, float] | None:

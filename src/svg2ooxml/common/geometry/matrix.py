@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from math import cos, radians, sin, tan
 
@@ -73,6 +73,12 @@ class Matrix2D:
         return (
             x * self.a + y * self.c + self.e,
             x * self.b + y * self.d + self.f,
+        )
+
+    def transform_delta_xy(self, dx: float, dy: float) -> tuple[float, float]:
+        return (
+            dx * self.a + dy * self.c,
+            dx * self.b + dy * self.d,
         )
 
     def transform_point(self, point: Point) -> Point:
@@ -232,4 +238,33 @@ def _parse_floats(text: str) -> list[float]:
     return parse_numeric_list(text)
 
 
-__all__ = ["Matrix2D", "parse_transform_list"]
+MatrixLike = Matrix2D | Sequence[float] | None
+
+
+def transform_delta_xy(
+    matrix: MatrixLike,
+    dx: float,
+    dy: float,
+) -> tuple[float, float]:
+    if matrix is None:
+        return (dx, dy)
+    if isinstance(matrix, Matrix2D):
+        return matrix.transform_delta_xy(dx, dy)
+    a, b, c, d, _e, _f = matrix
+    return (a * dx + c * dy, b * dx + d * dy)
+
+
+def transform_delta_pairs(
+    matrix: MatrixLike,
+    pairs: Iterable[tuple[float, float]],
+) -> list[tuple[float, float]]:
+    return [transform_delta_xy(matrix, dx, dy) for dx, dy in pairs]
+
+
+__all__ = [
+    "Matrix2D",
+    "MatrixLike",
+    "parse_transform_list",
+    "transform_delta_pairs",
+    "transform_delta_xy",
+]

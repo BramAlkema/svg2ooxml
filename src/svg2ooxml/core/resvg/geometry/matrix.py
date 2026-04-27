@@ -6,7 +6,7 @@ import math
 from collections.abc import Iterable
 from dataclasses import dataclass
 
-from ..parser.presentation import TransformCommand
+from svg2ooxml.core.resvg.parser.presentation import TransformCommand
 
 
 @dataclass(frozen=True)

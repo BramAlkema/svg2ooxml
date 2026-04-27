@@ -175,7 +175,7 @@ def _split_components(body: str, *, expected_min: int, expected_max: int) -> lis
 def _parse_rgb_component(component: str) -> float:
     if component.endswith("%"):
         value = float(component[:-1]) / 100.0
-        return _clamp(value)
+        return round(_clamp(value) * 255.0) / 255.0
     return _clamp(float(component) / 255.0)
 
 

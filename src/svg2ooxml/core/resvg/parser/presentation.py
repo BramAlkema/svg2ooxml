@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from svg2ooxml.common.conversions.opacity import parse_opacity
 from svg2ooxml.common.conversions.transforms import parse_numeric_list
 from svg2ooxml.common.units import UnitConverter
+from svg2ooxml.common.units.lengths import resolve_length_px
 from svg2ooxml.common.units.scalars import PX_PER_INCH
 
 from .tree import SvgNode
@@ -109,10 +110,16 @@ def _parse_length(value: str | None) -> float | None:
         return None
     if token.endswith("%"):
         return _parse_float(token.rstrip("%"))
-    try:
-        return _UNIT_CONVERTER.to_px(token, _default_length_context(), axis="font-size")
-    except ValueError:
+    resolved = resolve_length_px(
+        token,
+        _default_length_context(),
+        axis="font-size",
+        default=float("nan"),
+        unit_converter=_UNIT_CONVERTER,
+    )
+    if resolved != resolved:
         return None
+    return resolved
 
 
 def _parse_positive_length(value: str | None) -> float | None:
@@ -133,9 +140,14 @@ def _parse_font_size(value: str | None) -> float | None:
             return _DEFAULT_FONT_SIZE_PT * max(0.0, float(token[:-1])) / 100.0
         except ValueError:
             return None
-    try:
-        px = _UNIT_CONVERTER.to_px(token, _default_length_context(), axis="font-size")
-    except ValueError:
+    px = resolve_length_px(
+        token,
+        _default_length_context(),
+        axis="font-size",
+        default=float("nan"),
+        unit_converter=_UNIT_CONVERTER,
+    )
+    if px != px:
         return None
     if px < 0:
         return None
@@ -167,10 +179,16 @@ def _parse_letter_spacing(value: str | None) -> float | None:
     value = value.strip().lower()
     if value in {"normal", "inherit", "initial"}:
         return None
-    try:
-        return _UNIT_CONVERTER.to_px(value, _default_length_context(), axis="font-size")
-    except ValueError:
+    resolved = resolve_length_px(
+        value,
+        _default_length_context(),
+        axis="font-size",
+        default=float("nan"),
+        unit_converter=_UNIT_CONVERTER,
+    )
+    if resolved != resolved:
         return None
+    return resolved
 
 
 def _parse_paint(value: str | None) -> str | None:

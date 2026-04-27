@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 
 from lxml import etree
 
+from svg2ooxml.color.adapters import hex_to_rgb_tuple
 from svg2ooxml.common.style.css_values import parse_style_declarations
 from svg2ooxml.common.units import UnitConverter
 from svg2ooxml.drawingml.bridges import EMFPathAdapter, PathStyle
@@ -236,14 +237,10 @@ def render_bitmap_fallback(
 
 
 def _hex_rgba_to_tuple(hex_color: str, opacity: float) -> tuple[int, int, int, int] | None:
-    token = hex_color.strip().lstrip("#")
-    if len(token) == 3:
-        token = "".join(channel * 2 for channel in token)
-    if len(token) != 6:
+    try:
+        r, g, b = hex_to_rgb_tuple(hex_color.strip())
+    except ValueError:
         return None
-    r = int(token[0:2], 16)
-    g = int(token[2:4], 16)
-    b = int(token[4:6], 16)
     a = max(0, min(255, int(round(opacity * 255))))
     return r, g, b, a
 

@@ -6,13 +6,25 @@ from collections.abc import Iterable
 from typing import Any
 
 from svg2ooxml.clipmask.types import ClipDefinition, MaskInfo
-from svg2ooxml.common.geometry import Matrix2D
 from svg2ooxml.common.geometry.paths import (
     compute_segments_bbox,
     normalize_path_to_segments,
 )
 from svg2ooxml.common.svg_refs import local_url_id
 from svg2ooxml.core.resvg.geometry.matrix import Matrix as ResvgMatrix
+from svg2ooxml.core.resvg.geometry.matrix_bridge import (
+    IDENTITY_MATRIX_TUPLE,
+    MatrixTuple,
+)
+from svg2ooxml.core.resvg.geometry.matrix_bridge import (
+    matrix_to_matrix2d as _matrix_to_matrix2d,
+)
+from svg2ooxml.core.resvg.geometry.matrix_bridge import (
+    matrix_to_tuple as _matrix_to_tuple,
+)
+from svg2ooxml.core.resvg.geometry.matrix_bridge import (
+    transform_point as _matrix_transform_point,
+)
 from svg2ooxml.core.resvg.usvg_tree import BaseNode, Tree
 from svg2ooxml.core.traversal.constants import DEFAULT_TOLERANCE
 from svg2ooxml.ir.geometry import BezierSegment, LineSegment, Point, Rect, SegmentType
@@ -394,19 +406,15 @@ def _transform_points(points: Iterable[Point], transform: ResvgMatrix) -> list[S
     return transformed
 
 
-def _transform_point(point: Point, transform: tuple[float, float, float, float, float, float]) -> Point:
-    a, b, c, d, e, f = transform
-    x = a * point.x + c * point.y + e
-    y = b * point.x + d * point.y + f
-    return Point(x, y)
+def _transform_point(point: Point, transform: MatrixTuple) -> Point:
+    return _matrix_transform_point(point, transform)
 
 
-def _normalize_transform_tuple(value: Any) -> tuple[float, float, float, float, float, float]:
-    if isinstance(value, tuple) and len(value) == 6:
-        return tuple(float(component) for component in value)
-    if isinstance(value, list) and len(value) == 6:
-        return tuple(float(component) for component in value)
-    return (1.0, 0.0, 0.0, 1.0, 0.0, 0.0)
+def _normalize_transform_tuple(value: Any) -> MatrixTuple:
+    try:
+        return _matrix_to_tuple(value)
+    except (TypeError, ValueError):
+        return IDENTITY_MATRIX_TUPLE
 
 
 def _compute_primitives_bbox(primitives: Iterable[dict[str, Any]]) -> Rect | None:
@@ -438,24 +446,6 @@ def _compute_primitives_bbox(primitives: Iterable[dict[str, Any]]) -> Rect | Non
         y=min_y,
         width=max_x - min_x,
         height=max_y - min_y,
-    )
-
-
-def _matrix_to_tuple(matrix: ResvgMatrix | None) -> tuple[float, float, float, float, float, float]:
-    if matrix is None:
-        return (1.0, 0.0, 0.0, 1.0, 0.0, 0.0)
-    return (matrix.a, matrix.b, matrix.c, matrix.d, matrix.e, matrix.f)
-
-
-def _matrix_to_matrix2d(matrix: ResvgMatrix | None) -> Matrix2D:
-    tuple_matrix = _matrix_to_tuple(matrix)
-    return Matrix2D(
-        a=tuple_matrix[0],
-        b=tuple_matrix[1],
-        c=tuple_matrix[2],
-        d=tuple_matrix[3],
-        e=tuple_matrix[4],
-        f=tuple_matrix[5],
     )
 
 

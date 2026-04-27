@@ -8,10 +8,6 @@ from dataclasses import dataclass
 from svg2ooxml.color.parsers import parse_color as parse_global_color
 from svg2ooxml.common.units import UnitConverter
 
-from .colors import parse_rgb
-
-_HEX_SHORT_RE = re.compile(r"^#([0-9a-fA-F]{3})$")
-_HEX_FULL_RE = re.compile(r"^#([0-9a-fA-F]{6})$")
 _RGB_RE = re.compile(r"^rgb\(([^)]+)\)$")
 _URL_RE = re.compile(r"url\((#[^)]+)\)")
 _UNIT_CONVERTER = UnitConverter()
@@ -122,23 +118,7 @@ def parse_color(value: str | None, opacity: float | None) -> Color | None:
     if value is None:
         return None
     value = value.strip()
-    rgb: tuple[int, int, int] | None = None
-    if match := _HEX_SHORT_RE.match(value):
-        hex_value = match.group(1)
-        rgb = tuple(int(ch * 2, 16) for ch in hex_value)
-    elif _HEX_FULL_RE.match(value):
-        rgb = parse_rgb(value)
-    else:
-        rgb = _parse_rgb_function(value)
-
-    if rgb is not None:
-        a = _clamp(opacity if opacity is not None else 1.0)
-        return Color(r=rgb[0] / 255.0, g=rgb[1] / 255.0, b=rgb[2] / 255.0, a=a)
-
-    try:
-        global_color = parse_global_color(value)
-    except ValueError:
-        return None
+    global_color = parse_global_color(value)
     if global_color is None:
         return None
 

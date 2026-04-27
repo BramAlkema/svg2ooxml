@@ -7,6 +7,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 
 from .matrix import Matrix
+from .matrix_bridge import apply_matrix_to_xy
 from .path_commands import (
     ARC_TO,
     CLOSE,
@@ -56,12 +57,12 @@ class NormalizedPath:
                 start = current
                 prev_cubic_ctrl = None
                 prev_quad_ctrl = None
-                primitives.append(_transform_point(MoveTo(*current), self.transform))
+                primitives.append(_transform_primitive(MoveTo(*current), self.transform))
             elif op == LINE_TO:
                 current = (pts[0], pts[1])
                 prev_cubic_ctrl = None
                 prev_quad_ctrl = None
-                primitives.append(_transform_point(LineTo(*current), self.transform))
+                primitives.append(_transform_primitive(LineTo(*current), self.transform))
             elif op == CUBIC_TO:
                 p0 = current
                 p1 = (pts[0], pts[1])
@@ -71,7 +72,7 @@ class NormalizedPath:
                 prev_quad_ctrl = None
                 segments = _flatten_cubic(p0, p1, p2, p3, tolerance)
                 for px, py in segments[1:]:
-                    primitives.append(_transform_point(LineTo(px, py), self.transform))
+                    primitives.append(_transform_primitive(LineTo(px, py), self.transform))
                 current = p3
             elif op == SMOOTH_CUBIC_TO:
                 p0 = current
@@ -86,7 +87,7 @@ class NormalizedPath:
                 prev_quad_ctrl = None
                 segments = _flatten_cubic(p0, reflected, p2, p3, tolerance)
                 for px, py in segments[1:]:
-                    primitives.append(_transform_point(LineTo(px, py), self.transform))
+                    primitives.append(_transform_primitive(LineTo(px, py), self.transform))
                 current = p3
             elif op == QUAD_TO:
                 p0 = current
@@ -96,7 +97,7 @@ class NormalizedPath:
                 prev_cubic_ctrl = None
                 segments = _flatten_quadratic(p0, p1, p2, tolerance)
                 for px, py in segments[1:]:
-                    primitives.append(_transform_point(LineTo(px, py), self.transform))
+                    primitives.append(_transform_primitive(LineTo(px, py), self.transform))
                 current = p2
             elif op == SMOOTH_QUAD_TO:
                 p0 = current
@@ -110,7 +111,7 @@ class NormalizedPath:
                 prev_cubic_ctrl = None
                 segments = _flatten_quadratic(p0, reflected, p2, tolerance)
                 for px, py in segments[1:]:
-                    primitives.append(_transform_point(LineTo(px, py), self.transform))
+                    primitives.append(_transform_primitive(LineTo(px, py), self.transform))
                 current = p2
             elif op == ARC_TO:
                 rx, ry, rotation, large, sweep, x, y = pts
@@ -120,7 +121,7 @@ class NormalizedPath:
                 for seg in arc_segments:
                     segments = _flatten_cubic(seg[0], seg[1], seg[2], seg[3], tolerance)
                     for px, py in segments[1:]:
-                        primitives.append(_transform_point(LineTo(px, py), self.transform))
+                        primitives.append(_transform_primitive(LineTo(px, py), self.transform))
                 current = (x, y)
             elif op == CLOSE:
                 primitives.append(ClosePath())
@@ -169,6 +170,8 @@ def _parse_path_data(path_data: str | None) -> Iterable[PathCommand]:
         idx = 0
         while idx < len(numbers):
             if command == MOVE_TO:
+                if idx + 2 > len(numbers):
+                    break
                 x, y = numbers[idx], numbers[idx + 1]
                 idx += 2
                 if not absolute:
@@ -181,6 +184,8 @@ def _parse_path_data(path_data: str | None) -> Iterable[PathCommand]:
                 # SVG spec: subsequent coordinate pairs after M are implicit LineTo
                 command = LINE_TO
             elif command == LINE_TO:
+                if idx + 2 > len(numbers):
+                    break
                 x, y = numbers[idx], numbers[idx + 1]
                 idx += 2
                 if not absolute:
@@ -329,12 +334,12 @@ def _read_numbers(chunk: str) -> list[float]:
     return result
 
 
-def _transform_point(primitive: object, matrix: Matrix) -> object:
+def _transform_primitive(primitive: object, matrix: Matrix) -> object:
     if isinstance(primitive, MoveTo):
-        x, y = matrix.apply_to_point(primitive.x, primitive.y)
+        x, y = apply_matrix_to_xy(primitive.x, primitive.y, matrix)
         return MoveTo(x, y)
     if isinstance(primitive, LineTo):
-        x, y = matrix.apply_to_point(primitive.x, primitive.y)
+        x, y = apply_matrix_to_xy(primitive.x, primitive.y, matrix)
         return LineTo(x, y)
     return primitive
 

@@ -9,9 +9,9 @@ from typing import TYPE_CHECKING, Any
 
 from lxml import etree
 
+from svg2ooxml.color.adapters import color_object_to_hex
 from svg2ooxml.color.models import Color
 from svg2ooxml.color.parsers import parse_color
-from svg2ooxml.color.utils import rgb_object_to_hex
 from svg2ooxml.common.conversions.angles import degrees_to_ppt
 from svg2ooxml.common.conversions.opacity import opacity_to_ppt, parse_opacity
 from svg2ooxml.common.conversions.scale import position_to_ppt
@@ -236,7 +236,7 @@ class GradientService:
         return gs
 
     def _color_to_hex(self, color: Color) -> str:
-        return rgb_object_to_hex(color, scale="unit") or "000000"
+        return color_object_to_hex(color, scale="unit") or "000000"
 
     def _analysis_comment(self, analysis: GradientAnalysis | None) -> str:
         if analysis is None:

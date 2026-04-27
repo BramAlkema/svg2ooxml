@@ -41,7 +41,13 @@ import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from svg2ooxml.color.utils import rgb_object_to_hex
+from svg2ooxml.color.adapters import color_object_to_hex
+from svg2ooxml.core.resvg.geometry.matrix_bridge import (
+    apply_matrix_to_xy as _apply_matrix_to_point,
+)
+from svg2ooxml.core.resvg.geometry.matrix_bridge import (
+    matrix_to_numpy as _matrix_to_numpy,
+)
 
 if TYPE_CHECKING:
     from svg2ooxml.core.resvg.painting.gradients import LinearGradient, RadialGradient
@@ -491,64 +497,6 @@ def radial_gradient_to_paint(gradient: RadialGradient) -> RadialGradientPaint:
     )
 
 
-def _apply_matrix_to_point(x: float, y: float, matrix) -> tuple[float, float]:
-    """Apply resvg Matrix transform to a point.
-
-    Args:
-        x: X coordinate
-        y: Y coordinate
-        matrix: Resvg Matrix with a, b, c, d, e, f fields (or None)
-
-    Returns:
-        Transformed (x, y) tuple, or original coordinates if matrix is None
-
-    Note:
-        Uses SVG matrix convention:
-        x' = a*x + c*y + e
-        y' = b*x + d*y + f
-    """
-    if matrix is None:
-        return (x, y)
-
-    x_prime = matrix.a * x + matrix.c * y + matrix.e
-    y_prime = matrix.b * x + matrix.d * y + matrix.f
-    return (x_prime, y_prime)
-
-
-def _matrix_to_numpy(matrix):
-    """Convert resvg Matrix to numpy 3x3 affine transform matrix.
-
-    Args:
-        matrix: Resvg Matrix with a, b, c, d, e, f fields (or None)
-
-    Returns:
-        3x3 numpy array in standard affine form, or None if matrix is None:
-        [[a, c, e],
-         [b, d, f],
-         [0, 0, 1]]
-
-    Note:
-        The resvg Matrix uses SVG matrix convention:
-        | a  c  e |   |x|   |a*x + c*y + e|
-        | b  d  f | × |y| = |b*x + d*y + f|
-        | 0  0  1 |   |1|   |      1      |
-
-    DEPRECATED: This function is no longer used for gradients.
-    Transforms are now applied directly to coordinates in the adapter layer.
-    Kept for potential future use with other IR objects.
-    """
-    if matrix is None:
-        return None
-
-    from svg2ooxml.ir.numpy_compat import np
-
-    return np.array([
-        [matrix.a, matrix.c, matrix.e],
-        [matrix.b, matrix.d, matrix.f],
-        [0.0, 0.0, 1.0],
-    ], dtype=np.float64)
-
-
 def _clamp(value: float, min_val: float, max_val: float) -> float:
     """Clamp a value to the given range [min_val, max_val].
 
@@ -572,7 +520,7 @@ def _color_to_hex(color) -> str:
     Returns:
         Hex string in RRGGBB format (uppercase, no #)
     """
-    return rgb_object_to_hex(color, scale="byte") or "000000"
+    return color_object_to_hex(color, scale="auto") or "000000"
 
 
 __all__ = [

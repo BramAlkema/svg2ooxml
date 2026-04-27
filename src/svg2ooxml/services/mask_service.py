@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from svg2ooxml.drawingml.mask_generator import MaskGeometryResult, compute_mask_geometry
@@ -35,7 +35,7 @@ class MaskComputeResult:
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
-class MaskClassification(str, Enum):
+class MaskClassification(StrEnum):
     """Categorise mask definitions for downstream decision making."""
 
     MISSING = "missing"

@@ -28,6 +28,12 @@ def test_parse_rgb_and_hsl() -> None:
     assert hsl.g > 0.0 and hsl.r < 0.2
 
 
+def test_parse_rgb_percent_channels_quantizes_like_svg_engines() -> None:
+    color = parse_color("rgb(99.9%, 50%, 0%)")
+
+    assert color == Color(1.0, 128 / 255, 0.0, 1.0)
+
+
 def test_parse_modern_space_separated_color_functions() -> None:
     rgb = parse_color("rgb(255 0 0 / 50%)")
     hsl = parse_color("hsl(240 100% 50% / 25%)")

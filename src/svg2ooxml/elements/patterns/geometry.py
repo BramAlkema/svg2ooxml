@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import logging
-import re
 from typing import Any
 
 from lxml import etree as ET
 
+from svg2ooxml.common.geometry import parse_transform_list
+from svg2ooxml.common.units.lengths import parse_number_or_percent, resolve_length_px
 
 logger = logging.getLogger(__name__)
 
@@ -47,47 +48,15 @@ def extract_pattern_geometry(element: ET.Element) -> Any:
 
 def parse_dimension(dim_str: str) -> float:
     """Parse dimension string to float value."""
-    try:
-        if dim_str.endswith("%"):
-            return float(dim_str[:-1]) / 100.0
-
-        if any(
-            dim_str.endswith(unit) for unit in ["px", "pt", "em", "cm", "mm", "in"]
-        ):
-            match = re.match(r"([\d.]+)", dim_str)
-            if match:
-                return float(match.group(1))
-
-        return float(dim_str)
-    except (ValueError, TypeError):
-        return 10.0  # Default value
+    if dim_str.endswith("%"):
+        return parse_number_or_percent(dim_str, 10.0)
+    return resolve_length_px(dim_str, None, axis="x", default=10.0)
 
 
 def parse_transform_matrix(transform_str: str) -> list[float] | None:
     """Parse transform string to matrix values."""
     try:
-        matrix_match = re.search(
-            r"matrix\s*\(\s*([\d.-]+(?:\s*,?\s*[\d.-]+)*)\s*\)", transform_str
-        )
-        if matrix_match:
-            values_str = matrix_match.group(1)
-            values = [float(x.strip()) for x in re.split(r"[,\s]+", values_str)]
-            if len(values) == 6:
-                return values
-
-        if "translate(" in transform_str:
-            translate_match = re.search(
-                r"translate\s*\(\s*([\d.-]+)(?:\s*,?\s*([\d.-]+))?\s*\)",
-                transform_str,
-            )
-            if translate_match:
-                tx = float(translate_match.group(1))
-                ty = (
-                    float(translate_match.group(2))
-                    if translate_match.group(2)
-                    else 0
-                )
-                return [1, 0, 0, 1, tx, ty]  # Identity + translation
+        return list(parse_transform_list(transform_str).as_tuple())
 
     except Exception as e:
         logger.warning(f"Failed to parse transform: {e}")

@@ -47,6 +47,43 @@ def test_describe_gradient_element_resolves_absolute_coordinate_units() -> None:
     assert descriptor.x2 == pytest.approx(96.0)
 
 
+def test_describe_gradient_element_preserves_contextless_userspace_percentages() -> None:
+    element = etree.fromstring(
+        """
+        <linearGradient id="grad" gradientUnits="userSpaceOnUse"
+                        x1="50%" y1="25%" x2="75%" y2="100%">
+          <stop offset="0" stop-color="#000000"/>
+          <stop offset="1" stop-color="#ffffff"/>
+        </linearGradient>
+        """
+    )
+
+    descriptor = describe_gradient_element(element)
+
+    assert isinstance(descriptor, LinearGradientDescriptor)
+    assert descriptor.units == "userSpaceOnUse"
+    assert descriptor.x1 == pytest.approx(0.5)
+    assert descriptor.y1 == pytest.approx(0.25)
+    assert descriptor.x2 == pytest.approx(0.75)
+    assert descriptor.y2 == pytest.approx(1.0)
+
+
+def test_describe_gradient_element_parses_full_transform_list() -> None:
+    element = etree.fromstring(
+        """
+        <linearGradient id="grad" gradientTransform="translate(10 20) scale(2)">
+          <stop offset="0" stop-color="#000000"/>
+          <stop offset="1" stop-color="#ffffff"/>
+        </linearGradient>
+        """
+    )
+
+    descriptor = describe_gradient_element(element)
+
+    assert isinstance(descriptor, LinearGradientDescriptor)
+    assert descriptor.transform == pytest.approx((2.0, 0.0, 0.0, 2.0, 10.0, 20.0))
+
+
 def test_describe_mesh_gradient_collects_css_stop_colors() -> None:
     element = etree.fromstring(
         """

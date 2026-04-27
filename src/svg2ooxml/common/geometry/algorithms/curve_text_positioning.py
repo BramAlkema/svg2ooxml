@@ -19,6 +19,11 @@ import re
 from dataclasses import dataclass
 from enum import Enum
 
+from svg2ooxml.common.geometry.algorithms.path_warp_fitter import (  # noqa: F401
+    PathWarpFitter,
+    WarpFitResult,
+    create_path_warp_fitter,
+)
 from svg2ooxml.ir.geometry import Point
 from svg2ooxml.ir.text_path import PathPoint
 
@@ -649,10 +654,3 @@ def create_curve_text_positioner(sampling_method: PathSamplingMethod = PathSampl
         Configured CurveTextPositioner instance
     """
     return CurveTextPositioner(sampling_method)
-
-# Re-export from extracted module for backward compatibility
-from svg2ooxml.common.geometry.algorithms.path_warp_fitter import (  # noqa: F401
-    PathWarpFitter,
-    WarpFitResult,
-    create_path_warp_fitter,
-)

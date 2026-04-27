@@ -9,6 +9,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from svg2ooxml.common.units import UnitConverter
+from svg2ooxml.common.units.lengths import resolve_length_px
 from svg2ooxml.core.resvg.geometry.tessellation import TessellationResult
 from svg2ooxml.core.resvg.usvg_tree import Tree
 
@@ -46,10 +47,16 @@ class Viewport:
             token = value.strip()
             if not token:
                 return None
-            try:
-                return converter.to_px(token, default_context, axis=axis)
-            except ValueError:
+            resolved = resolve_length_px(
+                token,
+                default_context,
+                axis=axis,
+                default=math.nan,
+                unit_converter=converter,
+            )
+            if math.isnan(resolved):
                 return None
+            return resolved
 
         width_attr = _parse_dimension(root.attributes.get("width"), axis="x")
         height_attr = _parse_dimension(root.attributes.get("height"), axis="y")

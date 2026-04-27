@@ -24,6 +24,8 @@ from urllib.parse import urlparse
 
 from lxml import etree as ET
 
+from svg2ooxml.common.units import UnitConverter
+from svg2ooxml.common.units.lengths import resolve_length_px
 from svg2ooxml.services import ConversionServices
 
 logger = logging.getLogger(__name__)
@@ -256,8 +258,8 @@ class ImageProcessor:
         height_str = element.get('height', '100')
 
         # Parse dimensions with unit support
-        width = self._parse_dimension(width_str, context)
-        height = self._parse_dimension(height_str, context)
+        width = self._parse_dimension(width_str, context, axis="x")
+        height = self._parse_dimension(height_str, context, axis="y")
 
         # Calculate aspect ratio
         aspect_ratio = width / height if height != 0 else 1.0
@@ -269,40 +271,22 @@ class ImageProcessor:
             units="px",  # Normalized to pixels
         )
 
-    def _parse_dimension(self, dimension_str: str, context: Any) -> float:
+    def _parse_dimension(self, dimension_str: str, context: Any, *, axis: str) -> float:
         """Parse dimension string with unit conversion."""
         if not dimension_str:
             return 100.0
 
-        # Extract numeric value and unit
-        match = re.match(r'([\d.]+)(\w*)', dimension_str.strip())
-        if not match:
-            return 100.0
-
-        value = float(match.group(1))
-        unit = match.group(2) or 'px'
-
-        # Convert to pixels using services
-        if hasattr(self.services, 'unit_converter'):
-            try:
-                # Use unit converter if available
-                return self.services.unit_converter.to_pixels(value, unit)
-            except Exception as e:
-                self.logger.warning(f"Unit conversion failed: {e}")
-
-        # Fallback conversion
-        unit_map = {
-            'px': 1.0,
-            'pt': 1.333,  # 96/72
-            'in': 96.0,
-            'cm': 37.795,  # 96/2.54
-            'mm': 3.7795,  # 96/25.4
-            'em': 16.0,    # Approximate
-            'rem': 16.0,   # Approximate
-            '%': 1.0,       # Treat as pixels for now
-        }
-
-        return value * unit_map.get(unit.lower(), 1.0)
+        conversion_context = (
+            getattr(context, "conversion", None)
+            or getattr(context, "conversion_context", None)
+        )
+        return resolve_length_px(
+            dimension_str,
+            conversion_context,
+            axis=axis,
+            default=100.0,
+            unit_converter=UnitConverter(),
+        )
 
     def _is_embedded_image(self, href: str) -> bool:
         """Check if image is embedded as data URL."""

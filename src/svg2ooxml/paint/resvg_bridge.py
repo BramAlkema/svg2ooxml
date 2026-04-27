@@ -5,9 +5,12 @@ from __future__ import annotations
 from collections.abc import Iterable
 from dataclasses import dataclass
 
-from svg2ooxml.color.utils import rgb_channels_to_hex, rgb_object_to_hex
+from svg2ooxml.color.adapters import color_object_alpha, color_object_to_hex
+from svg2ooxml.color.utils import rgb_channels_to_hex
 from svg2ooxml.core.parser.colors import parse_color as parse_svg_color
-from svg2ooxml.core.resvg.geometry.matrix import Matrix as ResvgMatrix
+from svg2ooxml.core.resvg.geometry.matrix_bridge import (
+    matrix_to_numpy as _matrix_to_array,
+)
 from svg2ooxml.core.resvg.painting.gradients import (
     GradientStop as ResvgGradientStop,
 )
@@ -25,7 +28,6 @@ from svg2ooxml.core.resvg.painting.paint import (
     StrokeStyle,
 )
 from svg2ooxml.core.resvg.usvg_tree import BaseNode, Tree
-from svg2ooxml.ir.numpy_compat import np
 from svg2ooxml.ir.paint import (
     GradientStop,
     LinearGradientPaint,
@@ -64,10 +66,7 @@ def resolve_paints_for_node(node: BaseNode, tree: Tree) -> NormalizedPaints:
         if fallback_fill is not None:
             fill_paint = fallback_fill
 
-    needs_stroke_fallback = (
-        (stroke_result is None)
-        or (stroke_result.paint is None)
-    )
+    needs_stroke_fallback = (stroke_result is None) or (stroke_result.paint is None)
     if needs_stroke_fallback and presentation is not None and presentation.stroke:
         fallback_stroke_paint = _solid_paint_from_presentation(
             presentation.stroke,
@@ -128,8 +127,6 @@ def resolve_stroke_style(stroke: StrokeStyle | None, tree: Tree) -> Stroke | Non
         paint = None
 
     width = _coerce_float(getattr(stroke, "width", None), 0.0)
-
-
 
     if paint is None and width <= 0.0:
         return None
@@ -224,7 +221,7 @@ def _convert_stops(stops: Iterable[ResvgGradientStop]) -> list[GradientStop]:
         GradientStop(
             offset=_clamp01(stop.offset),
             rgb=_color_to_hex(stop.color),
-            opacity=_clamp01(stop.color.a),
+            opacity=color_object_alpha(stop.color),
         )
         for stop in stops
     ]
@@ -242,7 +239,7 @@ def _color_to_solid(color: Color, opacity: float | None) -> SolidPaint | None:
     if hex_value is None:
         return None
 
-    alpha = _coerce_float(getattr(color, "a", None), 1.0)
+    alpha = color_object_alpha(color)
     if opacity is None:
         effective_opacity = alpha
     else:
@@ -253,18 +250,8 @@ def _color_to_solid(color: Color, opacity: float | None) -> SolidPaint | None:
     return SolidPaint(rgb=hex_value, opacity=_clamp01(effective_opacity))
 
 
-def _matrix_to_array(matrix: ResvgMatrix | None):
-    if matrix is None:
-        return None
-    return np.array([
-        [matrix.a, matrix.c, matrix.e],
-        [matrix.b, matrix.d, matrix.f],
-        [0.0, 0.0, 1.0],
-    ])
-
-
 def _color_to_hex(color: Color) -> str | None:
-    return rgb_object_to_hex(color, default=None, scale="auto")
+    return color_object_to_hex(color, default=None, scale="auto")
 
 
 def _coerce_float(value: float | None, default: float) -> float:
@@ -287,7 +274,7 @@ def _solid_paint_from_presentation(
         return None
 
     r, g, b, a = rgba
-    
+
     effective_opacity = _coerce_float(a, 1.0)
     if fill_opacity is not None:
         effective_opacity *= _coerce_float(fill_opacity, 1.0)

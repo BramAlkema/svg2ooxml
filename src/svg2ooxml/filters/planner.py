@@ -7,9 +7,17 @@ import math
 from collections.abc import Iterable, Mapping
 from typing import Any
 
+from svg2ooxml.common.units.lengths import (
+    parse_number_or_percent,
+    resolve_user_length_px,
+)
 from svg2ooxml.filters.base import FilterContext, FilterResult
+from svg2ooxml.filters.resvg_bridge import (
+    FilterPrimitiveDescriptor,
+    ResolvedFilter,
+    build_filter_node,
+)
 from svg2ooxml.filters.utils import parse_float_list
-from svg2ooxml.filters.resvg_bridge import FilterPrimitiveDescriptor, ResolvedFilter, build_filter_node
 from svg2ooxml.render.filters import FilterPlan, plan_filter
 from svg2ooxml.render.rasterizer import Viewport
 
@@ -112,21 +120,25 @@ class FilterPlanner:
                 region.get("x"),
                 x - 0.1 * base_width,
                 viewport_width,
+                axis="x",
             )
             region_y = self._parse_user_length(
                 region.get("y"),
                 y - 0.1 * base_height,
                 viewport_height,
+                axis="y",
             )
             region_width = self._parse_user_length(
                 region.get("width"),
                 base_width * 1.2,
                 viewport_width,
+                axis="x",
             )
             region_height = self._parse_user_length(
                 region.get("height"),
                 base_height * 1.2,
                 viewport_height,
+                axis="y",
             )
 
         region_width = max(region_width, 1.0)
@@ -316,31 +328,17 @@ class FilterPlanner:
 
     @staticmethod
     def _parse_fraction(value: Any, default: float) -> float:
-        if value is None:
-            return default
-        token = str(value).strip()
-        if not token:
-            return default
-        try:
-            if token.endswith("%"):
-                return float(token[:-1]) / 100.0
-            return float(token)
-        except (TypeError, ValueError):
-            return default
+        return parse_number_or_percent(value, default)
 
     @staticmethod
-    def _parse_user_length(value: Any, default: float, viewport_length: float) -> float:
-        if value is None:
-            return default
-        token = str(value).strip()
-        if not token:
-            return default
-        try:
-            if token.endswith("%"):
-                return (float(token[:-1]) / 100.0) * viewport_length
-            return float(token)
-        except (TypeError, ValueError):
-            return default
+    def _parse_user_length(
+        value: Any,
+        default: float,
+        viewport_length: float,
+        *,
+        axis: str = "x",
+    ) -> float:
+        return resolve_user_length_px(value, default, viewport_length, axis=axis)
 
     @staticmethod
     def _is_identity_matrix(values: list[float]) -> bool:

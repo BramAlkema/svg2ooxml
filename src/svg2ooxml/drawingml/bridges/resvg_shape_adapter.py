@@ -302,7 +302,7 @@ class ResvgShapeAdapter:
             return []
 
         segments: list[SegmentType] = []
-        for start, end in zip(points, points[1:]):
+        for start, end in zip(points, points[1:], strict=False):
             segments.append(LineSegment(start, end))
 
         if node.tag == "polygon" and not self._points_close(points[0], points[-1]):
@@ -385,8 +385,14 @@ class ResvgShapeAdapter:
         quadratic curves.  Arcs are first decomposed into cubic segments.
         """
         from svg2ooxml.core.resvg.geometry.path_commands import (
-            ARC_TO, CLOSE, CUBIC_TO, LINE_TO, MOVE_TO,
-            QUAD_TO, SMOOTH_CUBIC_TO, SMOOTH_QUAD_TO,
+            ARC_TO,
+            CLOSE,
+            CUBIC_TO,
+            LINE_TO,
+            MOVE_TO,
+            QUAD_TO,
+            SMOOTH_CUBIC_TO,
+            SMOOTH_QUAD_TO,
         )
         from svg2ooxml.core.resvg.geometry.path_normalizer import (
             _arc_to_cubic_segments,
