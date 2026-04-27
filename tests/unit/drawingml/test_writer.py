@@ -5,6 +5,7 @@ from __future__ import annotations
 from io import BytesIO
 from pathlib import Path
 
+import pytest
 from lxml import etree as ET
 from PIL import Image as PILImage
 
@@ -724,6 +725,8 @@ def test_render_scene_from_ir_uses_wordart_for_text_path_fixture() -> None:
         / "kelvin_lawrence"
         / "text-path.svg"
     )
+    if not fixture.exists():
+        pytest.skip("Kelvin Lawrence text-path fixture not available")
     parser = SVGParser(ParserConfig())
     parse_result = parser.parse(fixture.read_text(), source_path=str(fixture))
     scene = convert_parser_output(parse_result)
