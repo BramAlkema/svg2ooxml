@@ -4,9 +4,14 @@ from __future__ import annotations
 
 import zipfile
 
+import pytest
 from lxml import etree as ET
 
-from svg2ooxml.core.pptx_exporter import SvgPageSource, SvgToPptxExporter
+from svg2ooxml.core.pptx_exporter import (
+    SvgConversionError,
+    SvgPageSource,
+    SvgToPptxExporter,
+)
 
 
 def test_convert_string_produces_slide_with_expected_fill(tmp_path) -> None:
@@ -32,10 +37,13 @@ def test_convert_string_produces_slide_with_expected_fill(tmp_path) -> None:
     root = ET.fromstring(slide_xml.encode())
     ns = {"a": "http://schemas.openxmlformats.org/drawingml/2006/main"}
     fills = root.findall(".//a:solidFill/a:srgbClr", ns)
-    assert any(fill.get("val") == "336699" for fill in fills), "Expected rectangle fill colour in slide XML"
+    assert any(fill.get("val") == "336699" for fill in fills), (
+        "Expected rectangle fill colour in slide XML"
+    )
 
 
-def test_convert_pages_creates_multi_slide_package(tmp_path) -> None:
+@pytest.mark.parametrize("parallel", [False, True])
+def test_convert_pages_creates_multi_slide_package(tmp_path, parallel: bool) -> None:
     exporter = SvgToPptxExporter()
     slide_one = (
         "<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10'>"
@@ -52,8 +60,9 @@ def test_convert_pages_creates_multi_slide_package(tmp_path) -> None:
         SvgPageSource(svg_text=slide_two, title="Second", name="second"),
     ]
 
-    output_path = tmp_path / "multi-slide.pptx"
-    multi_result = exporter.convert_pages(pages, output_path)
+    suffix = "parallel" if parallel else "serial"
+    output_path = tmp_path / f"multi-slide-{suffix}.pptx"
+    multi_result = exporter.convert_pages(pages, output_path, parallel=parallel)
 
     assert output_path.exists()
     assert multi_result.slide_count == len(pages)
@@ -61,7 +70,9 @@ def test_convert_pages_creates_multi_slide_package(tmp_path) -> None:
 
     aggregated_totals = multi_result.aggregated_trace_report.get("stage_totals", {})
     assert aggregated_totals.get("parser:normalization") == len(pages)
-    assert isinstance(multi_result.aggregated_trace_report.get("resvg_metrics", {}), dict)
+    assert isinstance(
+        multi_result.aggregated_trace_report.get("resvg_metrics", {}), dict
+    )
 
     packaging_totals = multi_result.packaging_report.get("stage_totals", {})
     assert packaging_totals.get("packaging:slide_xml_written") == len(pages)
@@ -73,10 +84,24 @@ def test_convert_pages_creates_multi_slide_package(tmp_path) -> None:
 
     with zipfile.ZipFile(output_path, "r") as archive:
         names = set(archive.namelist())
-        expected_slides = {f"ppt/slides/slide{index}.xml" for index in range(1, len(pages) + 1)}
+        expected_slides = {
+            f"ppt/slides/slide{index}.xml" for index in range(1, len(pages) + 1)
+        }
         assert expected_slides.issubset(names)
 
         slide1_xml = archive.read("ppt/slides/slide1.xml").decode("utf-8")
         slide2_xml = archive.read("ppt/slides/slide2.xml").decode("utf-8")
         assert "FF0000" in slide1_xml
         assert "00FF00" in slide2_xml
+
+
+def test_parallel_convert_pages_rejects_custom_render_components(tmp_path) -> None:
+    exporter = SvgToPptxExporter(parser=object())  # type: ignore[arg-type]
+    pages = [
+        SvgPageSource(
+            svg_text="<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10'/>"
+        )
+    ]
+
+    with pytest.raises(SvgConversionError, match="custom render components: parser"):
+        exporter.convert_pages(pages, tmp_path / "custom-parallel.pptx", parallel=True)

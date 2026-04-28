@@ -6,6 +6,10 @@ import math
 from collections.abc import Iterable
 from dataclasses import dataclass
 
+from svg2ooxml.common.geometry.paths.quadratic import (
+    quadratic_tuple_to_cubic_controls,
+)
+
 from .matrix import Matrix
 from .matrix_bridge import apply_matrix_to_xy
 from .path_commands import (
@@ -368,8 +372,7 @@ def _flatten_cubic(p0: Point, p1: Point, p2: Point, p3: Point, tolerance: float)
 
 
 def _flatten_quadratic(p0: Point, p1: Point, p2: Point, tolerance: float) -> list[Point]:
-    c1 = (p0[0] + 2.0 / 3.0 * (p1[0] - p0[0]), p0[1] + 2.0 / 3.0 * (p1[1] - p0[1]))
-    c2 = (p2[0] + 2.0 / 3.0 * (p1[0] - p2[0]), p2[1] + 2.0 / 3.0 * (p1[1] - p2[1]))
+    c1, c2 = quadratic_tuple_to_cubic_controls(p0, p1, p2)
     return _flatten_cubic(p0, c1, c2, p2, tolerance)
 
 

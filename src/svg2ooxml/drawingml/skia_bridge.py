@@ -28,15 +28,11 @@ from svg2ooxml.drawingml.paint_converter import (
     _stroke_paint_from_descriptor,
     _transform_is_identity,
 )
+from svg2ooxml.render.rgba import encode_rgba8_png, png_chunk
 
 # ------------------------------------------------------------------ #
 # PNG encoding                                                       #
 # ------------------------------------------------------------------ #
-
-
-def _png_chunk(chunk_type: bytes, data: bytes) -> bytes:
-    crc = zlib.crc32(chunk_type + data) & 0xFFFFFFFF
-    return struct.pack(">I", len(data)) + chunk_type + data + struct.pack(">I", crc)
 
 
 def _solid_gray_png(width: int, height: int, gray: int) -> bytes:
@@ -44,14 +40,14 @@ def _solid_gray_png(width: int, height: int, gray: int) -> bytes:
     height = max(1, height)
     gray = max(0, min(255, gray))
     header = b"\x89PNG\r\n\x1a\n"
-    ihdr = _png_chunk(
+    ihdr = png_chunk(
         b"IHDR",
         struct.pack(">IIBBBBB", width, height, 8, 0, 0, 0, 0),
     )
     row = bytes([0]) + bytes([gray] * width)
     pixel_rows = row * height
-    idat = _png_chunk(b"IDAT", zlib.compress(pixel_rows))
-    iend = _png_chunk(b"IEND", b"")
+    idat = png_chunk(b"IDAT", zlib.compress(pixel_rows))
+    iend = png_chunk(b"IEND", b"")
     return header + ihdr + idat + iend
 
 
@@ -70,18 +66,7 @@ def _surface_to_png(surface) -> bytes:
         0.0,
     ).astype(np.uint8)
     height, width, _ = rgba.shape
-    header = b"\x89PNG\r\n\x1a\n"
-    ihdr = _png_chunk(
-        b"IHDR",
-        struct.pack(">IIBBBBB", width, height, 8, 6, 0, 0, 0),
-    )
-    row_bytes = bytearray()
-    for row in rgba:
-        row_bytes.append(0)
-        row_bytes.extend(row.tobytes())
-    idat = _png_chunk(b"IDAT", zlib.compress(bytes(row_bytes)))
-    iend = _png_chunk(b"IEND", b"")
-    return header + ihdr + idat + iend
+    return encode_rgba8_png(rgba.tobytes(), width, height)
 
 
 def _surface_from_skia_image(image):

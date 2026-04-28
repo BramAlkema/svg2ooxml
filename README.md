@@ -36,10 +36,10 @@ Empirical PowerPoint behavior research, authored control decks, and durable orac
 
 ## Current Release
 
-`0.7.5` is a hardening release for the recent converter refactors: clean
-checkout imports for split helper modules, centralized unit/color/matrix
-conversion helpers, published `openxml-audit` validation in CI, and a fast
-SVG-to-PPTX end-to-end conversion gate.
+`0.7.6` is an architecture/dedupe release after the large-file split work:
+geometry, WordArt, gradient, filter, resvg, animation, and PPTX internals are
+split into smaller modules with shared helper paths, while base installs avoid
+eager optional render dependencies.
 
 ## Comparison
 

@@ -5,10 +5,9 @@ from __future__ import annotations
 from collections.abc import Sequence
 from copy import deepcopy
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
-if TYPE_CHECKING:  # pragma: no cover - type checking only
-    from svg2ooxml.core.pptx_exporter import SvgPageSource
+from svg2ooxml.core.pptx_exporter_types import SvgPageSource
 
 
 @dataclass(frozen=True)
@@ -241,8 +240,6 @@ def expand_page_with_variants(
             merged = dict(policy_bucket.get(category, {}))
             merged.update(overrides)
             policy_bucket[category] = merged
-
-        from svg2ooxml.core.pptx_exporter import SvgPageSource
 
         clones.append(
             SvgPageSource(

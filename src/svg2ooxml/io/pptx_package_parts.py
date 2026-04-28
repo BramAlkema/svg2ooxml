@@ -10,12 +10,14 @@ from pathlib import Path
 from lxml import etree as ET
 
 from svg2ooxml.common.boundaries import next_relationship_id
-from svg2ooxml.io.pptx_assembly import (
+from svg2ooxml.io.pptx_package_constants import (
     CONTENT_NS,
     R_DOC_NS,
     REL_NS,
     THEME_FAMILY_NS,
     THEME_NS,
+)
+from svg2ooxml.io.pptx_package_model import (
     MaskAsset,
     MaskMeta,
     MediaMeta,

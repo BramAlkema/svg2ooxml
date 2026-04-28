@@ -3,62 +3,39 @@
 from __future__ import annotations
 
 import logging
-import os
 import time
-from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from lxml import etree
 
 from svg2ooxml.core.conversion_context import (
     ConversionContextBundle,
-    build_conversion_context,
-    clone_policy_context,
 )
 from svg2ooxml.performance.metrics import record_metric
 from svg2ooxml.services import ConversionServices
 
-from .colors.parsing import parse_color
 from .content_cleaner import prepare_svg_content
 from .css_font_parser import CSSFontFaceParser
-from .dom_loader import ParserOptions, XMLParser
+from .dom_loader import XMLParser
 from .normalization import SafeSVGNormalizer
 from .preprocess.services import ParserServices
 from .reference_collector import collect_references
 from .references import collect_namespaces, has_external_references
 from .result import ParseResult
 from .statistics import compute_statistics
-from .style_context import StyleContext as ParserStyleContext
-from .style_context import resolve_viewport
 from .svg_font_parser import SVGFontParser
-from .units import viewbox_to_px
+from .svg_parser_config import ParserConfig
+from .svg_parser_context import SVGParserContextMixin
+from .svg_parser_geometry import SVGParserGeometryMixin
+from .svg_parser_telemetry import SVGParserTelemetryMixin
 from .validators import has_basic_dimensions
 
 
-@dataclass(slots=True)
-class ParserConfig:
-    """Basic parsing configuration flags."""
-
-    remove_comments: bool = False
-    strip_whitespace: bool = False
-    recover: bool = True
-    remove_blank_text: bool = False
-    strip_cdata: bool = False
-    resolve_entities: bool = False
-    apply_normalization: bool = True
-    eager_ir: bool = False
-
-    def to_parser_options(self) -> ParserOptions:
-        return ParserOptions(
-            remove_comments=self.remove_comments,
-            remove_blank_text=self.remove_blank_text,
-            strip_cdata=self.strip_cdata,
-            recover=self.recover,
-            resolve_entities=self.resolve_entities,
-        )
-
-
-class SVGParser:
+class SVGParser(
+    SVGParserContextMixin,
+    SVGParserGeometryMixin,
+    SVGParserTelemetryMixin,
+):
     """Parse SVG strings into lxml element trees with light normalization."""
 
     def __init__(
@@ -204,19 +181,7 @@ class SVGParser:
         context = self._context_template.clone()
         services = context.services
 
-        if source_path:
-            image_service = getattr(services, "image_service", None)
-            if image_service:
-                try:
-                    from svg2ooxml.services.image_service import FileResolver
-                    base_dir = os.path.dirname(source_path)
-                    asset_root = _resolve_asset_root_option(services)
-                    image_service.register_resolver(
-                        FileResolver(base_dir, asset_root=asset_root),
-                        prepend=True,
-                    )
-                except ImportError:
-                    self._logger.warning("Could not import FileResolver to handle source_path images.")
+        self._register_source_path_resolver(services, source_path)
 
         policy_context = context.policy_context
         policy_engine = context.policy_engine
@@ -379,119 +344,6 @@ class SVGParser:
         )
         return result
 
-    def _coerce_context(
-        self,
-        services: ConversionServices | ParserServices | ConversionContextBundle | None,
-    ) -> ConversionContextBundle:
-        if services is None:
-            return build_conversion_context()
-        if isinstance(services, ConversionContextBundle):
-            return services.clone()
-        if isinstance(services, ParserServices):
-            cloned_context = clone_policy_context(services.policy_context)
-            if cloned_context is None:
-                cloned_context = services.policy_engine.evaluate()
-            return build_conversion_context(
-                services=services.services,
-                policy_engine=services.policy_engine,
-                policy_context=cloned_context,
-                unit_converter=services.unit_converter,
-                style_resolver=services.style_resolver,
-            )
-
-        return build_conversion_context(services=services)
-
-    def _strip_whitespace(self, element: etree._Element) -> None:
-        """Remove leading/trailing whitespace from text nodes."""
-        if element.text:
-            element.text = element.text.strip()
-        if element.tail:
-            element.tail = element.tail.strip()
-        for child in element:
-            self._strip_whitespace(child)
-
-    @staticmethod
-    def _trace(
-        tracer: ConversionTracer | None,
-        action: str,
-        *,
-        metadata: dict[str, Any] | None = None,
-        subject: str | None = None,
-    ) -> None:
-        if tracer is None:
-            return
-        tracer.record_stage_event(stage="parser", action=action, metadata=metadata, subject=subject)
-
-    def _extract_dimensions(
-        self, root: etree._Element
-    ) -> tuple[float | None, float | None]:
-        width_px, height_px = resolve_viewport(
-            root,
-            self._unit_converter,
-            default_width=800.0,
-            default_height=600.0,
-        )
-        viewbox = root.get("viewBox")
-        if viewbox is None and root.get("width") is None:
-            width_px = None
-        if viewbox is None and root.get("height") is None:
-            height_px = None
-        return width_px, height_px
-
-    def _extract_viewbox_scale(
-        self,
-        root: etree._Element,
-        width_px: float | None,
-        height_px: float | None,
-    ) -> tuple[float, float] | None:
-        viewbox_attr = root.get("viewBox")
-        if not viewbox_attr or width_px is None or height_px is None:
-            return None
-        viewbox = self._parse_viewbox(viewbox_attr)
-        if viewbox is None:
-            return None
-        return viewbox_to_px(viewbox, width_px, height_px)
-
-    def _extract_root_color(
-        self, root: etree._Element
-    ) -> tuple[float, float, float, float] | None:
-        color_attr = root.get("color")
-        if not color_attr:
-            return None
-        return parse_color(color_attr)
-
-    def _parse_viewbox(self, value: str) -> tuple[float, float, float, float] | None:
-        parts = value.replace(",", " ").split()
-        if len(parts) != 4:
-            return None
-        try:
-            numbers = [float(part) for part in parts]
-        except ValueError:
-            return None
-        if numbers[2] <= 0 or numbers[3] <= 0:
-            return None
-        return (numbers[0], numbers[1], numbers[2], numbers[3])
-
-    def _build_style_context(
-        self,
-        width_px: float | None,
-        height_px: float | None,
-    ) -> ParserStyleContext | None:
-        if width_px is None or height_px is None:
-            return None
-        conversion = self._unit_converter.create_context(
-            width=width_px,
-            height=height_px,
-            font_size=12.0,
-            parent_width=width_px,
-            parent_height=height_px,
-        )
-        return ParserStyleContext(
-            conversion=conversion,
-            viewport_width=width_px,
-            viewport_height=height_px,
-        )
-
     def _emit_metrics(
         self,
         *,
@@ -527,75 +379,6 @@ class SVGParser:
         except Exception:  # pragma: no cover - metrics should not break parsing
             self._logger.debug("Metric recording failed", exc_info=True)
 
-    @staticmethod
-    def _summarize_preparse(report: dict[str, object] | None) -> dict[str, object] | None:
-        if not report:
-            return None
-        summary: dict[str, object] = {}
-        for key in (
-            "removed_bom",
-            "encoding_replacements",
-            "added_xml_declaration",
-            "error",
-        ):
-            if key in report:
-                summary[key] = report[key]
-
-        by_char = report.get("encoding_replacements_by_char")
-        if isinstance(by_char, dict) and by_char:
-            summary["encoding_replacements_by_char"] = by_char
-
-        return summary or None
-
-    @staticmethod
-    def _summarize_normalization(
-        changes: dict[str, object] | None,
-    ) -> dict[str, object] | None:
-        if not changes:
-            return None
-
-        summary: dict[str, object] = {}
-        if "namespaces_fixed" in changes:
-            summary["namespaces_fixed"] = bool(changes["namespaces_fixed"])
-
-        attributes_added = changes.get("attributes_added")
-        if isinstance(attributes_added, list) and attributes_added:
-            summary["attributes_added"] = len(attributes_added)
-
-        structure_fixes = changes.get("structure_fixes")
-        if isinstance(structure_fixes, list) and structure_fixes:
-            summary["structure_fixes"] = len(structure_fixes)
-
-        summary["whitespace_normalized"] = bool(
-            changes.get("whitespace_normalized")
-        )
-        summary["comments_filtered"] = bool(changes.get("comments_filtered"))
-
-        encoding_fixes = changes.get("encoding_fixes")
-        if isinstance(encoding_fixes, list) and encoding_fixes:
-            total_encoding_fix = 0
-            for entry in encoding_fixes:
-                if isinstance(entry, dict):
-                    total_encoding_fix += int(entry.get("text_nodes", 0))
-                    total_encoding_fix += int(entry.get("tail_nodes", 0))
-                    total_encoding_fix += int(entry.get("attributes", 0))
-            if total_encoding_fix:
-                summary["encoding_fix_nodes"] = total_encoding_fix
-
-        log_entries = changes.get("log")
-        if isinstance(log_entries, list) and log_entries:
-            action_counts: dict[str, int] = {}
-            for entry in log_entries:
-                if isinstance(entry, dict):
-                    action = entry.get("action")
-                    if isinstance(action, str) and action:
-                        action_counts[action] = action_counts.get(action, 0) + 1
-            if action_counts:
-                summary["actions"] = action_counts
-
-        return summary or None
-
-
 def parse_svg(
     svg_content: str,
     *,
@@ -608,18 +391,6 @@ def parse_svg(
 
     parser = SVGParser(config=config, services=services)
     return parser.parse(svg_content, tracer=tracer, source_path=source_path)
-
-
-def _resolve_asset_root_option(services: Any) -> str | None:
-    resolver = getattr(services, "resolve", None)
-    if not callable(resolver):
-        return None
-    for key in ("asset_root", "root_dir", "source_root"):
-        value = resolver(key)
-        if isinstance(value, str) and value:
-            return value
-    return None
-
 
 __all__ = ["SVGParser", "ParserConfig", "parse_svg"]
 if TYPE_CHECKING:  # pragma: no cover - type hints only

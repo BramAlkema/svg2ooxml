@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from copy import deepcopy
-from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -29,6 +28,15 @@ from svg2ooxml.core.export.variant_expansion import (
 )
 from svg2ooxml.core.ir.converter import IRScene
 from svg2ooxml.core.parser import ParserConfig, SVGParser
+from svg2ooxml.core.pptx_exporter_pages import build_page_result, page_variant_type
+from svg2ooxml.core.pptx_exporter_parallel import SvgToPptxParallelMixin
+from svg2ooxml.core.pptx_exporter_types import (
+    SvgConversionError,
+    SvgPageResult,
+    SvgPageSource,
+    SvgToPptxMultiResult,
+    SvgToPptxResult,
+)
 from svg2ooxml.core.slide_orchestrator import (
     build_fidelity_tier_variants,
     derive_variants_from_trace,
@@ -48,50 +56,7 @@ from svg2ooxml.policy import PolicyContext
 from svg2ooxml.services import configure_services
 
 
-class SvgConversionError(RuntimeError):
-    """Raised when the SVG to PPTX conversion fails."""
-
-
-@dataclass(frozen=True)
-class SvgToPptxResult:
-    """Result describing the generated PPTX artifact."""
-
-    pptx_path: Path
-    slide_count: int
-    trace_report: dict[str, Any] | None = None
-
-
-@dataclass(frozen=True)
-class SvgPageSource:
-    """Input payload describing a single SVG slide."""
-
-    svg_text: str
-    title: str | None = None
-    name: str | None = None
-    metadata: dict[str, Any] = field(default_factory=dict)
-
-
-@dataclass(frozen=True)
-class SvgPageResult:
-    """Per-page conversion result."""
-
-    title: str | None
-    trace_report: dict[str, Any]
-    metadata: dict[str, Any] | None = None
-
-
-@dataclass(frozen=True)
-class SvgToPptxMultiResult:
-    """Result describing a multi-slide PPTX conversion."""
-
-    pptx_path: Path
-    slide_count: int
-    page_results: list[SvgPageResult]
-    packaging_report: dict[str, Any]
-    aggregated_trace_report: dict[str, Any]
-
-
-class SvgToPptxExporter:
+class SvgToPptxExporter(SvgToPptxParallelMixin):
     """Facade around the parsing and packaging pipeline used by the CLI."""
 
     def __init__(
@@ -123,6 +88,19 @@ class SvgToPptxExporter:
         """
         import os
 
+        custom_parallel_components = []
+        if parser is not None:
+            custom_parallel_components.append("parser")
+        if writer is not None:
+            custom_parallel_components.append("writer")
+        if animation_parser_factory is not None:
+            custom_parallel_components.append("animation_parser_factory")
+        if timeline_sampler is not None:
+            custom_parallel_components.append("timeline_sampler")
+        if timeline_config is not None:
+            custom_parallel_components.append("timeline_config")
+        self._parallel_unsupported_components = tuple(custom_parallel_components)
+
         self._parser = parser or SVGParser(ParserConfig())
         self._writer = writer or DrawingMLWriter()
         self._animation_parser_factory = animation_parser_factory or SMILParser
@@ -136,7 +114,9 @@ class SvgToPptxExporter:
         if geometry_mode is not None:
             self._geometry_mode = geometry_mode
         else:
-            self._geometry_mode = os.environ.get("SVG2OOXML_GEOMETRY_MODE", "resvg-only")
+            self._geometry_mode = os.environ.get(
+                "SVG2OOXML_GEOMETRY_MODE", "resvg-only"
+            )
 
         # Validate geometry_mode
         if self._geometry_mode not in ("legacy", "resvg", "resvg-only"):
@@ -154,7 +134,9 @@ class SvgToPptxExporter:
             )
         self._slide_size_mode = mode
 
-        self._builder = builder or PPTXPackageBuilder(slide_size_mode=self._slide_size_mode)
+        self._builder = builder or PPTXPackageBuilder(
+            slide_size_mode=self._slide_size_mode
+        )
 
     # ------------------------------------------------------------------
     # Single document conversion
@@ -212,7 +194,9 @@ class SvgToPptxExporter:
         if isinstance(scene.metadata, dict):
             scene.metadata["trace_report"] = report_dict
 
-        return SvgToPptxResult(pptx_path=pptx_path, slide_count=1, trace_report=report_dict)
+        return SvgToPptxResult(
+            pptx_path=pptx_path, slide_count=1, trace_report=report_dict
+        )
 
     # ------------------------------------------------------------------
     # Multi document conversion
@@ -232,13 +216,18 @@ class SvgToPptxExporter:
         """Convert multiple SVG payloads into a multi-slide PPTX."""
 
         if not pages:
-            raise SvgConversionError("At least one SVG page is required for multi-slide conversion.")
+            raise SvgConversionError(
+                "At least one SVG page is required for multi-slide conversion."
+            )
 
         packaging_tracer = tracer or ConversionTracer()
 
         if parallel and not render_tiers and not split_fallback_variants:
             return self._convert_pages_parallel(
-                pages, output_path, packaging_tracer, max_workers=max_workers,
+                pages,
+                output_path,
+                packaging_tracer,
+                max_workers=max_workers,
             )
 
         page_results: list[SvgPageResult] = []
@@ -258,9 +247,13 @@ class SvgToPptxExporter:
                         )
                     variant_pages = expand_page_with_variants(page_seed, tier_variants)
                     for variant_page in variant_pages:
-                        variant_overrides = (variant_page.metadata or {}).get("policy_overrides")
+                        variant_overrides = (variant_page.metadata or {}).get(
+                            "policy_overrides"
+                        )
                         variant_tracer = ConversionTracer()
-                        variant_source_path = (variant_page.metadata or {}).get("source_path")
+                        variant_source_path = (variant_page.metadata or {}).get(
+                            "source_path"
+                        )
                         variant_render, variant_scene = self._render_svg(
                             variant_page.svg_text,
                             variant_tracer,
@@ -268,38 +261,18 @@ class SvgToPptxExporter:
                             source_path=variant_source_path,
                         )
                         variant_report = variant_tracer.report().to_dict()
-
-                        variant_title = (
-                            variant_page.title
-                            or (
-                                variant_scene.metadata.get("page_title")
-                                if isinstance(variant_scene.metadata, dict)
-                                else None
-                            )
-                            or variant_page.name
-                            or f"Slide {index}"
+                        page_result = build_page_result(
+                            variant_page,
+                            variant_scene,
+                            variant_report,
+                            fallback_title=f"Slide {index}",
+                            variant_type=page_variant_type(variant_page),
                         )
-
-                        variant_metadata: dict[str, Any] | None = None
-                        if isinstance(variant_scene.metadata, dict):
-                            variant_scene.metadata.setdefault("page_title", variant_title)
-                            variant_scene.metadata.setdefault("trace_report", variant_report)
-                            variant_scene.metadata.setdefault("variant", {}).setdefault(
-                                "type",
-                                variant_page.metadata.get("variant", {}).get("type", "variant"),
-                            )
-                            variant_metadata = variant_scene.metadata
 
                         stream.add_slide(variant_render)
                         slide_count += 1
                         del variant_render
-                        page_results.append(
-                            SvgPageResult(
-                                title=variant_title,
-                                trace_report=variant_report,
-                                metadata=variant_metadata,
-                            )
-                        )
+                        page_results.append(page_result)
                     continue
 
                 base_overrides = (page.metadata or {}).get("policy_overrides")
@@ -312,41 +285,33 @@ class SvgToPptxExporter:
                     source_path=source_path,
                 )
                 report_dict = base_tracer.report().to_dict()
-
-                slide_title = (
-                    page.title
-                    or (scene.metadata.get("page_title") if isinstance(scene.metadata, dict) else None)
-                    or page.name
-                    or f"Slide {index}"
+                page_result = build_page_result(
+                    page,
+                    scene,
+                    report_dict,
+                    fallback_title=f"Slide {index}",
+                    variant_type="base",
+                    include_page_metadata=True,
                 )
-
-                scene_metadata: dict[str, Any] | None = None
-                if isinstance(scene.metadata, dict):
-                    scene.metadata.setdefault("page_title", slide_title)
-                    scene.metadata.setdefault("trace_report", report_dict)
-                    if page.metadata:
-                        scene.metadata.setdefault("page_metadata", {}).update(page.metadata)
-                    scene.metadata.setdefault("variant", {}).setdefault("type", "base")
-                    scene_metadata = scene.metadata
 
                 stream.add_slide(render_result)
                 slide_count += 1
                 del render_result
-                page_results.append(
-                    SvgPageResult(
-                        title=slide_title,
-                        trace_report=report_dict,
-                        metadata=scene_metadata,
-                    )
-                )
+                page_results.append(page_result)
 
                 if split_fallback_variants:
-                    variants = derive_variants_from_trace(report_dict, enable_split=True)
+                    variants = derive_variants_from_trace(
+                        report_dict, enable_split=True
+                    )
                     variant_pages = expand_page_with_variants(page, variants)
                     for variant_page in variant_pages:
-                        variant_overrides = (variant_page.metadata or {}).get("policy_overrides")
+                        variant_overrides = (variant_page.metadata or {}).get(
+                            "policy_overrides"
+                        )
                         variant_tracer = ConversionTracer()
-                        variant_source_path = (variant_page.metadata or {}).get("source_path")
+                        variant_source_path = (variant_page.metadata or {}).get(
+                            "source_path"
+                        )
                         variant_render, variant_scene = self._render_svg(
                             variant_page.svg_text,
                             variant_tracer,
@@ -354,34 +319,19 @@ class SvgToPptxExporter:
                             source_path=variant_source_path,
                         )
                         variant_report = variant_tracer.report().to_dict()
-
-                        variant_title = (
-                            variant_page.title
-                            or (variant_scene.metadata.get("page_title") if isinstance(variant_scene.metadata, dict) else None)
-                            or variant_page.name
-                            or f"{slide_title} ({variant_page.metadata.get('variant', {}).get('type', 'variant')})"
+                        variant_type = page_variant_type(variant_page)
+                        variant_page_result = build_page_result(
+                            variant_page,
+                            variant_scene,
+                            variant_report,
+                            fallback_title=f"{page_result.title} ({variant_type})",
+                            variant_type=variant_type,
                         )
-
-                        variant_metadata: dict[str, Any] | None = None
-                        if isinstance(variant_scene.metadata, dict):
-                            variant_scene.metadata.setdefault("page_title", variant_title)
-                            variant_scene.metadata.setdefault("trace_report", variant_report)
-                            variant_scene.metadata.setdefault("variant", {}).setdefault(
-                                "type",
-                                variant_page.metadata.get("variant", {}).get("type", "variant"),
-                            )
-                            variant_metadata = variant_scene.metadata
 
                         stream.add_slide(variant_render)
                         slide_count += 1
                         del variant_render
-                        page_results.append(
-                            SvgPageResult(
-                                title=variant_title,
-                                trace_report=variant_report,
-                                metadata=variant_metadata,
-                            )
-                        )
+                        page_results.append(variant_page_result)
 
             pptx_path = stream.finalize(output_path)
 
@@ -420,7 +370,9 @@ class SvgToPptxExporter:
                 metadata={"strategy": self._filter_strategy},
             )
 
-        parse_result = self._parser.parse(svg_text, tracer=tracer, source_path=source_path)
+        parse_result = self._parser.parse(
+            svg_text, tracer=tracer, source_path=source_path
+        )
         if not parse_result.success or parse_result.svg_root is None:
             message = parse_result.error_message or "SVG parsing failed."
             raise SvgConversionError(message)
@@ -428,7 +380,9 @@ class SvgToPptxExporter:
         # Use the parser's services which includes the StyleResolver with loaded CSS rules
         services_override = parse_result.services
         if services_override is None:
-            services_override = configure_services(filter_strategy=self._filter_strategy)
+            services_override = configure_services(
+                filter_strategy=self._filter_strategy
+            )
         elif self._filter_strategy and services_override.filter_service is not None:
             services_override.filter_service.set_strategy(self._filter_strategy)
 
@@ -455,12 +409,16 @@ class SvgToPptxExporter:
 
         # Inject geometry_mode into policy_overrides
         effective_overrides = deepcopy(policy_overrides) if policy_overrides else {}
-        if self._geometry_mode != "legacy":  # Only inject when not using legacy fallback
+        if (
+            self._geometry_mode != "legacy"
+        ):  # Only inject when not using legacy fallback
             geometry_overrides = effective_overrides.get("geometry", {})
             geometry_overrides["geometry_mode"] = self._geometry_mode
             effective_overrides["geometry"] = geometry_overrides
 
-        policy_context = self._apply_policy_overrides(parse_result.policy_context, effective_overrides or None)
+        policy_context = self._apply_policy_overrides(
+            parse_result.policy_context, effective_overrides or None
+        )
         if policy_context is not None:
             animation_policy_options = policy_context.get("animation")
         scene = convert_parser_output(
@@ -483,7 +441,9 @@ class SvgToPptxExporter:
                 scene,
                 parse_result.svg_root,
             )
-            animations = _lower_safe_group_transform_targets_with_animated_descendants(animations, scene)
+            animations = _lower_safe_group_transform_targets_with_animated_descendants(
+                animations, scene
+            )
             animations = _enrich_animations_with_element_centers(animations, scene)
             animations = _compose_sampled_center_motions(animations, scene)
             _materialize_simple_line_paths(scene, animations)
@@ -519,7 +479,9 @@ class SvgToPptxExporter:
                         "animation_count": len(animations),
                         "timeline_frames": len(animation_meta.get("timeline", [])),
                         "duration": animation_meta["summary"]["duration"],
-                        "has_motion_paths": animation_meta["summary"]["has_motion_paths"],
+                        "has_motion_paths": animation_meta["summary"][
+                            "has_motion_paths"
+                        ],
                         "has_transforms": animation_meta["summary"]["has_transforms"],
                     },
                 )
@@ -530,113 +492,21 @@ class SvgToPptxExporter:
                         metadata={"reason": reason, "count": count},
                     )
 
-        animation_payload = scene.metadata.get("animation_raw") if isinstance(scene.metadata, dict) else None
+        animation_payload = (
+            scene.metadata.get("animation_raw")
+            if isinstance(scene.metadata, dict)
+            else None
+        )
         if hasattr(self._writer, "set_image_service"):
-            self._writer.set_image_service(getattr(services_override, "image_service", None))
+            self._writer.set_image_service(
+                getattr(services_override, "image_service", None)
+            )
         render_result = self._writer.render_scene_from_ir(
             scene,
             tracer=tracer,
             animation_payload=animation_payload,
         )
         return render_result, scene
-
-    def _convert_pages_parallel(
-        self,
-        pages: Sequence[SvgPageSource],
-        output_path: Path,
-        packaging_tracer: ConversionTracer,
-        *,
-        max_workers: int | None = None,
-    ) -> SvgToPptxMultiResult:
-        """Render pages in parallel, then package sequentially."""
-        import os
-        from concurrent.futures import ThreadPoolExecutor
-
-        workers = max_workers or min(len(pages), os.cpu_count() or 1)
-
-        futures: list[tuple[SvgPageSource, Any]] = []
-        with ThreadPoolExecutor(max_workers=workers) as pool:
-            for page in pages:
-                overrides = (page.metadata or {}).get("policy_overrides")
-                source_path = (page.metadata or {}).get("source_path")
-                fut = pool.submit(
-                    SvgToPptxExporter._render_page_isolated,
-                    page.svg_text,
-                    filter_strategy=self._filter_strategy,
-                    geometry_mode=self._geometry_mode,
-                    policy_overrides=overrides,
-                    source_path=source_path,
-                )
-                futures.append((page, fut))
-
-        page_results: list[SvgPageResult] = []
-        slide_count = 0
-
-        with self._builder.begin_streaming(tracer=packaging_tracer) as stream:
-            for index, (page, fut) in enumerate(futures, start=1):
-                render_result, scene, report_dict = fut.result()
-
-                slide_title = (
-                    page.title
-                    or (scene.metadata.get("page_title") if isinstance(scene.metadata, dict) else None)
-                    or page.name
-                    or f"Slide {index}"
-                )
-
-                scene_metadata: dict[str, Any] | None = None
-                if isinstance(scene.metadata, dict):
-                    scene.metadata.setdefault("page_title", slide_title)
-                    scene.metadata.setdefault("trace_report", report_dict)
-                    if page.metadata:
-                        scene.metadata.setdefault("page_metadata", {}).update(page.metadata)
-                    scene.metadata.setdefault("variant", {}).setdefault("type", "base")
-                    scene_metadata = scene.metadata
-
-                stream.add_slide(render_result)
-                slide_count += 1
-                del render_result
-                page_results.append(
-                    SvgPageResult(
-                        title=slide_title,
-                        trace_report=report_dict,
-                        metadata=scene_metadata,
-                    )
-                )
-
-            pptx_path = stream.finalize(output_path)
-
-        packaging_report = packaging_tracer.report().to_dict()
-        aggregate_trace = _merge_trace_reports(
-            [result.trace_report for result in page_results] + [packaging_report]
-        )
-
-        return SvgToPptxMultiResult(
-            pptx_path=pptx_path,
-            slide_count=slide_count,
-            page_results=page_results,
-            packaging_report=packaging_report,
-            aggregated_trace_report=aggregate_trace,
-        )
-
-    @staticmethod
-    def _render_page_isolated(
-        svg_text: str,
-        *,
-        filter_strategy: str | None,
-        geometry_mode: str,
-        policy_overrides: dict[str, dict[str, Any]] | None = None,
-        source_path: str | None = None,
-    ) -> tuple[DrawingMLRenderResult, IRScene, dict[str, Any]]:
-        """Thread-safe single-page render with fresh pipeline instances."""
-        exporter = SvgToPptxExporter(
-            filter_strategy=filter_strategy,
-            geometry_mode=geometry_mode,
-        )
-        tracer = ConversionTracer()
-        render_result, scene = exporter._render_svg(
-            svg_text, tracer, policy_overrides, source_path=source_path,
-        )
-        return render_result, scene, tracer.report().to_dict()
 
     @staticmethod
     def _apply_policy_overrides(

@@ -13,7 +13,10 @@ from io import BytesIO
 from typing import TYPE_CHECKING, Any
 
 from svg2ooxml.common.boundaries import is_safe_relationship_id
-from svg2ooxml.drawingml.filter_fallback import resolve_filter_fallback_bounds
+from svg2ooxml.drawingml.filter_fallback import (
+    iter_filter_fallback_assets,
+    resolve_filter_fallback_bounds,
+)
 from svg2ooxml.drawingml.generator import px_to_emu
 from svg2ooxml.io.emf import EMFRelationshipManager
 from svg2ooxml.ir.scene import Image
@@ -345,56 +348,17 @@ class AssetPipeline:
         shape_id: int,
         metadata: dict[str, object],
     ) -> str | None:
-        policy = metadata.get("policy")
-        if not isinstance(policy, dict):
-            return None
-        media_policy = policy.get("media")
-        if not isinstance(media_policy, dict):
-            return None
-        filter_assets = media_policy.get("filter_assets")
-        if not isinstance(filter_assets, dict):
-            return None
-        filters = metadata.get("filters")
-        if not isinstance(filters, list):
-            return None
-        filter_meta = metadata.get("filter_metadata")
-        if not isinstance(filter_meta, dict):
-            filter_meta = {}
-
-        for entry in filters:
-            if not isinstance(entry, dict):
+        for candidate in iter_filter_fallback_assets(metadata):
+            asset = candidate.asset
+            rel_id = asset.get("relationship_id")
+            if not is_safe_relationship_id(
+                rel_id,
+                reserved_ids=_RESERVED_SLIDE_RELATIONSHIP_IDS,
+            ):
                 continue
-            filter_id = entry.get("id")
-            if not isinstance(filter_id, str) or not filter_id:
-                continue
-            fallback = entry.get("fallback")
-            fallback = fallback.lower() if isinstance(fallback, str) else None
-            if fallback not in {"bitmap", "raster", "emf", "vector"}:
-                continue
-            assets = filter_assets.get(filter_id)
-            if not isinstance(assets, list):
-                continue
-            asset_type = "emf" if fallback in {"emf", "vector"} else "raster"
-            asset = next(
-                (
-                    item
-                    for item in assets
-                    if isinstance(item, dict)
-                    and item.get("type") == asset_type
-                    and is_safe_relationship_id(
-                        item.get("relationship_id"),
-                        reserved_ids=_RESERVED_SLIDE_RELATIONSHIP_IDS,
-                    )
-                ),
-                None,
-            )
-            if asset is None:
-                continue
-            rel_id = asset["relationship_id"]
-            meta = filter_meta.get(filter_id)
             bounds = resolve_filter_fallback_bounds(
                 group.bbox,
-                meta if isinstance(meta, dict) else None,
+                candidate.metadata,
             )
             if bounds is None:
                 continue

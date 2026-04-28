@@ -11,6 +11,10 @@ from svg2ooxml.common.geometry.paths.parser import (
     _MAX_CACHED_PATH_CHARS,
     _parse_path_data_cached,
 )
+from svg2ooxml.common.geometry.paths.quadratic import (
+    quadratic_to_cubic,
+    quadratic_tuple_to_cubic_controls,
+)
 from svg2ooxml.common.geometry.paths.segments import BezierSegment, LineSegment, Point
 
 
@@ -89,6 +93,24 @@ def test_parse_quadratic_and_smooth_quadratic() -> None:
     assert second.end == Point(40, 0)
     assert second.control1.x == pytest.approx(26.6666667, rel=1e-6)
     assert second.control1.y == pytest.approx(-6.6666667, rel=1e-6)
+
+
+def test_quadratic_to_cubic_helpers_share_conversion_formula() -> None:
+    start = Point(0, 0)
+    control = Point(10, 10)
+    end = Point(20, 0)
+
+    cubic = quadratic_to_cubic(start, control, end)
+    tuple_controls = quadratic_tuple_to_cubic_controls(
+        (start.x, start.y),
+        (control.x, control.y),
+        (end.x, end.y),
+    )
+
+    assert cubic.control1 == Point(*tuple_controls[0])
+    assert cubic.control2 == Point(*tuple_controls[1])
+    assert cubic.control1.x == pytest.approx(20.0 / 3.0)
+    assert cubic.control2.x == pytest.approx(40.0 / 3.0)
 
 
 def test_compute_segments_bbox() -> None:

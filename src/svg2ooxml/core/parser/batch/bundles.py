@@ -18,7 +18,7 @@ from svg2ooxml.drawingml.assets import (
     NavigationAsset,
 )
 from svg2ooxml.drawingml.result import DrawingMLRenderResult
-from svg2ooxml.io.pptx_assembly import (
+from svg2ooxml.io.pptx_part_names import (
     suffix_for_content_type as _suffix_for_content_type,
 )
 from svg2ooxml.ir.text import EmbeddedFontPlan

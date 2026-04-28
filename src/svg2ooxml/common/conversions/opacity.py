@@ -18,6 +18,7 @@ from __future__ import annotations
 PPT_OPACITY_SCALE = 100000
 
 __all__ = [
+    "clamp_opacity",
     "opacity_to_ppt",
     "ppt_to_opacity",
     "alpha_to_ppt",
@@ -27,6 +28,11 @@ __all__ = [
     "parse_opacity",
     "PPT_OPACITY_SCALE",
 ]
+
+
+def clamp_opacity(value: float) -> float:
+    """Clamp an opacity/alpha value to SVG's ``0.0``-``1.0`` range."""
+    return max(0.0, min(1.0, value))
 
 
 def opacity_to_ppt(opacity: float) -> int:
@@ -53,7 +59,7 @@ def opacity_to_ppt(opacity: float) -> int:
         >>> opacity_to_ppt(-0.5)  # Clamped to 0.0
         0
     """
-    clamped = max(0.0, min(1.0, opacity))
+    clamped = clamp_opacity(opacity)
     return int(round(clamped * PPT_OPACITY_SCALE))
 
 
@@ -65,13 +71,13 @@ def parse_opacity(value: str | float | int | None, default: float = 1.0) -> floa
     """
 
     if value is None:
-        return max(0.0, min(1.0, float(default)))
+        return clamp_opacity(float(default))
     if isinstance(value, (int, float)):
-        return max(0.0, min(1.0, float(value)))
+        return clamp_opacity(float(value))
 
     token = value.strip()
     if not token:
-        return max(0.0, min(1.0, float(default)))
+        return clamp_opacity(float(default))
     try:
         if token.endswith("%"):
             parsed = float(token[:-1]) / 100.0
@@ -79,7 +85,7 @@ def parse_opacity(value: str | float | int | None, default: float = 1.0) -> floa
             parsed = float(token)
     except ValueError:
         parsed = float(default)
-    return max(0.0, min(1.0, parsed))
+    return clamp_opacity(parsed)
 
 
 def ppt_to_opacity(ppt_value: int) -> float:

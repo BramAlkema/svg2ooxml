@@ -4,10 +4,12 @@ from svg2ooxml.common.geometry import Matrix2D
 from svg2ooxml.drawingml import paint_runtime
 from svg2ooxml.drawingml.paint_runtime import _dash_elem, _pattern_to_fill_elem
 from svg2ooxml.drawingml.xml_builder import to_string
+from svg2ooxml.ir.geometry import Rect
 from svg2ooxml.ir.paint import (
     GradientStop,
     LinearGradientPaint,
     PatternPaint,
+    RadialGradientPaint,
     SolidPaint,
     Stroke,
 )
@@ -62,6 +64,40 @@ def test_gradient_stops_support_theme_slots() -> None:
     assert '<a:schemeClr val="accent2"><a:alpha val="50000"/></a:schemeClr>' in xml
     assert 'val="4472C4"' not in xml
     assert 'val="ED7D31"' not in xml
+
+
+def test_userspace_linear_gradient_is_projected_to_shape_bbox() -> None:
+    paint = LinearGradientPaint(
+        stops=[
+            GradientStop(0.0, "FF0000"),
+            GradientStop(1.0, "00FF00"),
+        ],
+        start=(10.0, 20.0),
+        end=(110.0, 70.0),
+        gradient_units="userSpaceOnUse",
+    )
+    bounds = Rect(x=10.0, y=20.0, width=100.0, height=50.0)
+
+    xml = paint_runtime.paint_to_fill(paint, shape_bbox=bounds)
+
+    assert 'ang="2700000"' in xml
+
+
+def test_userspace_radial_gradient_is_projected_to_shape_bbox() -> None:
+    paint = RadialGradientPaint(
+        stops=[
+            GradientStop(0.0, "FF0000"),
+            GradientStop(1.0, "00FF00"),
+        ],
+        center=(60.0, 45.0),
+        radius=25.0,
+        gradient_units="userSpaceOnUse",
+    )
+    bounds = Rect(x=10.0, y=20.0, width=100.0, height=50.0)
+
+    xml = paint_runtime.paint_to_fill(paint, shape_bbox=bounds)
+
+    assert '<a:fillToRect l="25000" t="25000" r="25000" b="25000"/>' in xml
 
 
 def test_pattern_fill_supports_theme_slots() -> None:

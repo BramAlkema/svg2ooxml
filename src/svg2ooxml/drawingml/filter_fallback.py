@@ -2,9 +2,24 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Iterator, Mapping
+from dataclasses import dataclass
+from typing import Any
 
-from svg2ooxml.ir.geometry import Rect
+from svg2ooxml.drawingml.image import render_picture
+from svg2ooxml.ir.geometry import Point, Rect
+from svg2ooxml.ir.scene import Image
+
+
+@dataclass(frozen=True)
+class FilterFallbackAsset:
+    """Resolved filter fallback asset candidate from element metadata."""
+
+    filter_id: str
+    fallback: str
+    asset_type: str
+    asset: Mapping[str, Any]
+    metadata: Mapping[str, Any] | None
 
 
 def resolve_filter_fallback_bounds(
@@ -36,4 +51,159 @@ def resolve_filter_fallback_bounds(
         return default_bounds
 
 
-__all__ = ["resolve_filter_fallback_bounds"]
+def iter_filter_fallback_assets(
+    metadata: Mapping[str, object] | None,
+    *,
+    infer_vector_fallback_from_metadata: bool = False,
+) -> Iterator[FilterFallbackAsset]:
+    """Yield filter fallback assets described by shape/group metadata."""
+    if not isinstance(metadata, Mapping):
+        return
+    filters = metadata.get("filters")
+    if not isinstance(filters, list) or not filters:
+        return
+    policy = metadata.get("policy")
+    if not isinstance(policy, Mapping):
+        return
+    media_policy = policy.get("media")
+    if not isinstance(media_policy, Mapping):
+        return
+    filter_assets = media_policy.get("filter_assets")
+    if not isinstance(filter_assets, Mapping):
+        return
+
+    filter_meta = metadata.get("filter_metadata")
+    if not isinstance(filter_meta, Mapping):
+        filter_meta = {}
+
+    for entry in filters:
+        if not isinstance(entry, Mapping):
+            continue
+        filter_id = entry.get("id")
+        if not isinstance(filter_id, str) or not filter_id:
+            continue
+        fallback = entry.get("fallback")
+        fallback = fallback.lower() if isinstance(fallback, str) else None
+        meta = filter_meta.get(filter_id)
+        if (
+            fallback is None
+            and infer_vector_fallback_from_metadata
+            and isinstance(meta, Mapping)
+        ):
+            filter_type = meta.get("filter_type")
+            if isinstance(filter_type, str) and filter_type.lower() in {
+                "composite",
+                "flood",
+            }:
+                fallback = "emf"
+        if fallback not in {"emf", "vector", "bitmap", "raster"}:
+            continue
+        assets = filter_assets.get(filter_id)
+        if not isinstance(assets, list):
+            continue
+        asset_type = "emf" if fallback in {"emf", "vector"} else "raster"
+        for asset in assets:
+            if isinstance(asset, Mapping) and asset.get("type") == asset_type:
+                yield FilterFallbackAsset(
+                    filter_id=filter_id,
+                    fallback=fallback,
+                    asset_type=asset_type,
+                    asset=asset,
+                    metadata=meta if isinstance(meta, Mapping) else None,
+                )
+
+
+def render_shape_filter_fallback(
+    element,
+    shape_id: int,
+    metadata: Mapping[str, object],
+    *,
+    picture_template: str,
+    policy_for: Callable[[dict[str, object] | None, str], dict[str, object]],
+    register_media: Callable[[Image], str],
+    trace_writer: Callable[..., None],
+    hyperlink_xml: str,
+) -> tuple[str, int] | None:
+    """Render a shape-level filter fallback asset as a picture."""
+    for candidate in iter_filter_fallback_assets(
+        metadata,
+        infer_vector_fallback_from_metadata=True,
+    ):
+        asset = candidate.asset
+        data_hex = asset.get("data_hex")
+        raw_data = asset.get("data")
+        if isinstance(data_hex, str) and data_hex:
+            try:
+                image_bytes = bytes.fromhex(data_hex)
+            except ValueError:
+                continue
+        elif isinstance(raw_data, (bytes, bytearray)):
+            image_bytes = bytes(raw_data)
+        else:
+            continue
+
+        bounds = resolve_filter_fallback_bounds(
+            getattr(element, "bbox", None),
+            candidate.metadata,
+        )
+        if bounds is None or bounds.width <= 0 or bounds.height <= 0:
+            continue
+
+        image_metadata: dict[str, object] = {
+            "image_source": "filter_fallback",
+            "filter_id": candidate.filter_id,
+            "fallback": candidate.fallback,
+        }
+        for source in (
+            candidate.metadata,
+            asset.get("metadata") if isinstance(asset.get("metadata"), Mapping) else None,
+        ):
+            if not isinstance(source, Mapping):
+                continue
+            blip_color_transforms = source.get("blip_color_transforms")
+            if isinstance(blip_color_transforms, list) and blip_color_transforms:
+                image_metadata["blip_color_transforms"] = list(blip_color_transforms)
+                break
+        if candidate.asset_type == "emf":
+            image_metadata["emf_asset"] = {
+                "relationship_id": asset.get("relationship_id"),
+                "width_emu": asset.get("width_emu"),
+                "height_emu": asset.get("height_emu"),
+            }
+        image = Image(
+            origin=Point(bounds.x, bounds.y),
+            size=Rect(0.0, 0.0, bounds.width, bounds.height),
+            data=image_bytes,
+            format="emf" if candidate.asset_type == "emf" else "png",
+            metadata=image_metadata,
+        )
+        xml = render_picture(
+            image,
+            shape_id,
+            template=picture_template,
+            policy_for=policy_for,
+            register_media=register_media,
+            hyperlink_xml=hyperlink_xml,
+        )
+        if xml is None:
+            return None
+        trace_writer(
+            "filter_fallback_rendered",
+            stage="filter",
+            metadata={
+                "shape_id": shape_id,
+                "filter_id": candidate.filter_id,
+                "fallback": candidate.fallback,
+                "format": image.format,
+            },
+        )
+        return xml, shape_id + 1
+    return None
+
+
+__all__ = [
+    "FilterFallbackAsset",
+    "iter_filter_fallback_assets",
+    "render_shape_filter_fallback",
+    "resolve_filter_fallback_bounds",
+]

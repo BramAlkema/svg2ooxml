@@ -13,14 +13,18 @@ from svg2ooxml.common.boundaries import (
     is_safe_relationship_id,
     next_relationship_id,
 )
-from svg2ooxml.io.pptx_assembly import (
+from svg2ooxml.io.pptx_package_constants import (
     FONT_STYLE_ORDER,
     FONT_STYLE_TAGS,
     P_NS,
     R_DOC_NS,
     REL_NS,
+)
+from svg2ooxml.io.pptx_package_model import (
     PackagedFont,
     SlideAssembly,
+)
+from svg2ooxml.io.pptx_part_names import (
     safe_int,
     sanitize_slide_filename,
 )

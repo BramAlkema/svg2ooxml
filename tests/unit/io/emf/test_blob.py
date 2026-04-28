@@ -120,3 +120,31 @@ def test_emf_blob_set_poly_fill_mode_emits_record_once() -> None:
     emf_bytes = blob.finalize()
     codes = [record_type for record_type, _ in _records(emf_bytes)]
     assert codes.count(EMFRecordType.EMR_SETPOLYFILLMODE) == 1
+
+
+def test_emf_blob_finalize_is_idempotent_and_closes_writer() -> None:
+    blob = EMFBlob(914400, 914400)
+    first = blob.finalize()
+
+    assert blob.finalize() == first
+    with pytest.raises(RuntimeError):
+        blob.fill_rectangle(0, 0, 10, 10, None)
+
+
+def test_emf_blob_rejects_unsafe_numeric_inputs() -> None:
+    with pytest.raises(ValueError):
+        EMFBlob(914400, 914400, dpi=0)
+    with pytest.raises(ValueError):
+        EMFBlob(914400, 914400, dpi=9601)
+
+    blob = EMFBlob(914400, 914400)
+    with pytest.raises(ValueError):
+        blob.draw_polyline([(0, 0), (10**30, 0)], pen_handle=None)
+
+
+def test_emf_blob_rejects_truncated_bmp_payload() -> None:
+    blob = EMFBlob(914400, 914400)
+    with pytest.raises(ValueError):
+        blob.create_dib_pattern_brush(b"BM")
+    with pytest.raises(ValueError):
+        blob.draw_bitmap(0, 0, 10, 10, 0, 0, 1, 1, b"BM")

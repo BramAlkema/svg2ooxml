@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "svg2ooxml"
-version = "0.7.5"
+version = "0.7.6"
 description = "SVG-to-PowerPoint converter with native, editable PresentationML output."
 readme = "README.pypi.md"
 requires-python = ">=3.14"

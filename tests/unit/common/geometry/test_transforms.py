@@ -8,6 +8,7 @@ import pytest
 
 from svg2ooxml.common.geometry.transforms.decompose import (
     classify_affine_matrix,
+    classify_linear_transform,
     decompose_matrix,
     dominant_affine_component,
     identity_payload_for_affine_component,
@@ -93,6 +94,21 @@ def test_classify_affine_matrix_rejects_skew() -> None:
 
     assert classify_affine_matrix(skewed) == (None, None)
     assert dominant_affine_component(skewed) is None
+
+
+def test_classify_linear_transform_reports_singular_values_and_shear() -> None:
+    classification = classify_linear_transform(2.0, 0.0, 0.0, 1.0)
+
+    assert classification.non_uniform is True
+    assert classification.has_shear is False
+    assert classification.det_sign == 1
+    assert classification.s1 == pytest.approx(2.0)
+    assert classification.s2 == pytest.approx(1.0)
+    assert classification.ratio == pytest.approx(2.0)
+
+    skew = classify_linear_transform(1.0, 0.0, math.tan(math.radians(15.0)), 1.0)
+    assert skew.has_shear is True
+    assert skew.shear_degrees == pytest.approx(15.0)
 
 
 def test_affine_identity_payloads() -> None:

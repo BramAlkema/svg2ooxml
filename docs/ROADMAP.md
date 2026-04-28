@@ -24,6 +24,9 @@ evidence live in the companion repository
 
 ## Recent Release Focus
 
+- **0.7.6**: architecture dedupe after the large-file split work, shared
+  geometry/gradient/filter helper paths, base-install optional dependency
+  safety, and stricter parallel exporter behavior
 - **0.7.5**: clean-checkout hardening for the large helper-module split,
   published `openxml-audit` validation in CI, centralized conversion helpers,
   and a fast SVG-to-PPTX end-to-end gate

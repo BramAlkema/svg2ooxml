@@ -7,6 +7,9 @@ from dataclasses import replace
 from lxml import etree
 
 from svg2ooxml.common.svg_refs import local_name, local_url_id
+from svg2ooxml.core.styling.pattern_merge import (
+    merge_pattern_paint as _merge_pattern_paint,
+)
 from svg2ooxml.core.styling.style_helpers import parse_style_attr
 from svg2ooxml.ir.paint import PatternPaint
 from svg2ooxml.paint.resvg_bridge import resolve_paints_for_node
@@ -184,22 +187,3 @@ def _element_explicitly_disables_paint(
     parsed = parse_style_attr(style_attr)
     value = parsed.get(attribute)
     return isinstance(value, str) and value.strip().lower() == "none"
-
-
-def _merge_pattern_paint(
-    runtime_paint: PatternPaint, analyzed_paint: PatternPaint
-) -> PatternPaint:
-    return replace(
-        runtime_paint,
-        preset=analyzed_paint.preset or runtime_paint.preset,
-        foreground=analyzed_paint.foreground or runtime_paint.foreground,
-        background=analyzed_paint.background or runtime_paint.background,
-        background_opacity=analyzed_paint.background_opacity,
-        foreground_theme_color=analyzed_paint.foreground_theme_color
-        or runtime_paint.foreground_theme_color,
-        background_theme_color=analyzed_paint.background_theme_color
-        or runtime_paint.background_theme_color,
-        tile_image=analyzed_paint.tile_image or runtime_paint.tile_image,
-        tile_width_px=analyzed_paint.tile_width_px or runtime_paint.tile_width_px,
-        tile_height_px=analyzed_paint.tile_height_px or runtime_paint.tile_height_px,
-    )

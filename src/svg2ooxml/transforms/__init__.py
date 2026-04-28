@@ -8,6 +8,8 @@ from importlib import import_module
 
 from svg2ooxml.common.geometry.transforms.decompose import (
     DecomposedTransform,
+    LinearTransformClass,
+    classify_linear_transform,
     compose_matrix,
     decompose_matrix,
 )
@@ -40,7 +42,9 @@ __all__ = [
     "parse_transform_list",
     "CoordinateSpace",
     "DecomposedTransform",
+    "LinearTransformClass",
     "decompose_matrix",
+    "classify_linear_transform",
     "compose_matrix",
 ]
 

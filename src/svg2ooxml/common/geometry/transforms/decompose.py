@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
-from math import atan2, cos, degrees, isfinite, radians, sin, sqrt
+from math import asin, atan2, cos, degrees, isfinite, radians, sin, sqrt
 from typing import Literal
 
 from svg2ooxml.common.geometry.matrix import Matrix2D
@@ -18,6 +18,22 @@ class DecomposedTransform:
     scale_x: float
     scale_y: float
     shear: float
+
+
+@dataclass(frozen=True)
+class LinearTransformClass:
+    """SVD-based classification of the linear part of a 2D affine transform."""
+
+    non_uniform: bool
+    has_shear: bool
+    det_sign: int
+    s1: float
+    s2: float
+    ratio: float
+    scale_x: float = 0.0
+    scale_y: float = 0.0
+    shear_factor: float = 0.0
+    shear_degrees: float = 0.0
 
 
 AffineComponent = Literal["identity", "translate", "scale", "rotate"]
@@ -44,6 +60,59 @@ def decompose_matrix(matrix: Matrix2D) -> DecomposedTransform:
         scale_x=scale_x,
         scale_y=scale_y,
         shear=shear,
+    )
+
+
+def classify_linear_transform(
+    a: float,
+    b: float,
+    c: float,
+    d: float,
+    eps: float = 1e-6,
+) -> LinearTransformClass:
+    """Classify a 2D linear transform from matrix elements ``[[a, c], [b, d]]``."""
+
+    square_x = a * a + b * b
+    shear_term = a * c + b * d
+    square_y = c * c + d * d
+    trace = square_x + square_y
+    determinant = a * d - b * c
+    discriminant = max(trace * trace - 4.0 * (determinant * determinant), 0.0)
+    sqrt_discriminant = discriminant**0.5
+
+    lambda_plus = 0.5 * (trace + sqrt_discriminant)
+    lambda_minus = 0.5 * (trace - sqrt_discriminant)
+    singular_1 = lambda_plus**0.5 if lambda_plus > 0 else 0.0
+    singular_2 = lambda_minus**0.5 if lambda_minus > 0 else 0.0
+    if singular_2 > singular_1:
+        singular_1, singular_2 = singular_2, singular_1
+
+    ratio = max(singular_1, singular_2) / max(min(singular_1, singular_2), eps)
+    scale_x = sqrt(square_x)
+    scale_y = sqrt(square_y)
+    shear_factor = 0.0
+    if scale_x > eps and scale_y > eps:
+        shear_factor = abs(shear_term) / (scale_x * scale_y)
+    shear_degrees = abs(degrees(asin(min(1.0, shear_factor))))
+    has_shear = abs(shear_term) > eps * (square_x + square_y + 1.0)
+    det_sign = -1 if determinant < -eps else (1 if determinant > eps else 0)
+    non_uniform = abs(singular_1 - singular_2) > eps * max(
+        singular_1,
+        singular_2,
+        1.0,
+    )
+
+    return LinearTransformClass(
+        non_uniform=non_uniform,
+        has_shear=has_shear,
+        det_sign=det_sign,
+        s1=singular_1,
+        s2=singular_2,
+        ratio=ratio,
+        scale_x=scale_x,
+        scale_y=scale_y,
+        shear_factor=shear_factor,
+        shear_degrees=shear_degrees,
     )
 
 
@@ -177,7 +246,9 @@ __all__ = [
     "ComponentPriority",
     "DEFAULT_COMPONENT_PRIORITY",
     "DecomposedTransform",
+    "LinearTransformClass",
     "classify_affine_matrix",
+    "classify_linear_transform",
     "compose_matrix",
     "decompose_matrix",
     "dominant_affine_component",

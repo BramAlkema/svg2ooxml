@@ -3,46 +3,22 @@
 from __future__ import annotations
 
 import math
-from collections.abc import Iterable
-from dataclasses import dataclass
 
-from svg2ooxml.common.dash_patterns import normalize_dash_array
-from svg2ooxml.common.gradient_units import normalize_gradient_units
-from svg2ooxml.ir.geometry import BezierSegment, LineSegment, Rect, SegmentType
-from svg2ooxml.ir.paint import (
-    GradientStop,
-    LinearGradientPaint,
-    RadialGradientPaint,
-    SolidPaint,
-    Stroke,
-    StrokeCap,
-    StrokeJoin,
-)
+from svg2ooxml.drawingml.rasterizer_backend import SKIA_AVAILABLE, skia
+from svg2ooxml.drawingml.rasterizer_geometry import RasterizerGeometryMixin
+from svg2ooxml.drawingml.rasterizer_paint import RasterizerPaintMixin
+from svg2ooxml.drawingml.rasterizer_shapes import RasterizerShapeMixin
+from svg2ooxml.drawingml.rasterizer_types import RasterResult
 from svg2ooxml.ir.scene import Group, Image
 from svg2ooxml.ir.scene import Path as IRPath
 from svg2ooxml.ir.shapes import Circle, Ellipse, Rectangle
 
-try:  # pragma: no cover - optional dependency
-    import skia
 
-    SKIA_AVAILABLE = True
-except Exception:  # pragma: no cover - optional dependency
-    skia = None  # type: ignore
-    SKIA_AVAILABLE = False
-
-from svg2ooxml.common.geometry.paths.drawingml import compute_path_bounds
-from svg2ooxml.core.resvg.geometry.matrix_bridge import matrix_to_tuple
-
-
-@dataclass(frozen=True)
-class RasterResult:
-    data: bytes
-    width_px: int
-    height_px: int
-    bounds: Rect
-
-
-class Rasterizer:
+class Rasterizer(
+    RasterizerShapeMixin,
+    RasterizerPaintMixin,
+    RasterizerGeometryMixin,
+):
     """Render IR elements to raster images using skia-python."""
 
     def __init__(self, *, scale: float = 1.0) -> None:
@@ -65,8 +41,8 @@ class Rasterizer:
         height_px = max(int(math.ceil(bounds.height * self._scale)), 1)
 
         try:
-            # skia-python ≥ 138 dropped the alphaType argument on the direct width/height
-            # overload. Build an ImageInfo so that we always request RGBA premul explicitly.
+            # skia-python >= 138 dropped alphaType on the direct width/height
+            # overload. ImageInfo keeps the requested RGBA premul explicit.
             info = skia.ImageInfo.Make(
                 width_px,
                 height_px,
@@ -136,14 +112,16 @@ class Rasterizer:
 
         try:
             info = skia.ImageInfo.Make(
-                width_px, height_px,
+                width_px,
+                height_px,
                 skia.ColorType.kRGBA_8888_ColorType,
                 skia.AlphaType.kPremul_AlphaType,
             )
             surface = skia.Surface(info)
         except (AttributeError, TypeError):  # pragma: no cover
             surface = skia.Surface(
-                width_px, height_px,
+                width_px,
+                height_px,
                 colorType=skia.ColorType.kRGBA_8888_ColorType,
             )
 
@@ -174,446 +152,6 @@ class Rasterizer:
             height_px=height_px,
             bounds=bounds,
         )
-
-    def _draw_element(self, canvas, element) -> bool:
-        """Draw a single IR element onto a canvas. Returns True on success."""
-        try:
-            geometry_bounds = self._element_bounds(element)
-        except TypeError:
-            return False  # unsupported element type (e.g. TextFrame)
-        if isinstance(element, Rectangle):
-            return self._draw_rectangle(canvas, element, geometry_bounds)
-        if isinstance(element, Circle):
-            return self._draw_circle(canvas, element, geometry_bounds)
-        if isinstance(element, Ellipse):
-            return self._draw_ellipse(canvas, element, geometry_bounds)
-        if isinstance(element, IRPath):
-            return self._draw_path(canvas, element, geometry_bounds)
-        if isinstance(element, Group):
-            drawn_any = False
-            if element.opacity < 1.0:
-                canvas.saveLayerAlpha(None, int(round(element.opacity * 255)))
-            else:
-                canvas.save()
-            try:
-                for child in element.children:
-                    if self._draw_element(canvas, child):
-                        drawn_any = True
-            finally:
-                canvas.restore()
-            return drawn_any
-        return False
-
-    # ------------------------------------------------------------------ #
-    # Drawing helpers
-    # ------------------------------------------------------------------ #
-
-    def _draw_rectangle(self, canvas: skia.Canvas, rect: Rectangle, bounds: Rect) -> bool:
-        sk_rect = skia.Rect.MakeXYWH(rect.bounds.x, rect.bounds.y, rect.bounds.width, rect.bounds.height)
-        drawn = False
-        if rect.fill is not None:
-            paint = self._paint_from_fill(rect.fill, bounds, opacity=rect.opacity)
-            if paint:
-                canvas.drawRect(sk_rect, paint)
-                drawn = True
-        if rect.stroke and rect.stroke.paint is not None:
-            paint = self._paint_from_stroke(rect.stroke, bounds, opacity=rect.opacity)
-            if paint:
-                canvas.drawRect(sk_rect, paint)
-                drawn = True
-        return drawn
-
-    def _draw_circle(self, canvas: skia.Canvas, circle: Circle, bounds: Rect) -> bool:
-        rect = skia.Rect.MakeXYWH(
-            circle.center.x - circle.radius,
-            circle.center.y - circle.radius,
-            circle.radius * 2.0,
-            circle.radius * 2.0,
-        )
-        drawn = False
-        if circle.fill is not None:
-            paint = self._paint_from_fill(circle.fill, bounds, opacity=circle.opacity)
-            if paint:
-                canvas.drawOval(rect, paint)
-                drawn = True
-        if circle.stroke and circle.stroke.paint is not None:
-            paint = self._paint_from_stroke(circle.stroke, bounds, opacity=circle.opacity)
-            if paint:
-                canvas.drawOval(rect, paint)
-                drawn = True
-        return drawn
-
-    def _draw_ellipse(self, canvas: skia.Canvas, ellipse: Ellipse, bounds: Rect) -> bool:
-        rect = skia.Rect.MakeXYWH(
-            ellipse.center.x - ellipse.radius_x,
-            ellipse.center.y - ellipse.radius_y,
-            ellipse.radius_x * 2.0,
-            ellipse.radius_y * 2.0,
-        )
-        drawn = False
-        if ellipse.fill is not None:
-            paint = self._paint_from_fill(ellipse.fill, bounds, opacity=ellipse.opacity)
-            if paint:
-                canvas.drawOval(rect, paint)
-                drawn = True
-        if ellipse.stroke and ellipse.stroke.paint is not None:
-            paint = self._paint_from_stroke(ellipse.stroke, bounds, opacity=ellipse.opacity)
-            if paint:
-                canvas.drawOval(rect, paint)
-                drawn = True
-        return drawn
-
-    def _draw_path(self, canvas: skia.Canvas, path: IRPath, bounds: Rect) -> bool:
-        if not path.segments:
-            return False
-        sk_path = self._build_skia_path(path.segments, path.is_closed)
-        drawn = False
-        if path.fill is not None:
-            paint = self._paint_from_fill(path.fill, bounds, opacity=path.opacity)
-            if paint:
-                canvas.drawPath(sk_path, paint)
-                drawn = True
-        if path.stroke and path.stroke.paint is not None:
-            paint = self._paint_from_stroke(path.stroke, bounds, opacity=path.opacity)
-            if paint:
-                canvas.drawPath(sk_path, paint)
-                drawn = True
-        return drawn
-
-    def _paint_from_fill(
-        self,
-        paint,
-        bounds: Rect,
-        *,
-        opacity: float = 1.0,
-    ) -> skia.Paint | None:
-        sk_paint = skia.Paint(AntiAlias=True)
-        sk_paint.setStyle(skia.Paint.kFill_Style)
-        if self._apply_paint(sk_paint, paint, bounds, opacity=opacity):
-            return sk_paint
-        return None
-
-    def _paint_from_stroke(
-        self,
-        stroke: Stroke,
-        bounds: Rect,
-        *,
-        opacity: float = 1.0,
-    ) -> skia.Paint | None:
-        sk_paint = skia.Paint(AntiAlias=True)
-        sk_paint.setStyle(skia.Paint.kStroke_Style)
-        if not self._apply_paint(
-            sk_paint,
-            stroke.paint,
-            bounds,
-            opacity=stroke.opacity * opacity,
-        ):
-            return None
-        sk_paint.setStrokeWidth(max(stroke.width, 0.1))
-        cap_map = {
-            StrokeCap.BUTT: skia.Paint.Cap.kButt_Cap,
-            StrokeCap.ROUND: skia.Paint.Cap.kRound_Cap,
-            StrokeCap.SQUARE: skia.Paint.Cap.kSquare_Cap,
-        }
-        sk_paint.setStrokeCap(cap_map.get(stroke.cap, skia.Paint.Cap.kButt_Cap))
-        join_map = {
-            StrokeJoin.MITER: skia.Paint.Join.kMiter_Join,
-            StrokeJoin.ROUND: skia.Paint.Join.kRound_Join,
-            StrokeJoin.BEVEL: skia.Paint.Join.kBevel_Join,
-        }
-        sk_paint.setStrokeJoin(join_map.get(stroke.join, skia.Paint.Join.kMiter_Join))
-        if stroke.dash_array:
-            intervals = [
-                max(0.1, value) for value in normalize_dash_array(stroke.dash_array)
-            ]
-            if intervals:
-                effect = skia.DashPathEffect.Make(intervals, stroke.dash_offset or 0.0)
-                if effect:
-                    sk_paint.setPathEffect(effect)
-        return sk_paint
-
-    def _apply_paint(self, sk_paint: skia.Paint, paint, bounds: Rect, *, opacity: float) -> bool:
-        if isinstance(paint, SolidPaint):
-            color = self._color_from_hex(paint.rgb, paint.opacity * opacity)
-            if color is None:
-                return False
-            sk_paint.setColor4f(color)
-            return True
-        if isinstance(paint, LinearGradientPaint):
-            shader = self._linear_gradient_shader(paint, bounds, opacity)
-            if shader is None:
-                return False
-            sk_paint.setShader(shader)
-            return True
-        if isinstance(paint, RadialGradientPaint):
-            shader = self._radial_gradient_shader(paint, bounds, opacity)
-            if shader is None:
-                return False
-            sk_paint.setShader(shader)
-            return True
-        return False
-
-    def _linear_gradient_shader(
-        self,
-        paint: LinearGradientPaint,
-        bounds: Rect,
-        opacity: float,
-    ) -> skia.Shader | None:
-        prepared = self._prepare_gradient_stops(paint.stops, opacity)
-        if prepared is None:
-            return None
-        positions, colors = prepared
-        x1, y1, x2, y2 = self._linear_gradient_points(paint, bounds)
-        if x1 == x2 and y1 == y2:
-            return None
-        tile_mode = self._resolve_tile_mode(paint.spread_method)
-        matrix = self._to_skia_matrix(paint.transform)
-        try:
-            return skia.GradientShader.MakeLinear(
-                [skia.Point(x1, y1), skia.Point(x2, y2)],
-                colors,
-                positions,
-                tile_mode,
-                0,
-                matrix,
-            )
-        except TypeError:  # pragma: no cover - older skia signature
-            return skia.GradientShader.MakeLinear(
-                [skia.Point(x1, y1), skia.Point(x2, y2)],
-                colors,
-                positions,
-                tile_mode,
-            )
-
-    def _radial_gradient_shader(
-        self,
-        paint: RadialGradientPaint,
-        bounds: Rect,
-        opacity: float,
-    ) -> skia.Shader | None:
-        prepared = self._prepare_gradient_stops(paint.stops, opacity)
-        if prepared is None:
-            return None
-        positions, colors = prepared
-        cx, cy, radius = self._radial_gradient_params(paint, bounds)
-        if radius <= 0:
-            return None
-        fx, fy = self._radial_gradient_focus(paint, bounds, (cx, cy))
-        tile_mode = self._resolve_tile_mode(paint.spread_method)
-        matrix = self._to_skia_matrix(paint.transform)
-        if fx != cx or fy != cy:
-            try:
-                return skia.GradientShader.MakeTwoPointConical(
-                    skia.Point(fx, fy),
-                    0.0,
-                    skia.Point(cx, cy),
-                    radius,
-                    colors,
-                    positions,
-                    tile_mode,
-                    0,
-                    matrix,
-                )
-            except TypeError:  # pragma: no cover - older skia signature
-                return skia.GradientShader.MakeTwoPointConical(
-                    skia.Point(fx, fy),
-                    0.0,
-                    skia.Point(cx, cy),
-                    radius,
-                    colors,
-                    positions,
-                    tile_mode,
-                )
-        try:
-            return skia.GradientShader.MakeRadial(
-                skia.Point(cx, cy),
-                radius,
-                colors,
-                positions,
-                tile_mode,
-                0,
-                matrix,
-            )
-        except TypeError:  # pragma: no cover - older skia signature
-            return skia.GradientShader.MakeRadial(
-                skia.Point(cx, cy),
-                radius,
-                colors,
-                positions,
-                tile_mode,
-            )
-
-    def _build_skia_path(self, segments: Iterable[SegmentType], closed: bool) -> skia.Path:
-        segment_list = list(segments)
-        path = skia.Path()
-        if not segment_list:
-            return path
-        first_segment = segment_list[0]
-        path.moveTo(first_segment.start.x, first_segment.start.y)
-        for segment in segment_list:
-            if isinstance(segment, LineSegment):
-                path.lineTo(segment.end.x, segment.end.y)
-            elif isinstance(segment, BezierSegment):
-                path.cubicTo(
-                    segment.control1.x,
-                    segment.control1.y,
-                    segment.control2.x,
-                    segment.control2.y,
-                    segment.end.x,
-                    segment.end.y,
-                )
-        if closed:
-            path.close()
-        return path
-
-    # ------------------------------------------------------------------ #
-    # Utility helpers
-    # ------------------------------------------------------------------ #
-
-    def _expanded_bounds(self, element) -> Rect:
-        bounds = self._element_bounds(element)
-        pad = 0.5
-        stroke = getattr(element, "stroke", None)
-        if isinstance(stroke, Stroke) and stroke.paint is not None:
-            pad = max(pad, stroke.width / 2.0)
-        return Rect(bounds.x - pad, bounds.y - pad, bounds.width + pad * 2.0, bounds.height + pad * 2.0)
-
-    def _group_bounds(self, group: Group) -> Rect:
-        boxes: list[Rect] = []
-        for child in group.children:
-            if isinstance(child, Group):
-                child_bounds = self._group_bounds(child)
-                if child_bounds.width > 0 and child_bounds.height > 0:
-                    boxes.append(child_bounds)
-                continue
-            if isinstance(child, Image):
-                continue
-            try:
-                boxes.append(self._expanded_bounds(child))
-            except TypeError:
-                continue
-        if not boxes:
-            return Rect(0.0, 0.0, 0.0, 0.0)
-        min_x = min(box.x for box in boxes)
-        min_y = min(box.y for box in boxes)
-        max_x = max(box.x + box.width for box in boxes)
-        max_y = max(box.y + box.height for box in boxes)
-        return Rect(min_x, min_y, max_x - min_x, max_y - min_y)
-
-    def _element_bounds(self, element) -> Rect:
-        if isinstance(element, Rectangle):
-            return element.bounds
-        if isinstance(element, Circle):
-            return element.bbox
-        if isinstance(element, Ellipse):
-            return element.bbox
-        if isinstance(element, IRPath):
-            return compute_path_bounds(element.segments or [])
-        raise TypeError(f"Unsupported element type for rasterization: {type(element).__name__}")
-
-    def _prepare_gradient_stops(
-        self,
-        stops: Iterable[GradientStop],
-        opacity: float,
-    ) -> tuple[list[float], list[skia.Color4f]] | None:
-        positions: list[float] = []
-        colors: list[skia.Color4f] = []
-        last_offset = 0.0
-        for stop in stops:
-            offset = max(0.0, min(1.0, float(stop.offset)))
-            offset = max(offset, last_offset)
-            last_offset = offset
-            color = self._color_from_hex(stop.rgb, float(stop.opacity) * opacity)
-            if color is None:
-                continue
-            positions.append(offset)
-            colors.append(color)
-        if len(colors) < 2:
-            return None
-        return positions, colors
-
-    def _linear_gradient_points(
-        self,
-        paint: LinearGradientPaint,
-        bounds: Rect,
-    ) -> tuple[float, float, float, float]:
-        x1, y1 = paint.start
-        x2, y2 = paint.end
-        if normalize_gradient_units(paint.gradient_units) == "objectBoundingBox":
-            x1 = bounds.x + x1 * bounds.width
-            y1 = bounds.y + y1 * bounds.height
-            x2 = bounds.x + x2 * bounds.width
-            y2 = bounds.y + y2 * bounds.height
-        return x1, y1, x2, y2
-
-    def _radial_gradient_params(
-        self,
-        paint: RadialGradientPaint,
-        bounds: Rect,
-    ) -> tuple[float, float, float]:
-        cx, cy = paint.center
-        radius = paint.radius
-        if normalize_gradient_units(paint.gradient_units) == "objectBoundingBox":
-            cx = bounds.x + cx * bounds.width
-            cy = bounds.y + cy * bounds.height
-            radius = radius * (bounds.width + bounds.height) * 0.5
-        return cx, cy, radius
-
-    def _radial_gradient_focus(
-        self,
-        paint: RadialGradientPaint,
-        bounds: Rect,
-        center: tuple[float, float],
-    ) -> tuple[float, float]:
-        if paint.focal_point is None:
-            return center
-        fx, fy = paint.focal_point
-        if normalize_gradient_units(paint.gradient_units) == "objectBoundingBox":
-            fx = bounds.x + fx * bounds.width
-            fy = bounds.y + fy * bounds.height
-        return fx, fy
-
-    @staticmethod
-    def _resolve_tile_mode(spread_method: str | None):
-        if spread_method == "repeat":
-            return skia.TileMode.kRepeat
-        if spread_method == "reflect":
-            return skia.TileMode.kMirror
-        return skia.TileMode.kClamp
-
-    @staticmethod
-    def _to_skia_matrix(matrix) -> skia.Matrix | None:
-        if matrix is None:
-            return None
-        try:
-            a, b, c, d, e, f = matrix_to_tuple(matrix)
-            return skia.Matrix.MakeAll(
-                a,
-                c,
-                e,
-                b,
-                d,
-                f,
-                0.0,
-                0.0,
-                1.0,
-            )
-        except Exception:  # pragma: no cover - defensive for unexpected matrix shapes
-            return None
-
-    @staticmethod
-    def _color_from_hex(value: str, opacity: float) -> skia.Color4f | None:
-        value = value.strip().lstrip("#")
-        if len(value) != 6:
-            return None
-        try:
-            r = int(value[0:2], 16) / 255.0
-            g = int(value[2:4], 16) / 255.0
-            b = int(value[4:6], 16) / 255.0
-        except ValueError:
-            return None
-        a = max(0.0, min(1.0, opacity))
-        return skia.Color4f(r, g, b, a)
 
 
 __all__ = ["Rasterizer", "RasterResult", "SKIA_AVAILABLE"]

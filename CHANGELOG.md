@@ -5,6 +5,57 @@ Empirical PowerPoint behavior research, authored control decks, and durable
 oracle evidence live in the companion repository
 [`openxml-audit`](https://github.com/BramAlkema/openxml-audit).
 
+## 0.7.6 - 2026-04-28
+
+Release focus: architecture dedupe after the large-file split work, plus a
+base-install safety fix for optional filter dependencies and a stricter
+parallel exporter contract.
+
+Full diff: https://github.com/BramAlkema/svg2ooxml/compare/v0.7.5...v0.7.6
+
+### Added
+
+- added focused modules for WordArt feature extraction, preset scoring, and
+  path-warp family fitting
+- added shared geometry point/segment helpers used by simplification,
+  shape detection, clip/mask bridges, and WordArt analysis
+- added dedicated gradient resolution, gradient paint building, and gradient
+  metadata modules
+- added regression coverage for dependency-light filter policy imports,
+  path-warp helpers, and custom-component parallel exporter rejection
+
+### Changed
+
+- decomposed the SVG path simplifier into pipeline, pass, RDP, curve-fitting,
+  and line-run modules while preserving compatibility aliases
+- split resvg tree conversion, animation color handling, resvg clip/mask
+  bridging, WordArt classification, path-warp fitting, and gradient paint
+  handling into smaller responsibility-focused modules
+- centralized repeated geometry, gradient-unit, curve-fitting, zero-crossing,
+  and point/vector calculations instead of keeping local helper copies
+- made parallel page conversion explicitly reject custom render components
+  when it cannot preserve the serial exporter configuration
+
+### Fixed
+
+- fixed a base-install import regression where `FilterService` loaded the full
+  filter planner and optional raster dependencies before the lightweight
+  fallback path could be selected
+- kept SVG-to-PPTX parallel mode from silently ignoring caller-provided parser,
+  writer, animation parser, or timeline sampler dependencies
+
+### Validation
+
+- local `ruff format` and `ruff check` passed on touched modules during the
+  refactor passes
+- local focused suites passed across geometry, WordArt, gradients, filters,
+  style extraction, and exporter integration
+- local full unit suite passed: `2778 passed`
+- fresh import check passed with `numpy` and `svg2ooxml.filters.planner`
+  blocked
+- local `python -m build` produced `svg2ooxml-0.7.6.tar.gz` and
+  `svg2ooxml-0.7.6-py3-none-any.whl`
+
 ## 0.7.5 - 2026-04-28
 
 Release focus: the post-0.7.4 hardening pass that made the large converter

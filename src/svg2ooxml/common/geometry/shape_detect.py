@@ -10,6 +10,7 @@ import math
 from dataclasses import dataclass
 from typing import Literal
 
+from svg2ooxml.common.geometry.points import point_distance
 from svg2ooxml.ir.geometry import BezierSegment, LineSegment, Point, Rect, SegmentType
 
 DEFAULT_TOLERANCE = 2.0  # px — intentionally loose for shape recognition
@@ -153,7 +154,9 @@ def _detect_round_rect(
         preset="roundRect",
         bounds=bounds,
         corner_radius=avg_radius,
-        confidence=min(1.0, 1.0 - max(abs(r - avg_radius) for r in radii) / (avg_radius + 1e-9)),
+        confidence=min(
+            1.0, 1.0 - max(abs(r - avg_radius) for r in radii) / (avg_radius + 1e-9)
+        ),
     )
 
 
@@ -304,9 +307,7 @@ def _ellipse_quadrant_error(
 
 
 def _dist(a: Point, b: Point) -> float:
-    dx = a.x - b.x
-    dy = a.y - b.y
-    return math.sqrt(dx * dx + dy * dy)
+    return point_distance(a, b)
 
 
 def _bounds_from_segments(segments: list[SegmentType]) -> Rect:
