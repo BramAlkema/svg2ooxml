@@ -24,6 +24,9 @@ evidence live in the companion repository
 
 ## Recent Release Focus
 
+- **0.7.7**: Python 3.13 compatibility metadata restored after the 0.7.x
+  architecture hardening releases, with tooling targets lowered to prevent
+  accidental Python 3.14-only syntax from shipping
 - **0.7.6**: architecture dedupe after the large-file split work, shared
   geometry/gradient/filter helper paths, base-install optional dependency
   safety, and stricter parallel exporter behavior

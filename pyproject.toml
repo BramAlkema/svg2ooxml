@@ -4,10 +4,10 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "svg2ooxml"
-version = "0.7.6"
+version = "0.7.7"
 description = "SVG-to-PowerPoint converter with native, editable PresentationML output."
 readme = "README.pypi.md"
-requires-python = ">=3.14"
+requires-python = ">=3.13"
 dependencies = [ "tinycss2>=1.2", "click>=8.1", "lxml>=4.9.0", "pydantic>=2.5.3",]
 license = "AGPL-3.0-only"
 keywords = [ "svg", "pptx", "powerpoint", "ooxml", "drawingml",]
@@ -15,6 +15,7 @@ classifiers = [
   "Development Status :: 4 - Beta",
   "Intended Audience :: Developers",
   "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.13",
   "Programming Language :: Python :: 3.14",
   "Topic :: Multimedia :: Graphics :: Graphics Conversion",
   "Topic :: Office/Business :: Office Suites",
@@ -68,7 +69,7 @@ figma2gslides = [
 
 [tool.black]
 line-length = 88
-target-version = [ "py314",]
+target-version = [ "py313",]
 
 [tool.isort]
 profile = "black"
@@ -76,7 +77,7 @@ line_length = 88
 src_paths = [ "src", "tests",]
 
 [tool.ruff]
-target-version = "py314"
+target-version = "py313"
 line-length = 88
 src = [ "src", "tests",]
 exclude = [ "venv",]
@@ -90,7 +91,7 @@ ignore = [ "B008", "E203", "E501", "N802", "N803", "N806", "N812",]
 "xml.etree.ElementTree".msg = "Use lxml.etree as ET instead of xml.etree.ElementTree."
 
 [tool.mypy]
-python_version = "3.14"
+python_version = "3.13"
 warn_unused_configs = true
 warn_redundant_casts = true
 warn_unused_ignores = true

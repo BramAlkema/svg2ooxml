@@ -51,10 +51,9 @@ pip install svg2ooxml[figma2gslides]  # Figma/Google Slides tool runtime
 
 ## Current Release
 
-`0.7.6` is an architecture/dedupe release after the large-file split work:
-geometry, WordArt, gradient, filter, resvg, animation, and PPTX internals are
-split into smaller modules with shared helper paths, while base installs avoid
-eager optional render dependencies.
+`0.7.7` restores Python 3.13-compatible release metadata after the 0.7.x
+architecture/dedupe releases, so installers no longer resolve Python 3.13 users
+back to 0.6.8.
 
 ## Quick Start
 

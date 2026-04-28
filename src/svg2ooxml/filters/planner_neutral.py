@@ -56,7 +56,7 @@ class NeutralPrimitiveMixin:
             return None
         try:
             return float(str(value).strip())
-        except TypeError, ValueError:
+        except (TypeError, ValueError):
             return None
 
     @staticmethod

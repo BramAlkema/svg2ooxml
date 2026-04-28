@@ -5,6 +5,33 @@ Empirical PowerPoint behavior research, authored control decks, and durable
 oracle evidence live in the companion repository
 [`openxml-audit`](https://github.com/BramAlkema/openxml-audit).
 
+## 0.7.7 - 2026-04-28
+
+Release focus: restore Python 3.13-compatible package metadata after the
+0.7.x architecture hardening releases.
+
+Full diff: https://github.com/BramAlkema/svg2ooxml/compare/v0.7.6...v0.7.7
+
+### Changed
+
+- lowered package metadata back to `Requires-Python >=3.13` and added the
+  Python 3.13 classifier so installers do not pin users to 0.6.8
+- set formatter, lint, and type-check target versions to Python 3.13 to catch
+  compatibility-only syntax during local validation
+
+### Fixed
+
+- replaced accidental Python 3.14-only unparenthesized multi-exception syntax
+  in the resvg clip/mask and filter planner helpers
+
+### Validation
+
+- local Python 3.13 compile check passed across `src/svg2ooxml`
+- local `ruff check src/svg2ooxml` passed
+- local full unit suite passed: `2778 passed`
+- local `python -m build` produced `svg2ooxml-0.7.7.tar.gz` and
+  `svg2ooxml-0.7.7-py3-none-any.whl`
+
 ## 0.7.6 - 2026-04-28
 
 Release focus: architecture dedupe after the large-file split work, plus a

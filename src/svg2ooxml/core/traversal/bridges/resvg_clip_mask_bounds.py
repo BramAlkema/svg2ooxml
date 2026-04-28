@@ -83,7 +83,7 @@ def points_bbox(points: Iterable[Point]) -> Rect | None:
 def normalize_transform_tuple(value: Any) -> MatrixTuple:
     try:
         return _matrix_to_tuple(value)
-    except TypeError, ValueError:
+    except (TypeError, ValueError):
         return IDENTITY_MATRIX_TUPLE
 
 
