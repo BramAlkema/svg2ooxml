@@ -26,7 +26,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -e .[dev,color,api,cloud,slides,render]
-          pip install "openxml-audit[pptx-lab]"
+          pip install "openxml-audit[pptx-lab]>=0.5.0"
 
       - name: Run test suite
         run: |
@@ -59,7 +59,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -e .[render,color]
-          pip install openxml-audit
+          pip install "openxml-audit>=0.5.0"
 
       - name: Run W3C sample with OpenXML gating
         env:

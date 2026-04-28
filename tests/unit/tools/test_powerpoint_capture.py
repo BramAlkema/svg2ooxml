@@ -466,6 +466,7 @@ def test_capture_pptx_slideshow_closes_presentation_after_capture(
             output_path.write_bytes(b"png"),
         ),
     )
+    monkeypatch.setattr(powerpoint_capture, "_cleanup_powerpoint_state", lambda: None)
     monkeypatch.setattr(
         powerpoint_capture, "_exit_slideshow", lambda: calls.append("exit")
     )
@@ -599,6 +600,17 @@ def test_permission_notice_is_shown_once(monkeypatch) -> None:
     assert "Screen Recording" in calls[0]
 
 
+def test_cleanup_powerpoint_state_skips_osascript_off_macos(monkeypatch) -> None:
+    monkeypatch.setattr(powerpoint_capture.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(
+        powerpoint_capture,
+        "_osascript",
+        lambda *args, **kwargs: pytest.fail("osascript should not run off macOS"),
+    )
+
+    powerpoint_capture._cleanup_powerpoint_state()
+
+
 def test_capture_pptx_slideshow_runs_permission_preflight_first(
     tmp_path: Path,
     monkeypatch,
@@ -633,6 +645,7 @@ def test_capture_pptx_slideshow_runs_permission_preflight_first(
             output_path.write_bytes(b"png"),
         ),
     )
+    monkeypatch.setattr(powerpoint_capture, "_cleanup_powerpoint_state", lambda: None)
     monkeypatch.setattr(
         powerpoint_capture, "_exit_slideshow", lambda: calls.append("exit")
     )

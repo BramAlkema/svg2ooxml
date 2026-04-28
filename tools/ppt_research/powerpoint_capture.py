@@ -532,6 +532,9 @@ def _teardown_powerpoint_session(pptx_path: Path | None = None) -> None:
 
 
 def _cleanup_powerpoint_state() -> None:
+    if platform.system() != "Darwin":
+        return
+
     script = """
 tell application "Microsoft PowerPoint"
     try
@@ -547,7 +550,7 @@ end tell
 """
     try:
         _osascript(script)
-    except RuntimeError:
+    except (FileNotFoundError, RuntimeError):
         pass
 
 
