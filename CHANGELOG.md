@@ -5,6 +5,52 @@ Empirical PowerPoint behavior research, authored control decks, and durable
 oracle evidence live in the companion repository
 [`openxml-audit`](https://github.com/BramAlkema/openxml-audit).
 
+## 0.7.5 - 2026-04-28
+
+Release focus: the post-0.7.4 hardening pass that made the large converter
+refactors shippable from a clean checkout and tightened CI around OpenXML
+validation.
+
+Full diff: https://github.com/BramAlkema/svg2ooxml/compare/v0.7.4...v0.7.5
+
+### Added
+
+- added a fast SVG-to-PPTX end-to-end conversion gate under `tests/e2e`
+- added centralized helpers for unit length resolution, color adaptation, dash
+  parsing, transform decomposition, and resvg matrix bridging
+- added split helper modules for native animation matching, timing tree
+  assembly, visibility rewrites, numeric scale handlers, transform handlers,
+  EMF primitives, raster bounds, text policy/runtime, filter palette handling,
+  and font embedding metadata
+
+### Changed
+
+- moved the unit CI lane to Python 3.14 and installed
+  `openxml-audit[pptx-lab]>=0.5.0` so bridge tests exercise the published
+  audit package
+- decomposed additional large animation, raster, filter, text, marker, and
+  policy modules into smaller importable pieces
+- made the visual stress suite expose optional Kelvin Lawrence corpus scenarios
+  only when those git-ignored downloaded fixtures exist locally
+
+### Fixed
+
+- preserved CSS paint inherited by detached `<use>` clone sources in resvg
+  conversion
+- kept PowerPoint cleanup AppleScript from running on non-macOS CI runners
+- kept the visual comparison server usable when browser rendering succeeds but
+  optional image metrics are unavailable
+- made clean CI checkouts import the split helper modules instead of relying on
+  untracked local files
+
+### Validation
+
+- GitHub `Tests` workflow passed on `fix/svg-animation-e2e` at `d8c7012`
+- GitHub `Tests` workflow passed on `main` after merge:
+  https://github.com/BramAlkema/svg2ooxml/actions/runs/25026650310
+- local `python -m build` produced `svg2ooxml-0.7.5.tar.gz` and
+  `svg2ooxml-0.7.5-py3-none-any.whl`
+
 ## 0.7.4 - 2026-04-27
 
 Release focus: animation export decomposition, safer PPTX packaging, and
