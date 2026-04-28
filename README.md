@@ -34,6 +34,13 @@ Empirical PowerPoint behavior research, authored control decks, and durable orac
 - [Animation documentation map](docs/internals/animation-documentation-map.md)
 - [Roadmap](docs/ROADMAP.md)
 
+## Current Release
+
+`0.7.5` is a hardening release for the recent converter refactors: clean
+checkout imports for split helper modules, centralized unit/color/matrix
+conversion helpers, published `openxml-audit` validation in CI, and a fast
+SVG-to-PPTX end-to-end conversion gate.
+
 ## Comparison
 
 | Feature | svg2ooxml | [svg2pptx](https://pypi.org/project/svg2pptx/) | PowerPoint SVG import | [CairoSVG](https://pypi.org/project/cairosvg/) | LibreOffice |
