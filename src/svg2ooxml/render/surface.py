@@ -5,7 +5,9 @@ from __future__ import annotations
 from collections.abc import Iterable
 from dataclasses import dataclass
 
-import numpy as np
+from svg2ooxml.common.numpy_compat import require_numpy
+
+np = require_numpy("svg2ooxml.render requires NumPy; install the 'render' extra.")
 
 RGBA = tuple[float, float, float, float]
 

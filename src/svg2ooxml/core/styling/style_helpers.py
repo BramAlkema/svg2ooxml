@@ -10,6 +10,7 @@ from svg2ooxml.common.conversions.colors import color_to_hex
 from svg2ooxml.common.conversions.opacity import parse_opacity
 from svg2ooxml.common.geometry import Matrix2D
 from svg2ooxml.common.gradient_units import parse_gradient_offset
+from svg2ooxml.common.numpy_compat import NUMPY_AVAILABLE, np
 from svg2ooxml.common.style.css_values import parse_style_declarations
 from svg2ooxml.common.svg_refs import reference_id
 from svg2ooxml.common.units import UnitConverter
@@ -18,7 +19,6 @@ from svg2ooxml.common.units.lengths import (
     resolve_length_px,
     split_length_list,
 )
-from svg2ooxml.ir.numpy_compat import NUMPY_AVAILABLE, np
 
 _UNIT_CONVERTER = UnitConverter()
 _LENGTH_CONTEXT = _UNIT_CONVERTER.create_context(

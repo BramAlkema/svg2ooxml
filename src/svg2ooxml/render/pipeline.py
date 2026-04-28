@@ -5,13 +5,12 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass, field
 
-import numpy as np
-
 try:  # pragma: no cover - optional dependency guard
     import skia
 except ImportError as exc:  # pragma: no cover
     raise RuntimeError("svg2ooxml.render requires skia-python; install the 'render' extra.") from exc
 
+from svg2ooxml.common.numpy_compat import require_numpy
 from svg2ooxml.common.svg_refs import unwrap_url_reference
 from svg2ooxml.core.resvg.geometry.primitives import ClosePath, LineTo, MoveTo
 from svg2ooxml.core.resvg.geometry.tessellation import TessellationResult, Tessellator
@@ -50,6 +49,8 @@ from svg2ooxml.render.skia_paint import (
     to_skia_matrix as _to_skia_matrix,
 )
 from svg2ooxml.render.surface import Surface
+
+np = require_numpy("svg2ooxml.render requires NumPy; install the 'render' extra.")
 
 _DEFINITION_TAGS = {
     "defs",

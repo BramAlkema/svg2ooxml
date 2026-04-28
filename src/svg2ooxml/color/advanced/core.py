@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Any
 
-import numpy as np
+from svg2ooxml.common.numpy_compat import require_numpy
 
 from .core_cache import cached_color_convert as _cached_color_convert
 from .core_factories import ColorFactoryMixin
@@ -18,6 +18,10 @@ from .core_outputs import ColorOutputMixin
 from .core_parsing import ColorParsingMixin
 from .core_science import ColorScienceMixin
 from .core_transformations import ColorTransformationMixin
+
+np = require_numpy(
+    "Advanced color support requires NumPy; install the 'color' extra."
+)
 
 
 class Color(

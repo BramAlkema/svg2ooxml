@@ -8,9 +8,9 @@ from collections import defaultdict
 from collections.abc import Callable
 from typing import Any
 
-import numpy as np
 from lxml import etree
 
+from svg2ooxml.common.numpy_compat import require_numpy
 from svg2ooxml.common.svg_refs import local_name
 from svg2ooxml.common.units import px_to_emu
 from svg2ooxml.filters.base import FilterContext, FilterResult
@@ -38,6 +38,8 @@ from svg2ooxml.render.filters import FilterPlan
 from svg2ooxml.render.rasterizer import Viewport
 from svg2ooxml.render.surface import Surface
 from svg2ooxml.services.filter_types import FilterEffectResult
+
+np = require_numpy("Filter raster bridging requires NumPy; install the 'render' extra.")
 
 _PROMOTION_FILTER_FACTORIES = {
     "feflood": FloodFilter,

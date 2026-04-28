@@ -5,11 +5,12 @@ from __future__ import annotations
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 
-import numpy as np
-
+from svg2ooxml.common.numpy_compat import require_numpy
 from svg2ooxml.ir.geometry import BezierSegment, LineSegment, Point
 from svg2ooxml.ir.scene import Path as IRPath
 from svg2ooxml.ir.shapes import Circle, Ellipse, Rectangle
+
+np = require_numpy("svg2ooxml.render requires NumPy; install the 'render' extra.")
 
 
 @dataclass(slots=True)

@@ -6,9 +6,9 @@ from collections.abc import Sequence
 from typing import Any
 
 from svg2ooxml.common.geometry import Matrix2D, parse_transform_list
+from svg2ooxml.common.numpy_compat import np
 from svg2ooxml.core.resvg.geometry.matrix import Matrix as ResvgMatrix
 from svg2ooxml.ir.geometry import Point
-from svg2ooxml.ir.numpy_compat import np
 
 MatrixTuple = tuple[float, float, float, float, float, float]
 MatrixBridgeInput = ResvgMatrix | Matrix2D | Sequence[float] | None

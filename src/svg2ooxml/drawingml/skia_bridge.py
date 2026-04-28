@@ -12,14 +12,7 @@ try:  # pragma: no cover - skia optional during transition
 except Exception:  # pragma: no cover - gracefully degrade without skia
     skia = None
 
-try:  # pragma: no cover - numpy optional for lightweight deployments
-    import numpy as np
-
-    NUMPY_AVAILABLE = True
-except Exception:  # pragma: no cover - optional dependency
-    np = None  # type: ignore[assignment]
-    NUMPY_AVAILABLE = False
-
+from svg2ooxml.common.numpy_compat import NUMPY_AVAILABLE, REAL_NUMPY
 from svg2ooxml.drawingml.paint_converter import (
     _UNSUPPORTED_SOURCE_STYLE,
     _color4f_from_paint_descriptor,
@@ -29,6 +22,8 @@ from svg2ooxml.drawingml.paint_converter import (
     _transform_is_identity,
 )
 from svg2ooxml.render.rgba import encode_rgba8_png, png_chunk
+
+np = REAL_NUMPY
 
 # ------------------------------------------------------------------ #
 # PNG encoding                                                       #

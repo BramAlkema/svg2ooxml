@@ -14,6 +14,7 @@ from svg2ooxml.color.bridge import (
     ensure_advanced_color_engine,
 )
 from svg2ooxml.color.spaces import ColorSpaceConverter, ColorSpaceResult
+from svg2ooxml.common.numpy_compat import require_numpy
 from svg2ooxml.services.image_service import ImageResource
 
 
@@ -116,8 +117,11 @@ class ColorSpaceService:
             return None
         try:
             ensure_advanced_color_engine()
-            import numpy as np
             from PIL import Image
+
+            np = require_numpy(
+                "Advanced color support requires NumPy; install the 'color' extra."
+            )
         except Exception:
             return None
 

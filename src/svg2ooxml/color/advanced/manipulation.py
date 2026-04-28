@@ -11,10 +11,15 @@ from __future__ import annotations
 from enum import Enum
 
 import colorspacious
-import numpy as np
+
+from svg2ooxml.common.numpy_compat import require_numpy
 
 from .batch import ColorBatch
 from .core import Color
+
+np = require_numpy(
+    "Advanced color support requires NumPy; install the 'color' extra."
+)
 
 
 class BlendMode(Enum):

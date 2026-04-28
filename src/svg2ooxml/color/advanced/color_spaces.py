@@ -12,8 +12,11 @@ Key Features:
 - Optimized for performance with NumPy operations
 """
 
+from svg2ooxml.common.numpy_compat import require_numpy
 
-import numpy as np
+np = require_numpy(
+    "Advanced color support requires NumPy; install the 'color' extra."
+)
 
 
 class ColorSpaceConverter:

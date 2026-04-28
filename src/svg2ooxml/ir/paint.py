@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 
-from .numpy_compat import np
+from svg2ooxml.common.numpy_compat import np
 
 
 @dataclass(frozen=True)

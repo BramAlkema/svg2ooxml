@@ -8,14 +8,13 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
-import numpy as np
-
 try:  # pragma: no cover - optional dependency guard
     import skia
 except ImportError:  # pragma: no cover
     skia = None
 
 from svg2ooxml.common.boundaries import classify_resource_href
+from svg2ooxml.common.numpy_compat import require_numpy
 from svg2ooxml.core.resvg.usvg_tree import FilterPrimitive
 from svg2ooxml.render.surface import Surface
 from svg2ooxml.services.image_service import (
@@ -23,6 +22,8 @@ from svg2ooxml.services.image_service import (
     normalize_image_href,
     resolve_local_image_path,
 )
+
+np = require_numpy("svg2ooxml.render requires NumPy; install the 'render' extra.")
 
 
 class _UnsupportedError(Exception):

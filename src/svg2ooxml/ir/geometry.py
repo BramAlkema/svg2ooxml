@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 
-from .numpy_compat import matmul, np, sqrt
+from svg2ooxml.common.numpy_compat import matmul, np, sqrt
 
 
 @dataclass(frozen=True)

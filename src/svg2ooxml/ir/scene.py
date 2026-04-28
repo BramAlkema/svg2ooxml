@@ -8,10 +8,10 @@ from enum import Enum
 from typing import Any, Literal
 
 from svg2ooxml.common.geometry.paths import compute_segments_bbox
+from svg2ooxml.common.numpy_compat import np
 
 from .effects import Effect
 from .geometry import Point, Rect, SegmentType
-from .numpy_compat import np
 from .paint import Paint, Stroke
 from .shapes import Circle, Ellipse, Line, Polygon, Polyline, Rectangle
 from .text import TextFrame

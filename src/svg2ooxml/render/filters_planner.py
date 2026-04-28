@@ -6,8 +6,7 @@ import math
 from collections.abc import Iterable, Mapping
 from typing import Any
 
-import numpy as np
-
+from svg2ooxml.common.numpy_compat import require_numpy
 from svg2ooxml.core.resvg.painting.paint import parse_color
 from svg2ooxml.core.resvg.usvg_tree import FilterNode, FilterPrimitive
 from svg2ooxml.render import filters_region as _region
@@ -20,6 +19,8 @@ from svg2ooxml.render.filters_model import (
     FilterPrimitivePlan,
     UnsupportedPrimitiveError,
 )
+
+np = require_numpy("svg2ooxml.render requires NumPy; install the 'render' extra.")
 
 
 def plan_filter(

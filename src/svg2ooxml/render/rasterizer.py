@@ -6,12 +6,13 @@ import math
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 
-import numpy as np
-
+from svg2ooxml.common.numpy_compat import require_numpy
 from svg2ooxml.common.units import UnitConverter
 from svg2ooxml.common.units.lengths import resolve_length_px
 from svg2ooxml.core.resvg.geometry.tessellation import TessellationResult
 from svg2ooxml.core.resvg.usvg_tree import Tree
+
+np = require_numpy("svg2ooxml.render requires NumPy; install the 'render' extra.")
 
 PixelPoint = tuple[float, float]
 

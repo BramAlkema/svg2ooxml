@@ -5,9 +5,14 @@ from __future__ import annotations
 from typing import Any
 
 import colorspacious
-import numpy as np
+
+from svg2ooxml.common.numpy_compat import require_numpy
 
 from .core_cache import cached_color_convert
+
+np = require_numpy(
+    "Advanced color support requires NumPy; install the 'color' extra."
+)
 
 
 class ColorTransformationMixin:

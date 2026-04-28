@@ -5,7 +5,11 @@ from __future__ import annotations
 import re
 from typing import Any
 
-import numpy as np
+from svg2ooxml.common.numpy_compat import require_numpy
+
+np = require_numpy(
+    "Advanced color support requires NumPy; install the 'color' extra."
+)
 
 
 class ColorParsingMixin:

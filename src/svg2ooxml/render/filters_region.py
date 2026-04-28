@@ -5,8 +5,7 @@ from __future__ import annotations
 import math
 from typing import Any
 
-import numpy as np
-
+from svg2ooxml.common.numpy_compat import require_numpy
 from svg2ooxml.common.units.lengths import (
     parse_number_or_percent,
     resolve_user_length_px,
@@ -14,6 +13,8 @@ from svg2ooxml.common.units.lengths import (
 from svg2ooxml.core.resvg.usvg_tree import FilterNode, FilterPrimitive
 from svg2ooxml.render.filters_model import PrimitiveUnitScale
 from svg2ooxml.render.surface import Surface
+
+np = require_numpy("svg2ooxml.render requires NumPy; install the 'render' extra.")
 
 _GAMMA = 2.4
 _INV_GAMMA = 1.0 / _GAMMA

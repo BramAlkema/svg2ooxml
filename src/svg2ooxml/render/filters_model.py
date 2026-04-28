@@ -5,9 +5,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-import numpy as np
-
+from svg2ooxml.common.numpy_compat import require_numpy
 from svg2ooxml.core.resvg.usvg_tree import FilterNode, FilterPrimitive
+
+np = require_numpy("svg2ooxml.render requires NumPy; install the 'render' extra.")
 
 REGISTERED_FILTER_PRIMITIVES = {
     "fegaussianblur",

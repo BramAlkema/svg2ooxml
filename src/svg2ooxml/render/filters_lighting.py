@@ -6,9 +6,10 @@ import math
 from collections.abc import Mapping
 from typing import Any
 
-import numpy as np
-
+from svg2ooxml.common.numpy_compat import require_numpy
 from svg2ooxml.render.surface import Surface
+
+np = require_numpy("svg2ooxml.render requires NumPy; install the 'render' extra.")
 
 _EPSILON = 1e-6
 

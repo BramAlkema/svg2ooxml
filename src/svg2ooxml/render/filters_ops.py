@@ -6,9 +6,8 @@ import math
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-import numpy as np
-
 from svg2ooxml.common.conversions.opacity import parse_opacity
+from svg2ooxml.common.numpy_compat import require_numpy
 from svg2ooxml.core.resvg.painting.paint import parse_color
 from svg2ooxml.render import filters_lighting as _lighting
 from svg2ooxml.render import filters_region as _region
@@ -19,6 +18,8 @@ from svg2ooxml.render.filters_model import (
     UnsupportedPrimitiveError,
 )
 from svg2ooxml.render.surface import Surface
+
+np = require_numpy("svg2ooxml.render requires NumPy; install the 'render' extra.")
 
 _GAMMA = 2.4
 

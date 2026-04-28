@@ -4,13 +4,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-import numpy as np
-
+from svg2ooxml.common.numpy_compat import require_numpy
 from svg2ooxml.common.svg_refs import unwrap_url_reference
 from svg2ooxml.core.resvg.geometry.tessellation import Tessellator
 from svg2ooxml.core.resvg.usvg_tree import BaseNode, ClipPathNode, MaskNode, Tree
 from svg2ooxml.render.rasterizer import Rasterizer, Viewport
 from svg2ooxml.render.shapes import node_geometry
+
+np = require_numpy("svg2ooxml.render requires NumPy; install the 'render' extra.")
 
 
 @dataclass(slots=True)
