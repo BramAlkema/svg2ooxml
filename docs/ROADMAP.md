@@ -1,6 +1,6 @@
 # Project Roadmap
 
-Last updated: 2026-04-18
+Last updated: 2026-04-28
 
 This roadmap is for the `svg2ooxml` converter/runtime package. Empirical
 PowerPoint behavior research, authored control decks, and durable oracle
@@ -24,18 +24,16 @@ evidence live in the companion repository
 
 ## Recent Release Focus
 
+- **0.7.5**: clean-checkout hardening for the large helper-module split,
+  published `openxml-audit` validation in CI, centralized conversion helpers,
+  and a fast SVG-to-PPTX end-to-end gate
+- **0.7.4**: animation export decomposition, safer PPTX packaging, centralized
+  gradient coordinate/unit handling, and broader converter internals cleanup
 - **0.7.1**: animation timing hardening, resvg geometry fallback fixes,
   DrawingML writer correctness, and targeted regressions for PowerPoint export
 - **0.7.0**: repository boundary cleanup, Python 3.14 standardization, the
   extracted `apps/figma2gslides` surface, and reproducible container render
   workflows
-- **0.6.8**: animation oracle normalization, universal compound effects, and
-  structured SSOT vocabularies for valid and falsified PowerPoint animation
-  shapes
-- **0.6.7**: deeper SMIL timing support, keyPoints handling, and tighter native
-  mapping/proof-deck tooling
-- **0.6.6**: better editable animated lines, motion proof decks, and stronger
-  PowerPoint capture tooling
 - **Earlier gap-closure work**: broad SVG feature coverage improvements remain
   important context, but the immediate release story is now mostly about
   fidelity tightening rather than headline feature-count growth
