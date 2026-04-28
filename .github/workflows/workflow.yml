@@ -20,8 +20,30 @@ jobs:
           name: dist
           path: dist/
 
-  publish:
+  python313-smoke:
     needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          name: dist
+          path: dist/
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+          cache: pip
+      - name: Install built wheel
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install dist/svg2ooxml-*.whl
+      - name: Verify Python 3.13 package support
+        run: |
+          python -c "import importlib.metadata as metadata; requires_python = metadata.metadata('svg2ooxml')['Requires-Python']; assert requires_python == '>=3.13', requires_python; print(requires_python)"
+          python -c "import compileall, pathlib, svg2ooxml; package = pathlib.Path(svg2ooxml.__file__).parent; raise SystemExit(0 if compileall.compile_dir(str(package), quiet=1) else 1)"
+          python -c "import svg2ooxml; import svg2ooxml.services.filter_service; print('py313 smoke ok')"
+
+  publish:
+    needs: [build, python313-smoke]
     runs-on: ubuntu-latest
     environment: pypi
     permissions:

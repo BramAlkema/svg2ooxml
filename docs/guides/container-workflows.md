@@ -2,7 +2,7 @@
 
 Use the local [`.venv`](../../.python-version) for day-to-day editing and fast
 checks. Use the Docker render lane when you need a reproducible Linux
-environment with Python 3.14 parity, raster dependencies, and stable output
+environment with pinned FontForge/skia dependencies and stable output
 directories.
 
 OrbStack does not need a separate image definition. If Docker commands in this
@@ -11,11 +11,13 @@ repo are running on OrbStack, use the same render wrappers documented here.
 ## Roles
 
 - Local `.venv`
-  - Python 3.14
+  - supports the package's Python 3.13 floor
+  - may use Python 3.14 for local render/font tooling when Homebrew
+    `fontforge` bindings or `skia-python` require it
   - fastest loop for coding, linting, and most unit tests
   - Homebrew-backed `fontforge` on macOS
 - Docker render lane
-  - Python 3.14 inside the container too
+  - matched interpreter/tooling environment for FontForge/skia render checks
   - official FontForge Python module built from a pinned upstream commit
   - reproducible Linux environment for raster/filter/font tests
   - stable mounts for reports and W3C output
@@ -64,7 +66,7 @@ bind-mounting the repo does not hide the installed dependencies.
 The Docker image currently builds FontForge from the upstream commit pinned in
 [`Dockerfile`](../../Dockerfile). That is intentional:
 
-- it preserves Python 3.14 parity with the local `.venv`
+- it preserves parity with the local FontForge/skia tooling environment
 - it avoids relying on Debian's older `python3-fontforge` package
 - it avoids claiming a public `pip install fontforge` release path before the
   upstream PyPI publication is actually in place

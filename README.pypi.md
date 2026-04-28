@@ -37,6 +37,8 @@ separate from the supported `svg2ooxml` converter API.
 
 ## Installation
 
+Requires Python 3.13 or newer.
+
 ```bash
 pip install svg2ooxml
 ```

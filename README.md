@@ -99,6 +99,8 @@ The boundary doc is at
 
 ## Installation
 
+Requires Python 3.13 or newer.
+
 ```bash
 pip install svg2ooxml
 ```
@@ -158,17 +160,19 @@ It is supported as a tool on top of the converter, not as part of the core
 `svg2ooxml` library API. App-specific docs live under
 [`apps/figma2gslides`](apps/figma2gslides/README.md).
 
-Use the project venv for all local Python, pytest, and visual-tool commands.
-Local development is standardised on Python 3.14 so Homebrew `fontforge`
-bindings and `skia-python` both load inside `.venv`.
+The published package supports Python 3.13 or newer. Use the project venv for
+local Python, pytest, and visual-tool commands. The local tooling lane may use
+Python 3.14 when needed because the render/font stack depends on the practical
+availability of Homebrew `fontforge` bindings and `skia-python` inside `.venv`;
+that is a tooling constraint, not the package runtime floor.
 
 ```bash
 ./tools/bootstrap_venv.sh --doctor   # report interpreter/module health
 source tools/venv_select.sh          # activate the canonical .venv
 ```
 
-For a reproducible Linux render lane with Python 3.14 parity and a pinned
-upstream FontForge source build, use the Docker wrappers:
+For a reproducible Linux render lane with pinned FontForge/skia dependencies,
+use the Docker wrappers:
 
 ```bash
 ./tools/containers/render/build.sh
