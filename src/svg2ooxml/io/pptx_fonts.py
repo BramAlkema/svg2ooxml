@@ -24,8 +24,36 @@ def write_font_parts(
     *,
     trace_packaging: Callable[..., None],
 ) -> list[PackagedFont]:
+    fonts_dir = package_root / "ppt" / "fonts"
+    reserved_filenames = (
+        {path.name for path in fonts_dir.iterdir() if path.is_file()}
+        if fonts_dir.exists()
+        else set()
+    )
+    packaged_fonts, payloads = build_font_parts(
+        font_assets,
+        trace_packaging=trace_packaging,
+        reserved_filenames=reserved_filenames,
+    )
+    if not payloads:
+        return packaged_fonts
+
+    fonts_dir.mkdir(parents=True, exist_ok=True)
+    for filename, font_bytes in payloads:
+        (fonts_dir / filename).write_bytes(font_bytes)
+    return packaged_fonts
+
+
+def build_font_parts(
+    font_assets: Sequence[FontAsset],
+    *,
+    trace_packaging: Callable[..., None],
+    reserved_filenames: set[str] | None = None,
+) -> tuple[list[PackagedFont], list[tuple[str, bytes]]]:
+    """Build packaged font metadata and payloads without touching the filesystem."""
+
     if not font_assets:
-        return []
+        return [], []
 
     entries: list[tuple[EmbeddedFontPlan, dict[str, object], bytes]] = []
     seen_keys: set[tuple[object, ...]] = set()
@@ -54,13 +82,12 @@ def write_font_parts(
         entries.append((plan, metadata, font_bytes))
 
     if not entries:
-        return []
-
-    fonts_dir = package_root / "ppt" / "fonts"
-    fonts_dir.mkdir(parents=True, exist_ok=True)
+        return [], []
 
     packaged_fonts: list[PackagedFont] = []
+    payloads: list[tuple[str, bytes]] = []
     used_relationships: set[str] = set()
+    used_filenames = set(reserved_filenames or ())
     rel_seed = 1
     font_index = 1
 
@@ -96,12 +123,11 @@ def write_font_parts(
 
         filename = f"font{font_index}.{extension}"
         font_index += 1
-        while (fonts_dir / filename).exists():
+        while filename in used_filenames:
             filename = f"font{font_index}.{extension}"
             font_index += 1
-        target_path = fonts_dir / filename
-        with target_path.open("wb") as handle:
-            handle.write(font_bytes)
+        used_filenames.add(filename)
+        payloads.append((filename, font_bytes))
         guid_value = metadata.get("font_guid")
         if isinstance(guid_value, uuid.UUID):
             guid_str = str(guid_value)
@@ -138,7 +164,7 @@ def write_font_parts(
             )
         )
 
-    return packaged_fonts
+    return packaged_fonts, payloads
 
 
-__all__ = ["write_font_parts"]
+__all__ = ["build_font_parts", "write_font_parts"]

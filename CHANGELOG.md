@@ -5,6 +5,52 @@ Empirical PowerPoint behavior research, authored control decks, and durable
 oracle evidence live in the companion repository
 [`openxml-audit`](https://github.com/BramAlkema/openxml-audit).
 
+## 0.7.8 - 2026-04-29
+
+Release focus: faster base imports and faster PPTX packaging after the
+architecture dedupe passes, while keeping optional NumPy/render dependencies
+out of the base install path.
+
+Full diff: https://github.com/BramAlkema/svg2ooxml/compare/v0.7.7...v0.7.8
+
+### Added
+
+- added an in-process PPTX scaffold byte cache shared by batch and streaming
+  packaging
+- added byte-oriented package helpers for presentation parts, content types,
+  required presentation support parts, theme extensions, slide relationships,
+  and embedded fonts
+
+### Changed
+
+- switched the batch PPTX writer from temp-directory assembly to direct
+  in-memory package assembly and zip writing
+- kept the streaming writer on cached scaffold materialization for incremental
+  low-memory writes
+- made exporter, DrawingML raster, clip, and filter code load optional heavy
+  render dependencies only when those paths are actually used
+- skipped a second animation parse when the first parser pass already proved a
+  document has no animations
+
+### Fixed
+
+- preserved the base-install dependency boundary so importing package, filter,
+  and DrawingML paths does not eagerly require NumPy or raster/render extras
+- preserved embedded-font filename reservation behavior when packaging from an
+  existing scaffold
+
+### Validation
+
+- local Python 3.13 compile check passed across `src/svg2ooxml`
+- local `ruff check` passed on touched packaging and font modules
+- local focused packaging/export suites passed: `46 passed`
+- local full unit suite passed: `2779 passed`
+- local full integration suite passed: `100 passed`
+- local Python 3.14 tiny SVG-to-PPTX benchmark measured about `4.04ms` median;
+  package-only single-slide writing measured about `2.76ms` median
+- local `python -m build` produced `svg2ooxml-0.7.8.tar.gz` and
+  `svg2ooxml-0.7.8-py3-none-any.whl`
+
 ## 0.7.7 - 2026-04-28
 
 Release focus: restore Python 3.13-compatible package metadata after the

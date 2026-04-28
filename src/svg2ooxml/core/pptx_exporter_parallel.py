@@ -4,19 +4,19 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from svg2ooxml.core.export.variant_expansion import _merge_trace_reports
-from svg2ooxml.core.ir.converter import IRScene
-from svg2ooxml.core.pptx_exporter_pages import build_page_result
 from svg2ooxml.core.pptx_exporter_types import (
     SvgConversionError,
     SvgPageResult,
     SvgPageSource,
     SvgToPptxMultiResult,
 )
-from svg2ooxml.core.tracing import ConversionTracer
-from svg2ooxml.drawingml.result import DrawingMLRenderResult
+
+if TYPE_CHECKING:  # pragma: no cover - type checking only
+    from svg2ooxml.core.ir.converter import IRScene
+    from svg2ooxml.core.tracing import ConversionTracer
+    from svg2ooxml.drawingml.result import DrawingMLRenderResult
 
 
 class SvgToPptxParallelMixin:
@@ -62,6 +62,8 @@ class SvgToPptxParallelMixin:
         page_results: list[SvgPageResult] = []
         slide_count = 0
 
+        from svg2ooxml.core.pptx_exporter_pages import build_page_result
+
         with self._builder.begin_streaming(tracer=packaging_tracer) as stream:
             for index, (page, fut) in enumerate(futures, start=1):
                 render_result, scene, report_dict = fut.result()
@@ -82,6 +84,8 @@ class SvgToPptxParallelMixin:
             pptx_path = stream.finalize(output_path)
 
         packaging_report = packaging_tracer.report().to_dict()
+        from svg2ooxml.core.export.variant_expansion import _merge_trace_reports
+
         aggregate_trace = _merge_trace_reports(
             [result.trace_report for result in page_results] + [packaging_report]
         )
@@ -110,6 +114,8 @@ class SvgToPptxParallelMixin:
             filter_strategy=filter_strategy,
             geometry_mode=geometry_mode,
         )
+        from svg2ooxml.core.tracing import ConversionTracer
+
         tracer = ConversionTracer()
         render_result, scene = exporter._render_svg(
             svg_text,

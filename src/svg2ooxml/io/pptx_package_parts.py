@@ -5,6 +5,7 @@ from __future__ import annotations
 import uuid
 import zipfile
 from collections.abc import Callable, Sequence
+from io import BytesIO
 from pathlib import Path
 
 from lxml import etree as ET
@@ -77,6 +78,26 @@ def inject_slide_layout_dimensions(
         layout_path.write_text(content, encoding="utf-8")
 
 
+def inject_slide_layout_dimensions_parts(
+    parts: dict[str, bytes],
+    slide_size: tuple[int, int] | None,
+) -> None:
+    """Replace dimension placeholders in slide layout template payloads."""
+
+    if slide_size is None:
+        return
+    for part_name, data in list(parts.items()):
+        if not (
+            part_name.startswith("ppt/slideLayouts/slideLayout")
+            and part_name.endswith(".xml")
+        ):
+            continue
+        content = data.decode("utf-8")
+        content = content.replace("{SLIDE_WIDTH}", str(slide_size[0]))
+        content = content.replace("{SLIDE_HEIGHT}", str(slide_size[1]))
+        parts[part_name] = content.encode("utf-8")
+
+
 def write_required_presentation_parts(
     package_root: Path,
     *,
@@ -87,17 +108,37 @@ def write_required_presentation_parts(
     ppt_dir = package_root / "ppt"
     ppt_dir.mkdir(parents=True, exist_ok=True)
 
+    parts: dict[str, bytes] = {}
+    rels_path = ppt_dir / "_rels" / "presentation.xml.rels"
+    if rels_path.exists():
+        parts["ppt/_rels/presentation.xml.rels"] = rels_path.read_bytes()
+
+    apply_required_presentation_parts(parts, trace_packaging=trace_packaging)
+
+    for part_name, data in parts.items():
+        target = package_root / part_name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(data)
+
+
+def apply_required_presentation_parts(
+    parts: dict[str, bytes],
+    *,
+    trace_packaging: TracePackaging | None = None,
+) -> None:
+    """Add required presentation support parts to an in-memory package."""
+
     for name, content in _REQUIRED_XML_PARTS.items():
-        (ppt_dir / name).write_text(content, encoding="utf-8")
+        parts[f"ppt/{name}"] = content.encode("utf-8")
         if trace_packaging is not None:
             trace_packaging("required_part_written", metadata={"file": name})
 
-    rels_path = ppt_dir / "_rels" / "presentation.xml.rels"
-    if not rels_path.exists():
+    rels_part_name = "ppt/_rels/presentation.xml.rels"
+    rels_xml = parts.get(rels_part_name)
+    if rels_xml is None:
         return
 
-    rels_tree = ET.parse(rels_path)
-    rels_root = rels_tree.getroot()
+    rels_root = ET.fromstring(rels_xml)
     existing_rel_ids = {
         rel.get("Id") for rel in rels_root.findall(f"{{{REL_NS}}}Relationship")
     }
@@ -117,7 +158,7 @@ def write_required_presentation_parts(
         existing_rel_ids.add(rel_id)
         existing_targets.add(target)
 
-    rels_tree.write(rels_path, encoding="utf-8", xml_declaration=True)
+    parts[rels_part_name] = _xml_bytes(rels_root)
     if trace_packaging is not None:
         trace_packaging(
             "presentation_rels_updated",
@@ -134,6 +175,26 @@ def write_content_types(
     mask_parts: Sequence[MaskAsset | MaskMeta],
 ) -> None:
     content_types_path = package_root / "[Content_Types].xml"
+    content_types_path.write_bytes(
+        build_content_types_xml(
+            content_types_template,
+            slides,
+            media_parts,
+            fonts,
+            mask_parts,
+        )
+    )
+
+
+def build_content_types_xml(
+    content_types_template: str,
+    slides: Sequence[SlideAssembly | SlideEntry],
+    media_parts: Sequence[PackagedMedia | MediaMeta],
+    fonts: Sequence[PackagedFont],
+    mask_parts: Sequence[MaskAsset | MaskMeta],
+) -> bytes:
+    """Return updated [Content_Types].xml payload."""
+
     root = ET.fromstring(content_types_template.encode("utf-8"))
 
     for node in list(root.findall(f"{{{CONTENT_NS}}}Override")):
@@ -223,18 +284,23 @@ def write_content_types(
                 {"PartName": part_name, "ContentType": content_type},
             )
 
-    ET.ElementTree(root).write(content_types_path, encoding="utf-8", xml_declaration=True)
+    return _xml_bytes(root)
 
 
 def ensure_theme_extension(package_root: Path) -> None:
     theme_path = package_root / "ppt" / "theme" / "theme1.xml"
     if not theme_path.exists():
         return
+    theme_path.write_bytes(ensure_theme_extension_xml(theme_path.read_bytes()))
+
+
+def ensure_theme_extension_xml(theme_xml: bytes) -> bytes:
+    """Return theme XML with the PowerPoint theme-family extension present."""
+
     try:
-        tree = ET.parse(theme_path)
-        root = tree.getroot()
+        root = ET.fromstring(theme_xml)
     except ET.XMLSyntaxError:
-        return
+        return theme_xml
 
     ext_lst = root.find(f"{{{THEME_NS}}}extLst")
     if ext_lst is None:
@@ -247,14 +313,14 @@ def ensure_theme_extension(package_root: Path) -> None:
         if ext.get("uri") == target_uri
     ]
     if existing:
-        return
+        return theme_xml
 
     ext = ET.SubElement(ext_lst, f"{{{THEME_NS}}}ext", uri=target_uri)
     theme_family = ET.SubElement(ext, f"{{{THEME_FAMILY_NS}}}themeFamily")
     theme_family.set("name", "svg2ooxml")
     theme_family.set("id", f"{{{str(uuid.uuid4()).upper()}}}")
     theme_family.set("vid", f"{{{str(uuid.uuid4()).upper()}}}")
-    tree.write(theme_path, encoding="utf-8", xml_declaration=True)
+    return _xml_bytes(root)
 
 
 def zip_package(package_root: Path, output: Path) -> None:
@@ -264,10 +330,29 @@ def zip_package(package_root: Path, output: Path) -> None:
                 archive.write(file_path, file_path.relative_to(package_root))
 
 
+def zip_package_parts(parts: dict[str, bytes], output: Path) -> None:
+    """Write an in-memory package map to a PPTX zip."""
+
+    with zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED) as archive:
+        for part_name in sorted(parts):
+            archive.writestr(part_name, parts[part_name])
+
+
+def _xml_bytes(root: ET._Element) -> bytes:
+    output = BytesIO()
+    ET.ElementTree(root).write(output, encoding="utf-8", xml_declaration=True)
+    return output.getvalue()
+
+
 __all__ = [
+    "apply_required_presentation_parts",
+    "build_content_types_xml",
     "ensure_theme_extension",
+    "ensure_theme_extension_xml",
     "inject_slide_layout_dimensions",
+    "inject_slide_layout_dimensions_parts",
     "write_content_types",
     "write_required_presentation_parts",
     "zip_package",
+    "zip_package_parts",
 ]

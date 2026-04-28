@@ -12,7 +12,7 @@ from .generator import px_to_emu
 from .result import DrawingMLRenderResult
 from .shape_renderer import DrawingMLShapeRenderer
 from .text_renderer import DrawingMLTextRenderer
-from .writer_base import DEFAULT_SLIDE_SIZE, logger
+from .writer_base import _RASTERIZER_PENDING, DEFAULT_SLIDE_SIZE, logger
 
 if TYPE_CHECKING:  # pragma: no cover - type checking only
     from svg2ooxml.core.tracing import ConversionTracer
@@ -54,6 +54,9 @@ class DrawingMLSceneMixin:
             assets=self._assets,
             logger=logger,
         )
+        active_rasterizer = (
+            None if self._rasterizer is _RASTERIZER_PENDING else self._rasterizer
+        )
         self._shape_renderer = DrawingMLShapeRenderer(
             rectangle_template=self._rectangle_template,
             preset_template=self._preset_template,
@@ -65,7 +68,8 @@ class DrawingMLSceneMixin:
             register_media=self._register_media,
             trace_writer=self._trace_writer,
             animation_pipeline=self._animation_pipeline,
-            rasterizer=self._rasterizer,
+            rasterizer=active_rasterizer,
+            rasterizer_provider=self._resolve_rasterizer,
             logger=logger,
         )
         self._trace_writer("render_start", metadata={"slide_size": slide_size})

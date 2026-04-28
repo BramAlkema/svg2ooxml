@@ -36,9 +36,9 @@ Empirical PowerPoint behavior research, authored control decks, and durable orac
 
 ## Current Release
 
-`0.7.7` restores Python 3.13-compatible release metadata after the 0.7.x
-architecture/dedupe releases, so installers no longer resolve Python 3.13 users
-back to 0.6.8.
+`0.7.8` speeds up base imports and PPTX packaging after the architecture/dedupe
+passes. Batch PPTX writing now assembles package parts in memory, while optional
+NumPy/render dependencies remain outside the base install path.
 
 ## Comparison
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from io import BytesIO
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -68,20 +69,12 @@ class PackageWriterBase:
         package_root: Path,
         media_parts: Sequence[PackagedMedia],
     ) -> None:
-        if not media_parts:
+        unique_media = self._unique_media_parts(media_parts)
+        if not unique_media:
             return
         media_dir = package_root / "ppt" / "media"
         media_dir.mkdir(parents=True, exist_ok=True)
-        unique_media: dict[str, PackagedMedia] = {}
-        for part in media_parts:
-            existing = unique_media.get(part.filename)
-            if existing is None:
-                unique_media[part.filename] = part
-            elif existing.data != part.data or existing.content_type != part.content_type:
-                raise ValueError(
-                    f"Conflicting media payloads target ppt/media/{part.filename!r}."
-                )
-        for part in unique_media.values():
+        for part in unique_media:
             target = resolve_package_child(
                 package_root,
                 part.package_path,
@@ -102,25 +95,14 @@ class PackageWriterBase:
         package_root: Path,
         mask_parts: Sequence[MaskAsset],
     ) -> None:
-        if not mask_parts:
-            return
-        written: dict[Path, MaskAsset] = {}
-        for part in mask_parts:
+        for part in self._unique_mask_parts(mask_parts):
             path = resolve_package_child(
                 package_root,
                 part.package_path,
                 required_prefix=Path("ppt") / "masks",
             )
-            existing = written.get(path)
-            if existing is not None:
-                if existing.data != part.data or existing.content_type != part.content_type:
-                    raise ValueError(
-                        f"Conflicting mask payloads target {part.part_name!r}."
-                    )
-                continue
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(part.data)
-            written[path] = part
             self._trace_packaging(
                 "mask_part_written",
                 metadata={"path": str(part.package_path)},
@@ -137,6 +119,22 @@ class PackageWriterBase:
     ) -> None:
         safe_slide_filename = sanitize_slide_filename(slide_filename)
         rels_path = slides_dir / "_rels" / f"{safe_slide_filename}.rels"
+        rels_path.write_bytes(
+            self._build_slide_relationships_xml(
+                slide_filename,
+                media_parts,
+                navigation_assets,
+                mask_parts,
+            )
+        )
+
+    def _build_slide_relationships_xml(
+        self,
+        _slide_filename: str,
+        media_parts: Sequence[PackagedMedia],
+        navigation_assets: Sequence[NavigationAsset],
+        mask_parts: Sequence[MaskAsset],
+    ) -> bytes:
         rels_root = ET.fromstring(self._slide_rels_template.encode("utf-8"))
         existing_ids = {
             rel.get("Id") for rel in rels_root.findall(f"{{{REL_NS}}}Relationship")
@@ -170,11 +168,45 @@ class PackageWriterBase:
             ET.SubElement(rels_root, f"{{{REL_NS}}}Relationship", attributes)
             existing_ids.add(attributes["Id"])
 
+        output = BytesIO()
         ET.ElementTree(rels_root).write(
-            rels_path,
+            output,
             encoding="utf-8",
             xml_declaration=True,
         )
+        return output.getvalue()
+
+    @staticmethod
+    def _unique_media_parts(
+        media_parts: Sequence[PackagedMedia],
+    ) -> list[PackagedMedia]:
+        unique_media: dict[str, PackagedMedia] = {}
+        for part in media_parts:
+            existing = unique_media.get(part.filename)
+            if existing is None:
+                unique_media[part.filename] = part
+            elif existing.data != part.data or existing.content_type != part.content_type:
+                raise ValueError(
+                    f"Conflicting media payloads target ppt/media/{part.filename!r}."
+                )
+        return list(unique_media.values())
+
+    @staticmethod
+    def _unique_mask_parts(
+        mask_parts: Sequence[MaskAsset],
+    ) -> list[MaskAsset]:
+        written: dict[Path, MaskAsset] = {}
+        for part in mask_parts:
+            path = part.package_path
+            existing = written.get(path)
+            if existing is not None:
+                if existing.data != part.data or existing.content_type != part.content_type:
+                    raise ValueError(
+                        f"Conflicting mask payloads target {part.part_name!r}."
+                    )
+                continue
+            written[path] = part
+        return list(written.values())
 
     @staticmethod
     def _validate_asset_relationship_id(

@@ -25,8 +25,6 @@ class ShapeRendererRasterMixin:
         hyperlink_xml: str,
     ) -> tuple[str, int] | None:
         gradient_raster = self._needs_gradient_raster(element)
-        if self._rasterizer is None:
-            return None
         geometry_policy = self._geometry_policy(metadata)
         fallback = geometry_policy.get("suggest_fallback")
         if (
@@ -34,11 +32,14 @@ class ShapeRendererRasterMixin:
             and fallback not in {FALLBACK_BITMAP, FALLBACK_RASTERIZE}
         ):
             return None
+        rasterizer = self._resolve_rasterizer()
+        if rasterizer is None:
+            return None
         if gradient_raster:
             geometry_policy.setdefault("suggest_fallback", FALLBACK_RASTERIZE)
             geometry_policy.setdefault("gradient_rasterize", True)
         try:
-            result = self._rasterizer.rasterize(element)
+            result = rasterizer.rasterize(element)
         except Exception:  # pragma: no cover - defensive
             self._logger.debug(
                 "Rasterization failed for %s",

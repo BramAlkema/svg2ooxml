@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections import OrderedDict
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from io import BytesIO
 from pathlib import Path
 
 from lxml import etree as ET
@@ -56,15 +57,36 @@ def update_presentation_parts(
     """Update presentation XML and package relationships for slides/fonts."""
 
     presentation_path = package_root / "ppt" / "presentation.xml"
-    tree = ET.parse(presentation_path)
-    root = tree.getroot()
+    rels_path = package_root / "ppt" / "_rels" / "presentation.xml.rels"
+    presentation_xml, rels_xml = build_presentation_parts(
+        presentation_path.read_bytes(),
+        rels_path.read_bytes(),
+        slides=slides,
+        fonts=fonts,
+        slide_size=slide_size,
+        trace_packaging=trace_packaging,
+    )
+    presentation_path.write_bytes(presentation_xml)
+    rels_path.write_bytes(rels_xml)
+
+
+def build_presentation_parts(
+    presentation_xml: bytes,
+    rels_xml: bytes,
+    *,
+    slides: Sequence[SlideAssembly],
+    fonts: Sequence[PackagedFont],
+    slide_size: tuple[int, int] | None = None,
+    trace_packaging: TracePackaging | None = None,
+) -> tuple[bytes, bytes]:
+    """Return updated presentation XML and relationship payloads."""
+
+    root = ET.fromstring(presentation_xml)
     ns = {"p": P_NS, "r": R_DOC_NS}
 
     _update_slide_dimensions(root, ns, slide_size, trace_packaging)
 
-    rels_path = package_root / "ppt" / "_rels" / "presentation.xml.rels"
-    rels_tree = ET.parse(rels_path)
-    rels_root = rels_tree.getroot()
+    rels_root = ET.fromstring(rels_xml)
 
     for rel in list(rels_root.findall(f"{{{REL_NS}}}Relationship")):
         if rel.get("Type") == f"{R_DOC_NS}/slide":
@@ -79,8 +101,6 @@ def update_presentation_parts(
     _replace_slide_list(root, ns, slide_refs)
     if fonts:
         _replace_embedded_font_list(root, ns, font_refs)
-
-    tree.write(presentation_path, encoding="utf-8", xml_declaration=True)
 
     for entry in slide_refs:
         ET.SubElement(
@@ -104,7 +124,13 @@ def update_presentation_parts(
             },
         )
 
-    rels_tree.write(rels_path, encoding="utf-8", xml_declaration=True)
+    return _xml_bytes(root), _xml_bytes(rels_root)
+
+
+def _xml_bytes(root: ET._Element) -> bytes:
+    output = BytesIO()
+    ET.ElementTree(root).write(output, encoding="utf-8", xml_declaration=True)
+    return output.getvalue()
 
 
 def _update_slide_dimensions(
@@ -277,4 +303,4 @@ def _reserve_slide_id(candidate: object, used_ids: set[int], *, fallback: int) -
     return parsed
 
 
-__all__ = ["update_presentation_parts"]
+__all__ = ["build_presentation_parts", "update_presentation_parts"]

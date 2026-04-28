@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from svg2ooxml.common.units import UnitConverter, px_to_emu
 from svg2ooxml.common.units.scalars import EMU_PER_PX_AT_DEFAULT_DPI
@@ -19,13 +19,15 @@ from svg2ooxml.core.traversal.clip_geometry import (
 )
 from svg2ooxml.drawingml.bridges.emf_path_adapter import EMFPathAdapter, PathStyle
 from svg2ooxml.drawingml.custgeom_generator import segments_from_primitives
-from svg2ooxml.drawingml.raster_adapter import RasterAdapter
 
 # Import centralized XML builders for safe DrawingML generation
 from svg2ooxml.drawingml.xml_builder import a_elem, a_sub, to_string
 from svg2ooxml.ir.geometry import Rect, SegmentType
 from svg2ooxml.ir.paint import SolidPaint
 from svg2ooxml.ir.scene import ClipRef
+
+if TYPE_CHECKING:  # pragma: no cover - type checking only
+    from svg2ooxml.drawingml.raster_adapter import RasterAdapter
 
 EMU_PER_PX = int(EMU_PER_PX_AT_DEFAULT_DPI)
 
@@ -49,7 +51,7 @@ class StructuredClipService:
         self._logger = logger or logging.getLogger(__name__)
         self._unit_converter = UnitConverter()
         self._emf_adapter = EMFPathAdapter()
-        self._raster_adapter = RasterAdapter()
+        self._raster_adapter: RasterAdapter | None = None
 
     def compute(
         self,
@@ -294,7 +296,7 @@ class StructuredClipService:
 
         width_px = max(1, int(round(bbox.width or 1.0)))
         height_px = max(1, int(round(bbox.height or 1.0)))
-        placeholder = self._raster_adapter.generate_placeholder(
+        placeholder = self._resolve_raster_adapter().generate_placeholder(
             width_px=width_px,
             height_px=height_px,
             metadata={
@@ -321,6 +323,13 @@ class StructuredClipService:
             media=media,
             xml_placeholder="<!-- svg2ooxml:clip-fallback raster -->",
         )
+
+    def _resolve_raster_adapter(self) -> RasterAdapter:
+        if self._raster_adapter is None:
+            from svg2ooxml.drawingml.raster_adapter import RasterAdapter
+
+            self._raster_adapter = RasterAdapter()
+        return self._raster_adapter
 
     def _collect_segments(self, clip_ref: ClipRef) -> list[SegmentType]:
         segments: list[SegmentType] = []

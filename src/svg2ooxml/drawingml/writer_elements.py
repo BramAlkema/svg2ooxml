@@ -242,11 +242,13 @@ class DrawingMLElementMixin:
     ) -> str | None:
         if (
             element.opacity >= 1.0
-            or self._rasterizer is None
             or not children_overlap(element.children)
         ):
             return None
-        raster = self._rasterizer.rasterize(element)
+        rasterizer = self._resolve_rasterizer()
+        if rasterizer is None:
+            return None
+        raster = rasterizer.rasterize(element)
         if raster is None:
             return None
         fragment = self._emit_raster_group(raster, element, shape_id, metadata)

@@ -5,30 +5,8 @@ from __future__ import annotations
 from collections.abc import Sequence
 from copy import deepcopy
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from svg2ooxml.core.animation import SMILParser, TimelineSampler, TimelineSamplingConfig
-from svg2ooxml.core.export.animation_processor import (
-    _build_animation_metadata,
-    _compose_sampled_center_motions,
-    _enrich_animations_with_element_centers,
-    _expand_deterministic_repeat_triggers,
-    _lower_safe_group_transform_targets_with_animated_descendants,
-    _prepare_scene_for_native_opacity_effects,
-)
-from svg2ooxml.core.export.motion_geometry import _apply_immediate_motion_starts
-from svg2ooxml.core.export.polyline_materialization import (
-    _materialize_stroked_polyline_groups,
-)
-from svg2ooxml.core.export.variant_expansion import (
-    _coalesce_simple_position_motions,
-    _compose_simple_line_endpoint_animations,
-    _materialize_simple_line_paths,
-    _merge_trace_reports,
-)
-from svg2ooxml.core.ir.converter import IRScene
-from svg2ooxml.core.parser import ParserConfig, SVGParser
-from svg2ooxml.core.pptx_exporter_pages import build_page_result, page_variant_type
 from svg2ooxml.core.pptx_exporter_parallel import SvgToPptxParallelMixin
 from svg2ooxml.core.pptx_exporter_types import (
     SvgConversionError,
@@ -37,23 +15,20 @@ from svg2ooxml.core.pptx_exporter_types import (
     SvgToPptxMultiResult,
     SvgToPptxResult,
 )
-from svg2ooxml.core.slide_orchestrator import (
-    build_fidelity_tier_variants,
-    derive_variants_from_trace,
-    expand_page_with_variants,
-)
-from svg2ooxml.core.tracing import ConversionTracer
-from svg2ooxml.drawingml.animation.visibility_compiler import (
-    assign_missing_visibility_source_ids,
-    rewrite_visibility_animations,
-)
-from svg2ooxml.drawingml.result import DrawingMLRenderResult
-from svg2ooxml.drawingml.writer import DrawingMLWriter
-from svg2ooxml.io.pptx_assembly import ALLOWED_SLIDE_SIZE_MODES, PPTXPackageBuilder
-from svg2ooxml.ir import convert_parser_output
-from svg2ooxml.ir.animation import AnimationScene, AnimationSummary
-from svg2ooxml.policy import PolicyContext
-from svg2ooxml.services import configure_services
+
+if TYPE_CHECKING:  # pragma: no cover - type checking only
+    from svg2ooxml.core.animation import (
+        SMILParser,
+        TimelineSampler,
+        TimelineSamplingConfig,
+    )
+    from svg2ooxml.core.ir.converter import IRScene
+    from svg2ooxml.core.parser import SVGParser
+    from svg2ooxml.core.tracing import ConversionTracer
+    from svg2ooxml.drawingml.result import DrawingMLRenderResult
+    from svg2ooxml.drawingml.writer import DrawingMLWriter
+    from svg2ooxml.io.pptx_assembly import PPTXPackageBuilder
+    from svg2ooxml.policy import PolicyContext
 
 
 class SvgToPptxExporter(SvgToPptxParallelMixin):
@@ -101,12 +76,27 @@ class SvgToPptxExporter(SvgToPptxParallelMixin):
             custom_parallel_components.append("timeline_config")
         self._parallel_unsupported_components = tuple(custom_parallel_components)
 
-        self._parser = parser or SVGParser(ParserConfig())
-        self._writer = writer or DrawingMLWriter()
-        self._animation_parser_factory = animation_parser_factory or SMILParser
+        if parser is None:
+            from svg2ooxml.core.parser import ParserConfig, SVGParser
+
+            parser = SVGParser(ParserConfig())
+        if writer is None:
+            from svg2ooxml.drawingml.writer import DrawingMLWriter
+
+            writer = DrawingMLWriter()
+        if animation_parser_factory is None:
+            from svg2ooxml.core.animation import SMILParser
+
+            animation_parser_factory = SMILParser
+
+        self._parser = parser
+        self._writer = writer
+        self._animation_parser_factory = animation_parser_factory
         if timeline_sampler is not None:
             self._timeline_sampler = timeline_sampler
         else:
+            from svg2ooxml.core.animation import TimelineSampler
+
             self._timeline_sampler = TimelineSampler(timeline_config)
         self._filter_strategy = filter_strategy
 
@@ -127,6 +117,8 @@ class SvgToPptxExporter(SvgToPptxParallelMixin):
 
         env_slide_mode = os.environ.get("SVG2OOXML_SLIDE_SIZE_MODE")
         mode = slide_size_mode or env_slide_mode or "same"
+        from svg2ooxml.io.pptx_package_constants import ALLOWED_SLIDE_SIZE_MODES
+
         if mode not in ALLOWED_SLIDE_SIZE_MODES:
             raise ValueError(
                 f"Invalid slide_size_mode: {mode!r}. "
@@ -134,9 +126,11 @@ class SvgToPptxExporter(SvgToPptxParallelMixin):
             )
         self._slide_size_mode = mode
 
-        self._builder = builder or PPTXPackageBuilder(
-            slide_size_mode=self._slide_size_mode
-        )
+        if builder is None:
+            from svg2ooxml.io.pptx_assembly import PPTXPackageBuilder
+
+            builder = PPTXPackageBuilder(slide_size_mode=self._slide_size_mode)
+        self._builder = builder
 
     # ------------------------------------------------------------------
     # Single document conversion
@@ -175,6 +169,8 @@ class SvgToPptxExporter(SvgToPptxParallelMixin):
         policy_overrides: dict[str, dict[str, Any]] | None = None,
     ) -> SvgToPptxResult:
         """Convert an SVG payload into a PPTX written to *output_path*."""
+
+        from svg2ooxml.core.tracing import ConversionTracer
 
         active_tracer = tracer or ConversionTracer()
         render_result, scene = self._render_svg(
@@ -220,6 +216,8 @@ class SvgToPptxExporter(SvgToPptxParallelMixin):
                 "At least one SVG page is required for multi-slide conversion."
             )
 
+        from svg2ooxml.core.tracing import ConversionTracer
+
         packaging_tracer = tracer or ConversionTracer()
 
         if parallel and not render_tiers and not split_fallback_variants:
@@ -230,12 +228,16 @@ class SvgToPptxExporter(SvgToPptxParallelMixin):
                 max_workers=max_workers,
             )
 
+        from svg2ooxml.core.pptx_exporter_pages import build_page_result
+
         page_results: list[SvgPageResult] = []
         slide_count = 0
 
         with self._builder.begin_streaming(tracer=packaging_tracer) as stream:
             for index, page in enumerate(pages, start=1):
                 if render_tiers:
+                    from svg2ooxml.core.pptx_exporter_pages import page_variant_type
+
                     tier_variants = build_fidelity_tier_variants()
                     page_seed = page
                     if not page.title and not page.name:
@@ -300,6 +302,8 @@ class SvgToPptxExporter(SvgToPptxParallelMixin):
                 page_results.append(page_result)
 
                 if split_fallback_variants:
+                    from svg2ooxml.core.pptx_exporter_pages import page_variant_type
+
                     variants = derive_variants_from_trace(
                         report_dict, enable_split=True
                     )
@@ -336,6 +340,8 @@ class SvgToPptxExporter(SvgToPptxParallelMixin):
             pptx_path = stream.finalize(output_path)
 
         packaging_report = packaging_tracer.report().to_dict()
+
+        from svg2ooxml.core.export.variant_expansion import _merge_trace_reports
 
         aggregate_trace = _merge_trace_reports(
             [result.trace_report for result in page_results] + [packaging_report]
@@ -380,6 +386,8 @@ class SvgToPptxExporter(SvgToPptxParallelMixin):
         # Use the parser's services which includes the StyleResolver with loaded CSS rules
         services_override = parse_result.services
         if services_override is None:
+            from svg2ooxml.services import configure_services
+
             services_override = configure_services(
                 filter_strategy=self._filter_strategy
             )
@@ -392,12 +400,20 @@ class SvgToPptxExporter(SvgToPptxParallelMixin):
             services_override.viewport_height = parse_result.height_px
 
         animations = []
-        timeline_scenes: list[AnimationScene] = []
-        animation_summary: AnimationSummary | None = None
+        timeline_scenes = []
+        animation_summary = None
         animation_fallback_reasons: dict[str, int] = {}
         animation_policy_options: dict[str, Any] | None = None
 
-        if parse_result.svg_root is not None:
+        should_parse_animations = (
+            parse_result.svg_root is not None
+            and (parse_result.animations is None or bool(parse_result.animations))
+        )
+        if should_parse_animations:
+            from svg2ooxml.drawingml.animation.visibility_compiler import (
+                assign_missing_visibility_source_ids,
+            )
+
             assign_missing_visibility_source_ids(parse_result.svg_root)
             animation_parser = self._animation_parser_factory()
             animations = animation_parser.parse_svg_animations(parse_result.svg_root)
@@ -421,6 +437,8 @@ class SvgToPptxExporter(SvgToPptxParallelMixin):
         )
         if policy_context is not None:
             animation_policy_options = policy_context.get("animation")
+        from svg2ooxml.ir import convert_parser_output
+
         scene = convert_parser_output(
             parse_result,
             services=services_override,
@@ -435,6 +453,29 @@ class SvgToPptxExporter(SvgToPptxParallelMixin):
             policy_meta = scene.metadata.setdefault("policy", {})
             policy_meta["animation"] = dict(animation_policy_options)
         if animations:
+            from svg2ooxml.core.export.animation_processor import (
+                _build_animation_metadata,
+                _compose_sampled_center_motions,
+                _enrich_animations_with_element_centers,
+                _expand_deterministic_repeat_triggers,
+                _lower_safe_group_transform_targets_with_animated_descendants,
+                _prepare_scene_for_native_opacity_effects,
+            )
+            from svg2ooxml.core.export.motion_geometry import (
+                _apply_immediate_motion_starts,
+            )
+            from svg2ooxml.core.export.polyline_materialization import (
+                _materialize_stroked_polyline_groups,
+            )
+            from svg2ooxml.core.export.variant_expansion import (
+                _coalesce_simple_position_motions,
+                _compose_simple_line_endpoint_animations,
+                _materialize_simple_line_paths,
+            )
+            from svg2ooxml.drawingml.animation.visibility_compiler import (
+                rewrite_visibility_animations,
+            )
+
             animations = _expand_deterministic_repeat_triggers(animations)
             animations = rewrite_visibility_animations(
                 animations,
@@ -526,7 +567,65 @@ class SvgToPptxExporter(SvgToPptxParallelMixin):
             merged.update(values)
             base_selections[target] = merged
 
+        from svg2ooxml.policy import PolicyContext
+
         return PolicyContext(selections=base_selections)
+
+
+def _apply_immediate_motion_starts(*args: Any, **kwargs: Any):
+    from svg2ooxml.core.export.motion_geometry import _apply_immediate_motion_starts
+
+    return _apply_immediate_motion_starts(*args, **kwargs)
+
+
+def _coalesce_simple_position_motions(*args: Any, **kwargs: Any):
+    from svg2ooxml.core.export.variant_expansion import (
+        _coalesce_simple_position_motions,
+    )
+
+    return _coalesce_simple_position_motions(*args, **kwargs)
+
+
+def _compose_sampled_center_motions(*args: Any, **kwargs: Any):
+    from svg2ooxml.core.export.animation_processor import (
+        _compose_sampled_center_motions,
+    )
+
+    return _compose_sampled_center_motions(*args, **kwargs)
+
+
+def _compose_simple_line_endpoint_animations(*args: Any, **kwargs: Any):
+    from svg2ooxml.core.export.variant_expansion import (
+        _compose_simple_line_endpoint_animations,
+    )
+
+    return _compose_simple_line_endpoint_animations(*args, **kwargs)
+
+
+def _enrich_animations_with_element_centers(*args: Any, **kwargs: Any):
+    from svg2ooxml.core.export.animation_processor import (
+        _enrich_animations_with_element_centers,
+    )
+
+    return _enrich_animations_with_element_centers(*args, **kwargs)
+
+
+def build_fidelity_tier_variants(*args: Any, **kwargs: Any):
+    from svg2ooxml.core.slide_orchestrator import build_fidelity_tier_variants
+
+    return build_fidelity_tier_variants(*args, **kwargs)
+
+
+def derive_variants_from_trace(*args: Any, **kwargs: Any):
+    from svg2ooxml.core.slide_orchestrator import derive_variants_from_trace
+
+    return derive_variants_from_trace(*args, **kwargs)
+
+
+def expand_page_with_variants(*args: Any, **kwargs: Any):
+    from svg2ooxml.core.slide_orchestrator import expand_page_with_variants
+
+    return expand_page_with_variants(*args, **kwargs)
 
 
 __all__ = [

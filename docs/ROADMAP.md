@@ -1,6 +1,6 @@
 # Project Roadmap
 
-Last updated: 2026-04-28
+Last updated: 2026-04-29
 
 This roadmap is for the `svg2ooxml` converter/runtime package. Empirical
 PowerPoint behavior research, authored control decks, and durable oracle
@@ -24,6 +24,9 @@ evidence live in the companion repository
 
 ## Recent Release Focus
 
+- **0.7.8**: base import and PPTX packaging speed pass, direct in-memory batch
+  package assembly, cached scaffold bytes, lazy optional render dependencies,
+  and preserved base-install NumPy boundaries
 - **0.7.7**: Python 3.13 compatibility metadata restored after the 0.7.x
   architecture hardening releases, with tooling targets lowered to prevent
   accidental Python 3.14-only syntax from shipping

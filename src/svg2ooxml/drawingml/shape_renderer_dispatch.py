@@ -120,10 +120,13 @@ class ShapeRendererDispatchMixin:
 
         element = self._strip_invalid_filter_effects(element)
         element = apply_clip_bounds(element, metadata)
-        if self._rasterizer is None and self._needs_gradient_raster(element):
+        if (
+            self._needs_gradient_raster(element)
+            and self._resolve_rasterizer() is None
+        ):
             element = self._apply_gradient_fallback(element, metadata)
 
-        if metadata.get("mix_blend_mode") and self._rasterizer is not None:
+        if metadata.get("mix_blend_mode") and self._resolve_rasterizer() is not None:
             rasterized = self._maybe_rasterize(
                 element,
                 shape_id,

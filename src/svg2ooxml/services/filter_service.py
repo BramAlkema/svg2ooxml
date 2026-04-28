@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING, Any
 from lxml import etree
 
 from svg2ooxml.drawingml.emf_primitives import PaletteResolver
-from svg2ooxml.drawingml.raster_adapter import RasterAdapter
 from svg2ooxml.filters.registry import FilterRegistry
 from svg2ooxml.filters.resvg_bridge import ResolvedFilter
 from svg2ooxml.services.filter_pipeline_runtime import (
@@ -27,6 +26,7 @@ from svg2ooxml.services.filter_service_pipeline import (
 from svg2ooxml.services.filter_service_resolution import FilterResolutionMixin
 
 if TYPE_CHECKING:  # pragma: no cover - type checking only
+    from svg2ooxml.drawingml.raster_adapter import RasterAdapter
     from svg2ooxml.filters.planner import FilterPlanner
     from svg2ooxml.filters.renderer import FilterRenderer as FilterPipelineRenderer
 

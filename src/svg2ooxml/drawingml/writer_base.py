@@ -12,15 +12,17 @@ from .generator import DrawingMLPathGenerator
 from .mask_pipeline import MaskPipeline
 from .navigation_runtime import NavigationRegistrar
 from .pipelines.asset_pipeline import AssetPipeline
-from .rasterizer import SKIA_AVAILABLE, Rasterizer
 
 if TYPE_CHECKING:  # pragma: no cover - type checking only
     from svg2ooxml.core.tracing import ConversionTracer
     from svg2ooxml.services.image_service import ImageService
 
+    from .rasterizer import Rasterizer
+
 DEFAULT_SLIDE_SIZE = (9144000, 6858000)  # 10" x 7.5"
 
 logger = logging.getLogger("svg2ooxml.drawingml.writer")
+_RASTERIZER_PENDING = object()
 
 
 def assets_root() -> Path:
@@ -51,17 +53,12 @@ class DrawingMLWriterBase:
         self._asset_registry: AssetRegistry | None = None
         self._navigation = NavigationRegistrar()
         self._mask_pipeline = MaskPipeline()
-        self._rasterizer: Rasterizer | None = None
+        self._rasterizer: Rasterizer | None | object = _RASTERIZER_PENDING
         self._animation_pipeline = AnimationPipeline(trace_writer=self._trace_writer)
         self._text_renderer = None
         self._shape_renderer = None
         self._scene_metadata: dict[str, Any] | None = None
         self._scene_background_color = None
-        if SKIA_AVAILABLE:  # pragma: no branch
-            try:
-                self._rasterizer = Rasterizer()
-            except Exception:  # pragma: no cover - defensive
-                self._rasterizer = None
         self._tracer: ConversionTracer | None = None
 
     @property
@@ -94,6 +91,27 @@ class DrawingMLWriterBase:
         """Update the image service used for on-the-fly media resolution."""
         self._image_service = image_service
         self._asset_pipeline.set_image_service(image_service)
+
+    def _resolve_rasterizer(self) -> Rasterizer | None:
+        """Instantiate the optional skia rasterizer only when raster output is needed."""
+
+        if self._rasterizer is None:
+            return None
+        if self._rasterizer is not _RASTERIZER_PENDING:
+            return self._rasterizer
+        try:
+            from .rasterizer import SKIA_AVAILABLE, Rasterizer
+        except Exception:  # pragma: no cover - optional dependency boundary
+            self._rasterizer = None
+            return None
+        if not SKIA_AVAILABLE:
+            self._rasterizer = None
+            return None
+        try:
+            self._rasterizer = Rasterizer()
+        except Exception:  # pragma: no cover - defensive
+            self._rasterizer = None
+        return self._rasterizer
 
 
 __all__ = ["DEFAULT_SLIDE_SIZE", "DrawingMLWriterBase", "assets_root", "logger"]

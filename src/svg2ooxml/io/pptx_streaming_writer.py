@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import shutil
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -23,6 +22,7 @@ from svg2ooxml.io.pptx_package_parts import (
     zip_package,
 )
 from svg2ooxml.io.pptx_slide_assembly import PackagingContext, SlideAssembler
+from svg2ooxml.io.pptx_template_cache import copy_template_tree
 from svg2ooxml.io.pptx_writer_base import PackageWriterBase
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
@@ -74,7 +74,7 @@ class StreamingPackageWriter(PackageWriterBase):
         )
         self._temp_dir_ctx = temporary_directory(prefix="svg2ooxml_pptx_")
         self._temp_path = self._temp_dir_ctx.__enter__()
-        shutil.copytree(self._base_template, self._temp_path, dirs_exist_ok=True)
+        copy_template_tree(self._base_template, self._temp_path)
         ensure_theme_extension(self._temp_path)
 
         self._slides_dir = self._temp_path / "ppt" / "slides"
