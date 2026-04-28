@@ -208,7 +208,7 @@ Goal:
 
 ### Required per filter/lighting PR
 - [ ] targeted unit/integration filter suite
-- [ ] OrbStack/skia run for skia-gated cases
+- [ ] Docker render-lane skia/NumPy run for skia-gated cases
 - [ ] slideshow/browser rerun on the affected W3C filter slice
 - [ ] no new repair/open regressions
 

@@ -2,11 +2,11 @@
 
 Use the local [`.venv`](../../.python-version) for day-to-day editing and fast
 checks. Use the Docker render lane when you need a reproducible Linux
-environment with pinned FontForge/skia dependencies and stable output
+environment with pinned FontForge/skia/NumPy dependencies and stable output
 directories.
 
-OrbStack does not need a separate image definition. If Docker commands in this
-repo are running on OrbStack, use the same render wrappers documented here.
+The wrappers require a Docker-compatible engine. Docker Desktop, OrbStack, and
+compatible remote Docker contexts can all use the same image and commands.
 
 ## Roles
 
@@ -14,6 +14,8 @@ repo are running on OrbStack, use the same render wrappers documented here.
   - supports the package's Python 3.13 floor
   - may use Python 3.14 for local render/font tooling when Homebrew
     `fontforge` bindings or `skia-python` require it
+  - keeps NumPy optional for base installs; install `render`, `color`, or
+    `accel` extras for NumPy-backed paths
   - fastest loop for coding, linting, and most unit tests
   - Homebrew-backed `fontforge` on macOS
 - Docker render lane
@@ -66,7 +68,7 @@ bind-mounting the repo does not hide the installed dependencies.
 The Docker image currently builds FontForge from the upstream commit pinned in
 [`Dockerfile`](../../Dockerfile). That is intentional:
 
-- it preserves parity with the local FontForge/skia tooling environment
+- it preserves parity with the local FontForge/skia/NumPy tooling environment
 - it avoids relying on Debian's older `python3-fontforge` package
 - it avoids claiming a public `pip install fontforge` release path before the
   upstream PyPI publication is actually in place

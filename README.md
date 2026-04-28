@@ -101,6 +101,9 @@ The boundary doc is at
 
 Requires Python 3.13 or newer.
 
+The base install does not depend on NumPy. NumPy is installed only through the
+`render`, `color`, or `accel` extras for raster/filter/color workloads.
+
 ```bash
 pip install svg2ooxml
 ```

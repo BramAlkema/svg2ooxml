@@ -614,9 +614,10 @@ Deterministic W3C sampling + OpenXML audit gating in CI. Resvg-only default
 path active. Filter/font hardening complete. Docker ergonomics ready.
 
 ### Dependency Footprint (ADR-026)
-Dependency tiers: resvg + skia-python required, FontForge optional, LibreOffice
-+ OpenXML audit test-only. Python 3.13 single runtime. Orbstack container for
-full-stack development.
+Dependency tiers: base converter avoids NumPy; NumPy/skia-python live behind
+render/color/accel extras, FontForge is optional, and LibreOffice + OpenXML
+audit are test-only. Python 3.13 single runtime. Docker-compatible container
+lane for full-stack/render development.
 
 ### PresentationML-First PowerPoint Oracle Strategy (ADR-029)
 The product target is PresentationML, not a version-matrix of PowerPoint

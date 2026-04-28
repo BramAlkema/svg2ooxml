@@ -39,6 +39,7 @@ jobs:
       - name: Verify Python 3.13 package support
         run: |
           python -c "import importlib.metadata as metadata; requires_python = metadata.metadata('svg2ooxml')['Requires-Python']; assert requires_python == '>=3.13', requires_python; print(requires_python)"
+          python -c "import importlib.util; assert importlib.util.find_spec('numpy') is None, 'base install unexpectedly installed numpy'"
           python -c "import compileall, pathlib, svg2ooxml; package = pathlib.Path(svg2ooxml.__file__).parent; raise SystemExit(0 if compileall.compile_dir(str(package), quiet=1) else 1)"
           python -c "import svg2ooxml; import svg2ooxml.services.filter_service; print('py313 smoke ok')"
 
