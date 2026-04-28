@@ -7,24 +7,35 @@ from pathlib import Path
 
 from tools.visual.suite_runner import run_cli
 
-
-SCENARIOS = {
+_REQUIRED_SCENARIOS = {
     "gallardo": Path("tests/visual/fixtures/gallardo.svg"),
     "transform-torture": Path("tests/visual/fixtures/resvg/transform_torture.svg"),
-    "filter-turbulence": Path("tests/corpus/kelvin_lawrence/filter-turbulence.svg"),
-    "filter-saturate": Path("tests/corpus/kelvin_lawrence/filter-saturate.svg"),
     "sketch-illustration": Path(
         "tests/corpus/real_world/sketch_illustration_sample.svg"
     ),
+    "figma-design-system": Path(
+        "tests/corpus/real_world/figma_design_system_sample.svg"
+    ),
+}
+
+_OPTIONAL_SCENARIOS = {
+    "filter-turbulence": Path("tests/corpus/kelvin_lawrence/filter-turbulence.svg"),
+    "filter-saturate": Path("tests/corpus/kelvin_lawrence/filter-saturate.svg"),
     "linear-gradients-repeat": Path(
         "tests/corpus/kelvin_lawrence/linear-gradients-repeat.svg"
     ),
     "mask-image": Path("tests/corpus/kelvin_lawrence/mask-image.svg"),
     "text-path": Path("tests/corpus/kelvin_lawrence/text-path.svg"),
     "text-path2": Path("tests/corpus/kelvin_lawrence/text-path2.svg"),
-    "figma-design-system": Path(
-        "tests/corpus/real_world/figma_design_system_sample.svg"
-    ),
+}
+
+SCENARIOS = {
+    **_REQUIRED_SCENARIOS,
+    **{
+        name: path
+        for name, path in _OPTIONAL_SCENARIOS.items()
+        if path.exists()
+    },
 }
 
 

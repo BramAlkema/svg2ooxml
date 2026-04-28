@@ -3,7 +3,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-
 from tools.visual.stress_suite import SCENARIOS as STRESS_SCENARIOS
 from tools.visual.suite_runner import _resolve_cli_output_dir, resolve_scenarios
 from tools.visual.w3c_animation_suite import SCENARIOS as W3C_ANIMATION_SCENARIOS
