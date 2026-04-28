@@ -6,8 +6,9 @@ import base64
 import html
 import logging
 import os
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException, Query
@@ -232,34 +233,39 @@ def create_app(
                     source_path=svg_path,
                 )
                 browser_image = browser_path
-
+            except (BrowserRenderError, RuntimeError, OSError) as exc:
+                notes.append(f"Browser reference failed: {html.escape(str(exc))}")
+            else:
                 resvg_images = renders.get("resvg", [])
-                if resvg_images:
-                    from PIL import Image
-
-                    differ = VisualDiffer(
-                        threshold=float(
-                            os.getenv("SVG2OOXML_VISUAL_BROWSER_THRESHOLD", "0.90")
-                        )
-                    )
-                    browser_result = differ.compare(
-                        Image.open(browser_path),
-                        Image.open(resvg_images[0]),
-                        generate_diff=True,
-                    )
-                    browser_metrics = (
-                        browser_result.ssim_score,
-                        browser_result.pixel_diff_percentage,
-                    )
-                    if browser_result.diff_image is not None:
-                        browser_diff = browser_dir / "diff.png"
-                        browser_result.save_diff(browser_diff)
-                else:
+                if not resvg_images:
                     notes.append(
                         "Browser reference rendered, but no PPTX slide image was available for diff."
                     )
-            except (BrowserRenderError, RuntimeError, OSError) as exc:
-                notes.append(f"Browser reference failed: {html.escape(str(exc))}")
+                    resvg_images = []
+
+                if resvg_images:
+                    try:
+                        from PIL import Image
+
+                        differ = VisualDiffer(
+                            threshold=float(
+                                os.getenv("SVG2OOXML_VISUAL_BROWSER_THRESHOLD", "0.90")
+                            )
+                        )
+                        browser_result = differ.compare(
+                            Image.open(browser_path),
+                            Image.open(resvg_images[0]),
+                            generate_diff=True,
+                        )
+                        browser_metrics = (
+                            browser_result.ssim_score,
+                            browser_result.pixel_diff_percentage,
+                        )
+                        if browser_result.diff_image is not None:
+                            browser_diff = browser_dir / "diff.png"
+                            browser_result.save_diff(browser_diff)
+                    except (RuntimeError, OSError) as exc:
+                        notes.append(f"Browser diff failed: {html.escape(str(exc))}")
         else:
             notes.append("Playwright browser renderer is not available.")
 
@@ -293,6 +299,10 @@ def create_app(
                 '<p data-testid="browser-metrics">'
                 f"SSIM: {ssim_score:.4f} | Pixel diff: {pixel_diff:.2f}%"
                 "</p>"
+            )
+        elif browser_image is not None:
+            browser_metrics_html = (
+                '<p data-testid="browser-metrics">Visual metrics unavailable.</p>'
             )
 
         def _format_trace(engine: str) -> str:

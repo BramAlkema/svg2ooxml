@@ -7,6 +7,7 @@ import pytest
 pytest.importorskip("fastapi")
 pytest.importorskip("PIL")
 
+import tools.visual.server as visual_server
 from fastapi.testclient import TestClient
 from PIL import Image
 from tools.visual.browser_renderer import RenderedSvg
@@ -126,3 +127,39 @@ def test_visual_server_keeps_structure_report_when_renderer_fails(tmp_path) -> N
     assert 'data-testid="pane-structure"' in compare.text
     assert 'data-testid="structure-report"' in compare.text
     assert "Resvg render failed" in compare.text
+
+
+def test_visual_server_keeps_browser_reference_when_metrics_unavailable(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    class FailingDiffer:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def compare(self, *args, **kwargs):
+            raise RuntimeError("scikit-image is required")
+
+    monkeypatch.setattr(visual_server, "VisualDiffer", FailingDiffer)
+
+    fixture_dir = tmp_path / "fixtures"
+    fixture_dir.mkdir()
+    sample_svg = fixture_dir / "sample.svg"
+    sample_svg.write_text("<svg xmlns='http://www.w3.org/2000/svg'></svg>")
+
+    app = create_app(
+        fixture_root=fixture_dir,
+        output_root=tmp_path / "out",
+        builder=StubBuilder(),
+        renderer=StubRenderer(),
+        browser_renderer=StubBrowserRenderer(),
+    )
+
+    client = TestClient(app)
+
+    compare = client.get("/compare", params={"name": "sample.svg"})
+    assert compare.status_code == 200
+    assert 'data-testid="pane-browser"' in compare.text
+    assert 'data-testid="browser-metrics"' in compare.text
+    assert "Visual metrics unavailable." in compare.text
+    assert "Browser diff failed" in compare.text
