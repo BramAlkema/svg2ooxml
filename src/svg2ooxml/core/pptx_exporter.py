@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
-from copy import deepcopy
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from svg2ooxml.core.pptx_exporter_multipage import SvgToPptxPagesMixin
 from svg2ooxml.core.pptx_exporter_parallel import SvgToPptxParallelMixin
+from svg2ooxml.core.pptx_exporter_render import SvgToPptxRenderMixin
 from svg2ooxml.core.pptx_exporter_types import (
     SvgConversionError,
     SvgPageResult,
@@ -15,6 +15,7 @@ from svg2ooxml.core.pptx_exporter_types import (
     SvgToPptxMultiResult,
     SvgToPptxResult,
 )
+from svg2ooxml.policy.fidelity import PolicyOverrides
 
 if TYPE_CHECKING:  # pragma: no cover - type checking only
     from svg2ooxml.core.animation import (
@@ -22,16 +23,17 @@ if TYPE_CHECKING:  # pragma: no cover - type checking only
         TimelineSampler,
         TimelineSamplingConfig,
     )
-    from svg2ooxml.core.ir.converter import IRScene
     from svg2ooxml.core.parser import SVGParser
     from svg2ooxml.core.tracing import ConversionTracer
-    from svg2ooxml.drawingml.result import DrawingMLRenderResult
     from svg2ooxml.drawingml.writer import DrawingMLWriter
     from svg2ooxml.io.pptx_assembly import PPTXPackageBuilder
-    from svg2ooxml.policy import PolicyContext
 
 
-class SvgToPptxExporter(SvgToPptxParallelMixin):
+class SvgToPptxExporter(
+    SvgToPptxPagesMixin,
+    SvgToPptxParallelMixin,
+    SvgToPptxRenderMixin,
+):
     """Facade around the parsing and packaging pipeline used by the CLI."""
 
     def __init__(
@@ -46,6 +48,7 @@ class SvgToPptxExporter(SvgToPptxParallelMixin):
         filter_strategy: str | None = None,
         geometry_mode: str | None = None,
         slide_size_mode: str | None = None,
+        embed_trace_docprops: bool = False,
     ) -> None:
         """Initialize the SVG to PPTX exporter.
 
@@ -131,6 +134,7 @@ class SvgToPptxExporter(SvgToPptxParallelMixin):
 
             builder = PPTXPackageBuilder(slide_size_mode=self._slide_size_mode)
         self._builder = builder
+        self._embed_trace_docprops = bool(embed_trace_docprops)
 
     # ------------------------------------------------------------------
     # Single document conversion
@@ -142,7 +146,8 @@ class SvgToPptxExporter(SvgToPptxParallelMixin):
         output_path: Path | None = None,
         *,
         tracer: ConversionTracer | None = None,
-        policy_overrides: dict[str, dict[str, Any]] | None = None,
+        policy_overrides: PolicyOverrides | None = None,
+        embed_trace_docprops: bool | None = None,
     ) -> SvgToPptxResult:
         """Convert the SVG located at *input_path* into a PPTX package."""
 
@@ -157,6 +162,7 @@ class SvgToPptxExporter(SvgToPptxParallelMixin):
             tracer=tracer,
             source_path=str(input_path),
             policy_overrides=policy_overrides,
+            embed_trace_docprops=embed_trace_docprops,
         )
 
     def convert_string(
@@ -166,7 +172,8 @@ class SvgToPptxExporter(SvgToPptxParallelMixin):
         *,
         tracer: ConversionTracer | None = None,
         source_path: str | None = None,
-        policy_overrides: dict[str, dict[str, Any]] | None = None,
+        policy_overrides: PolicyOverrides | None = None,
+        embed_trace_docprops: bool | None = None,
     ) -> SvgToPptxResult:
         """Convert an SVG payload into a PPTX written to *output_path*."""
 
@@ -189,387 +196,30 @@ class SvgToPptxExporter(SvgToPptxParallelMixin):
         report_dict = active_tracer.report().to_dict()
         if isinstance(scene.metadata, dict):
             scene.metadata["trace_report"] = report_dict
+        self._embed_trace_docprops_if_requested(
+            pptx_path,
+            report_dict,
+            embed_trace_docprops,
+        )
 
         return SvgToPptxResult(
             pptx_path=pptx_path, slide_count=1, trace_report=report_dict
         )
 
-    # ------------------------------------------------------------------
-    # Multi document conversion
-    # ------------------------------------------------------------------
+    def _should_embed_trace_docprops(self, override: bool | None) -> bool:
+        return self._embed_trace_docprops if override is None else bool(override)
 
-    def convert_pages(
+    def _embed_trace_docprops_if_requested(
         self,
-        pages: Sequence[SvgPageSource],
-        output_path: Path,
-        *,
-        tracer: ConversionTracer | None = None,
-        split_fallback_variants: bool = False,
-        render_tiers: bool = False,
-        parallel: bool = False,
-        max_workers: int | None = None,
-    ) -> SvgToPptxMultiResult:
-        """Convert multiple SVG payloads into a multi-slide PPTX."""
+        pptx_path: Path,
+        trace_report: dict[str, Any],
+        override: bool | None,
+    ) -> None:
+        if not self._should_embed_trace_docprops(override):
+            return
+        from svg2ooxml.io.pptx_docprops import embed_trace_docprops as _embed
 
-        if not pages:
-            raise SvgConversionError(
-                "At least one SVG page is required for multi-slide conversion."
-            )
-
-        from svg2ooxml.core.tracing import ConversionTracer
-
-        packaging_tracer = tracer or ConversionTracer()
-
-        if parallel and not render_tiers and not split_fallback_variants:
-            return self._convert_pages_parallel(
-                pages,
-                output_path,
-                packaging_tracer,
-                max_workers=max_workers,
-            )
-
-        from svg2ooxml.core.pptx_exporter_pages import build_page_result
-
-        page_results: list[SvgPageResult] = []
-        slide_count = 0
-
-        with self._builder.begin_streaming(tracer=packaging_tracer) as stream:
-            for index, page in enumerate(pages, start=1):
-                if render_tiers:
-                    from svg2ooxml.core.pptx_exporter_pages import page_variant_type
-
-                    tier_variants = build_fidelity_tier_variants()
-                    page_seed = page
-                    if not page.title and not page.name:
-                        page_seed = SvgPageSource(
-                            svg_text=page.svg_text,
-                            title=f"Slide {index}",
-                            name=page.name,
-                            metadata=page.metadata,
-                        )
-                    variant_pages = expand_page_with_variants(page_seed, tier_variants)
-                    for variant_page in variant_pages:
-                        variant_overrides = (variant_page.metadata or {}).get(
-                            "policy_overrides"
-                        )
-                        variant_tracer = ConversionTracer()
-                        variant_source_path = (variant_page.metadata or {}).get(
-                            "source_path"
-                        )
-                        variant_render, variant_scene = self._render_svg(
-                            variant_page.svg_text,
-                            variant_tracer,
-                            variant_overrides,
-                            source_path=variant_source_path,
-                        )
-                        variant_report = variant_tracer.report().to_dict()
-                        page_result = build_page_result(
-                            variant_page,
-                            variant_scene,
-                            variant_report,
-                            fallback_title=f"Slide {index}",
-                            variant_type=page_variant_type(variant_page),
-                        )
-
-                        stream.add_slide(variant_render)
-                        slide_count += 1
-                        del variant_render
-                        page_results.append(page_result)
-                    continue
-
-                base_overrides = (page.metadata or {}).get("policy_overrides")
-                base_tracer = ConversionTracer()
-                source_path = (page.metadata or {}).get("source_path")
-                render_result, scene = self._render_svg(
-                    page.svg_text,
-                    base_tracer,
-                    base_overrides,
-                    source_path=source_path,
-                )
-                report_dict = base_tracer.report().to_dict()
-                page_result = build_page_result(
-                    page,
-                    scene,
-                    report_dict,
-                    fallback_title=f"Slide {index}",
-                    variant_type="base",
-                    include_page_metadata=True,
-                )
-
-                stream.add_slide(render_result)
-                slide_count += 1
-                del render_result
-                page_results.append(page_result)
-
-                if split_fallback_variants:
-                    from svg2ooxml.core.pptx_exporter_pages import page_variant_type
-
-                    variants = derive_variants_from_trace(
-                        report_dict, enable_split=True
-                    )
-                    variant_pages = expand_page_with_variants(page, variants)
-                    for variant_page in variant_pages:
-                        variant_overrides = (variant_page.metadata or {}).get(
-                            "policy_overrides"
-                        )
-                        variant_tracer = ConversionTracer()
-                        variant_source_path = (variant_page.metadata or {}).get(
-                            "source_path"
-                        )
-                        variant_render, variant_scene = self._render_svg(
-                            variant_page.svg_text,
-                            variant_tracer,
-                            variant_overrides,
-                            source_path=variant_source_path,
-                        )
-                        variant_report = variant_tracer.report().to_dict()
-                        variant_type = page_variant_type(variant_page)
-                        variant_page_result = build_page_result(
-                            variant_page,
-                            variant_scene,
-                            variant_report,
-                            fallback_title=f"{page_result.title} ({variant_type})",
-                            variant_type=variant_type,
-                        )
-
-                        stream.add_slide(variant_render)
-                        slide_count += 1
-                        del variant_render
-                        page_results.append(variant_page_result)
-
-            pptx_path = stream.finalize(output_path)
-
-        packaging_report = packaging_tracer.report().to_dict()
-
-        from svg2ooxml.core.export.variant_expansion import _merge_trace_reports
-
-        aggregate_trace = _merge_trace_reports(
-            [result.trace_report for result in page_results] + [packaging_report]
-        )
-
-        return SvgToPptxMultiResult(
-            pptx_path=pptx_path,
-            slide_count=slide_count,
-            page_results=page_results,
-            packaging_report=packaging_report,
-            aggregated_trace_report=aggregate_trace,
-        )
-
-    # ------------------------------------------------------------------
-    # Internal helpers
-    # ------------------------------------------------------------------
-
-    def _render_svg(
-        self,
-        svg_text: str,
-        tracer: ConversionTracer,
-        policy_overrides: dict[str, dict[str, Any]] | None = None,
-        *,
-        source_path: str | None = None,
-    ) -> tuple[DrawingMLRenderResult, IRScene]:
-        """Convert SVG text into a rendered DrawingML payload."""
-
-        if self._filter_strategy and tracer is not None:
-            tracer.record_stage_event(
-                stage="filter",
-                action="strategy_configured",
-                metadata={"strategy": self._filter_strategy},
-            )
-
-        parse_result = self._parser.parse(
-            svg_text, tracer=tracer, source_path=source_path
-        )
-        if not parse_result.success or parse_result.svg_root is None:
-            message = parse_result.error_message or "SVG parsing failed."
-            raise SvgConversionError(message)
-
-        # Use the parser's services which includes the StyleResolver with loaded CSS rules
-        services_override = parse_result.services
-        if services_override is None:
-            from svg2ooxml.services import configure_services
-
-            services_override = configure_services(
-                filter_strategy=self._filter_strategy
-            )
-        elif self._filter_strategy and services_override.filter_service is not None:
-            services_override.filter_service.set_strategy(self._filter_strategy)
-
-        if parse_result.width_px is not None:
-            services_override.viewport_width = parse_result.width_px
-        if parse_result.height_px is not None:
-            services_override.viewport_height = parse_result.height_px
-
-        animations = []
-        timeline_scenes = []
-        animation_summary = None
-        animation_fallback_reasons: dict[str, int] = {}
-        animation_policy_options: dict[str, Any] | None = None
-
-        should_parse_animations = (
-            parse_result.svg_root is not None
-            and (parse_result.animations is None or bool(parse_result.animations))
-        )
-        if should_parse_animations:
-            from svg2ooxml.drawingml.animation.visibility_compiler import (
-                assign_missing_visibility_source_ids,
-            )
-
-            assign_missing_visibility_source_ids(parse_result.svg_root)
-            animation_parser = self._animation_parser_factory()
-            animations = animation_parser.parse_svg_animations(parse_result.svg_root)
-            animation_summary = animation_parser.get_animation_summary()
-            animation_fallback_reasons = animation_parser.get_degradation_reasons()
-            if animations:
-                timeline_scenes = self._timeline_sampler.generate_scenes(animations)
-            animation_parser.reset_summary()
-
-        # Inject geometry_mode into policy_overrides
-        effective_overrides = deepcopy(policy_overrides) if policy_overrides else {}
-        if (
-            self._geometry_mode != "legacy"
-        ):  # Only inject when not using legacy fallback
-            geometry_overrides = effective_overrides.get("geometry", {})
-            geometry_overrides["geometry_mode"] = self._geometry_mode
-            effective_overrides["geometry"] = geometry_overrides
-
-        policy_context = self._apply_policy_overrides(
-            parse_result.policy_context, effective_overrides or None
-        )
-        if policy_context is not None:
-            animation_policy_options = policy_context.get("animation")
-        from svg2ooxml.ir import convert_parser_output
-
-        scene = convert_parser_output(
-            parse_result,
-            services=services_override,
-            policy_engine=parse_result.policy_engine,
-            policy_context=policy_context,
-            overrides=effective_overrides or None,
-            tracer=tracer,
-        )
-        if scene.metadata is None:
-            scene.metadata = {}
-        if animation_policy_options:
-            policy_meta = scene.metadata.setdefault("policy", {})
-            policy_meta["animation"] = dict(animation_policy_options)
-        if animations:
-            from svg2ooxml.core.export.animation_processor import (
-                _build_animation_metadata,
-                _compose_sampled_center_motions,
-                _enrich_animations_with_element_centers,
-                _expand_deterministic_repeat_triggers,
-                _lower_safe_group_transform_targets_with_animated_descendants,
-                _prepare_scene_for_native_opacity_effects,
-            )
-            from svg2ooxml.core.export.motion_geometry import (
-                _apply_immediate_motion_starts,
-            )
-            from svg2ooxml.core.export.polyline_materialization import (
-                _materialize_stroked_polyline_groups,
-            )
-            from svg2ooxml.core.export.variant_expansion import (
-                _coalesce_simple_position_motions,
-                _compose_simple_line_endpoint_animations,
-                _materialize_simple_line_paths,
-            )
-            from svg2ooxml.drawingml.animation.visibility_compiler import (
-                rewrite_visibility_animations,
-            )
-
-            animations = _expand_deterministic_repeat_triggers(animations)
-            animations = rewrite_visibility_animations(
-                animations,
-                scene,
-                parse_result.svg_root,
-            )
-            animations = _lower_safe_group_transform_targets_with_animated_descendants(
-                animations, scene
-            )
-            animations = _enrich_animations_with_element_centers(animations, scene)
-            animations = _compose_sampled_center_motions(animations, scene)
-            _materialize_simple_line_paths(scene, animations)
-            animations = _compose_simple_line_endpoint_animations(animations, scene)
-            animations = _materialize_stroked_polyline_groups(scene, animations)
-            _apply_immediate_motion_starts(scene, animations)
-            animations = _coalesce_simple_position_motions(animations, scene)
-            _prepare_scene_for_native_opacity_effects(scene, animations)
-            timeline_scenes = self._timeline_sampler.generate_scenes(animations)
-            scene.animations = animations
-            animation_meta = _build_animation_metadata(
-                animations,
-                timeline_scenes,
-                animation_summary,
-                animation_fallback_reasons,
-                animation_policy_options,
-            )
-            raw_payload = {
-                "definitions": animations,
-                "timeline": timeline_scenes,
-                "summary": animation_summary,
-                "fallback_reasons": dict(animation_fallback_reasons),
-            }
-            if animation_policy_options:
-                raw_payload["policy"] = dict(animation_policy_options)
-            scene.metadata.setdefault("animation_raw", raw_payload)
-            scene.metadata.setdefault("animation", animation_meta)
-            if tracer is not None:
-                tracer.record_stage_event(
-                    stage="animation",
-                    action="parsed",
-                    metadata={
-                        "animation_count": len(animations),
-                        "timeline_frames": len(animation_meta.get("timeline", [])),
-                        "duration": animation_meta["summary"]["duration"],
-                        "has_motion_paths": animation_meta["summary"][
-                            "has_motion_paths"
-                        ],
-                        "has_transforms": animation_meta["summary"]["has_transforms"],
-                    },
-                )
-                for reason, count in sorted(animation_fallback_reasons.items()):
-                    tracer.record_stage_event(
-                        stage="animation",
-                        action="parse_fallback",
-                        metadata={"reason": reason, "count": count},
-                    )
-
-        animation_payload = (
-            scene.metadata.get("animation_raw")
-            if isinstance(scene.metadata, dict)
-            else None
-        )
-        if hasattr(self._writer, "set_image_service"):
-            self._writer.set_image_service(
-                getattr(services_override, "image_service", None)
-            )
-        render_result = self._writer.render_scene_from_ir(
-            scene,
-            tracer=tracer,
-            animation_payload=animation_payload,
-        )
-        return render_result, scene
-
-    @staticmethod
-    def _apply_policy_overrides(
-        context: PolicyContext | None,
-        overrides: dict[str, dict[str, Any]] | None,
-    ) -> PolicyContext | None:
-        if not overrides:
-            return context
-
-        base_selections: dict[str, dict[str, Any]] = {}
-        if context is not None:
-            for key, value in context.selections.items():
-                base_selections[key] = dict(value)
-
-        for target, values in overrides.items():
-            merged = base_selections.get(target, {}).copy()
-            merged.update(values)
-            base_selections[target] = merged
-
-        from svg2ooxml.policy import PolicyContext
-
-        return PolicyContext(selections=base_selections)
+        _embed(pptx_path, trace_report)
 
 
 def _apply_immediate_motion_starts(*args: Any, **kwargs: Any):

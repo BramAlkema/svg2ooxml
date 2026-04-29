@@ -18,7 +18,7 @@ from svg2ooxml.policy import PolicyContext, PolicyEngine
 from svg2ooxml.services import ConversionServices
 
 if TYPE_CHECKING:  # pragma: no cover - hint only
-    from svg2ooxml.core.tracing import ConversionTracer
+    from svg2ooxml.core.tracing import ConversionTracer, StageTrace
 
 
 def convert_parser_output(
@@ -40,7 +40,7 @@ def convert_parser_output(
         fallback_engine=parser_result.policy_engine,
         policy_name=policy_name,
     )
-    
+
     # If overrides are provided, we should re-evaluate targets affected by them
     if overrides and engine is not None:
         # Merge overrides into engine's current options if possible,
@@ -50,13 +50,14 @@ def convert_parser_output(
         resolved_context = policy_context or parser_result.policy_context
         if resolved_context is None:
             resolved_context = engine.evaluate()
-        
+
         # Patch the context with overrides
         for target, values in overrides.items():
             # Re-evaluate via engine if it's a known provider target
             # This ensures 'decision' objects are updated
             try:
                 from svg2ooxml.policy.targets import TargetRegistry
+
                 target_obj = TargetRegistry.default().get(target)
                 if target_obj:
                     # Merge global options with these specific overrides
@@ -66,7 +67,11 @@ def convert_parser_output(
                         targets = combined_options.get("targets")
                         if not isinstance(targets, dict):
                             targets = {}
-                        target_bucket = dict(targets.get(target, {})) if isinstance(targets.get(target), dict) else {}
+                        target_bucket = (
+                            dict(targets.get(target, {}))
+                            if isinstance(targets.get(target), dict)
+                            else {}
+                        )
                         target_bucket.update(values)
                         targets[target] = target_bucket
                         combined_options["targets"] = targets
@@ -80,15 +85,20 @@ def convert_parser_output(
                                 for primitive_name, primitive_values in value.items():
                                     if not isinstance(primitive_values, dict):
                                         continue
-                                    for attr_name, attr_value in primitive_values.items():
+                                    for (
+                                        attr_name,
+                                        attr_value,
+                                    ) in primitive_values.items():
                                         combined_options[
                                             f"filter.primitives.{primitive_name}.{attr_name}"
                                         ] = attr_value
-                    
+
                     for provider in getattr(engine, "_providers", []):
                         if provider.supports(target_obj):
                             # Pass combined options
-                            new_payload = provider.evaluate(target_obj, combined_options)
+                            new_payload = provider.evaluate(
+                                target_obj, combined_options
+                            )
                             resolved_context.selections[target] = new_payload
             except Exception:
                 # Fallback to simple dict update if re-evaluation fails
@@ -120,6 +130,7 @@ def convert_parser_output(
     if source_path:
         try:
             from svg2ooxml.services.image_service import FileResolver
+
             image_service = services.image_service
             if image_service is not None:
                 base_dir = Path(source_path).parent
@@ -133,13 +144,10 @@ def convert_parser_output(
             if logger:
                 logger.warning("Failed to register FileResolver: %s", exc)
 
-    pre_stage_events: list[tuple[str, str, str | None, dict[str, Any]]] = []
+    pre_stage_events: list[StageTrace] = []
     if tracer is not None:
         snapshot = tracer.report()
-        pre_stage_events = [
-            (event.stage, event.action, event.subject, dict(event.metadata or {}))
-            for event in snapshot.stage_events
-        ]
+        pre_stage_events = list(snapshot.stage_events)
 
     converter = IRConverter(
         services=services,
@@ -191,7 +199,9 @@ def _hydrate_services_from_parser(
                     allow_network=True,
                     base_dir=_resolve_base_dir(parser_result),
                     asset_root=_resolve_asset_root_path(services),
-                    allow_svg_fonts=_allow_svg_font_conversion(parser_result.policy_context),
+                    allow_svg_fonts=_allow_svg_font_conversion(
+                        parser_result.policy_context
+                    ),
                 )
 
                 # Create provider with loader enabled
@@ -199,14 +209,14 @@ def _hydrate_services_from_parser(
                     rules=tuple(parser_result.web_fonts),
                     loader=loader,
                     enable_loading=True,
-                    cache_loaded_fonts=True
+                    cache_loaded_fonts=True,
                 )
                 # Prepend to give web fonts priority over system fonts
                 font_service.prepend_provider(provider)
                 if logger:
                     logger.debug(
                         "Registered WebFontProvider with %d font face(s) and font loading enabled",
-                        len(parser_result.web_fonts)
+                        len(parser_result.web_fonts),
                     )
             except Exception as exc:  # pragma: no cover - defensive logging
                 if logger:

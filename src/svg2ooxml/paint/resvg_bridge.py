@@ -7,6 +7,7 @@ from dataclasses import dataclass
 
 from svg2ooxml.color.adapters import color_object_alpha, color_object_to_hex
 from svg2ooxml.color.utils import rgb_channels_to_hex
+from svg2ooxml.common.math_utils import clamp01, coerce_float
 from svg2ooxml.core.parser.colors import parse_color as parse_svg_color
 from svg2ooxml.core.resvg.geometry.matrix_bridge import (
     matrix_to_numpy as _matrix_to_array,
@@ -255,12 +256,7 @@ def _color_to_hex(color: Color) -> str | None:
 
 
 def _coerce_float(value: float | None, default: float) -> float:
-    if value is None:
-        return default
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return default
+    return coerce_float(value, default)
 
 
 def _solid_paint_from_presentation(
@@ -287,11 +283,7 @@ def _solid_paint_from_presentation(
 
 
 def _clamp01(value: float) -> float:
-    if value < 0.0:
-        return 0.0
-    if value > 1.0:
-        return 1.0
-    return value
+    return clamp01(value)
 
 
 __all__ = [

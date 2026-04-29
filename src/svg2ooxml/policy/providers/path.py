@@ -5,7 +5,13 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
+from svg2ooxml.common.math_utils import coerce_int, finite_float
 from svg2ooxml.policy.engine import PolicyProvider
+from svg2ooxml.policy.providers.common import (
+    dotted_overrides,
+    normalise_quality,
+    target_defaults,
+)
 from svg2ooxml.policy.targets import PolicyTarget
 
 
@@ -109,34 +115,22 @@ class PathPolicyProvider(PolicyProvider):
         return self._coerce_payload(base, quality)
 
     def _extract_target_defaults(self, options: Mapping[str, Any], quality: str) -> dict[str, Any]:
-        targets = options.get("targets")
-        if isinstance(targets, Mapping):
-            candidate = targets.get("geometry")
-            if isinstance(candidate, Mapping):
-                payload = dict(candidate)
-                if "max_complexity" not in payload and "max_complexity_ratio" in payload:
-                    payload["max_complexity"] = payload["max_complexity_ratio"]
-                return payload
-        return dict(self._FALLBACKS.get(quality, self._FALLBACKS["balanced"]))
+        payload = target_defaults(
+            options,
+            target_name="geometry",
+            quality=quality,
+            fallbacks=self._FALLBACKS,
+        )
+        if "max_complexity" not in payload and "max_complexity_ratio" in payload:
+            payload["max_complexity"] = payload["max_complexity_ratio"]
+        return payload
 
     @staticmethod
     def _normalise_quality(value: Any) -> str:
-        if isinstance(value, str):
-            token = value.strip().lower()
-            if token in PathPolicyProvider._FALLBACKS:
-                return token
-        return "balanced"
+        return normalise_quality(value, PathPolicyProvider._FALLBACKS)
 
     def _collect_overrides(self, options: Mapping[str, Any]) -> dict[str, Any]:
-        overrides: dict[str, Any] = {}
-        for key, raw in options.items():
-            if not isinstance(key, str) or "." not in key:
-                continue
-            prefix, field = key.split(".", 1)
-            if prefix != "geometry" or not field:
-                continue
-            overrides[field] = raw
-        return overrides
+        return dotted_overrides(options, prefix="geometry")
 
     def _coerce_payload(self, payload: Mapping[str, Any], quality: str) -> dict[str, Any]:
         result: dict[str, Any] = {
@@ -164,17 +158,11 @@ class PathPolicyProvider(PolicyProvider):
 
     @staticmethod
     def _coerce_int(value: Any) -> int | None:
-        try:
-            return int(value)
-        except (TypeError, ValueError):
-            return None
+        return coerce_int(value)
 
     @staticmethod
     def _coerce_float(value: Any) -> float | None:
-        try:
-            return float(value)
-        except (TypeError, ValueError):
-            return None
+        return finite_float(value)
 
 
 __all__ = ["PathPolicyProvider"]

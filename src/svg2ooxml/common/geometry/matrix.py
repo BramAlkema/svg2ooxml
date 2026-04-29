@@ -254,6 +254,16 @@ def transform_delta_xy(
     return (a * dx + c * dy, b * dx + d * dy)
 
 
+def transform_motion_space_delta(
+    animation,
+    dx: float,
+    dy: float,
+) -> tuple[float, float]:
+    """Project a motion delta through an animation's motion-space matrix."""
+
+    return transform_delta_xy(getattr(animation, "motion_space_matrix", None), dx, dy)
+
+
 def transform_delta_pairs(
     matrix: MatrixLike,
     pairs: Iterable[tuple[float, float]],
@@ -267,4 +277,5 @@ __all__ = [
     "parse_transform_list",
     "transform_delta_pairs",
     "transform_delta_xy",
+    "transform_motion_space_delta",
 ]

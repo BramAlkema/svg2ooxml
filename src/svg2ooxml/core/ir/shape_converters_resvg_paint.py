@@ -9,6 +9,7 @@ from typing import Any
 from lxml import etree
 
 from svg2ooxml.common.conversions.opacity import clamp_opacity
+from svg2ooxml.common.math_utils import coerce_float
 from svg2ooxml.core.styling.pattern_merge import merge_pattern_paint
 from svg2ooxml.core.styling.style_helpers import (
     apply_stroke_opacity as _apply_paint_opacity,
@@ -83,12 +84,7 @@ class ResvgPaintSupportMixin:
 
     @staticmethod
     def _coerce_float(value: float | None, default: float) -> float:
-        if value is None:
-            return default
-        try:
-            return float(value)
-        except (TypeError, ValueError):
-            return default
+        return coerce_float(value, default)
 
     @staticmethod
     def _clamp_opacity(value: float) -> float:

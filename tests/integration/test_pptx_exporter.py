@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import zipfile
 
 import pytest
@@ -12,6 +13,7 @@ from svg2ooxml.core.pptx_exporter import (
     SvgPageSource,
     SvgToPptxExporter,
 )
+from svg2ooxml.io.pptx_docprops import CUSTOM_PROPERTIES_PART, CUSTOM_TRACE_PROPERTY
 
 
 def test_convert_string_produces_slide_with_expected_fill(tmp_path) -> None:
@@ -37,9 +39,31 @@ def test_convert_string_produces_slide_with_expected_fill(tmp_path) -> None:
     root = ET.fromstring(slide_xml.encode())
     ns = {"a": "http://schemas.openxmlformats.org/drawingml/2006/main"}
     fills = root.findall(".//a:solidFill/a:srgbClr", ns)
-    assert any(fill.get("val") == "336699" for fill in fills), (
-        "Expected rectangle fill colour in slide XML"
+    assert any(
+        fill.get("val") == "336699" for fill in fills
+    ), "Expected rectangle fill colour in slide XML"
+
+
+def test_convert_string_embeds_trace_docprops_only_when_requested(tmp_path) -> None:
+    exporter = SvgToPptxExporter()
+    svg_markup = (
+        "<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10'>"
+        "<rect width='10' height='10' fill='#336699'/>"
+        "</svg>"
     )
+
+    default_path = tmp_path / "default.pptx"
+    exporter.convert_string(svg_markup, default_path)
+    with zipfile.ZipFile(default_path, "r") as archive:
+        assert CUSTOM_PROPERTIES_PART not in set(archive.namelist())
+
+    embedded_path = tmp_path / "embedded.pptx"
+    exporter.convert_string(svg_markup, embedded_path, embed_trace_docprops=True)
+    with zipfile.ZipFile(embedded_path, "r") as archive:
+        custom_xml = archive.read(CUSTOM_PROPERTIES_PART)
+
+    payload = _trace_payload_from_custom_xml(custom_xml)
+    assert payload["stage_totals"]["parser:normalization"] == 1
 
 
 @pytest.mark.parametrize("parallel", [False, True])
@@ -105,3 +129,18 @@ def test_parallel_convert_pages_rejects_custom_render_components(tmp_path) -> No
 
     with pytest.raises(SvgConversionError, match="custom render components: parser"):
         exporter.convert_pages(pages, tmp_path / "custom-parallel.pptx", parallel=True)
+
+
+def _trace_payload_from_custom_xml(custom_xml: bytes) -> dict[str, object]:
+    root = ET.fromstring(custom_xml)
+    ns = {
+        "cp": "http://schemas.openxmlformats.org/officeDocument/2006/custom-properties",
+        "vt": "http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes",
+    }
+    prop = root.find(f".//cp:property[@name='{CUSTOM_TRACE_PROPERTY}']", ns)
+    assert prop is not None
+    value = prop.find("vt:lpwstr", ns)
+    assert value is not None and value.text
+    payload = json.loads(value.text)
+    assert isinstance(payload, dict)
+    return payload

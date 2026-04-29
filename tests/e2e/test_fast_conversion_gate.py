@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import posixpath
 import zipfile
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -31,8 +31,8 @@ class E2ECase:
     name: str
     svg: str
     expected_text: tuple[str, ...] = ()
-    assertions: tuple[Callable[[ET._Element, dict[str, str], set[str]], None], ...] = field(
-        default_factory=tuple
+    assertions: tuple[Callable[[ET._Element, dict[str, str], set[str]], None], ...] = (
+        field(default_factory=tuple)
     )
 
 
@@ -45,14 +45,18 @@ class PptxPackageSnapshot:
         return self.xml_parts[name]
 
 
-def test_curated_svg_cases_convert_to_consistent_pptx(tmp_path: Path, case: E2ECase) -> None:
+def test_curated_svg_cases_convert_to_consistent_pptx(
+    tmp_path: Path, case: E2ECase
+) -> None:
     exporter = SvgToPptxExporter(filter_strategy="resvg", geometry_mode="resvg-only")
     output_path = tmp_path / f"{case.name}.pptx"
 
-    result = exporter.convert_string(case.svg, output_path, source_path=f"{case.name}.svg")
+    result = exporter.convert_string(
+        case.svg, output_path, source_path=f"{case.name}.svg"
+    )
 
     assert result.slide_count == 1
-    assert result.trace_report is not None
+    _assert_trace_report_payload(result.trace_report)
     package = _assert_pptx_package_is_self_consistent(output_path, expected_slides=1)
     slide_root = _parse_xml(package["ppt/slides/slide1.xml"])
     slide_xml = package["ppt/slides/slide1.xml"]
@@ -72,24 +76,41 @@ def test_project_bee_asset_converts_to_animation_pptx(tmp_path: Path) -> None:
     result = exporter.convert_file(source_path, output_path)
 
     assert result.slide_count == 1
+    _assert_trace_report_payload(result.trace_report)
     package = _assert_pptx_package_is_self_consistent(output_path, expected_slides=1)
     slide_root = _parse_xml(package["ppt/slides/slide1.xml"])
     assert slide_root.find(".//p:timing", namespaces=_NS) is not None
 
 
-def test_multi_slide_conversion_keeps_slide_relationships_consistent(tmp_path: Path) -> None:
+def test_multi_slide_conversion_keeps_slide_relationships_consistent(
+    tmp_path: Path,
+) -> None:
     exporter = SvgToPptxExporter(filter_strategy="resvg", geometry_mode="resvg-only")
     output_path = tmp_path / "multi.pptx"
     pages = [
         SvgPageSource(svg_text=_BASIC_SHAPES_TEXT, title="Basic", name="basic"),
         SvgPageSource(svg_text=_DATA_URI_IMAGE, title="Image", name="image"),
-        SvgPageSource(svg_text=_ANIMATED_MIXED_GROUP, title="Animated", name="animated"),
+        SvgPageSource(
+            svg_text=_ANIMATED_MIXED_GROUP, title="Animated", name="animated"
+        ),
     ]
 
     result = exporter.convert_pages(pages, output_path)
 
     assert result.slide_count == len(pages)
-    package = _assert_pptx_package_is_self_consistent(output_path, expected_slides=len(pages))
+    _assert_trace_report_payload(
+        result.packaging_report,
+        expected_parser_events=None,
+        expected_packaging_slides=len(pages),
+    )
+    _assert_trace_report_payload(
+        result.aggregated_trace_report, expected_parser_events=len(pages)
+    )
+    for page_result in result.page_results:
+        _assert_trace_report_payload(page_result.trace_report)
+    package = _assert_pptx_package_is_self_consistent(
+        output_path, expected_slides=len(pages)
+    )
     presentation = _parse_xml(package["ppt/presentation.xml"])
     slide_ids = presentation.findall(".//p:sldId", namespaces=_NS)
     assert len(slide_ids) == len(pages)
@@ -97,12 +118,42 @@ def test_multi_slide_conversion_keeps_slide_relationships_consistent(tmp_path: P
     assert "<p:timing" in package["ppt/slides/slide3.xml"]
 
 
+def _assert_trace_report_payload(
+    trace_report: Mapping[str, object] | None,
+    *,
+    expected_parser_events: int | None = 1,
+    expected_packaging_slides: int | None = None,
+) -> None:
+    assert isinstance(trace_report, Mapping)
+    stage_totals = trace_report.get("stage_totals")
+    assert isinstance(stage_totals, Mapping)
+    stage_events = trace_report.get("stage_events")
+    assert isinstance(stage_events, list)
+    resvg_metrics = trace_report.get("resvg_metrics")
+    assert isinstance(resvg_metrics, Mapping)
+
+    if expected_parser_events is not None:
+        assert stage_totals.get("parser:normalization") == expected_parser_events
+    if expected_packaging_slides is not None:
+        assert (
+            stage_totals.get("packaging:slide_xml_written") == expected_packaging_slides
+        )
+
+    for event in stage_events:
+        assert isinstance(event, Mapping)
+        assert isinstance(event.get("stage"), str)
+        assert isinstance(event.get("action"), str)
+        assert isinstance(event.get("metadata"), Mapping)
+
+
 def _assert_has_media_relationship(
     _slide_root: ET._Element,
     rel_targets: dict[str, str],
     package_names: set[str],
 ) -> None:
-    media_targets = [target for target in rel_targets.values() if target.startswith("ppt/media/")]
+    media_targets = [
+        target for target in rel_targets.values() if target.startswith("ppt/media/")
+    ]
     assert media_targets, "expected at least one slide media relationship"
     assert all(target in package_names for target in media_targets)
 
@@ -131,8 +182,12 @@ def _assert_has_gradient_or_raster_fallback(
     _package_names: set[str],
 ) -> None:
     gradients = slide_root.findall(".//a:gradFill", namespaces=_NS)
-    media_targets = [target for target in rel_targets.values() if target.startswith("ppt/media/")]
-    assert gradients or media_targets, "expected native gradient fill or raster fallback"
+    media_targets = [
+        target for target in rel_targets.values() if target.startswith("ppt/media/")
+    ]
+    assert (
+        gradients or media_targets
+    ), "expected native gradient fill or raster fallback"
 
 
 def _assert_pptx_package_is_self_consistent(
@@ -151,8 +206,14 @@ def _assert_pptx_package_is_self_consistent(
             "ppt/slideMasters/slideMaster1.xml",
             "ppt/slideLayouts/slideLayout1.xml",
             "ppt/theme/theme1.xml",
-            *{f"ppt/slides/slide{index}.xml" for index in range(1, expected_slides + 1)},
-            *{f"ppt/slides/_rels/slide{index}.xml.rels" for index in range(1, expected_slides + 1)},
+            *{
+                f"ppt/slides/slide{index}.xml"
+                for index in range(1, expected_slides + 1)
+            },
+            *{
+                f"ppt/slides/_rels/slide{index}.xml.rels"
+                for index in range(1, expected_slides + 1)
+            },
         }
         missing = required - package_names
         assert not missing, f"missing required PPTX parts: {sorted(missing)}"
@@ -185,10 +246,14 @@ def _assert_slide_relationship_references_are_resolved(
     rel_ids = set(_slide_relationship_targets(package, slide_index))
     referenced_ids = _relationship_ids_used_by_xml(slide_root)
     missing = referenced_ids - rel_ids
-    assert not missing, f"{slide_name} references missing relationships: {sorted(missing)}"
+    assert (
+        not missing
+    ), f"{slide_name} references missing relationships: {sorted(missing)}"
 
 
-def _slide_relationship_targets(package: dict[str, str], slide_index: int) -> dict[str, str]:
+def _slide_relationship_targets(
+    package: dict[str, str], slide_index: int
+) -> dict[str, str]:
     rels_name = f"ppt/slides/_rels/slide{slide_index}.xml.rels"
     rels_root = _parse_xml(package[rels_name], label=rels_name)
     targets: dict[str, str] = {}
@@ -226,7 +291,9 @@ def _resolve_relationship_target(rels_name: str, target: str) -> str:
         resolved = posixpath.normpath(
             posixpath.join(_relationship_source_dir(rels_name), clean_target)
         )
-    assert not resolved.startswith("../"), f"relationship escapes package root: {target!r}"
+    assert not resolved.startswith(
+        "../"
+    ), f"relationship escapes package root: {target!r}"
     return resolved
 
 
@@ -352,7 +419,10 @@ _CASES = (
     E2ECase(
         name="gradient_pattern_transforms",
         svg=_GRADIENT_PATTERN_TRANSFORMS,
-        assertions=(_assert_has_shapes_or_pictures, _assert_has_gradient_or_raster_fallback),
+        assertions=(
+            _assert_has_shapes_or_pictures,
+            _assert_has_gradient_or_raster_fallback,
+        ),
     ),
     E2ECase(
         name="clip_mask_filter",

@@ -2,12 +2,19 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Any
 
+from svg2ooxml.core.metadata import (
+    merge_policy_overrides,
+    set_page_variant_type,
+    trace_stage_events,
+    trace_totals,
+)
 from svg2ooxml.core.pptx_exporter_types import SvgPageSource
+from svg2ooxml.policy.fidelity import DEFAULT_FIDELITY_POLICY, PolicyOverrides
 
 
 @dataclass(frozen=True)
@@ -15,106 +22,12 @@ class FallbackVariant:
     """Represents a derived slide variant based on fallback decisions."""
 
     name: str
-    policy_overrides: dict[str, dict[str, object]] = field(default_factory=dict)
+    policy_overrides: PolicyOverrides = field(default_factory=dict)
     title_suffix: str = ""
 
 
-_FIDELITY_TIER_SPECS: tuple[tuple[str, str, dict[str, dict[str, object]]], ...] = (
-    (
-        "direct",
-        " (Direct)",
-        {
-            "geometry": {
-                "allow_emf_fallback": False,
-                "allow_bitmap_fallback": False,
-                "simplify_paths": False,
-            },
-            "filter": {
-                "strategy": "native",
-                "approximation_allowed": False,
-                "prefer_rasterization": False,
-            },
-            "mask": {
-                "allow_vector_mask": True,
-                "force_emf": False,
-                "force_raster": False,
-                "fallback_order": ("native",),
-            },
-            "clip": {"fallback_order": ("native",)},
-        },
-    ),
-    (
-        "mimic",
-        " (Mimic)",
-        {
-            "geometry": {
-                "allow_emf_fallback": False,
-                "allow_bitmap_fallback": False,
-                "simplify_paths": True,
-            },
-            "filter": {
-                "strategy": "native",
-                "approximation_allowed": True,
-                "prefer_rasterization": False,
-            },
-            "mask": {
-                "allow_vector_mask": True,
-                "force_emf": False,
-                "force_raster": False,
-                "fallback_order": ("native", "mimic"),
-            },
-            "clip": {"fallback_order": ("native", "mimic")},
-        },
-    ),
-    (
-        "emf",
-        " (EMF)",
-        {
-            "geometry": {
-                "allow_emf_fallback": True,
-                "allow_bitmap_fallback": False,
-            },
-            "filter": {
-                "strategy": "emf",
-                "approximation_allowed": False,
-                "prefer_rasterization": False,
-            },
-            "mask": {
-                "allow_vector_mask": True,
-                "force_emf": False,
-                "force_raster": False,
-                "fallback_order": ("native", "mimic", "emf"),
-            },
-            "clip": {"fallback_order": ("native", "mimic", "emf")},
-        },
-    ),
-    (
-        "bitmap",
-        " (Bitmap)",
-        {
-            "geometry": {
-                "allow_emf_fallback": True,
-                "allow_bitmap_fallback": True,
-            },
-            "filter": {
-                "strategy": "raster",
-                "approximation_allowed": False,
-                "prefer_rasterization": True,
-            },
-            "mask": {
-                "allow_vector_mask": True,
-                "force_emf": False,
-                "force_raster": False,
-                "fallback_order": ("native", "mimic", "emf", "raster"),
-            },
-            "clip": {"fallback_order": ("native", "mimic", "emf", "raster")},
-        },
-    ),
-)
-
-
 def derive_variants_from_trace(
-    trace_report: dict[str, object] | None,
+    trace_report: Mapping[str, Any] | None,
     *,
     enable_split: bool,
 ) -> list[FallbackVariant]:
@@ -126,15 +39,17 @@ def derive_variants_from_trace(
     variants: list[FallbackVariant] = []
     seen: set[str] = set()
 
-    def register(name: str, overrides: dict[str, dict[str, object]], suffix: str) -> None:
+    def register(name: str, overrides: PolicyOverrides, suffix: str) -> None:
         if name in seen:
             return
-        variants.append(FallbackVariant(name=name, policy_overrides=overrides, title_suffix=suffix))
+        variants.append(
+            FallbackVariant(name=name, policy_overrides=overrides, title_suffix=suffix)
+        )
         seen.add(name)
 
-    geometry_totals: dict[str, int] = trace_report.get("geometry_totals", {})  # type: ignore[assignment]
-    paint_totals: dict[str, int] = trace_report.get("paint_totals", {})  # type: ignore[assignment]
-    stage_events: list[dict[str, object]] = trace_report.get("stage_events", [])  # type: ignore[assignment]
+    geometry_totals = trace_totals(trace_report, "geometry_totals")
+    paint_totals = trace_totals(trace_report, "paint_totals")
+    stage_events = trace_stage_events(trace_report)
 
     if geometry_totals.get("emf"):
         register(
@@ -161,15 +76,14 @@ def derive_variants_from_trace(
     mask_requires_emf = False
 
     for event in stage_events:
-        stage = event.get("stage")
-        metadata: dict[str, object] = event.get("metadata") or {}
-        if stage == "filter":
+        metadata = event.metadata
+        if event.stage == "filter":
             fallback = metadata.get("fallback")
             if fallback is None and isinstance(metadata.get("metadata"), dict):
-                fallback = metadata["metadata"].get("fallback")  # type: ignore[index]
+                fallback = metadata["metadata"].get("fallback")
             if isinstance(fallback, str):
                 filter_fallbacks.add(fallback.lower())
-        elif stage == "mask":
+        elif event.stage == "mask":
             if bool(metadata.get("requires_emf")):
                 mask_requires_emf = True
 
@@ -201,26 +115,23 @@ def build_fidelity_tier_variants() -> list[FallbackVariant]:
     """Return tiered slide variants covering direct, mimic, EMF, and bitmap output."""
     return [
         FallbackVariant(
-            name=name,
-            policy_overrides=deepcopy(overrides),
-            title_suffix=suffix,
+            name=policy.name,
+            policy_overrides=policy.clone_overrides(),
+            title_suffix=policy.title_suffix,
         )
-        for name, suffix, overrides in _FIDELITY_TIER_SPECS
+        for policy in DEFAULT_FIDELITY_POLICY.tiers()
     ]
 
 
 def resolve_fidelity_tier_variant(name: str) -> FallbackVariant:
     """Return a single fidelity tier variant by name."""
 
-    token = name.strip().lower()
-    for variant_name, suffix, overrides in _FIDELITY_TIER_SPECS:
-        if variant_name == token:
-            return FallbackVariant(
-                name=variant_name,
-                policy_overrides=deepcopy(overrides),
-                title_suffix=suffix,
-            )
-    raise ValueError(f"Unknown fidelity tier: {name!r}")
+    policy = DEFAULT_FIDELITY_POLICY.resolve_tier(name)
+    return FallbackVariant(
+        name=policy.name,
+        policy_overrides=policy.clone_overrides(),
+        title_suffix=policy.title_suffix,
+    )
 
 
 def expand_page_with_variants(
@@ -233,13 +144,8 @@ def expand_page_with_variants(
 
     for variant in variants:
         metadata: dict[str, Any] = deepcopy(page.metadata or {})
-        variant_meta = metadata.setdefault("variant", {})
-        variant_meta["type"] = variant.name
-        policy_bucket = metadata.setdefault("policy_overrides", {})
-        for category, overrides in variant.policy_overrides.items():
-            merged = dict(policy_bucket.get(category, {}))
-            merged.update(overrides)
-            policy_bucket[category] = merged
+        set_page_variant_type(metadata, variant.name)
+        merge_policy_overrides(metadata, variant.policy_overrides)
 
         clones.append(
             SvgPageSource(

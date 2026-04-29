@@ -4,17 +4,31 @@ from importlib import import_module as _im
 from typing import Any as _Any
 
 __all__ = [
-    'ConversionTracer',
-    'GeometryTrace',
-    'PaintTrace',
-    'StageTrace',
-    'TraceReport',
-    'conversion'
+    "ConversionTracer",
+    "GeometryTrace",
+    "GeometryTracePayload",
+    "PaintTrace",
+    "PaintTracePayload",
+    "StageTrace",
+    "StageTracePayload",
+    "TraceReport",
+    "TraceReportPayload",
+    "conversion",
 ]
 
 # map symbol -> relative module
-_symbol_map = {'TraceReport': 'conversion', 'PaintTrace': 'conversion', 'GeometryTrace': 'conversion', 'StageTrace': 'conversion', 'ConversionTracer': 'conversion'}
-_module_map = {'conversion': 'conversion'}
+_symbol_map = {
+    "TraceReport": "conversion",
+    "PaintTrace": "conversion",
+    "GeometryTrace": "conversion",
+    "StageTrace": "conversion",
+    "ConversionTracer": "conversion",
+    "GeometryTracePayload": "conversion",
+    "PaintTracePayload": "conversion",
+    "StageTracePayload": "conversion",
+    "TraceReportPayload": "conversion",
+}
+_module_map = {"conversion": "conversion"}
 
 
 def __getattr__(name: str) -> _Any:  # PEP 562

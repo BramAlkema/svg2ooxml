@@ -5,6 +5,8 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
+from svg2ooxml.core.ir.context import IRConverterContext
+
 
 class PolicyHooksMixin:
     """Mixin providing policy convenience helpers for :class:`IRConverter`."""
@@ -36,26 +38,7 @@ class PolicyHooksMixin:
 
     @staticmethod
     def _bitmap_fallback_limits(options: Mapping[str, Any] | None) -> tuple[int | None, int | None]:
-        default_area = 1_500_000
-        default_side = 2048
-
-        def _coerce(value: Any, default: int) -> int | None:
-            if value is None:
-                return default
-            try:
-                numeric = float(value)
-            except (TypeError, ValueError):
-                return default
-            if numeric <= 0:
-                return None
-            return int(numeric)
-
-        if not options:
-            return default_area, default_side
-
-        max_area = _coerce(options.get("max_bitmap_area"), default_area)
-        max_side = _coerce(options.get("max_bitmap_side"), default_side)
-        return max_area, max_side
+        return IRConverterContext.bitmap_fallback_limits(options)
 
 
 __all__ = ["PolicyHooksMixin"]

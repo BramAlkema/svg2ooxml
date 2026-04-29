@@ -6,6 +6,7 @@ from collections.abc import Iterable
 
 from svg2ooxml.common.dash_patterns import normalize_dash_array
 from svg2ooxml.common.gradient_units import normalize_gradient_units
+from svg2ooxml.common.skia_helpers import tile_mode as _skia_tile_mode
 from svg2ooxml.core.resvg.geometry.matrix_bridge import matrix_to_tuple
 from svg2ooxml.drawingml.rasterizer_backend import skia
 from svg2ooxml.ir.geometry import Rect
@@ -253,13 +254,9 @@ class RasterizerPaintMixin:
             fy = bounds.y + fy * bounds.height
         return fx, fy
 
-    @staticmethod
-    def _resolve_tile_mode(spread_method: str | None):
-        if spread_method == "repeat":
-            return skia.TileMode.kRepeat
-        if spread_method == "reflect":
-            return skia.TileMode.kMirror
-        return skia.TileMode.kClamp
+    _resolve_tile_mode = staticmethod(
+        lambda spread_method: _skia_tile_mode(skia, spread_method)
+    )
 
     @staticmethod
     def _to_skia_matrix(matrix) -> skia.Matrix | None:

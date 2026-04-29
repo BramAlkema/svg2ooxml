@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
+from svg2ooxml.filters.planner_common import is_identity_color_matrix
 from svg2ooxml.filters.utils import parse_float_list
 
 
@@ -61,32 +62,7 @@ class NeutralPrimitiveMixin:
 
     @staticmethod
     def _is_identity_matrix(values: list[float]) -> bool:
-        if len(values) != 20:
-            return False
-        identity = [
-            1.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            1.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            1.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            1.0,
-            0.0,
-        ]
-        tol = 1e-6
-        return all(abs(a - b) <= tol for a, b in zip(values, identity, strict=True))
+        return is_identity_color_matrix(values)
 
 
 __all__ = ["NeutralPrimitiveMixin"]

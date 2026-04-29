@@ -5,7 +5,7 @@ Utility helpers for working with the Clean Slate color system.
 
 from __future__ import annotations
 
-from .core import Color
+from svg2ooxml.color.utils import color_to_hex as _color_to_hex
 
 
 def color_to_hex(value: str | None, default: str = "000000") -> str:
@@ -19,12 +19,4 @@ def color_to_hex(value: str | None, default: str = "000000") -> str:
     Returns:
         Uppercase 6-digit hex string without leading '#'.
     """
-    if not value:
-        return default
-
-    try:
-        hex_value = Color(value.strip()).hex()
-        return hex_value[1:].upper() if hex_value.startswith("#") else hex_value.upper()
-    except Exception:
-        return default.upper()
-
+    return _color_to_hex(value, default=default)

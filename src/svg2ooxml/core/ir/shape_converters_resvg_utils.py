@@ -8,15 +8,11 @@ from typing import Any
 from lxml import etree
 
 from svg2ooxml.common.geometry import Matrix2D
+from svg2ooxml.common.math_utils import coerce_float
 
 
 def _coerce_float(value: float | None, default: float) -> float:
-    if value is None:
-        return default
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return default
+    return coerce_float(value, default)
 
 
 class ResvgUtilityMixin:

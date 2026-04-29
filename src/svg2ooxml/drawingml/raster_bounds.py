@@ -7,24 +7,19 @@ from typing import Any
 
 from lxml import etree
 
+from svg2ooxml.common.math_utils import (
+    coerce_positive_float,
+    finite_float,
+)
 from svg2ooxml.common.svg_refs import local_name
 
 
 def _finite_float(value: object, default: float | None = None) -> float | None:
-    try:
-        number = float(value)
-    except (TypeError, ValueError):
-        return default
-    if not math.isfinite(number):
-        return default
-    return number
+    return finite_float(value, default)
 
 
 def _positive_float(value: object, fallback: float) -> float:
-    number = _finite_float(value)
-    if number is not None and number > 0:
-        return number
-    return fallback
+    return coerce_positive_float(value, fallback)
 
 
 def source_graphic_descriptor_from_context(context) -> dict[str, Any] | None:

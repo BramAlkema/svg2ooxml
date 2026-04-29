@@ -26,6 +26,7 @@ __all__ = [
     "percentage_to_ppt",
     "ppt_to_percentage",
     "parse_opacity",
+    "parse_authored_opacity",
     "PPT_OPACITY_SCALE",
 ]
 
@@ -86,6 +87,21 @@ def parse_opacity(value: str | float | int | None, default: float = 1.0) -> floa
     except ValueError:
         parsed = float(default)
     return clamp_opacity(parsed)
+
+
+def parse_authored_opacity(
+    value: str | float | int | None,
+    default: float = 1.0,
+) -> float:
+    """Parse animation-authored opacity, accepting ``0``-``100`` percent tokens."""
+
+    try:
+        opacity = float(value)
+    except (TypeError, ValueError):
+        return clamp_opacity(default)
+    if opacity > 1.0:
+        opacity = opacity / 100.0
+    return clamp_opacity(opacity)
 
 
 def ppt_to_opacity(ppt_value: int) -> float:

@@ -97,7 +97,8 @@ class ShapePipeline(ShapeConversionMixin, TraversalHooksMixin):
         subject: str | None = None,
         stage: str = "converter",
     ) -> None:
-        self._context.trace_stage(action, metadata=metadata, subject=subject, stage=stage)
+        trace_stage = self._context.trace_stage
+        trace_stage(action, metadata=metadata, subject=subject, stage=stage)
 
     def _matrix_from_transform(self, transform_str: str | None):
         return self._context.matrix_from_transform(transform_str)

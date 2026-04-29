@@ -14,7 +14,7 @@ from svg2ooxml.common.svg_refs import (
 )
 from svg2ooxml.common.svg_refs import (
     local_url_id,
-    namespace_uri,
+    namespaced_tag_like,
 )
 from svg2ooxml.core.masks import MaskProcessor
 from svg2ooxml.core.parser.units import UnitConverter
@@ -26,7 +26,7 @@ from svg2ooxml.services import ConversionServices
 
 if TYPE_CHECKING:  # pragma: no cover - imported for type hints only
     from svg2ooxml.core.parser import ParseResult
-    from svg2ooxml.core.tracing import ConversionTracer
+    from svg2ooxml.core.tracing import ConversionTracer, StageTrace
 
 
 class IRConverterContext:
@@ -53,7 +53,9 @@ class IRConverterContext:
             except AttributeError:  # pragma: no cover - defensive fallback
                 resolved_style_resolver = None
 
-        self.style_resolver = resolved_style_resolver or StyleResolver(self.unit_converter)
+        self.style_resolver = resolved_style_resolver or StyleResolver(
+            self.unit_converter
+        )
         self.style_extractor = StyleExtractor(self.style_resolver)
         self.tracer = tracer
         self.style_extractor.set_tracer(tracer)
@@ -68,7 +70,7 @@ class IRConverterContext:
         self.element_index: dict[str, Any] = {}
         self.viewport_engine = ViewportEngine()
         self.resvg_tree: Any = None
-        self._preloaded_stage_events: list[tuple[str, str, str | None, dict[str, Any]]] = []
+        self._preloaded_stage_events: list[StageTrace] = []
 
         mask_processor = None
         if services is not None:
@@ -91,22 +93,29 @@ class IRConverterContext:
             return
         self.tracer.reset()
         if self._preloaded_stage_events:
-            for stage, action, subject, metadata in self._preloaded_stage_events:
+            for event in self._preloaded_stage_events:
                 self.tracer.record_stage_event(
-                    stage=stage,
-                    action=action,
-                    subject=subject,
-                    metadata=metadata,
+                    stage=event.stage,
+                    action=event.action,
+                    subject=event.subject,
+                    metadata=event.metadata,
                 )
             self._preloaded_stage_events.clear()
 
     def preload_stage_events(
         self,
-        events: Iterable[tuple[str, str, str | None, dict[str, Any]]],
+        events: Iterable[StageTrace],
     ) -> None:
+        from svg2ooxml.core.tracing import StageTrace
+
         self._preloaded_stage_events = [
-            (stage, action, subject, dict(metadata) if isinstance(metadata, dict) else {})
-            for stage, action, subject, metadata in events
+            StageTrace(
+                stage=event.stage,
+                action=event.action,
+                subject=event.subject,
+                metadata=dict(event.metadata),
+            )
+            for event in events
         ]
 
     def prepare_style_context(self, result: ParseResult) -> None:
@@ -144,7 +153,9 @@ class IRConverterContext:
         tracer = self.tracer
         if tracer is None:
             return
-        tracer.record_stage_event(stage=stage, action=action, metadata=metadata, subject=subject)
+        tracer.record_stage_event(
+            stage=stage, action=action, metadata=metadata, subject=subject
+        )
 
     def trace_geometry_decision(
         self,
@@ -190,7 +201,9 @@ class IRConverterContext:
             existing.update(option_dict)
 
     @staticmethod
-    def bitmap_fallback_limits(options: Mapping[str, Any] | None) -> tuple[int | None, int | None]:
+    def bitmap_fallback_limits(
+        options: Mapping[str, Any] | None,
+    ) -> tuple[int | None, int | None]:
         default_area = 1_500_000
         default_side = 2048
 
@@ -236,16 +249,15 @@ class IRConverterContext:
 
     @staticmethod
     def make_namespaced_tag(reference, local: str) -> str:
-        namespace = namespace_uri(reference.tag)
-        if namespace:
-            return f"{{{namespace}}}{local}"
-        return local
+        return namespaced_tag_like(reference, local)
 
     def _detect_system_languages(self) -> tuple[str, ...]:
         override = os.getenv("SVG2OOXML_SYSTEM_LANGUAGE")
         tokens: list[str] = []
         if override:
-            tokens.extend(token.strip() for token in override.split(",") if token.strip())
+            tokens.extend(
+                token.strip() for token in override.split(",") if token.strip()
+            )
         else:
             tokens.extend(self._environment_languages())
             if not tokens:

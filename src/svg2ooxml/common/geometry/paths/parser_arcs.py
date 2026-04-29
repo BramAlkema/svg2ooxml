@@ -48,6 +48,28 @@ def _approximate_arc(
     large_arc_flag: float,
     sweep_flag: float,
 ) -> list[SegmentType]:
+    return approximate_arc(
+        start,
+        end,
+        rx,
+        ry,
+        x_axis_rotation,
+        large_arc_flag,
+        sweep_flag,
+    )
+
+
+def approximate_arc(
+    start: Point,
+    end: Point,
+    rx: float,
+    ry: float,
+    x_axis_rotation: float,
+    large_arc_flag: float,
+    sweep_flag: float,
+) -> list[SegmentType]:
+    """Approximate one SVG elliptical arc command as IR path segments."""
+
     if rx == 0 or ry == 0:
         return [LineSegment(start, end)]
 
@@ -190,4 +212,4 @@ def _arc_derivative(rx: float, ry: float, phi: float, theta: float) -> Point:
     )
 
 
-__all__ = ["_parse_arc"]
+__all__ = ["_parse_arc", "approximate_arc"]

@@ -30,6 +30,16 @@ def compute_segments_bbox(segments: Iterable[SegmentType]) -> Rect:
             max_x = max(max_x, bx_max)
             min_y = min(min_y, by_min)
             max_y = max(max_y, by_max)
+        else:  # pragma: no cover - reserved for future segment types
+            start = getattr(segment, "start", None)
+            end = getattr(segment, "end", None)
+            for point in (start, end):
+                if point is None:
+                    continue
+                min_x = min(min_x, point.x)
+                max_x = max(max_x, point.x)
+                min_y = min(min_y, point.y)
+                max_y = max(max_y, point.y)
 
     if min_x == float("inf") or min_y == float("inf"):
         return Rect(0.0, 0.0, 0.0, 0.0)

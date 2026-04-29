@@ -24,6 +24,10 @@ evidence live in the companion repository
 
 ## Recent Release Focus
 
+- **0.8.0**: centralized fidelity tier policy, typed trace and metadata
+  boundaries, optional embedded PPTX trace docProps, exporter/PPTX assembly
+  decomposition, and a final dedupe pass across geometry, color, filters,
+  SVG references, policy providers, and DrawingML helpers
 - **0.7.8**: base import and PPTX packaging speed pass, direct in-memory batch
   package assembly, cached scaffold bytes, lazy optional render dependencies,
   and preserved base-install NumPy boundaries

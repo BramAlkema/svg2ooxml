@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 
+from svg2ooxml.common.conversions.opacity import parse_authored_opacity
 from svg2ooxml.core.export.animation_metadata import _build_animation_metadata
 from svg2ooxml.core.export.animation_predicates import (
     _is_polyline_segment_fade_animation,
@@ -360,10 +361,4 @@ def _needs_unbaked_native_opacity_effect(animation: AnimationDefinition) -> bool
 
 
 def _opacity_float(value: str) -> float:
-    try:
-        opacity = float(value)
-    except (TypeError, ValueError):
-        return 1.0
-    if opacity > 1.0:
-        opacity = opacity / 100.0
-    return max(0.0, min(1.0, opacity))
+    return parse_authored_opacity(value)

@@ -6,6 +6,11 @@ from collections.abc import Mapping
 from typing import Any
 
 from svg2ooxml.policy.engine import PolicyProvider
+from svg2ooxml.policy.providers.common import (
+    dotted_overrides,
+    normalise_quality,
+    target_defaults,
+)
 from svg2ooxml.policy.targets import PolicyTarget
 
 
@@ -79,31 +84,19 @@ class ImagePolicyProvider(PolicyProvider):
 
 
     def _extract_target_defaults(self, options: Mapping[str, Any], quality: str) -> dict[str, Any]:
-        targets = options.get("targets")
-        if isinstance(targets, Mapping):
-            candidate = targets.get("image")
-            if isinstance(candidate, Mapping):
-                return dict(candidate)
-        return dict(self._FALLBACKS.get(quality, self._FALLBACKS["balanced"]))
+        return target_defaults(
+            options,
+            target_name="image",
+            quality=quality,
+            fallbacks=self._FALLBACKS,
+        )
 
     @staticmethod
     def _normalise_quality(value: Any) -> str:
-        if isinstance(value, str) and value:
-            token = value.strip().lower()
-            if token in ImagePolicyProvider._FALLBACKS:
-                return token
-        return "balanced"
+        return normalise_quality(value, ImagePolicyProvider._FALLBACKS)
 
     def _collect_overrides(self, options: Mapping[str, Any]) -> dict[str, Any]:
-        overrides: dict[str, Any] = {}
-        for key, raw in options.items():
-            if not isinstance(key, str) or "." not in key:
-                continue
-            prefix, field = key.split(".", 1)
-            if prefix != "image" or not field:
-                continue
-            overrides[field] = self._coerce(field, raw)
-        return overrides
+        return dotted_overrides(options, prefix="image", coerce=self._coerce)
 
     def _coerce(self, field: str, value: Any) -> Any:
         if field in {

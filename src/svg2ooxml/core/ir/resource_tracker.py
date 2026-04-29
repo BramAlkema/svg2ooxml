@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any
 from lxml import etree
 
 from svg2ooxml.clipmask.types import ClipDefinition, MaskInfo
+from svg2ooxml.common.svg_refs import element_index_by_id
 
 if TYPE_CHECKING:  # pragma: no cover - type checking only
     from svg2ooxml.core.ir.context import IRConverterContext
@@ -97,12 +98,7 @@ class ResourceTracker:
 
     @staticmethod
     def _build_element_index(root: etree._Element) -> dict[str, etree._Element]:
-        index: dict[str, etree._Element] = {}
-        for node in root.iter():
-            node_id = node.get("id")
-            if node_id:
-                index[node_id] = node
-        return index
+        return element_index_by_id(root)
 
 
 __all__ = ["ResourceTracker"]

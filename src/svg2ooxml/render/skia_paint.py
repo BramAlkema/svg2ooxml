@@ -7,6 +7,7 @@ try:  # pragma: no cover - optional dependency guard
 except ImportError as exc:  # pragma: no cover
     raise RuntimeError("svg2ooxml.render requires skia-python; install the 'render' extra.") from exc
 
+from svg2ooxml.common.skia_helpers import tile_mode as _skia_tile_mode
 from svg2ooxml.common.svg_refs import local_url_id
 from svg2ooxml.core.resvg.painting.gradients import (
     GradientStop,
@@ -192,11 +193,7 @@ def make_pattern_shader(fill: FillStyle, tree: Tree) -> skia.Shader | None:
 
 
 def resolve_tile_mode(spread_method: str) -> skia.TileMode:
-    if spread_method == "repeat":
-        return skia.TileMode.kRepeat
-    if spread_method == "reflect":
-        return skia.TileMode.kMirror
-    return skia.TileMode.kClamp
+    return _skia_tile_mode(skia, spread_method)
 
 
 def linear_gradient_points(

@@ -16,6 +16,7 @@ from svg2ooxml.filters.base import (
     FilterResult,
     stitch_blip_transforms,
 )
+from svg2ooxml.filters.planner_common import is_identity_color_matrix
 from svg2ooxml.filters.utils import parse_float_list
 
 
@@ -154,16 +155,7 @@ class ColorMatrixFilter(Filter):
 
     @staticmethod
     def _is_identity_matrix(values: list[float]) -> bool:
-        if len(values) != 20:
-            return False
-        identity = [
-            1.0, 0.0, 0.0, 0.0, 0.0,
-            0.0, 1.0, 0.0, 0.0, 0.0,
-            0.0, 0.0, 1.0, 0.0, 0.0,
-            0.0, 0.0, 0.0, 1.0, 0.0,
-        ]
-        tol = 1e-6
-        return all(abs(a - b) <= tol for a, b in zip(values, identity, strict=True))
+        return is_identity_color_matrix(values)
 
     @staticmethod
     def _blip_transform_candidates(params: ColorMatrixParams) -> list[dict[str, object]]:

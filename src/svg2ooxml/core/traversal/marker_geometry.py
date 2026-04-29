@@ -7,6 +7,9 @@ import math
 from lxml import etree
 
 from svg2ooxml.common.geometry.paths import parse_path_data
+from svg2ooxml.common.geometry.segments import (
+    ellipse_segments as _ellipse_segments_common,
+)
 from svg2ooxml.common.svg_refs import local_url_id
 from svg2ooxml.common.units.lengths import resolve_length_px
 from svg2ooxml.ir.geometry import BezierSegment, LineSegment, Point, SegmentType
@@ -129,39 +132,11 @@ def expand_marker_use(converter, element: etree._Element) -> list[etree._Element
 
 
 def _circle_segments(cx: float, cy: float, r: float) -> list[SegmentType]:
-    return _ellipse_segments(cx, cy, r, r)
+    return _ellipse_segments_common(cx, cy, r, r)
 
 
 def _ellipse_segments(cx: float, cy: float, rx: float, ry: float) -> list[SegmentType]:
-    kappa = 0.5522847498307936
-    control_x = rx * kappa
-    control_y = ry * kappa
-    points = [
-        Point(cx, cy - ry),
-        Point(cx + control_x, cy - ry),
-        Point(cx + rx, cy - control_y),
-        Point(cx + rx, cy),
-        Point(cx + rx, cy + control_y),
-        Point(cx + control_x, cy + ry),
-        Point(cx, cy + ry),
-        Point(cx - control_x, cy + ry),
-        Point(cx - rx, cy + control_y),
-        Point(cx - rx, cy),
-        Point(cx - rx, cy - control_y),
-        Point(cx - control_x, cy - ry),
-        Point(cx, cy - ry),
-    ]
-    segments: list[SegmentType] = []
-    for idx in range(0, len(points) - 3, 3):
-        segments.append(
-            BezierSegment(
-                start=points[idx],
-                control1=points[idx + 1],
-                control2=points[idx + 2],
-                end=points[idx + 3],
-            )
-        )
-    return segments
+    return _ellipse_segments_common(cx, cy, rx, ry)
 
 
 def _segment_angle(segment: SegmentType, *, forward: bool, tolerance: float) -> float:

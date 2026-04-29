@@ -6,6 +6,16 @@ import math
 from collections.abc import Iterable, Mapping
 from typing import Any
 
+from svg2ooxml.common.math_utils import (
+    coerce_float as _coerce_float,
+)
+from svg2ooxml.common.math_utils import (
+    coerce_positive_float as _coerce_positive_float,
+)
+from svg2ooxml.common.math_utils import (
+    finite_float as _finite_float,
+)
+
 VECTOR_HINT_TAGS = {
     "fecomponenttransfer",
     "fedisplacementmap",
@@ -25,25 +35,15 @@ RASTER_HINT_TAGS = {
 
 
 def finite_float(value: Any) -> float | None:
-    try:
-        number = float(value)
-    except (TypeError, ValueError):
-        return None
-    if math.isnan(number) or math.isinf(number):
-        return None
-    return number
+    return _finite_float(value)
 
 
 def coerce_float(value: Any, default: float) -> float:
-    number = finite_float(value)
-    return default if number is None else number
+    return _coerce_float(value, default)
 
 
 def coerce_positive_float(value: Any, default: float) -> float:
-    number = finite_float(value)
-    if number is not None and number > 0:
-        return number
-    return default
+    return _coerce_positive_float(value, default)
 
 
 def is_finite_number(value: Any) -> bool:
@@ -53,6 +53,36 @@ def is_finite_number(value: Any) -> bool:
 def is_positive_finite(value: Any) -> bool:
     number = finite_float(value)
     return number is not None and number > 0
+
+
+def is_identity_color_matrix(values: list[float], *, tol: float = 1e-6) -> bool:
+    """Return whether an SVG 4x5 color matrix is identity."""
+
+    if len(values) != 20:
+        return False
+    identity = [
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+    ]
+    return all(abs(a - b) <= tol for a, b in zip(values, identity, strict=True))
 
 
 def numeric_region(region: Mapping[str, Any] | None) -> dict[str, float] | None:
@@ -153,6 +183,7 @@ __all__ = [
     "finite_bounds",
     "finite_float",
     "infer_descriptor_strategy",
+    "is_identity_color_matrix",
     "is_finite_number",
     "is_positive_finite",
     "numeric_region",

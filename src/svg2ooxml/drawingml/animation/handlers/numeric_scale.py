@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 from lxml import etree
 
-from svg2ooxml.common.geometry.matrix import transform_delta_xy
+from svg2ooxml.common.geometry.matrix import transform_motion_space_delta
 from svg2ooxml.drawingml.animation.timing_utils import (
     compute_paced_key_times,
     compute_segment_durations_ms,
@@ -427,10 +427,4 @@ class NumericScaleMixin:
             float(self._DEFAULT_SLIDE_HEIGHT_EMU),
         )
 
-    @staticmethod
-    def _project_motion_delta(
-        animation: AnimationDefinition,
-        dx: float,
-        dy: float,
-    ) -> tuple[float, float]:
-        return transform_delta_xy(animation.motion_space_matrix, dx, dy)
+    _project_motion_delta = staticmethod(transform_motion_space_delta)

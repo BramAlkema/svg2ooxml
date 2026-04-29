@@ -18,7 +18,7 @@ from svg2ooxml.services import ConversionServices
 
 if TYPE_CHECKING:  # pragma: no cover - imported for type hints only
     from svg2ooxml.core.ir.text_converter import TextConverter
-    from svg2ooxml.core.tracing import ConversionTracer
+    from svg2ooxml.core.tracing import ConversionTracer, StageTrace
     from svg2ooxml.ir.animation import AnimationDefinition
 
 from svg2ooxml.core.hyperlinks import HyperlinkProcessor
@@ -72,7 +72,9 @@ class IRConverter:
             resvg_bridge=self._resvg_bridge,
             text_pipeline=self._text_pipeline,
         )
-        self._shape_pipeline_convert_path_to_emf = self._shape_pipeline._convert_path_to_emf
+        self._shape_pipeline_convert_path_to_emf = (
+            self._shape_pipeline._convert_path_to_emf
+        )
         self._shape_pipeline._convert_path_to_emf = self._convert_path_to_emf
 
         # Backwards-compatible attributes used across the conversion helpers.
@@ -115,7 +117,9 @@ class IRConverter:
 
     def convert(self, result: ParseResult) -> IRScene:
         if not result.success or result.svg_root is None:
-            raise ValueError("ParseResult must represent a successful parse with svg_root")
+            raise ValueError(
+                "ParseResult must represent a successful parse with svg_root"
+            )
 
         self._context.reset_tracer()
         self._resources.reset_usage()
@@ -127,22 +131,29 @@ class IRConverter:
             if self._services.resolve("source_path") is None:
                 self._services.register("source_path", source_path)
 
-        if self._context.policy_context is None and self._context.policy_engine is not None:
+        if (
+            self._context.policy_context is None
+            and self._context.policy_engine is not None
+        ):
             self._context.policy_context = self._context.policy_engine.evaluate()
             self._policy_context = self._context.policy_context
 
-        hyperlink_processor = getattr(self._context.services, "hyperlink_processor", None)
+        hyperlink_processor = getattr(
+            self._context.services, "hyperlink_processor", None
+        )
         if hyperlink_processor is None:
             hyperlink_processor = HyperlinkProcessor(self._context.logger)
 
         self._resvg_bridge.build(result.svg_root)
         self._resvg_tree = self._resvg_bridge.tree
         self._context.resvg_tree = self._resvg_tree
-        self._shape_pipeline._svg_root = result.svg_root # Store root for baking
+        self._shape_pipeline._svg_root = result.svg_root  # Store root for baking
         self._context.prepare_style_context(result)
         self._css_context = self._context.css_context
         self._conversion_context = self._context.conversion_context
-        self._resources.prepare(result, resvg_bridge=self._resvg_bridge, context=self._context)
+        self._resources.prepare(
+            result, resvg_bridge=self._resvg_bridge, context=self._context
+        )
         self._shape_pipeline.refresh_state()
         self._style_extractor.clear_cache()
 
@@ -170,7 +181,9 @@ class IRConverter:
         if self._context.tracer is not None:
             scene_metadata["trace_report"] = self._context.tracer.report().to_dict()
         background_color = _extract_background(
-            elements, result.width_px, result.height_px,
+            elements,
+            result.width_px,
+            result.height_px,
         )
         return IRScene(
             elements=elements,
@@ -222,17 +235,23 @@ class IRConverter:
             traverse_callback=traverse_callback,
         )
 
-    def attach_metadata(self, ir_object, element: etree._Element, navigation_spec) -> None:
+    def attach_metadata(
+        self, ir_object, element: etree._Element, navigation_spec
+    ) -> None:
         self._shape_pipeline.attach_metadata(ir_object, element, navigation_spec)
 
-    def _apply_filter_metadata(self, ir_object, element: etree._Element, metadata: dict[str, Any]) -> None:
+    def _apply_filter_metadata(
+        self, ir_object, element: etree._Element, metadata: dict[str, Any]
+    ) -> None:
         self._sync_policy_context()
         self._shape_pipeline._apply_filter_metadata(ir_object, element, metadata)
 
     def __getattr__(self, name: str):
         if name.startswith("_") and hasattr(self._shape_pipeline, name):
             return getattr(self._shape_pipeline, name)
-        raise AttributeError(f"{type(self).__name__!r} object has no attribute {name!r}")
+        raise AttributeError(
+            f"{type(self).__name__!r} object has no attribute {name!r}"
+        )
 
     def _trace_stage(
         self,
@@ -242,11 +261,13 @@ class IRConverter:
         subject: str | None = None,
         stage: str = "converter",
     ) -> None:
-        self._context.trace_stage(action, metadata=metadata, subject=subject, stage=stage)
+        self._context.trace_stage(
+            action, metadata=metadata, subject=subject, stage=stage
+        )
 
     def preload_stage_events(
         self,
-        events: Iterable[tuple[str, str, str | None, dict[str, Any]]],
+        events: Iterable[StageTrace],
     ) -> None:
         self._context.preload_stage_events(events)
 
@@ -263,10 +284,14 @@ class IRConverter:
         self._context.prepare_style_context(result)
         self._css_context = self._context.css_context
         self._conversion_context = self._context.conversion_context
-        self._resources.prepare(result, resvg_bridge=self._resvg_bridge, context=self._context)
+        self._resources.prepare(
+            result, resvg_bridge=self._resvg_bridge, context=self._context
+        )
         self._shape_pipeline.refresh_state()
 
-    def _trace_geometry_decision(self, element, decision: str, metadata: dict[str, Any] | None) -> None:
+    def _trace_geometry_decision(
+        self, element, decision: str, metadata: dict[str, Any] | None
+    ) -> None:
         self._context.trace_geometry_decision(element, decision, metadata)
 
     def _policy_options(self, target: str) -> Mapping[str, Any] | None:
@@ -284,7 +309,9 @@ class IRConverter:
         self._context.attach_policy_metadata(metadata, target, extra=extra)
 
     @staticmethod
-    def _bitmap_fallback_limits(options: Mapping[str, Any] | None) -> tuple[int | None, int | None]:
+    def _bitmap_fallback_limits(
+        options: Mapping[str, Any] | None,
+    ) -> tuple[int | None, int | None]:
         return IRConverterContext.bitmap_fallback_limits(options)
 
     def _matrix_from_transform(self, transform_str: str | None):

@@ -219,19 +219,8 @@ class LightweightFilterRenderer:
             )
         ]
 
-    @staticmethod
-    def attach_emf_metadata(
-        existing_results: list[FilterEffectResult],
-        emf_results: list[FilterEffectResult],
-    ) -> list[FilterEffectResult]:
-        return _attach_emf_metadata(existing_results, emf_results)
-
-    @staticmethod
-    def attach_raster_metadata(
-        existing_results: list[FilterEffectResult],
-        raster_results: list[FilterEffectResult],
-    ) -> None:
-        _attach_raster_metadata(existing_results, raster_results)
+    attach_emf_metadata = staticmethod(_attach_emf_metadata)
+    attach_raster_metadata = staticmethod(_attach_raster_metadata)
 
 
 __all__ = [

@@ -1,19 +1,23 @@
 from __future__ import annotations
 
+from svg2ooxml.core.pptx_exporter import SvgPageSource
 from svg2ooxml.core.slide_orchestrator import (
     build_fidelity_tier_variants,
     derive_variants_from_trace,
     expand_page_with_variants,
     resolve_fidelity_tier_variant,
 )
-from svg2ooxml.core.pptx_exporter import SvgPageSource
 
 
 def test_derive_variants_geometry_and_filter() -> None:
     report = {
         "geometry_totals": {"emf": 1},
         "stage_events": [
-            {"stage": "filter", "action": "filter_effect", "metadata": {"fallback": "bitmap"}},
+            {
+                "stage": "filter",
+                "action": "filter_effect",
+                "metadata": {"fallback": "bitmap"},
+            },
         ],
     }
     variants = derive_variants_from_trace(report, enable_split=True)
@@ -22,10 +26,31 @@ def test_derive_variants_geometry_and_filter() -> None:
     assert "filter_raster" in names
 
 
+def test_derive_variants_accepts_nested_filter_metadata() -> None:
+    report = {
+        "stage_events": [
+            {
+                "stage": "filter",
+                "action": "filter_effect",
+                "metadata": {"metadata": {"fallback": "emf"}},
+            },
+            {"stage": 10, "metadata": {"fallback": "bitmap"}},
+        ],
+    }
+
+    variants = derive_variants_from_trace(report, enable_split=True)
+
+    assert [variant.name for variant in variants] == ["filter_emf"]
+
+
 def test_derive_variants_mask_emf() -> None:
     report = {
         "stage_events": [
-            {"stage": "mask", "action": "processed", "metadata": {"requires_emf": True}},
+            {
+                "stage": "mask",
+                "action": "processed",
+                "metadata": {"requires_emf": True},
+            },
         ],
     }
     variants = derive_variants_from_trace(report, enable_split=True)
@@ -79,7 +104,9 @@ def test_expand_page_with_variants_keeps_variant_overrides_isolated() -> None:
 
     variants = expand_page_with_variants(page, build_fidelity_tier_variants())
     by_name = {
-        variant.metadata["variant"]["type"]: variant.metadata["policy_overrides"]["filter"]
+        variant.metadata["variant"]["type"]: variant.metadata["policy_overrides"][
+            "filter"
+        ]
         for variant in variants
     }
 

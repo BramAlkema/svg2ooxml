@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 
+from svg2ooxml.common.geometry.paths.quadratic import quadratic_tuple_to_cubic_controls
 from svg2ooxml.drawingml.generator import px_to_emu
 
 try:
@@ -193,13 +194,18 @@ def _skia_path_to_custgeom(
             x, y = _transform_pt(pts[1], ox, oy, w, h, w_emu, h_emu, rotation_deg)
             commands.append(f'<a:lnTo><a:pt x="{x}" y="{y}"/></a:lnTo>')
         elif verb_name == "kQuad_Verb":
-            cx, cy = _transform_pt(pts[1], ox, oy, w, h, w_emu, h_emu, rotation_deg)
+            sx, sy = _transform_pt(pts[0], ox, oy, w, h, w_emu, h_emu, rotation_deg)
+            qx, qy = _transform_pt(pts[1], ox, oy, w, h, w_emu, h_emu, rotation_deg)
             ex, ey = _transform_pt(pts[2], ox, oy, w, h, w_emu, h_emu, rotation_deg)
-            # Approximate quad bezier as cubic
+            c1, c2 = quadratic_tuple_to_cubic_controls(
+                (sx, sy),
+                (qx, qy),
+                (ex, ey),
+            )
             commands.append(
                 f'<a:cubicBezTo>'
-                f'<a:pt x="{cx}" y="{cy}"/>'
-                f'<a:pt x="{cx}" y="{cy}"/>'
+                f'<a:pt x="{int(round(c1[0]))}" y="{int(round(c1[1]))}"/>'
+                f'<a:pt x="{int(round(c2[0]))}" y="{int(round(c2[1]))}"/>'
                 f'<a:pt x="{ex}" y="{ey}"/>'
                 f'</a:cubicBezTo>'
             )

@@ -5,7 +5,6 @@ from __future__ import annotations
 import uuid
 import zipfile
 from collections.abc import Callable, Sequence
-from io import BytesIO
 from pathlib import Path
 
 from lxml import etree as ET
@@ -27,6 +26,7 @@ from svg2ooxml.io.pptx_package_model import (
     SlideAssembly,
     SlideEntry,
 )
+from svg2ooxml.io.pptx_xml import serialize_xml
 
 TracePackaging = Callable[..., None]
 
@@ -158,7 +158,7 @@ def apply_required_presentation_parts(
         existing_rel_ids.add(rel_id)
         existing_targets.add(target)
 
-    parts[rels_part_name] = _xml_bytes(rels_root)
+    parts[rels_part_name] = serialize_xml(rels_root)
     if trace_packaging is not None:
         trace_packaging(
             "presentation_rels_updated",
@@ -284,7 +284,7 @@ def build_content_types_xml(
                 {"PartName": part_name, "ContentType": content_type},
             )
 
-    return _xml_bytes(root)
+    return serialize_xml(root)
 
 
 def ensure_theme_extension(package_root: Path) -> None:
@@ -320,7 +320,7 @@ def ensure_theme_extension_xml(theme_xml: bytes) -> bytes:
     theme_family.set("name", "svg2ooxml")
     theme_family.set("id", f"{{{str(uuid.uuid4()).upper()}}}")
     theme_family.set("vid", f"{{{str(uuid.uuid4()).upper()}}}")
-    return _xml_bytes(root)
+    return serialize_xml(root)
 
 
 def zip_package(package_root: Path, output: Path) -> None:
@@ -336,12 +336,6 @@ def zip_package_parts(parts: dict[str, bytes], output: Path) -> None:
     with zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED) as archive:
         for part_name in sorted(parts):
             archive.writestr(part_name, parts[part_name])
-
-
-def _xml_bytes(root: ET._Element) -> bytes:
-    output = BytesIO()
-    ET.ElementTree(root).write(output, encoding="utf-8", xml_declaration=True)
-    return output.getvalue()
 
 
 __all__ = [

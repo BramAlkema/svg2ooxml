@@ -11,6 +11,7 @@ from svg2ooxml.drawingml.effect_fragments import (
 from svg2ooxml.drawingml.xml_builder import (
     blur,
     effect_list,
+    format_xml_block,
     glow,
     outer_shadow,
     reflection,
@@ -94,10 +95,7 @@ def effect_to_drawingml(effect: Effect) -> str:
 
 
 def _format_block(xml: str, indent: str) -> str:
-    if not xml:
-        return ""
-    lines = xml.splitlines()
-    return "\n".join(indent + line for line in lines) + "\n"
+    return format_xml_block(xml, indent)
 
 
 __all__ = ["effect_block", "effect_to_drawingml"]

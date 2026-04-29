@@ -160,6 +160,15 @@ def to_string(elem: etree._Element) -> str:
     return xml_str
 
 
+def format_xml_block(xml: str, indent: str) -> str:
+    """Indent an XML fragment block for template insertion."""
+
+    if not xml:
+        return ""
+    lines = xml.splitlines()
+    return "\n".join(indent + line for line in lines) + "\n"
+
+
 def graft_xml_fragment(
     parent: etree._Element,
     xml: str,
@@ -422,6 +431,7 @@ __all__ = [
     "a_sub",
     "p_sub",
     "to_string",
+    "format_xml_block",
     "graft_xml_fragment",
     # Common patterns
     "color_choice",

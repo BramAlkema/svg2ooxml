@@ -5,7 +5,6 @@ from __future__ import annotations
 from collections import OrderedDict
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from io import BytesIO
 from pathlib import Path
 
 from lxml import etree as ET
@@ -29,6 +28,7 @@ from svg2ooxml.io.pptx_part_names import (
     safe_int,
     sanitize_slide_filename,
 )
+from svg2ooxml.io.pptx_xml import serialize_xml
 
 TracePackaging = Callable[..., None]
 
@@ -124,13 +124,7 @@ def build_presentation_parts(
             },
         )
 
-    return _xml_bytes(root), _xml_bytes(rels_root)
-
-
-def _xml_bytes(root: ET._Element) -> bytes:
-    output = BytesIO()
-    ET.ElementTree(root).write(output, encoding="utf-8", xml_declaration=True)
-    return output.getvalue()
+    return serialize_xml(root), serialize_xml(rels_root)
 
 
 def _update_slide_dimensions(

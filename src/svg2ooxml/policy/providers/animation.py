@@ -5,6 +5,10 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
+from svg2ooxml.common.math_utils import (
+    coerce_bool,
+    coerce_float,
+)
 from svg2ooxml.policy.engine import PolicyProvider
 from svg2ooxml.policy.targets import PolicyTarget
 
@@ -12,25 +16,11 @@ _FALLBACK_OPTIONS = {"native", "slide", "raster"}
 
 
 def _coerce_bool(value: Any, default: bool) -> bool:
-    if isinstance(value, bool):
-        return value
-    if value is None:
-        return default
-    value_str = str(value).strip().lower()
-    if value_str in {"1", "true", "yes", "on"}:
-        return True
-    if value_str in {"0", "false", "no", "off"}:
-        return False
-    return default
+    return coerce_bool(value, default)
 
 
 def _coerce_float(value: Any, default: float) -> float:
-    if value is None:
-        return default
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return default
+    return coerce_float(value, default)
 
 
 def _normalize_fallback(value: Any, default: str) -> str:

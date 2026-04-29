@@ -11,6 +11,8 @@ from svg2ooxml.common.conversions.opacity import opacity_to_ppt
 # Import centralized XML builders for safe DrawingML generation
 from svg2ooxml.drawingml.xml_builder import a_elem, a_sub, to_string
 from svg2ooxml.filters.base import Filter, FilterContext, FilterResult
+from svg2ooxml.filters.metadata import FilterFallbackAssetPayload
+from svg2ooxml.filters.primitives.composite_inputs import lookup_filter_input
 from svg2ooxml.filters.primitives.result_utils import (
     approximate_gradient_color,
     collect_fallback_assets,
@@ -51,8 +53,8 @@ class BlendFilter(Filter):
         pipeline = context.pipeline_state or {}
         base_name = params.input_1 or "SourceGraphic"
         top_name = params.input_2 or "SourceGraphic"
-        base_result = self._lookup_input(pipeline, base_name)
-        top_result = self._lookup_input(pipeline, top_name)
+        base_result = lookup_filter_input(pipeline, base_name)
+        top_result = lookup_filter_input(pipeline, top_name)
         policy = context.policy
         approximation_allowed = bool(policy.get("approximation_allowed", True))
         prefer_rasterization = bool(policy.get("prefer_rasterization", False))
@@ -67,7 +69,9 @@ class BlendFilter(Filter):
         metadata["inputs"] = [name for name in (base_name, top_name) if name]
 
         if params.mode == "normal":
-            drawingml, fallback, warnings = self._combine_normal(base_result, top_result)
+            drawingml, fallback, warnings = self._combine_normal(
+                base_result, top_result
+            )
             metadata["native_support"] = bool(drawingml)
             if fallback:
                 metadata["fallback_reason"] = fallback
@@ -91,7 +95,11 @@ class BlendFilter(Filter):
 
         if params.mode in {"multiply", "screen", "darken", "lighten"}:
             overlay_info = self._extract_overlay_color(top_result)
-            if overlay_info and overlay_info.approximation and not approximation_allowed:
+            if (
+                overlay_info
+                and overlay_info.approximation
+                and not approximation_allowed
+            ):
                 overlay_info = None
             overlay = self._build_overlay(params.mode, base_result, overlay_info)
             if overlay:
@@ -120,7 +128,9 @@ class BlendFilter(Filter):
 
             metadata["native_support"] = False
             metadata["fallback_reason"] = "missing_overlay"
-            fallback = "bitmap" if (approximation_allowed or prefer_rasterization) else "emf"
+            fallback = (
+                "bitmap" if (approximation_allowed or prefer_rasterization) else "emf"
+            )
             metadata["approximation_allowed"] = approximation_allowed
             fallback_assets = self._collect_fallback_assets(base_result, top_result)
             if fallback_assets:
@@ -137,7 +147,9 @@ class BlendFilter(Filter):
                 drawingml="",
                 fallback=fallback,
                 metadata=metadata,
-                warnings=[f"feBlend mode '{params.mode}' rendered via {fallback} fallback"],
+                warnings=[
+                    f"feBlend mode '{params.mode}' rendered via {fallback} fallback"
+                ],
             )
 
         # Unsupported mode - fallback to EMF
@@ -150,7 +162,10 @@ class BlendFilter(Filter):
                 element_type="feBlend",
                 strategy="emf",
                 reason=f"Unsupported blend mode: {params.mode}",
-                metadata={"mode": params.mode, "supported_modes": list(SUPPORTED_MODES)},
+                metadata={
+                    "mode": params.mode,
+                    "supported_modes": list(SUPPORTED_MODES),
+                },
             )
 
         return FilterResult(
@@ -173,20 +188,6 @@ class BlendFilter(Filter):
         input_2 = primitive.get("in2")
         result = primitive.get("result")
         return BlendParams(mode=mode, input_1=input_1, input_2=input_2, result=result)
-
-    def _lookup_input(
-        self,
-        pipeline: dict[str, FilterResult],
-        name: str,
-    ) -> FilterResult | None:
-        if not name:
-            return None
-        candidate = pipeline.get(name)
-        if candidate is not None:
-            return candidate
-        if name in {"SourceGraphic", "SourceAlpha"}:
-            return pipeline.get(name)
-        return None
 
     def _combine_normal(
         self,
@@ -259,7 +260,9 @@ class BlendFilter(Filter):
     def _merge_one_fallback(current: str | None, new_value: str | None) -> str | None:
         return merge_fallback_mode(current, new_value)
 
-    def _merge_fallback(self, base: FilterResult | None, top: FilterResult | None) -> str | None:
+    def _merge_fallback(
+        self, base: FilterResult | None, top: FilterResult | None
+    ) -> str | None:
         fallback: str | None = None
         for result in (base, top):
             if result is not None:
@@ -289,13 +292,18 @@ class BlendFilter(Filter):
             opacity = float(fill_meta.get("opacity", metadata.get("opacity", 1.0)))
             return OverlayInfo(color=color, opacity=opacity)
 
-        if isinstance(fill_meta, dict) and fill_meta.get("type") in {"linearGradient", "radialGradient"}:
+        if isinstance(fill_meta, dict) and fill_meta.get("type") in {
+            "linearGradient",
+            "radialGradient",
+        }:
             stops = fill_meta.get("stops")
             if isinstance(stops, list) and stops:
                 approx = cls._approximate_gradient_color(stops)
                 if approx is not None:
                     color, opacity = approx
-                    return OverlayInfo(color=color, opacity=opacity, approximation="gradient_avg")
+                    return OverlayInfo(
+                        color=color, opacity=opacity, approximation="gradient_avg"
+                    )
 
         if isinstance(fill_meta, dict) and fill_meta.get("type") == "pattern":
             color = fill_meta.get("foreground") or fill_meta.get("background")
@@ -305,16 +313,22 @@ class BlendFilter(Filter):
                     token = "".join(ch * 2 for ch in token)
                 if len(token) == 6:
                     opacity = float(metadata.get("opacity", 1.0))
-                    return OverlayInfo(color=token, opacity=opacity, approximation="pattern_color")
+                    return OverlayInfo(
+                        color=token, opacity=opacity, approximation="pattern_color"
+                    )
 
         return None
 
     @staticmethod
-    def _approximate_gradient_color(stops: list[dict[str, object]]) -> tuple[str, float] | None:
+    def _approximate_gradient_color(
+        stops: list[dict[str, object]],
+    ) -> tuple[str, float] | None:
         return approximate_gradient_color(stops)
 
     @staticmethod
-    def _collect_fallback_assets(*results: FilterResult | None) -> list[dict[str, object]]:
+    def _collect_fallback_assets(
+        *results: FilterResult | None,
+    ) -> list[FilterFallbackAssetPayload]:
         return collect_fallback_assets(*results)
 
 

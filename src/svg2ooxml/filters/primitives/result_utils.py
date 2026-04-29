@@ -4,6 +4,10 @@ from __future__ import annotations
 
 from svg2ooxml.color.utils import rgb_channels_to_hex
 from svg2ooxml.filters.base import FilterResult
+from svg2ooxml.filters.metadata import (
+    FilterFallbackAssetPayload,
+    collect_fallback_asset_payloads,
+)
 
 _FALLBACK_PRECEDENCE = {"bitmap": 3, "raster": 3, "emf": 2, "vector": 1}
 
@@ -18,16 +22,14 @@ def merge_fallback_mode(current: str | None, new_value: str | None) -> str | Non
     return new_value if new_rank > current_rank else current
 
 
-def collect_fallback_assets(*results: FilterResult | None) -> list[dict[str, object]]:
-    assets: list[dict[str, object]] = []
+def collect_fallback_assets(
+    *results: FilterResult | None,
+) -> list[FilterFallbackAssetPayload]:
+    assets: list[FilterFallbackAssetPayload] = []
     for result in results:
-        if result is None or not isinstance(result.metadata, dict):
+        if result is None:
             continue
-        candidate = result.metadata.get("fallback_assets")
-        if isinstance(candidate, list):
-            for item in candidate:
-                if isinstance(item, dict):
-                    assets.append(dict(item))
+        assets.extend(collect_fallback_asset_payloads(result.metadata))
     return assets
 
 

@@ -6,6 +6,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from svg2ooxml.core.metadata import PageMetadata
+
 
 class SvgConversionError(RuntimeError):
     """Raised when the SVG to PPTX conversion fails."""
@@ -27,7 +29,7 @@ class SvgPageSource:
     svg_text: str
     title: str | None = None
     name: str | None = None
-    metadata: dict[str, Any] = field(default_factory=dict)
+    metadata: PageMetadata = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

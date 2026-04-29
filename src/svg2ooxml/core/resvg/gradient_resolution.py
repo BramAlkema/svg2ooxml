@@ -9,7 +9,7 @@ from svg2ooxml.common.gradient_units import (
     parse_gradient_coordinate,
     parse_gradient_offset,
 )
-from svg2ooxml.common.svg_refs import local_url_id
+from svg2ooxml.common.svg_refs import href_value, local_url_id, strip_svg_namespace
 from svg2ooxml.common.units.conversion import ConversionContext
 from svg2ooxml.common.units.lengths import parse_number_or_percent
 from svg2ooxml.core.resvg.geometry.matrix import Matrix, matrix_from_commands
@@ -320,17 +320,11 @@ def _required(value: float | None) -> float:
 
 
 def _extract_href(attributes: Mapping[str, str]) -> str | None:
-    for key in ("href", "{http://www.w3.org/1999/xlink}href"):
-        if key in attributes:
-            return attributes[key]
-    return None
+    return href_value(attributes)
 
 
 def _strip_namespace(tag: object) -> str:
-    tag_str = str(tag)
-    if tag_str.startswith("{" + SVG_NAMESPACE + "}"):
-        return tag_str[len(SVG_NAMESPACE) + 2 :]
-    return tag_str
+    return strip_svg_namespace(tag, svg_namespace=SVG_NAMESPACE)
 
 
 __all__ = [

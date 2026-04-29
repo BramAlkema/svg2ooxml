@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 
 from lxml import etree
 
+from svg2ooxml.common.conversions.opacity import parse_authored_opacity
 from svg2ooxml.drawingml.animation.constants import FADE_ATTRIBUTES
 from svg2ooxml.drawingml.animation.handlers.base import AnimationHandler
 from svg2ooxml.drawingml.animation.oracle import default_oracle
@@ -366,13 +367,7 @@ class OpacityAnimationHandler(AnimationHandler):
 
     @staticmethod
     def _opacity_float(value: str) -> float:
-        try:
-            opacity = float(value)
-        except (TypeError, ValueError):
-            return 1.0
-        if opacity > 1.0:
-            opacity = opacity / 100.0
-        return max(0.0, min(1.0, opacity))
+        return parse_authored_opacity(value)
 
     @classmethod
     def _format_effect_opacity(cls, value: str) -> str:

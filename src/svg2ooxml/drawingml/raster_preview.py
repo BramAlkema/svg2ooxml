@@ -2,26 +2,23 @@
 
 from __future__ import annotations
 
-import math
 import re
 from copy import deepcopy
 from typing import Any
 
 from lxml import etree
 
+from svg2ooxml.common.math_utils import (
+    coerce_positive_float,
+    finite_float,
+)
 from svg2ooxml.common.svg_refs import local_name, local_url_id
 
 _URL_REF_RE = re.compile(r"url\(\s*([^)]+?)\s*\)", re.IGNORECASE)
 
 
 def _finite_float(value: object, default: float | None = None) -> float | None:
-    try:
-        number = float(value)
-    except (TypeError, ValueError):
-        return default
-    if not math.isfinite(number):
-        return default
-    return number
+    return finite_float(value, default)
 
 
 def _positive_dimension(value: object, default: int = 1) -> int:
@@ -32,10 +29,7 @@ def _positive_dimension(value: object, default: int = 1) -> int:
 
 
 def _positive_float(value: object, default: float) -> float:
-    number = _finite_float(value)
-    if number is None or number <= 0:
-        return default
-    return number
+    return coerce_positive_float(value, default)
 
 
 def _local_url_ids_from_value(value: str) -> set[str]:

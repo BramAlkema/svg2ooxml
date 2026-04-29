@@ -6,12 +6,14 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from svg2ooxml.core.metadata import read_page_render_metadata
 from svg2ooxml.core.pptx_exporter_types import (
     SvgConversionError,
     SvgPageResult,
     SvgPageSource,
     SvgToPptxMultiResult,
 )
+from svg2ooxml.policy.fidelity import PolicyOverrides
 
 if TYPE_CHECKING:  # pragma: no cover - type checking only
     from svg2ooxml.core.ir.converter import IRScene
@@ -29,6 +31,7 @@ class SvgToPptxParallelMixin:
         packaging_tracer: ConversionTracer,
         *,
         max_workers: int | None = None,
+        embed_trace_docprops: bool | None = None,
     ) -> SvgToPptxMultiResult:
         """Render pages in parallel, then package sequentially."""
         import os
@@ -47,15 +50,17 @@ class SvgToPptxParallelMixin:
         futures: list[tuple[SvgPageSource, Any]] = []
         with ThreadPoolExecutor(max_workers=workers) as pool:
             for page in pages:
-                overrides = (page.metadata or {}).get("policy_overrides")
-                source_path = (page.metadata or {}).get("source_path")
+                page_metadata = read_page_render_metadata(
+                    page.metadata,
+                    default_variant_type="base",
+                )
                 fut = pool.submit(
                     self._render_page_isolated,
                     page.svg_text,
                     filter_strategy=self._filter_strategy,
                     geometry_mode=self._geometry_mode,
-                    policy_overrides=overrides,
-                    source_path=source_path,
+                    policy_overrides=page_metadata.policy_overrides,
+                    source_path=page_metadata.source_path,
                 )
                 futures.append((page, fut))
 
@@ -89,6 +94,11 @@ class SvgToPptxParallelMixin:
         aggregate_trace = _merge_trace_reports(
             [result.trace_report for result in page_results] + [packaging_report]
         )
+        self._embed_trace_docprops_if_requested(
+            pptx_path,
+            aggregate_trace,
+            embed_trace_docprops,
+        )
 
         return SvgToPptxMultiResult(
             pptx_path=pptx_path,
@@ -104,7 +114,7 @@ class SvgToPptxParallelMixin:
         *,
         filter_strategy: str | None,
         geometry_mode: str,
-        policy_overrides: dict[str, dict[str, Any]] | None = None,
+        policy_overrides: PolicyOverrides | None = None,
         source_path: str | None = None,
     ) -> tuple[DrawingMLRenderResult, IRScene, dict[str, Any]]:
         """Thread-safe single-page render with fresh pipeline instances."""

@@ -15,6 +15,7 @@ from svg2ooxml.drawingml.text_shapes_runtime import render_textframe, render_wor
 from svg2ooxml.drawingml.xml_builder import (
     a_elem,
     a_sub,
+    format_xml_block,
     to_string,
 )
 from svg2ooxml.ir.geometry import LineSegment, Rect
@@ -383,10 +384,7 @@ def _render_polygonal_shape(
 
 
 def _format_block(xml: str, indent: str) -> str:
-    if not xml:
-        return ""
-    lines = xml.splitlines()
-    return "\n".join(indent + line for line in lines) + "\n"
+    return format_xml_block(xml, indent)
 
 
 __all__ = [

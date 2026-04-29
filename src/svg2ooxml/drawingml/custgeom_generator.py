@@ -7,8 +7,15 @@ from typing import Any
 
 from svg2ooxml.common.geometry import Matrix2D
 from svg2ooxml.common.geometry.paths import parse_path_data
+from svg2ooxml.common.geometry.segments import (
+    ellipse_segments as _ellipse_segments,
+)
+from svg2ooxml.common.geometry.segments import (
+    line_segments_from_points,
+    transform_segments,
+)
 from svg2ooxml.drawingml.generator import CustomGeometry, DrawingMLPathGenerator
-from svg2ooxml.ir.geometry import BezierSegment, LineSegment, Point, SegmentType
+from svg2ooxml.ir.geometry import LineSegment, Point, SegmentType
 
 PrimitiveDict = Mapping[str, Any]
 PrimitiveIterable = Iterable[PrimitiveDict]
@@ -112,60 +119,15 @@ class PrimitiveSegmentBuilder:
             Point(x, y + height),
         ]
         transformed = [matrix.transform_point(point) for point in corners]
-        # Close the loop by adding the first point at the end
         transformed.append(transformed[0])
-
-        segments: SegmentList = []
-        for start, end in zip(transformed, transformed[1:], strict=False):
-            segments.append(LineSegment(start, end))
-        return segments
+        return list(line_segments_from_points(transformed))
 
     def _ellipse_segments(self, primitive: PrimitiveDict, matrix: Matrix2D) -> SegmentList:
         cx = float(primitive.get("cx", primitive.get("x", 0.0)) or 0.0)
         cy = float(primitive.get("cy", primitive.get("y", 0.0)) or 0.0)
         rx = float(primitive.get("r", primitive.get("rx", 0.0)) or 0.0)
         ry = float(primitive.get("r", primitive.get("ry", rx)) or 0.0)
-        if rx <= 0 or ry <= 0:
-            return []
-
-        kappa = 0.5522847498307936
-        curves = [
-            (
-                Point(cx + rx, cy),
-                Point(cx + rx, cy + kappa * ry),
-                Point(cx + kappa * rx, cy + ry),
-                Point(cx, cy + ry),
-            ),
-            (
-                Point(cx, cy + ry),
-                Point(cx - kappa * rx, cy + ry),
-                Point(cx - rx, cy + kappa * ry),
-                Point(cx - rx, cy),
-            ),
-            (
-                Point(cx - rx, cy),
-                Point(cx - rx, cy - kappa * ry),
-                Point(cx - kappa * rx, cy - ry),
-                Point(cx, cy - ry),
-            ),
-            (
-                Point(cx, cy - ry),
-                Point(cx + kappa * rx, cy - ry),
-                Point(cx + rx, cy - kappa * ry),
-                Point(cx + rx, cy),
-            ),
-        ]
-        segments: SegmentList = []
-        for start, control1, control2, end in curves:
-            segments.append(
-                BezierSegment(
-                    start=matrix.transform_point(start),
-                    control1=matrix.transform_point(control1),
-                    control2=matrix.transform_point(control2),
-                    end=matrix.transform_point(end),
-                )
-            )
-        return segments
+        return apply_matrix_to_segments(_ellipse_segments(cx, cy, rx, ry), matrix)
 
     def _line_segments(self, primitive: PrimitiveDict, matrix: Matrix2D) -> SegmentList:
         x1 = float(primitive.get("x1", 0.0) or 0.0)
@@ -201,10 +163,7 @@ class PrimitiveSegmentBuilder:
 
     def _points_to_segments(self, points: Sequence[tuple[float, float]], matrix: Matrix2D) -> SegmentList:
         transformed = [matrix.transform_point(Point(px, py)) for px, py in points]
-        segments: SegmentList = []
-        for start, end in zip(transformed, transformed[1:], strict=False):
-            segments.append(LineSegment(start, end))
-        return segments
+        return list(line_segments_from_points(transformed))
 
     @staticmethod
     def _matrix_from_tuple(values: Any) -> Matrix2D:
@@ -234,27 +193,7 @@ class PrimitiveSegmentBuilder:
 
 
 def apply_matrix_to_segments(segments: Iterable[SegmentType], matrix: Matrix2D) -> SegmentList:
-    transformed: SegmentList = []
-    for segment in segments:
-        if isinstance(segment, LineSegment):
-            transformed.append(
-                LineSegment(
-                    start=matrix.transform_point(segment.start),
-                    end=matrix.transform_point(segment.end),
-                )
-            )
-        elif isinstance(segment, BezierSegment):
-            transformed.append(
-                BezierSegment(
-                    start=matrix.transform_point(segment.start),
-                    control1=matrix.transform_point(segment.control1),
-                    control2=matrix.transform_point(segment.control2),
-                    end=matrix.transform_point(segment.end),
-                )
-            )
-        else:
-            transformed.append(segment)
-    return transformed
+    return transform_segments(segments, matrix.transform_point)
 
 
 _DEFAULT_PRIMITIVE_BUILDER = PrimitiveSegmentBuilder()

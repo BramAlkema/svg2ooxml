@@ -34,7 +34,9 @@ def test_tracer_records_resvg_geometry_decision() -> None:
 
 
 def test_tracer_records_emf_then_bitmap_decisions() -> None:
-    emf_policy = PolicyContext(selections={"geometry": {"max_segments": 1, "simplify_paths": False}})
+    emf_policy = PolicyContext(
+        selections={"geometry": {"max_segments": 1, "simplify_paths": False}}
+    )
     tracer = ConversionTracer()
     _convert_with_tracer(
         "<svg width='100' height='100' xmlns='http://www.w3.org/2000/svg'><path d='M0 0 L10 0 L10 10 L0 10 Z' fill='#00ff00'/></svg>",
@@ -96,17 +98,42 @@ def test_tracer_records_clip_mask_filter() -> None:
 
     assert any(event.tag == "mask" for event in report.geometry_events)
     assert any("clip_id" in (event.metadata or {}) for event in report.geometry_events)
-    assert any(report.paint_totals.get(key, 0) >= 1 for key in ("native", "bitmap", "emf"))
+    assert any(
+        report.paint_totals.get(key, 0) >= 1 for key in ("native", "bitmap", "emf")
+    )
 
 
 def test_tracer_records_stage_events() -> None:
     tracer = ConversionTracer()
-    tracer.record_stage_event(stage="parser", action="normalization", metadata={"changes": 2})
+    tracer.record_stage_event(
+        stage="parser", action="normalization", metadata={"changes": 2}
+    )
     tracer.record_stage_event(stage="parser", action="warning", subject="duplicate-id")
     report = tracer.report()
     key = "parser:normalization"
     assert report.stage_totals.get(key) == 1
-    assert any(event.action == "warning" and event.subject == "duplicate-id" for event in report.stage_events)
+    assert any(
+        event.action == "warning" and event.subject == "duplicate-id"
+        for event in report.stage_events
+    )
+
+
+def test_tracer_sanitizes_stage_event_metadata_to_typed_payload() -> None:
+    tracer = ConversionTracer()
+    tracer.record_stage_event(
+        stage="parser",
+        action="normalization",
+        metadata={"changes": 2, "raw": object()},
+    )
+
+    payload = tracer.report().to_dict()
+
+    assert payload["stage_events"][0]["stage"] == "parser"
+    assert payload["stage_events"][0]["action"] == "normalization"
+    assert payload["stage_events"][0]["subject"] is None
+    metadata = payload["stage_events"][0]["metadata"]
+    assert metadata["changes"] == 2
+    assert metadata["raw"].startswith("<object object at ")
 
 
 def test_tracer_reports_resvg_metrics() -> None:

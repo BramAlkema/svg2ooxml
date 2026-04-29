@@ -8,6 +8,7 @@ from typing import Literal
 from svg2ooxml.color.models import Color
 from svg2ooxml.color.parsers import parse_color
 from svg2ooxml.color.utils import rgb_channels_to_hex, rgb_object_to_hex
+from svg2ooxml.common.math_utils import clamp01
 
 RgbaTuple = tuple[float, float, float, float]
 RgbScale = Literal["unit", "byte", "auto"]
@@ -143,7 +144,7 @@ def _unit_to_byte(value: float) -> int:
 
 
 def _clamp01(value: float) -> float:
-    return max(0.0, min(1.0, value))
+    return clamp01(value)
 
 
 __all__ = [

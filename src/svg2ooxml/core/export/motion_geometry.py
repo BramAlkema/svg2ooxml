@@ -6,7 +6,7 @@ import math
 from collections.abc import Sequence
 from typing import Any
 
-from svg2ooxml.common.geometry.matrix import transform_delta_xy
+from svg2ooxml.common.geometry.matrix import transform_motion_space_delta
 from svg2ooxml.core.export.element_translation import _translate_element_to_motion_start
 from svg2ooxml.core.ir.converter import IRScene
 from svg2ooxml.ir.animation import AnimationDefinition, AnimationType
@@ -148,7 +148,7 @@ def _project_linear_motion_delta(
     dy: float,
     animation: AnimationDefinition,
 ) -> tuple[float, float]:
-    return transform_delta_xy(animation.motion_space_matrix, dx, dy)
+    return transform_motion_space_delta(animation, dx, dy)
 
 
 # ---------------------------------------------------------------------------

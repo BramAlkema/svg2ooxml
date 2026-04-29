@@ -7,6 +7,11 @@ from dataclasses import dataclass
 from typing import Any
 
 from svg2ooxml.drawingml.image import render_picture
+from svg2ooxml.filters.metadata import (
+    FilterFallbackAssetPayload,
+    coerce_fallback_asset,
+    fallback_asset_bytes,
+)
 from svg2ooxml.ir.geometry import Point, Rect
 from svg2ooxml.ir.scene import Image
 
@@ -18,7 +23,7 @@ class FilterFallbackAsset:
     filter_id: str
     fallback: str
     asset_type: str
-    asset: Mapping[str, Any]
+    asset: FilterFallbackAssetPayload
     metadata: Mapping[str, Any] | None
 
 
@@ -103,14 +108,20 @@ def iter_filter_fallback_assets(
             continue
         asset_type = "emf" if fallback in {"emf", "vector"} else "raster"
         for asset in assets:
-            if isinstance(asset, Mapping) and asset.get("type") == asset_type:
-                yield FilterFallbackAsset(
-                    filter_id=filter_id,
-                    fallback=fallback,
-                    asset_type=asset_type,
-                    asset=asset,
-                    metadata=meta if isinstance(meta, Mapping) else None,
-                )
+            typed_asset = coerce_fallback_asset(
+                asset,
+                asset_type=asset_type,
+                copy=False,
+            )
+            if typed_asset is None:
+                continue
+            yield FilterFallbackAsset(
+                filter_id=filter_id,
+                fallback=fallback,
+                asset_type=asset_type,
+                asset=typed_asset,
+                metadata=meta if isinstance(meta, Mapping) else None,
+            )
 
 
 def render_shape_filter_fallback(
@@ -130,16 +141,8 @@ def render_shape_filter_fallback(
         infer_vector_fallback_from_metadata=True,
     ):
         asset = candidate.asset
-        data_hex = asset.get("data_hex")
-        raw_data = asset.get("data")
-        if isinstance(data_hex, str) and data_hex:
-            try:
-                image_bytes = bytes.fromhex(data_hex)
-            except ValueError:
-                continue
-        elif isinstance(raw_data, (bytes, bytearray)):
-            image_bytes = bytes(raw_data)
-        else:
+        image_bytes = fallback_asset_bytes(asset)
+        if image_bytes is None:
             continue
 
         bounds = resolve_filter_fallback_bounds(
@@ -156,7 +159,11 @@ def render_shape_filter_fallback(
         }
         for source in (
             candidate.metadata,
-            asset.get("metadata") if isinstance(asset.get("metadata"), Mapping) else None,
+            (
+                asset.get("metadata")
+                if isinstance(asset.get("metadata"), Mapping)
+                else None
+            ),
         ):
             if not isinstance(source, Mapping):
                 continue

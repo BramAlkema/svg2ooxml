@@ -9,7 +9,11 @@ from lxml import etree
 
 from svg2ooxml.common.geometry import Matrix2D
 from svg2ooxml.common.style.resolver import StyleContext as CSSStyleContext
-from svg2ooxml.common.svg_refs import local_url_id, namespace_uri
+from svg2ooxml.common.svg_refs import (
+    element_index_by_id,
+    local_url_id,
+    namespaced_tag_like,
+)
 from svg2ooxml.core.parser.switch_evaluator import SwitchEvaluator
 from svg2ooxml.core.styling import style_runtime, use_expander
 from svg2ooxml.core.traversal.clipping_hooks import ClippingHooksMixin
@@ -331,19 +335,11 @@ class TraversalHooksMixin(ShapeCreationMixin, StylingHooksMixin, ClippingHooksMi
 
     @staticmethod
     def _make_namespaced_tag(reference: etree._Element, local: str) -> str:
-        namespace = namespace_uri(reference.tag)
-        if namespace:
-            return f"{{{namespace}}}{local}"
-        return local
+        return namespaced_tag_like(reference, local)
 
     @staticmethod
     def _build_element_index(root: etree._Element) -> dict[str, etree._Element]:
-        index: dict[str, etree._Element] = {}
-        for node in root.iter():
-            node_id = node.get("id")
-            if node_id:
-                index[node_id] = node
-        return index
+        return element_index_by_id(root)
 
 
 __all__ = ["TraversalHooksMixin"]

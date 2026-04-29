@@ -6,6 +6,7 @@ from dataclasses import replace
 from typing import Any
 
 from svg2ooxml.common.conversions.transforms import parse_numeric_list
+from svg2ooxml.common.svg_refs import href_value, strip_svg_namespace
 from svg2ooxml.common.units.lengths import parse_number_or_percent
 
 from .geometry.matrix import matrix_from_commands
@@ -18,10 +19,7 @@ SVG_NAMESPACE = "http://www.w3.org/2000/svg"
 
 
 def strip_namespace(tag: Any) -> str:
-    tag_str = str(tag)
-    if tag_str.startswith("{" + SVG_NAMESPACE + "}"):
-        return tag_str[len(SVG_NAMESPACE) + 2 :]
-    return tag_str
+    return strip_svg_namespace(tag, svg_namespace=SVG_NAMESPACE)
 
 
 def gather_text(node: SvgNode) -> str | None:
@@ -41,10 +39,7 @@ def gather_text(node: SvgNode) -> str | None:
 
 
 def extract_href(attributes: dict[str, str]) -> str | None:
-    for key in ("href", "{http://www.w3.org/1999/xlink}href"):
-        if key in attributes:
-            return attributes[key]
-    return None
+    return href_value(attributes)
 
 
 def parse_number(value: str | None, default: float = 0.0) -> float:

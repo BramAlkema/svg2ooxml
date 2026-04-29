@@ -7,6 +7,7 @@ from collections.abc import Callable, Iterable
 from svg2ooxml.ir.geometry import BezierSegment, LineSegment, Point, SegmentType
 
 PointTransform = Callable[[Point], Point]
+ELLIPSE_KAPPA = 0.5522847498307936
 
 
 def transform_segment(
@@ -50,8 +51,48 @@ def line_segments_from_points(points: Iterable[Point]) -> list[LineSegment]:
     return segments
 
 
+def ellipse_segments(cx: float, cy: float, rx: float, ry: float) -> list[SegmentType]:
+    """Build cubic Bezier segments approximating an ellipse."""
+
+    if rx <= 0 or ry <= 0:
+        return []
+    top = Point(cx, cy - ry)
+    right = Point(cx + rx, cy)
+    bottom = Point(cx, cy + ry)
+    left = Point(cx - rx, cy)
+
+    return [
+        BezierSegment(
+            start=right,
+            control1=Point(cx + rx, cy + ELLIPSE_KAPPA * ry),
+            control2=Point(cx + ELLIPSE_KAPPA * rx, cy + ry),
+            end=bottom,
+        ),
+        BezierSegment(
+            start=bottom,
+            control1=Point(cx - ELLIPSE_KAPPA * rx, cy + ry),
+            control2=Point(cx - rx, cy + ELLIPSE_KAPPA * ry),
+            end=left,
+        ),
+        BezierSegment(
+            start=left,
+            control1=Point(cx - rx, cy - ELLIPSE_KAPPA * ry),
+            control2=Point(cx - ELLIPSE_KAPPA * rx, cy - ry),
+            end=top,
+        ),
+        BezierSegment(
+            start=top,
+            control1=Point(cx + ELLIPSE_KAPPA * rx, cy - ry),
+            control2=Point(cx + rx, cy - ELLIPSE_KAPPA * ry),
+            end=right,
+        ),
+    ]
+
+
 __all__ = [
     "PointTransform",
+    "ELLIPSE_KAPPA",
+    "ellipse_segments",
     "line_segments_from_points",
     "transform_segment",
     "transform_segments",

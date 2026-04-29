@@ -5,6 +5,62 @@ Empirical PowerPoint behavior research, authored control decks, and durable
 oracle evidence live in the companion repository
 [`openxml-audit`](https://github.com/BramAlkema/openxml-audit).
 
+## 0.8.0 - 2026-04-29
+
+Release focus: fidelity policy, traceability, typed metadata boundaries, and
+converter hardening after the architecture split/dedupe work.
+
+Full diff: https://github.com/BramAlkema/svg2ooxml/compare/v0.7.8...v0.8.0
+
+### Added
+
+- added a typed `FidelityPolicy` source for direct, mimic, EMF, and bitmap
+  conversion tiers
+- added typed metadata helpers for page variants, page render payloads, trace
+  stage events, filter fallback assets, and trace report payloads
+- added optional `--embed-trace-docprops` support to embed compact trace JSON
+  in `docProps/custom.xml`
+- added focused regression coverage for fidelity policy isolation, metadata
+  coercion, trace payloads, filter fallback assets, docProps embedding, and
+  end-to-end trace reports
+
+### Changed
+
+- decomposed exporter, multi-page rendering, PPTX XML serialization, EMF
+  rendering, raster adapter, resvg filter promotion, filter policy coercion,
+  and gradient service conversion responsibilities into smaller modules
+- centralized shared numeric coercion, SVG reference handling, color/opacity
+  conversion, path flattening, curve bounds, ellipse segments, motion deltas,
+  Skia tile modes, filter input lookup, color-matrix identity checks, and XML
+  block formatting
+- moved fidelity-tier variant generation and override construction behind the
+  typed fidelity policy API
+- kept trace sidecar output controlled by verbose mode while requiring an
+  explicit switch for embedded PPTX trace metadata
+
+### Fixed
+
+- prevented public fidelity tier accessors from exposing mutable global policy
+  defaults
+- preserved base-install optional dependency boundaries during filter planning,
+  raster, EMF, and DrawingML imports
+- preserved custom exporter configuration contracts by rejecting unsupported
+  parallel conversion paths instead of silently swapping in defaults
+- fixed quadratic glyph path conversion to use the shared quadratic-to-cubic
+  control-point formula
+
+### Validation
+
+- local `ruff check src/svg2ooxml cli` passed
+- local `python -m compileall -q src/svg2ooxml cli` passed
+- local full unit suite passed: `2797 passed`
+- local full integration suite passed: `101 passed`
+- local fast end-to-end suite passed: `7 passed`
+- local `python -m build` produced `svg2ooxml-0.8.0.tar.gz` and
+  `svg2ooxml-0.8.0-py3-none-any.whl`
+- wheel metadata inspection confirmed `Version: 0.8.0` and
+  `Requires-Python: >=3.13`
+
 ## 0.7.8 - 2026-04-29
 
 Release focus: faster base imports and faster PPTX packaging after the

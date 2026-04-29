@@ -2,13 +2,18 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import replace
 from typing import Any
 
+from svg2ooxml.filters.metadata import (
+    FilterFallbackAssetPayload,
+    coerce_fallback_asset,
+)
 from svg2ooxml.services.filter_types import FilterEffectResult
 
 
-def _asset_key(asset: dict[str, Any]) -> tuple[object, ...] | None:
+def _asset_key(asset: Mapping[str, Any]) -> tuple[object, ...] | None:
     asset_type = asset.get("type")
     relationship_id = asset.get("relationship_id")
     if isinstance(relationship_id, str) and relationship_id:
@@ -26,21 +31,24 @@ def _asset_dicts(
     values: object,
     *,
     asset_type: str | None = None,
-) -> list[dict[str, Any]]:
+) -> list[FilterFallbackAssetPayload]:
     if not isinstance(values, list):
         return []
-    assets: list[dict[str, Any]] = []
+    assets: list[FilterFallbackAssetPayload] = []
     for value in values:
-        if not isinstance(value, dict):
+        asset = coerce_fallback_asset(value, asset_type=asset_type)
+        if asset is None:
             continue
-        if asset_type is not None and value.get("type") != asset_type:
-            continue
-        assets.append(dict(value))
+        assets.append(asset)
     return assets
 
 
-def _dedupe_assets(values: object, *, asset_type: str | None = None) -> list[dict[str, Any]]:
-    assets: list[dict[str, Any]] = []
+def _dedupe_assets(
+    values: object,
+    *,
+    asset_type: str | None = None,
+) -> list[FilterFallbackAssetPayload]:
+    assets: list[FilterFallbackAssetPayload] = []
     seen: set[tuple[object, ...]] = set()
     for asset in _asset_dicts(values, asset_type=asset_type):
         key = _asset_key(asset)
@@ -73,8 +81,11 @@ def attach_emf_metadata(
     metadata = dict(last_result.metadata or {})
     original_assets = _dedupe_assets(metadata.get("fallback_assets"))
     assets = list(original_assets)
-    descriptor_result = isinstance(last_result.metadata, dict) and last_result.metadata.get("strategy_source") == "resvg_descriptor"
-    best_assets: list[dict[str, Any]] | None = None
+    descriptor_result = (
+        isinstance(last_result.metadata, dict)
+        and last_result.metadata.get("strategy_source") == "resvg_descriptor"
+    )
+    best_assets: list[FilterFallbackAssetPayload] | None = None
     for emf_result in emf_results:
         emf_meta = emf_result.metadata if isinstance(emf_result.metadata, dict) else {}
         emf_assets = emf_meta.get("fallback_assets")
@@ -89,7 +100,11 @@ def attach_emf_metadata(
         else:
             best_assets = candidates
 
-    descriptor_info = metadata.get("descriptor") if isinstance(metadata.get("descriptor"), dict) else {}
+    descriptor_info = (
+        metadata.get("descriptor")
+        if isinstance(metadata.get("descriptor"), dict)
+        else {}
+    )
     primitive_count = None
     primitive_tags: set[str] = set()
     if isinstance(descriptor_info, dict):
@@ -98,13 +113,19 @@ def attach_emf_metadata(
         if isinstance(tags, (list, tuple, set)):
             primitive_tags = {str(tag).strip().lower() for tag in tags if tag}
 
-    multi_stage_descriptor = descriptor_result and primitive_count and primitive_count > 1
-    has_composite = descriptor_result and any("fecomposite" in tag for tag in primitive_tags)
+    multi_stage_descriptor = (
+        descriptor_result and primitive_count and primitive_count > 1
+    )
+    has_composite = descriptor_result and any(
+        "fecomposite" in tag for tag in primitive_tags
+    )
 
     if descriptor_result:
         if multi_stage_descriptor or has_composite:
             raster_assets = [
-                asset for asset in original_assets if isinstance(asset, dict) and asset.get("type") == "raster"
+                asset
+                for asset in original_assets
+                if isinstance(asset, dict) and asset.get("type") == "raster"
             ]
             if raster_assets:
                 assets = raster_assets
@@ -119,7 +140,9 @@ def attach_emf_metadata(
     assets = _dedupe_assets(assets)
     metadata["fallback_assets"] = assets
     if assets:
-        sample = next((asset for asset in reversed(assets) if isinstance(asset, dict)), None)
+        sample = next(
+            (asset for asset in reversed(assets) if isinstance(asset, dict)), None
+        )
         if sample:
             sample_meta = sample.get("metadata")
             if isinstance(sample_meta, dict) and sample_meta.get("filter_type"):
@@ -151,12 +174,20 @@ def attach_raster_metadata(
     target = existing_results[-1]
     metadata = dict(target.metadata or {})
     assets = _dedupe_assets(metadata.get("fallback_assets"))
-    had_emf = any(isinstance(asset, dict) and asset.get("type") == "emf" for asset in assets)
+    had_emf = any(
+        isinstance(asset, dict) and asset.get("type") == "emf" for asset in assets
+    )
     for raster in raster_results:
         raster_meta = raster.metadata if isinstance(raster.metadata, dict) else {}
         if "renderer" in raster_meta:
             metadata.setdefault("renderer", raster_meta.get("renderer"))
-        for key in ("width_px", "height_px", "filter_units", "primitive_units", "descriptor"):
+        for key in (
+            "width_px",
+            "height_px",
+            "filter_units",
+            "primitive_units",
+            "descriptor",
+        ):
             if key in raster_meta and key not in metadata:
                 metadata[key] = raster_meta[key]
         assets.extend(_asset_dicts(raster_meta.get("fallback_assets")))
@@ -166,7 +197,11 @@ def attach_raster_metadata(
         and isinstance(assets, list)
         and not had_emf
     ):
-        assets.sort(key=lambda asset: 0 if isinstance(asset, dict) and asset.get("type") == "raster" else 1)
+        assets.sort(
+            key=lambda asset: (
+                0 if isinstance(asset, dict) and asset.get("type") == "raster" else 1
+            )
+        )
     if assets:
         metadata["fallback_assets"] = assets
     existing_results[-1] = FilterEffectResult(

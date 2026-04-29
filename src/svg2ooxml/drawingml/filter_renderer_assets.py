@@ -9,19 +9,26 @@ from lxml import etree
 from svg2ooxml.common.boundaries import is_safe_relationship_id
 from svg2ooxml.drawingml.xml_builder import a_elem, a_sub, to_string
 from svg2ooxml.filters.base import FilterResult
+from svg2ooxml.filters.metadata import (
+    FilterFallbackAssetPayload,
+    coerce_fallback_asset,
+    fallback_asset_data_hex,
+)
 
-_ALLOWED_BLIP_TAGS = frozenset({
-    "alphaModFix",
-    "alphaMod",
-    "alphaOff",
-    "satMod",
-    "satOff",
-    "hueOff",
-    "lumMod",
-    "lumOff",
-    "tint",
-    "shade",
-})
+_ALLOWED_BLIP_TAGS = frozenset(
+    {
+        "alphaModFix",
+        "alphaMod",
+        "alphaOff",
+        "satMod",
+        "satOff",
+        "hueOff",
+        "lumMod",
+        "lumOff",
+        "tint",
+        "shade",
+    }
+)
 _RESERVED_SLIDE_RELATIONSHIP_IDS = {"rId1"}
 
 
@@ -38,7 +45,9 @@ class FilterRendererAssetMixin:
         try:
             asset = self._ensure_emf_asset(metadata, result)
         except Exception:  # pragma: no cover - defensive fallback
-            self._logger.debug("EMF adapter failed; falling back to placeholder", exc_info=True)
+            self._logger.debug(
+                "EMF adapter failed; falling back to placeholder", exc_info=True
+            )
             asset = None
 
         if not asset:
@@ -65,7 +74,9 @@ class FilterRendererAssetMixin:
         comment = " ".join(comment_parts)
 
         effectLst = a_elem("effectLst")
-        effectLst.append(etree.Comment(self._safe_comment_text(f"svg2ooxml:emf {comment}")))
+        effectLst.append(
+            etree.Comment(self._safe_comment_text(f"svg2ooxml:emf {comment}"))
+        )
         blip = self._append_blip_fill(effectLst, rel_id)
         self._apply_blip_enrichment(blip, metadata, policy)
 
@@ -114,21 +125,28 @@ class FilterRendererAssetMixin:
             return self._render_existing_raster_asset(existing_asset, metadata, policy)
         return self._render_generated_raster_placeholder(metadata, policy)
 
-    def _existing_raster_asset(self, metadata: dict[str, object]) -> dict[str, object] | None:
+    def _existing_raster_asset(
+        self,
+        metadata: dict[str, object],
+    ) -> FilterFallbackAssetPayload | None:
         assets_list = metadata.get("fallback_assets")
         if isinstance(assets_list, list):
             for asset in assets_list:
+                typed_asset = coerce_fallback_asset(
+                    asset,
+                    asset_type="raster",
+                    copy=False,
+                )
                 if (
-                    isinstance(asset, dict)
-                    and asset.get("type") == "raster"
-                    and self._asset_data_hex(asset) is not None
+                    typed_asset is not None
+                    and self._asset_data_hex(typed_asset) is not None
                 ):
-                    return asset
+                    return typed_asset
         return None
 
     def _render_existing_raster_asset(
         self,
-        asset: dict[str, object],
+        asset: FilterFallbackAssetPayload,
         metadata: dict[str, object],
         policy: dict[str, object] | None,
     ) -> str:
@@ -151,7 +169,9 @@ class FilterRendererAssetMixin:
         if height_px is not None:
             comment_parts.append(f'height="{height_px}"')
         comment = " ".join(comment_parts)
-        effectLst.append(etree.Comment(self._safe_comment_text(f"svg2ooxml:raster {comment}")))
+        effectLst.append(
+            etree.Comment(self._safe_comment_text(f"svg2ooxml:raster {comment}"))
+        )
         blip = self._append_blip_fill(effectLst, rel_id)
         self._apply_blip_enrichment(blip, metadata, policy)
 
@@ -210,24 +230,32 @@ class FilterRendererAssetMixin:
         )
         return blip
 
-    def _ensure_emf_asset(self, metadata: dict[str, object], result: FilterResult) -> dict[str, object] | None:
+    def _ensure_emf_asset(
+        self,
+        metadata: dict[str, object],
+        result: FilterResult,
+    ) -> FilterFallbackAssetPayload | None:
         asset = self._active_emf_asset(metadata)
         if asset is not None:
             return asset
 
         filter_type = self._filter_type(metadata, result)
         try:
-            source_meta = result.metadata if isinstance(result.metadata, dict) else metadata
+            source_meta = (
+                result.metadata if isinstance(result.metadata, dict) else metadata
+            )
             if isinstance(source_meta, dict):
                 source_meta = dict(source_meta)
             else:
                 source_meta = metadata if isinstance(metadata, dict) else {}
             emf = self._emf_adapter.render_filter(filter_type, source_meta)
         except Exception:
-            self._logger.debug("Failed to render EMF for filter %s", filter_type, exc_info=True)
+            self._logger.debug(
+                "Failed to render EMF for filter %s", filter_type, exc_info=True
+            )
             return None
 
-        asset = {
+        asset: FilterFallbackAssetPayload = {
             "type": "emf",
             "relationship_id": emf.relationship_id,
             "width_emu": emf.width_emu,
@@ -240,19 +268,28 @@ class FilterRendererAssetMixin:
         if isinstance(emf_meta, dict):
             emf_meta.setdefault("width_emu", emf.width_emu)
             emf_meta.setdefault("height_emu", emf.height_emu)
-            emf_meta.setdefault("filter_type", emf.metadata.get("filter_type", filter_type))
+            emf_meta.setdefault(
+                "filter_type", emf.metadata.get("filter_type", filter_type)
+            )
         return asset
 
-    def _active_emf_asset(self, metadata: dict[str, object]) -> dict[str, object] | None:
+    def _active_emf_asset(
+        self,
+        metadata: dict[str, object],
+    ) -> FilterFallbackAssetPayload | None:
         assets_list = metadata.get("fallback_assets")
         if isinstance(assets_list, list):
             for asset in assets_list:
+                typed_asset = coerce_fallback_asset(
+                    asset,
+                    asset_type="emf",
+                    copy=False,
+                )
                 if (
-                    isinstance(asset, dict)
-                    and asset.get("type") == "emf"
-                    and self._asset_data_hex(asset) is not None
+                    typed_asset is not None
+                    and self._asset_data_hex(typed_asset) is not None
                 ):
-                    return asset
+                    return typed_asset
         return None
 
     @staticmethod
@@ -266,7 +303,9 @@ class FilterRendererAssetMixin:
         return copied
 
     @staticmethod
-    def _ensure_asset_list(metadata: dict[str, object]) -> list[dict[str, object]]:
+    def _ensure_asset_list(
+        metadata: dict[str, object],
+    ) -> list[FilterFallbackAssetPayload]:
         assets = metadata.get("fallback_assets")
         if not isinstance(assets, list):
             assets = []
@@ -278,39 +317,26 @@ class FilterRendererAssetMixin:
         cls,
         metadata: dict[str, object],
         asset_type: str,
-    ) -> list[dict[str, object]]:
-        pruned: list[dict[str, object]] = []
+    ) -> list[FilterFallbackAssetPayload]:
+        pruned: list[FilterFallbackAssetPayload] = []
         assets = metadata.get("fallback_assets")
         if isinstance(assets, list):
             for asset in assets:
-                if not isinstance(asset, dict):
+                copied = coerce_fallback_asset(asset)
+                if copied is None:
                     continue
-                copied = dict(asset)
-                if copied.get("type") == asset_type and cls._asset_data_hex(copied) is None:
+                if (
+                    copied.get("type") == asset_type
+                    and cls._asset_data_hex(copied) is None
+                ):
                     continue
                 pruned.append(copied)
         metadata["fallback_assets"] = pruned
         return pruned
 
     @staticmethod
-    def _asset_data_hex(asset: dict[str, object]) -> str | None:
-        data_hex = asset.get("data_hex")
-        if isinstance(data_hex, str) and data_hex.strip():
-            token = data_hex.strip()
-            try:
-                bytes.fromhex(token)
-            except ValueError:
-                asset.pop("data_hex", None)
-            else:
-                asset["data_hex"] = token
-                return token
-
-        raw = asset.get("data")
-        if isinstance(raw, (bytes, bytearray)):
-            token = bytes(raw).hex()
-            asset["data_hex"] = token
-            return token
-        return None
+    def _asset_data_hex(asset: FilterFallbackAssetPayload) -> str | None:
+        return fallback_asset_data_hex(asset)
 
     @staticmethod
     def _coerce_int(value: object) -> int | None:

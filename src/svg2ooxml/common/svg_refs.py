@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 
 
@@ -26,6 +27,25 @@ def namespace_uri(tag: Any) -> str | None:
         namespace = value[1:].split("}", 1)[0]
         return namespace or None
     return None
+
+
+def namespaced_tag_like(reference: Any, local: str) -> str:
+    """Return ``local`` in the same namespace as an XML reference element."""
+
+    namespace = namespace_uri(getattr(reference, "tag", None))
+    if namespace:
+        return f"{{{namespace}}}{local}"
+    return local
+
+
+def strip_svg_namespace(tag: Any, *, svg_namespace: str = "http://www.w3.org/2000/svg") -> str:
+    """Strip the SVG namespace from an ElementTree-style tag when present."""
+
+    value = str(tag)
+    prefix = "{" + svg_namespace + "}"
+    if value.startswith(prefix):
+        return value[len(prefix) :]
+    return value
 
 
 def unwrap_url_reference(token: str | None) -> str | None:
@@ -61,10 +81,34 @@ def local_url_id(token: str | None) -> str | None:
     return None
 
 
+def href_value(attributes: Mapping[str, str]) -> str | None:
+    """Return SVG/XLink href from an attribute mapping, if present."""
+
+    for key in ("href", "{http://www.w3.org/1999/xlink}href"):
+        if key in attributes:
+            return attributes[key]
+    return None
+
+
+def element_index_by_id(root: Any) -> dict[str, Any]:
+    """Build an ``id`` to element lookup for an XML tree."""
+
+    index: dict[str, Any] = {}
+    for node in root.iter():
+        node_id = node.get("id")
+        if node_id:
+            index[node_id] = node
+    return index
+
+
 __all__ = [
+    "element_index_by_id",
+    "href_value",
     "local_name",
     "local_url_id",
+    "namespaced_tag_like",
     "namespace_uri",
     "reference_id",
+    "strip_svg_namespace",
     "unwrap_url_reference",
 ]

@@ -56,9 +56,11 @@ pip install svg2ooxml[figma2gslides]  # Figma/Google Slides tool runtime
 
 ## Current Release
 
-`0.7.8` speeds up base imports and PPTX packaging after the architecture/dedupe
-passes. Batch PPTX writing now assembles package parts in memory, while optional
-NumPy/render dependencies remain outside the base install path.
+`0.8.0` is the fidelity policy, traceability, and converter-hardening release.
+Fidelity tiers now come from one typed policy source, trace reports are typed
+end to end, optional PPTX docProps trace embedding is behind an explicit switch,
+and more shared geometry, color, filter, SVG reference, and policy helpers are
+centralized to reduce duplicate conversion behavior.
 
 ## Quick Start
 

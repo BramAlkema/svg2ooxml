@@ -5,16 +5,17 @@ from __future__ import annotations
 from typing import Any
 
 from svg2ooxml.core.ir.converter import IRScene
+from svg2ooxml.core.metadata import ensure_scene_variant_type, read_page_render_metadata
 from svg2ooxml.core.pptx_exporter_types import SvgPageResult, SvgPageSource
 
 
-def page_variant_type(page: SvgPageSource, default: str = "variant") -> Any:
+def page_variant_type(page: SvgPageSource, default: str = "variant") -> str:
     """Return the variant type stored on a page source."""
 
-    variant_metadata = (page.metadata or {}).get("variant", {})
-    if isinstance(variant_metadata, dict):
-        return variant_metadata.get("type", default)
-    return default
+    return read_page_render_metadata(
+        page.metadata,
+        default_variant_type=default,
+    ).variant_type
 
 
 def resolve_page_title(page: SvgPageSource, scene: IRScene, fallback: str) -> str:
@@ -44,7 +45,7 @@ def attach_page_metadata(
     scene.metadata.setdefault("trace_report", trace_report)
     if include_page_metadata and page.metadata:
         scene.metadata.setdefault("page_metadata", {}).update(page.metadata)
-    scene.metadata.setdefault("variant", {}).setdefault("type", variant_type)
+    ensure_scene_variant_type(scene.metadata, variant_type)
     return scene.metadata
 
 

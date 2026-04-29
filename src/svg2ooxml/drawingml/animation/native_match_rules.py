@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from svg2ooxml.common.conversions.opacity import parse_authored_opacity
 from svg2ooxml.drawingml.animation.constants import (
     COLOR_ATTRIBUTES,
     DISCRETE_VISIBILITY_ATTRIBUTES,
@@ -435,10 +436,4 @@ def _is_simple_authored_fade(animation: AnimationDefinition) -> bool:
 
 
 def _opacity_float(value: str) -> float:
-    try:
-        opacity = float(value)
-    except (TypeError, ValueError):
-        return 1.0
-    if opacity > 1.0:
-        opacity = opacity / 100.0
-    return max(0.0, min(1.0, opacity))
+    return parse_authored_opacity(value)

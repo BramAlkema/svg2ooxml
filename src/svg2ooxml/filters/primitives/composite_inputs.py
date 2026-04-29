@@ -5,6 +5,7 @@ from __future__ import annotations
 from lxml import etree
 
 from svg2ooxml.filters.base import FilterResult
+from svg2ooxml.filters.metadata import FilterFallbackAssetPayload
 from svg2ooxml.filters.primitives.composite_types import (
     SUPPORTED_OPERATORS,
     CompositeParams,
@@ -13,6 +14,22 @@ from svg2ooxml.filters.primitives.result_utils import (
     collect_fallback_assets,
     merge_fallback_mode,
 )
+
+
+def lookup_filter_input(
+    pipeline: dict[str, FilterResult],
+    name: str | None,
+) -> FilterResult | None:
+    """Resolve a named primitive input from the active filter pipeline."""
+
+    if not name:
+        return None
+    candidate = pipeline.get(name)
+    if candidate is not None:
+        return candidate
+    if name in {"SourceGraphic", "SourceAlpha"}:
+        return pipeline.get(name)
+    return None
 
 
 class CompositeInputMixin:
@@ -51,14 +68,7 @@ class CompositeInputMixin:
         pipeline: dict[str, FilterResult],
         name: str,
     ) -> FilterResult | None:
-        if not name:
-            return None
-        candidate = pipeline.get(name)
-        if candidate is not None:
-            return candidate
-        if name in {"SourceGraphic", "SourceAlpha"}:
-            return pipeline.get(name)
-        return None
+        return lookup_filter_input(pipeline, name)
 
     def _arithmetic_passthrough(self, params: CompositeParams) -> str | None:
         if params.operator != "arithmetic":
@@ -77,8 +87,10 @@ class CompositeInputMixin:
         return merge_fallback_mode(current, new_value)
 
     @staticmethod
-    def _collect_fallback_assets(*results: FilterResult | None) -> list[dict[str, object]]:
+    def _collect_fallback_assets(
+        *results: FilterResult | None,
+    ) -> list[FilterFallbackAssetPayload]:
         return collect_fallback_assets(*results)
 
 
-__all__ = ["CompositeInputMixin"]
+__all__ = ["CompositeInputMixin", "lookup_filter_input"]

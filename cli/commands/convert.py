@@ -57,6 +57,11 @@ from ._convert_sources import (
     is_flag=True,
     help="Emit debug logs and write a conversion trace report alongside the PPTX.",
 )
+@click.option(
+    "--embed-trace-docprops/--no-embed-trace-docprops",
+    default=False,
+    help="Embed conversion trace JSON in PPTX docProps/custom.xml.",
+)
 def convert(  # noqa: PLR0913  (CLI surface)
     input_source: str,
     output_file: Path | None,
@@ -66,14 +71,17 @@ def convert(  # noqa: PLR0913  (CLI surface)
     render_tiers: bool,
     parallel: bool,
     verbose: bool,
+    embed_trace_docprops: bool,
 ) -> None:
     """Convert INPUT_SOURCE (SVG) to a PPTX."""
 
     exporter = SvgToPptxExporter()
     tracer: ConversionTracer | None = None
-    if verbose:
+    if verbose or embed_trace_docprops:
         logging.basicConfig(level=logging.DEBUG)
-        tracer = ConversionTracer(logger=logging.getLogger("svg2ooxml.map"), collect_events=True)
+        tracer = ConversionTracer(
+            logger=logging.getLogger("svg2ooxml.map"), collect_events=True
+        )
 
     primary_svg, primary_title, primary_path = load_source(input_source)
     primary_uri = input_source if looks_like_uri(input_source) else None
@@ -84,9 +92,15 @@ def convert(  # noqa: PLR0913  (CLI surface)
         if split_results:
             slides.extend(split_results)
         else:
-            slides.append(SvgPageSource(svg_text=primary_svg, title=primary_title, name=primary_title))
+            slides.append(
+                SvgPageSource(
+                    svg_text=primary_svg, title=primary_title, name=primary_title
+                )
+            )
     else:
-        slides.append(SvgPageSource(svg_text=primary_svg, title=primary_title, name=primary_title))
+        slides.append(
+            SvgPageSource(svg_text=primary_svg, title=primary_title, name=primary_title)
+        )
     for extra in extra_slides:
         svg_text, slide_title, _ = load_source(extra)
         slides.append(
@@ -108,8 +122,18 @@ def convert(  # noqa: PLR0913  (CLI surface)
     click.echo(f"📦 Output: {target_path}")
 
     try:
-        if len(slides) == 1 and not extra_slides and not split_fallback_slides and not render_tiers:
-            result = exporter.convert_string(slides[0].svg_text, target_path, tracer=tracer)
+        if (
+            len(slides) == 1
+            and not extra_slides
+            and not split_fallback_slides
+            and not render_tiers
+        ):
+            result = exporter.convert_string(
+                slides[0].svg_text,
+                target_path,
+                tracer=tracer,
+                embed_trace_docprops=embed_trace_docprops,
+            )
             slide_count = result.slide_count
             trace_payload: dict[str, Any] | None = result.trace_report
         else:
@@ -120,13 +144,15 @@ def convert(  # noqa: PLR0913  (CLI surface)
                 split_fallback_variants=split_fallback_slides,
                 render_tiers=render_tiers,
                 parallel=parallel,
+                embed_trace_docprops=embed_trace_docprops,
             )
             slide_count = multi_result.slide_count
             trace_payload = {
                 "aggregated": multi_result.aggregated_trace_report,
                 "packaging": multi_result.packaging_report,
                 "pages": [
-                    {"title": page.title, "trace_report": page.trace_report} for page in multi_result.page_results
+                    {"title": page.title, "trace_report": page.trace_report}
+                    for page in multi_result.page_results
                 ],
             }
     except SvgConversionError as exc:
@@ -137,7 +163,9 @@ def convert(  # noqa: PLR0913  (CLI surface)
         raise SystemExit(1) from exc
 
     pptx_path = target_path
-    click.echo(f"✅ Conversion complete: {pptx_path} ({slide_count} slide{'s' if slide_count != 1 else ''})")
+    click.echo(
+        f"✅ Conversion complete: {pptx_path} ({slide_count} slide{'s' if slide_count != 1 else ''})"
+    )
 
     if verbose and trace_payload:
         trace_path = target_path.with_suffix(target_path.suffix + ".trace.json")

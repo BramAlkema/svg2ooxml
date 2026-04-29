@@ -7,6 +7,11 @@ from collections.abc import Iterable, Sequence
 from lxml import etree
 
 from svg2ooxml.common.geometry import Matrix2D
+from svg2ooxml.common.geometry.segments import (
+    ellipse_segments,
+    line_segments_from_points,
+)
+from svg2ooxml.common.math_utils import clamp01
 from svg2ooxml.common.style.css_values import parse_style_declarations
 from svg2ooxml.common.svg_refs import local_name as _local_name
 from svg2ooxml.common.svg_refs import namespace_uri
@@ -15,11 +20,7 @@ from svg2ooxml.ir.geometry import BezierSegment, LineSegment, Point, Rect, Segme
 
 
 def _clamp01(value: float) -> float:
-    if value < 0.0:
-        return 0.0
-    if value > 1.0:
-        return 1.0
-    return value
+    return clamp01(value)
 
 def _parse_float(value: str | None, *, default: float | None = None) -> float | None:
     if value is None:
@@ -55,46 +56,11 @@ def _resolve_svg_length(
 
 
 def _ellipse_segments(cx: float, cy: float, rx: float, ry: float) -> list[SegmentType]:
-    if rx <= 0 or ry <= 0:
-        return []
-    kappa = 0.5522847498307936
-    top = Point(cx, cy - ry)
-    right = Point(cx + rx, cy)
-    bottom = Point(cx, cy + ry)
-    left = Point(cx - rx, cy)
-
-    return [
-        BezierSegment(
-            start=right,
-            control1=Point(cx + rx, cy + kappa * ry),
-            control2=Point(cx + kappa * rx, cy + ry),
-            end=bottom,
-        ),
-        BezierSegment(
-            start=bottom,
-            control1=Point(cx - kappa * rx, cy + ry),
-            control2=Point(cx - rx, cy + kappa * ry),
-            end=left,
-        ),
-        BezierSegment(
-            start=left,
-            control1=Point(cx - rx, cy - kappa * ry),
-            control2=Point(cx - kappa * rx, cy - ry),
-            end=top,
-        ),
-        BezierSegment(
-            start=top,
-            control1=Point(cx + kappa * rx, cy - ry),
-            control2=Point(cx + rx, cy - kappa * ry),
-            end=right,
-        ),
-    ]
+    return ellipse_segments(cx, cy, rx, ry)
 
 
 def _points_to_segments(points: Sequence[Point], *, closed: bool) -> list[SegmentType]:
-    segments: list[SegmentType] = []
-    for start, end in zip(points, points[1:], strict=False):
-        segments.append(LineSegment(start, end))
+    segments: list[SegmentType] = list(line_segments_from_points(points))
     if closed and points:
         segments.append(LineSegment(points[-1], points[0]))
     return segments

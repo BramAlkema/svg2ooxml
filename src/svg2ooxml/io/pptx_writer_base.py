@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from io import BytesIO
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -27,6 +26,7 @@ from svg2ooxml.io.pptx_package_model import (
 )
 from svg2ooxml.io.pptx_part_names import sanitize_slide_filename
 from svg2ooxml.io.pptx_presentation import update_presentation_parts
+from svg2ooxml.io.pptx_xml import serialize_xml
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from svg2ooxml.core.tracing import ConversionTracer
@@ -168,13 +168,7 @@ class PackageWriterBase:
             ET.SubElement(rels_root, f"{{{REL_NS}}}Relationship", attributes)
             existing_ids.add(attributes["Id"])
 
-        output = BytesIO()
-        ET.ElementTree(rels_root).write(
-            output,
-            encoding="utf-8",
-            xml_declaration=True,
-        )
-        return output.getvalue()
+        return serialize_xml(rels_root)
 
     @staticmethod
     def _unique_media_parts(
