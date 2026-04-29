@@ -15,6 +15,10 @@ from svg2ooxml.color.parsers import parse_color
 from svg2ooxml.common.conversions.angles import degrees_to_ppt
 from svg2ooxml.common.conversions.opacity import opacity_to_ppt, parse_opacity
 from svg2ooxml.common.conversions.scale import position_to_ppt
+from svg2ooxml.common.gradient_units import (
+    parse_gradient_coordinate,
+    parse_gradient_offset,
+)
 from svg2ooxml.common.style.css_values import parse_style_declarations
 from svg2ooxml.common.svg_refs import local_name
 from svg2ooxml.drawingml.bridges.resvg_paint_bridge import (
@@ -206,18 +210,7 @@ class GradientServiceConversionMixin:
                 yield node
 
     def _parse_offset(self, value: str | None) -> int:
-        if not value:
-            return 0
-        token = value.strip()
-        try:
-            if token.endswith("%"):
-                return position_to_ppt(float(token[:-1]) / 100.0)
-            numeric = float(token)
-            if 0.0 <= numeric <= 1.0:
-                return position_to_ppt(numeric)
-            return position_to_ppt(numeric / 100.0)
-        except (TypeError, ValueError):
-            return 0
+        return position_to_ppt(parse_gradient_offset(value))
 
     def _resolve_stop_color(self, stop: etree._Element) -> Color:
         style_map = self._parse_style(stop.get("style"))
@@ -235,10 +228,31 @@ class GradientServiceConversionMixin:
     def _resolve_linear_angle(self, element: etree._Element) -> int:
         # Map SVG x1/y1/x2/y2 into DrawingML degrees; fall back to 180° (top-to-bottom)
         try:
-            x1 = float(element.get("x1", "0") or 0)
-            y1 = float(element.get("y1", "0") or 0)
-            x2 = float(element.get("x2", "0") or 0)
-            y2 = float(element.get("y2", "1") or 1)
+            units = element.get("gradientUnits")
+            x1 = parse_gradient_coordinate(
+                element.get("x1"),
+                units=units,
+                axis="x",
+                default="0",
+            )
+            y1 = parse_gradient_coordinate(
+                element.get("y1"),
+                units=units,
+                axis="y",
+                default="0",
+            )
+            x2 = parse_gradient_coordinate(
+                element.get("x2"),
+                units=units,
+                axis="x",
+                default="0",
+            )
+            y2 = parse_gradient_coordinate(
+                element.get("y2"),
+                units=units,
+                axis="y",
+                default="1",
+            )
             dx = x2 - x1
             dy = y2 - y1
             if dx == 0 and dy == 0:

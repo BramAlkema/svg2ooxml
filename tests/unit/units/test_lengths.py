@@ -7,7 +7,10 @@ import pytest
 from svg2ooxml.common.style.css_values import resolve_calc
 from svg2ooxml.common.units import UnitConverter
 from svg2ooxml.common.units.lengths import (
+    parse_number,
+    parse_number_list,
     parse_number_or_percent,
+    parse_percentage,
     resolve_length_list_px,
     resolve_length_px,
     resolve_user_length_px,
@@ -57,8 +60,31 @@ def test_resolve_length_list_px_preserves_calc_tokens() -> None:
 
 def test_user_length_and_fraction_helpers_share_semantics() -> None:
     assert parse_number_or_percent("25%", 0.0) == pytest.approx(0.25)
+    assert parse_number_or_percent("calc(25% + 5%)", 0.0) == pytest.approx(0.30)
+    assert parse_number_or_percent("calc(1 / 4)", 0.0) == pytest.approx(0.25)
+    assert parse_number_or_percent("calc(25% + 5px)", 0.5) == pytest.approx(0.5)
     assert resolve_user_length_px("25%", 0.0, 80.0) == pytest.approx(20.0)
     assert resolve_user_length_px("calc(25% + 5px)", 0.0, 80.0) == pytest.approx(25.0)
+
+
+def test_number_and_percentage_helpers_keep_calc_typed() -> None:
+    assert parse_number("calc(2 * 3)") == pytest.approx(6.0)
+    assert parse_number("25%", 7.0) == pytest.approx(7.0)
+    assert parse_percentage("calc(25% + 25%)") == pytest.approx(0.5)
+    assert parse_percentage("0.5", 7.0) == pytest.approx(7.0)
+
+
+def test_number_helpers_reject_nonfinite_tokens() -> None:
+    assert parse_number("nan", 7.0) == pytest.approx(7.0)
+    assert parse_number("inf", 7.0) == pytest.approx(7.0)
+    assert parse_number_or_percent("-inf", 0.25) == pytest.approx(0.25)
+    assert parse_percentage("nan%", 0.5) == pytest.approx(0.5)
+
+
+def test_parse_number_list_keeps_calc_tokens_together() -> None:
+    assert parse_number_list("calc(1 + 2), 4 calc(2 * 3)") == pytest.approx(
+        [3.0, 4.0, 6.0]
+    )
 
 
 def test_context_free_calc_preserves_mixed_units_for_later_resolution() -> None:

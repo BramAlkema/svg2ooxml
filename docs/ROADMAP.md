@@ -24,6 +24,9 @@ evidence live in the companion repository
 
 ## Recent Release Focus
 
+- **0.8.1**: typed CSS value evaluation, broader calc coverage, parser
+  hardening for non-finite authored values, and ADR-036 accepting 0.9 as a
+  measured-fidelity release driven by ranked browser-vs-PowerPoint evidence
 - **0.8.0**: centralized fidelity tier policy, typed trace and metadata
   boundaries, optional embedded PPTX trace docProps, exporter/PPTX assembly
   decomposition, and a final dedupe pass across geometry, color, filters,
@@ -55,6 +58,7 @@ evidence live in the companion repository
 
 ### Blocking
 
+- [ ] generate the 0.9 ranked browser-vs-PowerPoint fidelity report first
 - [ ] run larger W3C/body passes against the current animation/runtime stack
 - [ ] keep tightening native animation mappings where PowerPoint playback and
       authored XML permit it
@@ -73,7 +77,7 @@ evidence live in the companion repository
 
 ## Longer-Term Work
 
-- `calc()` CSS expression evaluator
+- typed `calc()` contexts that are still unresolved after the 0.8.1 evaluator
 - `@import` stylesheet resolution
 - `<foreignObject>` support through a browser-backed path
 - Async conversion option for large multi-frame exports

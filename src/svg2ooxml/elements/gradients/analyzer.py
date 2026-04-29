@@ -8,6 +8,7 @@ from typing import Any
 from lxml import etree as ET
 
 from svg2ooxml.color import summarize_palette
+from svg2ooxml.common.gradient_units import parse_gradient_offset
 from svg2ooxml.elements.gradients.types import (
     GradientAnalysis,
     GradientComplexity,
@@ -82,14 +83,7 @@ def analyze_gradient_stops(element: ET.Element) -> dict[str, Any]:
 
     for stop in stop_elements:
         offset_str = stop.get("offset", "0")
-        try:
-            if offset_str.endswith("%"):
-                position = float(offset_str[:-1]) / 100.0
-            else:
-                position = float(offset_str)
-            positions.append(position)
-        except (ValueError, TypeError):
-            positions.append(0.0)
+        positions.append(parse_gradient_offset(offset_str))
 
         color_str = stop.get("stop-color", "#000000")
         colors_raw.append(color_str)

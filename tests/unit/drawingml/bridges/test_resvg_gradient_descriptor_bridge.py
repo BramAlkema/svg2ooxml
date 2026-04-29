@@ -6,7 +6,9 @@ from lxml import etree
 from svg2ooxml.drawingml.bridges.resvg_paint_bridge import (
     LinearGradientDescriptor,
     MeshGradientDescriptor,
+    PatternDescriptor,
     describe_gradient_element,
+    describe_pattern_element,
 )
 
 
@@ -51,7 +53,7 @@ def test_describe_gradient_element_preserves_contextless_userspace_percentages()
     element = etree.fromstring(
         """
         <linearGradient id="grad" gradientUnits="userSpaceOnUse"
-                        x1="50%" y1="25%" x2="75%" y2="100%">
+                        x1="calc(25% + 25%)" y1="25%" x2="75%" y2="100%">
           <stop offset="0" stop-color="#000000"/>
           <stop offset="1" stop-color="#ffffff"/>
         </linearGradient>
@@ -66,6 +68,25 @@ def test_describe_gradient_element_preserves_contextless_userspace_percentages()
     assert descriptor.y1 == pytest.approx(0.25)
     assert descriptor.x2 == pytest.approx(0.75)
     assert descriptor.y2 == pytest.approx(1.0)
+
+
+def test_describe_gradient_element_ignores_nonfinite_coordinates() -> None:
+    element = etree.fromstring(
+        """
+        <linearGradient id="grad" x1="nan" y1="inf" x2="nan" y2="-inf">
+          <stop offset="0" stop-color="#000000"/>
+          <stop offset="1" stop-color="#ffffff"/>
+        </linearGradient>
+        """
+    )
+
+    descriptor = describe_gradient_element(element)
+
+    assert isinstance(descriptor, LinearGradientDescriptor)
+    assert descriptor.x1 == 0.0
+    assert descriptor.y1 == 0.0
+    assert descriptor.x2 == 1.0
+    assert descriptor.y2 == 0.0
 
 
 def test_describe_gradient_element_parses_full_transform_list() -> None:
@@ -102,3 +123,20 @@ def test_describe_mesh_gradient_collects_css_stop_colors() -> None:
 
     assert isinstance(descriptor, MeshGradientDescriptor)
     assert descriptor.colors == ("0000FF", "FF0000")
+
+
+def test_describe_pattern_element_accepts_calc_number_percent_geometry() -> None:
+    element = etree.fromstring(
+        """
+        <pattern id="pat" x="calc(25% + 25%)" y="calc(2 * 3)"
+                 width="50%" height="calc(1 / 4)"/>
+        """
+    )
+
+    descriptor = describe_pattern_element(element)
+
+    assert isinstance(descriptor, PatternDescriptor)
+    assert descriptor.x == pytest.approx(0.5)
+    assert descriptor.y == pytest.approx(6.0)
+    assert descriptor.width == pytest.approx(0.5)
+    assert descriptor.height == pytest.approx(0.25)

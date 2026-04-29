@@ -23,6 +23,19 @@ class NumericScaleMixin:
 
     _SCALE_ATTRS = {"ppt_h", "ppt_w", "height", "width", "w", "h", "rx", "ry"}
 
+    def _normalized_float(self, ppt_attribute: str, raw_value: str) -> float:
+        return float(self._normalize_value(ppt_attribute, raw_value))
+
+    def _normalized_float_list(
+        self,
+        ppt_attribute: str,
+        raw_values: list[str],
+    ) -> list[float]:
+        return [
+            self._normalized_float(ppt_attribute, raw_value)
+            for raw_value in raw_values
+        ]
+
     def _build_scale_animation(
         self,
         animation: AnimationDefinition,
@@ -32,8 +45,8 @@ class NumericScaleMixin:
     ) -> etree._Element:
         """Build ``<p:animScale>`` for width/height changes."""
         values = animation.values
-        from_val = float(self._normalize_value(ppt_attribute, values[0]))
-        to_val = float(self._normalize_value(ppt_attribute, values[-1]))
+        from_val = self._normalized_float(ppt_attribute, values[0])
+        to_val = self._normalized_float(ppt_attribute, values[-1])
 
         animScale = p_elem("animScale")
         cBhvr = self._xml.build_behavior_core_elem(
@@ -84,8 +97,8 @@ class NumericScaleMixin:
     ) -> etree._Element:
         """Build a symmetric grow/shrink pulse using authored-style animScale."""
         values = animation.values
-        start_val = float(self._normalize_value(ppt_attribute, values[0]))
-        peak_val = float(self._normalize_value(ppt_attribute, values[1]))
+        start_val = self._normalized_float(ppt_attribute, values[0])
+        peak_val = self._normalized_float(ppt_attribute, values[1])
 
         half_duration_ms = max(1, int(round(animation.duration_ms / 2.0)))
         anim_scale = p_elem("animScale")
@@ -152,10 +165,7 @@ class NumericScaleMixin:
         behavior_id: int,
         ppt_attribute: str,
     ) -> etree._Element:
-        values = [
-            float(self._normalize_value(ppt_attribute, raw_value))
-            for raw_value in animation.values
-        ]
+        values = self._normalized_float_list(ppt_attribute, animation.values)
         key_times = self._resolve_scale_key_times(values, animation)
         segment_durations = compute_segment_durations_ms(
             total_ms=animation.duration_ms,
@@ -283,16 +293,15 @@ class NumericScaleMixin:
                 return abs(value)
         return 1.0
 
-    @classmethod
     def _is_symmetric_scale_pulse(
-        cls,
+        self,
         animation: AnimationDefinition,
         ppt_attribute: str,
     ) -> bool:
         """Return True for start->peak->start scale pulses that PowerPoint can
         represent as grow/shrink plus auto-reverse.
         """
-        if ppt_attribute not in cls._SCALE_ATTRS:
+        if ppt_attribute not in self._SCALE_ATTRS:
             return False
         if len(animation.values) != 3:
             return False
@@ -307,9 +316,9 @@ class NumericScaleMixin:
         ]:
             return False
         try:
-            start = float(animation.values[0])
-            peak = float(animation.values[1])
-            end = float(animation.values[2])
+            start = self._normalized_float(ppt_attribute, animation.values[0])
+            peak = self._normalized_float(ppt_attribute, animation.values[1])
+            end = self._normalized_float(ppt_attribute, animation.values[2])
         except (TypeError, ValueError):
             return False
         if abs(start - end) > 1e-6:

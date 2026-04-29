@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import math
-import re
 from collections.abc import Iterator
 
 from lxml import etree as ET
 
+from svg2ooxml.common.conversions.transforms import parse_numeric_list
 from svg2ooxml.common.geometry import Matrix2D, parse_transform_list
 from svg2ooxml.core.styling.style_helpers import clean_color
 from svg2ooxml.elements.patterns._helpers import (
@@ -49,8 +49,8 @@ def build_tile_payload(
     if not is_translation_only(analysis.geometry.transform_matrix):
         return None
 
-    tile_width = max(float(analysis.geometry.tile_width), 0.0)
-    tile_height = max(float(analysis.geometry.tile_height), 0.0)
+    tile_width = max(analysis.geometry.tile_width, 0.0)
+    tile_height = max(analysis.geometry.tile_height, 0.0)
     width_px = max(int(math.ceil(tile_width)), 1)
     height_px = max(int(math.ceil(tile_height)), 1)
 
@@ -166,16 +166,16 @@ def tile_ellipse_geometry(
     tag = local_name(element.tag)
     geometry: tuple[float, float, float, float] | None = None
     if tag == "circle":
-        cx = parse_float_attr(element, "cx")
-        cy = parse_float_attr(element, "cy")
-        radius = parse_float_attr(element, "r")
+        cx = parse_float_attr(element, "cx", axis="x")
+        cy = parse_float_attr(element, "cy", axis="y")
+        radius = parse_float_attr(element, "r", axis="x")
         if cx is not None and cy is not None and radius is not None:
             geometry = (cx, cy, radius, radius)
     elif tag == "ellipse":
-        cx = parse_float_attr(element, "cx")
-        cy = parse_float_attr(element, "cy")
-        rx = parse_float_attr(element, "rx")
-        ry = parse_float_attr(element, "ry")
+        cx = parse_float_attr(element, "cx", axis="x")
+        cy = parse_float_attr(element, "cy", axis="y")
+        rx = parse_float_attr(element, "rx", axis="x")
+        ry = parse_float_attr(element, "ry", axis="y")
         if cx is not None and cy is not None and rx is not None and ry is not None:
             geometry = (cx, cy, rx, ry)
     elif tag == "path":
@@ -199,10 +199,10 @@ def path_ellipse_geometry(
     element: ET.Element,
 ) -> tuple[float, float, float, float] | None:
     sodipodi_ns = "http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
-    cx = parse_float_attr(element, f"{{{sodipodi_ns}}}cx")
-    cy = parse_float_attr(element, f"{{{sodipodi_ns}}}cy")
-    rx = parse_float_attr(element, f"{{{sodipodi_ns}}}rx")
-    ry = parse_float_attr(element, f"{{{sodipodi_ns}}}ry")
+    cx = parse_float_attr(element, f"{{{sodipodi_ns}}}cx", axis="x")
+    cy = parse_float_attr(element, f"{{{sodipodi_ns}}}cy", axis="y")
+    rx = parse_float_attr(element, f"{{{sodipodi_ns}}}rx", axis="x")
+    ry = parse_float_attr(element, f"{{{sodipodi_ns}}}ry", axis="y")
     if cx is not None and cy is not None and rx is not None and ry is not None:
         return (cx, cy, rx, ry)
 
@@ -210,19 +210,14 @@ def path_ellipse_geometry(
         return None
 
     path_data = element.get("d") or ""
-    match = re.search(
-        r"M\s*([-+]?[\d.]+)\s*,?\s*([-+]?[\d.]+)\s+"
-        r"A\s*([-+]?[\d.]+)\s*,?\s*([-+]?[\d.]+)",
-        path_data,
-        flags=re.IGNORECASE,
-    )
-    if match is None:
+    path_data_upper = path_data.upper()
+    if "M" not in path_data_upper or "A" not in path_data_upper:
         return None
 
-    start_x = float(match.group(1))
-    start_y = float(match.group(2))
-    radius_x = float(match.group(3))
-    radius_y = float(match.group(4))
+    values = parse_numeric_list(path_data)
+    if len(values) < 4:
+        return None
+    start_x, start_y, radius_x, radius_y = values[:4]
     return (start_x - radius_x, start_y, radius_x, radius_y)
 
 

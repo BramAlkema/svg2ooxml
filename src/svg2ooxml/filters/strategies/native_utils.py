@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import math
 from typing import Any
 
 from lxml import etree
 
 from svg2ooxml.common.svg_refs import local_name
+from svg2ooxml.common.units.lengths import parse_number
 from svg2ooxml.filters.primitives.component_transfer import ComponentTransferFilter
 
 
@@ -27,10 +29,9 @@ def component_transfer_alpha_scale(
             params = getattr(function, "params", {}) or {}
             if getattr(function, "func_type", "") != "linear":
                 return None
-            try:
-                intercept = float(params.get("intercept", 0.0))
-                slope = float(params.get("slope", 1.0))
-            except (TypeError, ValueError):
+            intercept = parse_number(params.get("intercept", 0.0), math.nan)
+            slope = parse_number(params.get("slope", 1.0), math.nan)
+            if math.isnan(intercept) or math.isnan(slope):
                 return None
             if abs(intercept) > 1e-6:
                 return None
@@ -60,20 +61,20 @@ def aggregate_blip_color_transforms(
         if tag not in seen_order:
             seen_order.append(tag)
         if tag == "alphaModFix":
-            try:
-                alpha_mod_fix *= float(transform.get("amt", 100000)) / 100000.0
-            except (TypeError, ValueError):
+            amount = parse_number(transform.get("amt", 100000), math.nan)
+            if math.isnan(amount):
                 continue
+            alpha_mod_fix *= amount / 100000.0
         elif tag == "satMod":
-            try:
-                sat_mod *= float(transform.get("val", 100000)) / 100000.0
-            except (TypeError, ValueError):
+            value = parse_number(transform.get("val", 100000), math.nan)
+            if math.isnan(value):
                 continue
+            sat_mod *= value / 100000.0
         elif tag == "hueOff":
-            try:
-                hue_off += int(round(float(transform.get("val", 0))))
-            except (TypeError, ValueError):
+            value = parse_number(transform.get("val", 0), math.nan)
+            if math.isnan(value):
                 continue
+            hue_off += int(round(value))
         else:
             passthrough.append(dict(transform))
 
@@ -96,14 +97,10 @@ def aggregate_blip_color_transforms(
 
 
 def coerce_non_negative_float(value: object) -> float | None:
-    if isinstance(value, (int, float)):
-        coerced = float(value)
-    elif isinstance(value, str):
-        try:
-            coerced = float(value.strip())
-        except ValueError:
-            return None
-    else:
+    if not isinstance(value, (int, float, str)):
+        return None
+    coerced = parse_number(value, math.nan)
+    if math.isnan(coerced):
         return None
     if coerced < 0:
         return None
@@ -111,12 +108,7 @@ def coerce_non_negative_float(value: object) -> float | None:
 
 
 def parse_float_attr(value: str | None) -> float:
-    if value is None:
-        return 0.0
-    try:
-        return float(value)
-    except ValueError:
-        return 0.0
+    return parse_number(value, 0.0)
 
 
 def is_additive_composite(k1: float, k2: float, k3: float, k4: float) -> bool:

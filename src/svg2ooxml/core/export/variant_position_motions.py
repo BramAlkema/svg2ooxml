@@ -6,6 +6,7 @@ from dataclasses import replace as _replace
 from typing import Any
 
 from svg2ooxml.core.export.animation_predicates import _simple_position_axis
+from svg2ooxml.core.export.animation_values import animation_length_delta_px
 from svg2ooxml.core.export.motion_geometry import _project_linear_motion_delta
 from svg2ooxml.core.export.scene_index import _build_element_alias_map
 from svg2ooxml.core.export.variant_grouping import _animation_group_key
@@ -56,10 +57,9 @@ def _build_position_replacement(
     x_animation = x_members[0][2]
     y_animation = y_members[0][2]
 
-    try:
-        dx = float(x_animation.values[-1]) - float(x_animation.values[0])
-        dy = float(y_animation.values[-1]) - float(y_animation.values[0])
-    except (TypeError, ValueError):
+    dx = animation_length_delta_px(x_animation, axis="x")
+    dy = animation_length_delta_px(y_animation, axis="y")
+    if dx is None or dy is None:
         return None
     dx, dy = _project_linear_motion_delta(dx, dy, base_animation)
 

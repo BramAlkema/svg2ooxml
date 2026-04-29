@@ -14,9 +14,14 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
+from svg2ooxml.export import (
+    ConversionArtifacts,
+    FontDiagnostics,
+    RequestedFont,
+    SVGFrame,
+)
 from svg2ooxml.services.fonts import FontSource
 
-from svg2ooxml.export import ConversionArtifacts, FontDiagnostics, RequestedFont, SVGFrame
 from .export_service_types import FontPreparationResult
 
 logger = logging.getLogger(__name__)

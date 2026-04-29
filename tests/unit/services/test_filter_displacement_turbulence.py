@@ -5,13 +5,13 @@ from __future__ import annotations
 import struct
 
 from lxml import etree
+from tests.unit.filters.policy import assert_assets, assert_fallback, assert_strategy
 
 from svg2ooxml.io.emf import EMFRecordType
 from svg2ooxml.ir.effects import CustomEffect
 from svg2ooxml.services import ConversionServices
 from svg2ooxml.services.filter_service import FilterService
 from svg2ooxml.services.filter_types import FilterEffectResult
-from tests.unit.filters.policy import assert_assets, assert_fallback, assert_strategy
 
 
 def _service_with_filter(filter_xml: str) -> FilterService:

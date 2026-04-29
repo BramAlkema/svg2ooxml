@@ -33,6 +33,21 @@ def test_filter_renderer_reuses_existing_emf_asset() -> None:
     assert "rIdExisting" in effect_result.effect.drawingml
 
 
+def test_filter_renderer_offset_hook_accepts_calc_values() -> None:
+    renderer = FilterRenderer()
+
+    xml = renderer._build_offset(
+        "offset",
+        {"dx": "calc(3 + 4)", "dy": "calc(2 * 3)"},
+        "",
+        None,
+        None,
+    )
+
+    assert "<a:outerShdw" in xml
+    assert "offset: no displacement" not in xml
+
+
 def test_filter_renderer_reuses_existing_raster_asset() -> None:
     renderer = FilterRenderer()
     metadata = {

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from svg2ooxml.core.export.animation_values import animation_length_bounds_or_default
 from svg2ooxml.core.export.motion_geometry import _lerp, _rotate_point
 from svg2ooxml.ir.animation import AnimationDefinition
 
@@ -97,14 +98,15 @@ def _rotate_around_point(
 def _numeric_bounds(
     member: tuple[int, AnimationDefinition] | None,
     *,
+    axis: str,
     default: float,
 ) -> tuple[float, float]:
-    if member is None:
-        return (default, default)
-    try:
-        return (float(member[1].values[0]), float(member[1].values[-1]))
-    except (TypeError, ValueError):
-        return (default, default)
+    animation = member[1] if member is not None else None
+    return animation_length_bounds_or_default(
+        animation,
+        axis=axis,
+        default=default,
+    )
 
 
 def _parse_translate_pair(value: str) -> tuple[float, float]:

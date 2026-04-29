@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 from typing import TYPE_CHECKING, Any
 
+from svg2ooxml.common.units.lengths import parse_number, parse_number_list
 from svg2ooxml.drawingml.emf_primitives import (
     DEFAULT_FILTER_PALETTE,
     adjust_lightness,
@@ -17,7 +18,6 @@ from svg2ooxml.drawingml.emf_primitives import (
     rect_points,
     resolve_with_palette,
     rounded_rect,
-    safe_float,
 )
 from svg2ooxml.io.emf import EMFBlob
 
@@ -133,11 +133,11 @@ class EMFAdapterRenderMixin:
         background = blob.get_solid_brush(colorref(self._color("color_matrix", "background", "#F7F9FF", metadata)))
         blob.fill_rectangle(0, 0, width_emu, height_emu, background)
 
-        values = list(metadata.get("values") or [])
+        values = _number_sequence(metadata.get("values"))
         if not values:
             source = metadata.get("matrix_source")
             if isinstance(source, str):
-                values = [safe_float(token) for token in source.replace(",", " ").split()]
+                values = parse_number_list(source)
         total = len(values)
         columns = 5
         rows = max(1, (total + columns - 1) // columns)
@@ -184,7 +184,7 @@ class EMFAdapterRenderMixin:
         warp_pen = blob.get_pen(colorref(self._color("displacement_map", "warp", "#203A84", metadata)), max(1, width_emu // 220))
         accent_pen = blob.get_pen(colorref(self._color("displacement_map", "accent", "#FF6B6B", metadata)), max(1, width_emu // 200))
 
-        scale = float(metadata.get("scale") or 0.0)
+        scale = parse_number(metadata.get("scale"), 0.0)
         amplitude = max(3.0, min(18.0, abs(scale) * 1.5 + 4.0))
         rows, cols = 6, 6
         left_px, top_px = 10.0, 12.0
@@ -229,10 +229,10 @@ class EMFAdapterRenderMixin:
         base_brush = blob.get_solid_brush(colorref(self._color("turbulence", "background", "#F2F6FF", metadata)))
         blob.fill_rectangle(0, 0, width_emu, height_emu, base_brush)
 
-        base_fx = float(metadata.get("base_frequency_x") or 0.0)
-        base_fy = float(metadata.get("base_frequency_y") or 0.0)
-        seed = float(metadata.get("seed") or 0.0)
-        octaves = max(1, int(metadata.get("num_octaves") or 1))
+        base_fx = parse_number(metadata.get("base_frequency_x"), 0.0)
+        base_fy = parse_number(metadata.get("base_frequency_y"), 0.0)
+        seed = parse_number(metadata.get("seed"), 0.0)
+        octaves = max(1, int(parse_number(metadata.get("num_octaves"), 1.0)))
         stitch = bool(metadata.get("stitch_tiles"))
 
         left_px, top_px = 6.0, 10.0
@@ -278,9 +278,10 @@ class EMFAdapterRenderMixin:
         blob.fill_rectangle(0, 0, width_emu, height_emu, background)
 
         order = metadata.get("order") or (3, 3)
-        order_x, order_y = int(order[0]), int(order[1])
-        kernel = list(metadata.get("kernel") or [])
-        divisor = float(metadata.get("divisor") or 1.0)
+        order_x = max(1, int(_sequence_number(order, 0, 3.0)))
+        order_y = max(1, int(_sequence_number(order, 1, 3.0)))
+        kernel = _number_sequence(metadata.get("kernel"))
+        divisor = parse_number(metadata.get("divisor"), 1.0)
 
         left_px, top_px = 12.0, 12.0
         cell = 14.0
@@ -290,7 +291,7 @@ class EMFAdapterRenderMixin:
         for row in range(order_y):
             for col in range(order_x):
                 index = row * order_x + col
-                value = float(kernel[index]) if index < len(kernel) else 0.0
+                value = kernel[index] if index < len(kernel) else 0.0
                 brush = blob.get_solid_brush(colorref(kernel_value_color(value)))
                 rect = rect_points(left_px + col * (cell + gap), top_px + row * (cell + gap), cell, cell)
                 blob.draw_polygon(rect, brush_handle=brush, pen_handle=pen)
@@ -409,6 +410,29 @@ class EMFAdapterRenderMixin:
 
         return self._finalise(blob, metadata | {"filter_type": "specular_lighting"})
 
+
+def _number_sequence(value: object) -> list[float]:
+    if isinstance(value, str):
+        return parse_number_list(value)
+    if value is None:
+        return []
+    try:
+        items = list(value)  # type: ignore[arg-type]
+    except TypeError:
+        return []
+    numbers: list[float] = []
+    for item in items:
+        parsed = parse_number(item, math.nan)
+        if parsed == parsed:
+            numbers.append(parsed)
+    return numbers
+
+
+def _sequence_number(value: object, index: int, default: float) -> float:
+    numbers = _number_sequence(value)
+    if index >= len(numbers):
+        return default
+    return numbers[index]
 
 
 __all__ = ["EMFAdapterRenderMixin"]

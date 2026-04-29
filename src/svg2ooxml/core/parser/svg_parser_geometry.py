@@ -8,6 +8,7 @@ from svg2ooxml.core.parser.colors.parsing import parse_color
 from svg2ooxml.core.parser.style_context import StyleContext as ParserStyleContext
 from svg2ooxml.core.parser.style_context import resolve_viewport
 from svg2ooxml.core.parser.units import viewbox_to_px
+from svg2ooxml.core.traversal.viewbox import parse_viewbox_attribute
 
 
 class SVGParserGeometryMixin:
@@ -61,16 +62,13 @@ class SVGParserGeometryMixin:
 
     @staticmethod
     def _parse_viewbox(value: str) -> tuple[float, float, float, float] | None:
-        parts = value.replace(",", " ").split()
-        if len(parts) != 4:
-            return None
         try:
-            numbers = [float(part) for part in parts]
+            viewbox = parse_viewbox_attribute(value)
         except ValueError:
             return None
-        if numbers[2] <= 0 or numbers[3] <= 0:
+        if viewbox is None:
             return None
-        return (numbers[0], numbers[1], numbers[2], numbers[3])
+        return (viewbox.min_x, viewbox.min_y, viewbox.width, viewbox.height)
 
     def _build_style_context(
         self,

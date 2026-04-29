@@ -6,6 +6,8 @@ import os
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass, replace
 
+from svg2ooxml.common.math_utils import finite_float
+
 
 @dataclass(frozen=True)
 class FontEmbeddingPolicy:
@@ -239,7 +241,11 @@ def _apply_overrides(
                 wordart = replace(decision.wordart, prefer_native_wordart=bool(value))
                 decision = replace(decision, wordart=wordart)
             case "text.wordart.confidence_threshold":
-                wordart = replace(decision.wordart, confidence_threshold=float(value))
+                threshold = finite_float(
+                    value,
+                    decision.wordart.confidence_threshold,
+                )
+                wordart = replace(decision.wordart, confidence_threshold=threshold)
                 decision = replace(decision, wordart=wordart)
             case "text.max_runs":
                 decision = replace(decision, max_runs=int(value))

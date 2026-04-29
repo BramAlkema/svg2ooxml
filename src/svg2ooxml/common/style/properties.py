@@ -10,6 +10,12 @@ from svg2ooxml.color.adapters import (
     rgba_tuple_to_hex,
 )
 from svg2ooxml.common.conversions.opacity import parse_opacity
+from svg2ooxml.common.style.css_math import (
+    CSSMathContext,
+    CSSMathError,
+    evaluate_calc_string,
+)
+from svg2ooxml.common.units import UnitConverter
 from svg2ooxml.common.units.lengths import resolve_length_px
 
 if TYPE_CHECKING:
@@ -48,6 +54,11 @@ def parse_font_size_token(
     unitless_scale: float,
 ) -> float:
     token = value.strip().lower()
+    if token.startswith("calc("):
+        resolved = _parse_calc_font_size_pt(token, base_pt)
+        if resolved is not None:
+            return resolved
+        return base_pt
     try:
         if token.endswith("px"):
             return float(token[:-2]) * 0.75
@@ -60,6 +71,30 @@ def parse_font_size_token(
         return float(token) * unitless_scale
     except ValueError:
         return base_pt
+
+
+def _parse_calc_font_size_pt(token: str, base_pt: float) -> float | None:
+    converter = UnitConverter()
+    base_px = base_pt / 0.75
+    conversion = converter.create_context(
+        width=0.0,
+        height=0.0,
+        font_size=base_px,
+        root_font_size=base_px,
+    )
+    context = CSSMathContext(
+        conversion_context=conversion,
+        unit_converter=converter,
+        axis="font-size",
+        percentage_basis="length",
+    )
+    try:
+        result = evaluate_calc_string(token, context=context)
+        if result.kind == "number":
+            return None
+        return result.as_length_px(context) * 0.75
+    except (CSSMathError, ValueError, ZeroDivisionError):
+        return None
 
 
 def hex_to_rgba(color: str) -> tuple[float, float, float, float]:

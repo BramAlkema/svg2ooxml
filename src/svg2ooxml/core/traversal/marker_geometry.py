@@ -7,6 +7,7 @@ import math
 from lxml import etree
 
 from svg2ooxml.common.geometry.paths import parse_path_data
+from svg2ooxml.common.geometry.points import parse_point_pairs
 from svg2ooxml.common.geometry.segments import (
     ellipse_segments as _ellipse_segments_common,
 )
@@ -30,14 +31,7 @@ def marker_segments_for_element(element: etree._Element, local_name: str) -> lis
         return [LineSegment(Point(x1, y1), Point(x2, y2))]
 
     if local_name == "polyline" or local_name == "polygon":
-        points_attr = element.get("points")
-        if not points_attr:
-            return []
-        points = [
-            Point(float(x), float(y))
-            for chunk in points_attr.strip().split()
-            for x, y in (chunk.split(","),)
-        ]
+        points = [Point(x, y) for x, y in parse_point_pairs(element.get("points"))]
         if local_name == "polygon" and points:
             points.append(points[0])
         segments: list[SegmentType] = []

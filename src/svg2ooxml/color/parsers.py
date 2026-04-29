@@ -6,6 +6,15 @@ import math
 import re
 from collections.abc import Mapping
 
+from svg2ooxml.common.conversions.transforms import parse_angle_strict
+from svg2ooxml.common.math_utils import finite_float
+from svg2ooxml.common.units.lengths import (
+    parse_number,
+    parse_number_or_percent,
+    parse_percentage,
+    split_length_list,
+)
+
 from .models import TRANSPARENT, Color
 from .names import CSS3_NAMES_TO_HEX
 
@@ -34,11 +43,13 @@ def coerce_color(value) -> Color | None:
         return value
     if not hasattr(value, "r") or not hasattr(value, "g") or not hasattr(value, "b"):
         return None
-    try:
-        alpha = float(getattr(value, "a", 1.0))
-        return Color(float(value.r), float(value.g), float(value.b), alpha)
-    except Exception:
+    red = finite_float(getattr(value, "r", None))
+    green = finite_float(getattr(value, "g", None))
+    blue = finite_float(getattr(value, "b", None))
+    if red is None or green is None or blue is None:
         return None
+    alpha = finite_float(getattr(value, "a", 1.0), 1.0)
+    return Color(red, green, blue, alpha if alpha is not None else 1.0)
 
 
 def parse_color(
@@ -156,51 +167,103 @@ def _parse_hsl(body: str) -> Color:
 
 def _split_components(body: str, *, expected_min: int, expected_max: int) -> list[str]:
     token = body.strip()
-    if "," in token:
-        parts = [
-            segment.strip()
-            for segment in token.replace("/", ",").split(",")
-            if segment.strip()
-        ]
+    if _has_top_level_comma(token):
+        parts = _split_top_level(token, separators={",", "/"})
     else:
-        main, separator, alpha = token.partition("/")
-        parts = [segment.strip() for segment in main.split() if segment.strip()]
-        if separator and alpha.strip():
+        main, alpha = _partition_top_level_slash(token)
+        parts = split_length_list(main)
+        if alpha is not None and alpha.strip():
             parts.append(alpha.strip())
     if not (expected_min <= len(parts) <= expected_max):
         raise ValueError("unexpected number of parameters")
     return parts
 
 
+def _has_top_level_comma(value: str) -> bool:
+    depth = 0
+    for char in value:
+        if char == "(":
+            depth += 1
+            continue
+        if char == ")":
+            depth = max(depth - 1, 0)
+            continue
+        if depth == 0 and char == ",":
+            return True
+    return False
+
+
+def _partition_top_level_slash(value: str) -> tuple[str, str | None]:
+    depth = 0
+    for index, char in enumerate(value):
+        if char == "(":
+            depth += 1
+            continue
+        if char == ")":
+            depth = max(depth - 1, 0)
+            continue
+        if depth == 0 and char == "/":
+            return value[:index].strip(), value[index + 1 :].strip()
+    return value, None
+
+
+def _split_top_level(value: str, *, separators: set[str]) -> list[str]:
+    parts: list[str] = []
+    current: list[str] = []
+    depth = 0
+    for char in value:
+        if char == "(":
+            depth += 1
+            current.append(char)
+            continue
+        if char == ")":
+            depth = max(depth - 1, 0)
+            current.append(char)
+            continue
+        if depth == 0 and char in separators:
+            part = "".join(current).strip()
+            if part:
+                parts.append(part)
+            current = []
+            continue
+        current.append(char)
+
+    part = "".join(current).strip()
+    if part:
+        parts.append(part)
+    return parts
+
+
 def _parse_rgb_component(component: str) -> float:
-    if component.endswith("%"):
-        value = float(component[:-1]) / 100.0
-        return round(_clamp(value) * 255.0) / 255.0
-    return _clamp(float(component) / 255.0)
+    percent = parse_percentage(component, math.nan)
+    if not math.isnan(percent):
+        return round(_clamp(percent) * 255.0) / 255.0
+
+    value = parse_number(component, math.nan)
+    if math.isnan(value):
+        raise ValueError("expected RGB component")
+    return _clamp(value / 255.0)
 
 
 def _parse_alpha(component: str) -> float:
-    if component.endswith("%"):
-        return _clamp(float(component[:-1]) / 100.0)
-    return _clamp(float(component))
+    value = parse_number_or_percent(component, math.nan)
+    if math.isnan(value):
+        raise ValueError("expected alpha component")
+    return _clamp(value)
 
 
 def _parse_hue(component: str) -> float:
-    if component.endswith("deg"):
-        value = float(component[:-3])
-    elif component.endswith("rad"):
-        value = math.degrees(float(component[:-3]))
-    elif component.endswith("turn"):
-        value = float(component[:-4]) * 360.0
-    else:
-        value = float(component)
+    value = parse_angle_strict(component)
+    if value is None:
+        raise ValueError("expected hue component")
     return (value % 360.0) / 360.0
 
 
 def _parse_percentage(component: str) -> float:
-    if not component.endswith("%"):
+    value = parse_percentage(component, math.nan)
+    if math.isnan(value):
         raise ValueError("expected percentage")
-    return _clamp(float(component[:-1]) / 100.0)
+    return _clamp(value)
 
 
 def _hsl_to_rgb(h: float, s: float, l: float) -> tuple[float, float, float]:  # noqa: E741 -- HSL spec notation for lightness
@@ -233,21 +296,14 @@ def _parse_oklab(body: str) -> Color | None:
     """Parse ``oklab(L a b [/ alpha])`` → Color (sRGB)."""
     from .oklab import oklab_to_rgb
 
-    parts = re.split(r"[/,\s]+", body.strip())
-    parts = [p for p in parts if p]
+    parts = _split_components(body, expected_min=3, expected_max=4)
     if len(parts) < 3:
         return None
-    try:
-        l_val = float(parts[0].rstrip("%"))
-        # CSS oklab: L is 0–1 (or 0%–100%), a/b are roughly -0.4–0.4
-        if parts[0].endswith("%"):
-            l_val /= 100.0
-        a_val = float(parts[1])
-        b_val = float(parts[2])
-        alpha = float(parts[3].rstrip("%")) if len(parts) > 3 else 1.0
-        if parts[3].endswith("%") if len(parts) > 3 else False:
-            alpha /= 100.0
-    except (ValueError, IndexError):
+    l_val = parse_number_or_percent(parts[0], math.nan)
+    a_val = parse_number(parts[1], math.nan)
+    b_val = parse_number(parts[2], math.nan)
+    alpha = _parse_alpha(parts[3]) if len(parts) > 3 else 1.0
+    if any(math.isnan(value) for value in (l_val, a_val, b_val, alpha)):
         return None
     r, g, b = oklab_to_rgb(l_val, a_val, b_val)
     return Color(_clamp(r), _clamp(g), _clamp(b), _clamp(alpha))
@@ -257,20 +313,19 @@ def _parse_oklch(body: str) -> Color | None:
     """Parse ``oklch(L C H [/ alpha])`` → Color (sRGB)."""
     from .oklab import oklch_to_rgb
 
-    parts = re.split(r"[/,\s]+", body.strip())
-    parts = [p for p in parts if p]
+    parts = _split_components(body, expected_min=3, expected_max=4)
     if len(parts) < 3:
         return None
-    try:
-        l_val = float(parts[0].rstrip("%"))
-        if parts[0].endswith("%"):
-            l_val /= 100.0
-        c_val = float(parts[1])
-        h_val = float(parts[2].rstrip("deg"))
-        alpha = float(parts[3].rstrip("%")) if len(parts) > 3 else 1.0
-        if parts[3].endswith("%") if len(parts) > 3 else False:
-            alpha /= 100.0
-    except (ValueError, IndexError):
+    l_val = parse_number_or_percent(parts[0], math.nan)
+    c_val = parse_number(parts[1], math.nan)
+    h_val = parse_angle_strict(parts[2])
+    alpha = _parse_alpha(parts[3]) if len(parts) > 3 else 1.0
+    if (
+        math.isnan(l_val)
+        or math.isnan(c_val)
+        or h_val is None
+        or math.isnan(alpha)
+    ):
         return None
     r, g, b = oklch_to_rgb(l_val, c_val, h_val)
     return Color(_clamp(r), _clamp(g), _clamp(b), _clamp(alpha))

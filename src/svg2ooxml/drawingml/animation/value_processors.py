@@ -13,14 +13,17 @@ from typing import TYPE_CHECKING
 
 from svg2ooxml.common.conversions.angles import degrees_to_ppt
 from svg2ooxml.common.conversions.colors import color_to_hex
-from svg2ooxml.common.conversions.opacity import opacity_to_ppt
-from svg2ooxml.common.conversions.opacity import parse_opacity as parse_opacity_value
+from svg2ooxml.common.conversions.opacity import (
+    opacity_to_ppt,
+    parse_authored_opacity,
+)
 from svg2ooxml.common.conversions.transforms import (
     parse_angle,
     parse_numeric_list,
     parse_scale_pair,
     parse_translation_pair,
 )
+from svg2ooxml.common.units.lengths import resolve_length_px_required
 
 from .constants import ANGLE_ATTRIBUTES, AXIS_MAP
 
@@ -160,18 +163,7 @@ class ValueProcessor:
             >>> ValueProcessor.parse_opacity("0.5")
             '50000'
         """
-        token = str(value).strip() if value is not None else ""
-        if token.endswith("%"):
-            opacity_float = parse_opacity_value(token, default=1.0)
-        else:
-            try:
-                opacity_float = float(token)
-            except (ValueError, TypeError):
-                opacity_float = 1.0
-            if opacity_float > 1.0:
-                opacity_float /= 100.0
-        ppt_opacity = opacity_to_ppt(opacity_float)
-        return str(ppt_opacity)
+        return str(opacity_to_ppt(parse_authored_opacity(value)))
 
     @staticmethod
     def format_ppt_angle(degrees: float) -> str:
@@ -226,7 +218,16 @@ class ValueProcessor:
         # Get axis hint for proper DPI conversion
         axis = AXIS_MAP.get(attribute)
         try:
+            if str(value).strip().lower().startswith("calc("):
+                px_value = resolve_length_px_required(
+                    value,
+                    None,
+                    axis=axis or "x",
+                    unit_converter=unit_converter,
+                )
+                emu = unit_converter.to_emu(px_value, axis=axis)
+                return str(int(round(emu)))
             emu = unit_converter.to_emu(value, axis=axis)
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, ZeroDivisionError):
             return value
         return str(int(round(emu)))

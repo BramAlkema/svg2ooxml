@@ -12,6 +12,7 @@ try:  # pragma: no cover - skia optional during transition
 except Exception:  # pragma: no cover - gracefully degrade without skia
     skia = None
 
+from svg2ooxml.common.math_utils import coerce_positive_float, finite_float
 from svg2ooxml.common.numpy_compat import NUMPY_AVAILABLE, REAL_NUMPY
 from svg2ooxml.drawingml.paint_converter import (
     _UNSUPPORTED_SOURCE_STYLE,
@@ -147,13 +148,10 @@ def render_surface_from_descriptor(
     if not isinstance(source_bounds, dict):
         return None
 
-    try:
-        x = float(source_bounds.get("x", 0.0))
-        y = float(source_bounds.get("y", 0.0))
-        width = max(1.0, float(source_bounds.get("width", width_px)))
-        height = max(1.0, float(source_bounds.get("height", height_px)))
-    except (TypeError, ValueError):
+    parsed_bounds = _coerce_bounds(source_bounds, default_width=width_px, default_height=height_px)
+    if parsed_bounds is None:
         return None
+    x, y, width, height = parsed_bounds
 
     surface = skia.Surface(int(max(1, width_px)), int(max(1, height_px)))
     canvas = surface.getCanvas()
@@ -385,13 +383,10 @@ def draw_bounds(
     height: int,
     palette: list,
 ) -> None:
-    try:
-        x = float(bounds.get("x", 0.0))
-        y = float(bounds.get("y", 0.0))
-        w = float(bounds.get("width", width))
-        h = float(bounds.get("height", height))
-    except (TypeError, ValueError):
+    parsed_bounds = _coerce_bounds(bounds, default_width=width, default_height=height)
+    if parsed_bounds is None:
         return
+    x, y, w, h = parsed_bounds
     color = palette[0] if palette else skia.Color4f(1.0, 1.0, 1.0, 1.0)
     stroke = skia.Paint(
         Color=skia.Color4f(color.fR, color.fG, color.fB, 0.65),
@@ -400,3 +395,28 @@ def draw_bounds(
         AntiAlias=True,
     )
     canvas.drawRect(skia.Rect.MakeXYWH(x, y, w, h), stroke)
+
+
+def _coerce_bounds(
+    bounds: dict[str, float | Any],
+    *,
+    default_width: float,
+    default_height: float,
+) -> tuple[float, float, float, float] | None:
+    x = _finite_bound(bounds, "x", 0.0)
+    y = _finite_bound(bounds, "y", 0.0)
+    width = coerce_positive_float(bounds.get("width"), float(default_width))
+    height = coerce_positive_float(bounds.get("height"), float(default_height))
+    if x is None or y is None:
+        return None
+    return (x, y, max(1.0, width), max(1.0, height))
+
+
+def _finite_bound(
+    bounds: dict[str, float | Any],
+    key: str,
+    default: float,
+) -> float | None:
+    if key not in bounds:
+        return default
+    return finite_float(bounds.get(key))

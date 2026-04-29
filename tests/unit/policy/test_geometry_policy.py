@@ -90,3 +90,27 @@ def test_apply_geometry_policy_skips_emf_when_disallowed() -> None:
 
     assert metadata["render_mode"] == FALLBACK_NATIVE
     assert mode == FALLBACK_NATIVE
+
+
+def test_apply_geometry_policy_ignores_invalid_numeric_policy_values() -> None:
+    segments = _build_segments(4)
+
+    _, metadata, mode = apply_geometry_policy(
+        segments,
+        {
+            "max_segments": "bad",
+            "max_complexity": "nan",
+            "detect_preset_shapes": False,
+            "simplify_paths": True,
+            "simplify_min_segments": "bad",
+            "simplify_epsilon_px": "bad",
+            "bezier_flatness_px": "inf",
+            "collinear_angle_deg": "bad",
+            "rdp_tolerance_px": "bad",
+            "curve_fit_tolerance_px": "bad",
+            "curve_fit_min_points": "bad",
+        },
+    )
+
+    assert metadata["render_mode"] == FALLBACK_NATIVE
+    assert mode == FALLBACK_NATIVE

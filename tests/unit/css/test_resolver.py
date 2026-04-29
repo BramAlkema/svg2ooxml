@@ -77,6 +77,28 @@ def test_style_resolver_supports_percentage_font_size() -> None:
     assert style["font_size_pt"] == pytest.approx(15.0)
 
 
+def test_style_resolver_supports_calc_font_size() -> None:
+    resolver = StyleResolver()
+    parent = resolver.default_text_style()
+    parent["font_size_pt"] = 10.0
+    element = etree.fromstring("<text style='font-size: calc(150% + 2pt)'>Hello</text>")
+
+    style = resolver.compute_text_style(element, parent_style=parent)
+
+    assert style["font_size_pt"] == pytest.approx(17.0)
+
+
+def test_style_resolver_invalid_inherited_font_size_uses_default_base() -> None:
+    resolver = StyleResolver()
+    parent = resolver.default_text_style()
+    parent["font_size_pt"] = "bad"
+    element = etree.fromstring("<text style='font-size: 150%'>Hello</text>")
+
+    style = resolver.compute_text_style(element, parent_style=parent)
+
+    assert style["font_size_pt"] == pytest.approx(18.0)
+
+
 def test_style_resolver_scales_unitless_font_size() -> None:
     resolver = StyleResolver(unitless_font_size_scale=0.875)
     element = etree.fromstring("<text style='font-size: 32'>Hello</text>")
@@ -155,6 +177,28 @@ def test_media_queries_resolve_length_units() -> None:
             <style>
                 @media (min-width: 2cm) { rect { fill: #008000; } }
                 @media (max-width: 1cm) { rect { stroke: #ff0000; } }
+            </style>
+            <rect width='10' height='10'/>
+        </svg>
+    """
+    root = etree.fromstring(svg_markup)
+    resolver.collect_css(root, viewport_width=100.0, viewport_height=100.0)
+    rect = root.find("{http://www.w3.org/2000/svg}rect")
+    assert rect is not None
+
+    paint = resolver.compute_paint_style(rect, context=_make_context(width=100.0)[1])
+
+    assert paint["fill"] == "#008000"
+    assert paint["stroke"] is None
+
+
+def test_media_queries_resolve_calc_length_units() -> None:
+    resolver = StyleResolver()
+    svg_markup = """
+        <svg xmlns='http://www.w3.org/2000/svg'>
+            <style>
+                @media (min-width: calc(2cm + 5px)) { rect { fill: #008000; } }
+                @media (max-width: calc(1cm + 5px)) { rect { stroke: #ff0000; } }
             </style>
             <rect width='10' height='10'/>
         </svg>

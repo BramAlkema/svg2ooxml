@@ -10,6 +10,7 @@ from typing import Any
 from lxml import etree
 
 from svg2ooxml.common.svg_refs import local_name
+from svg2ooxml.common.units.lengths import split_length_list
 from svg2ooxml.filters.base import FilterContext, FilterResult
 from svg2ooxml.filters.planner import FilterPlanner
 from svg2ooxml.filters.primitives.blend import BlendFilter
@@ -28,7 +29,7 @@ from svg2ooxml.filters.primitives.morphology import MorphologyFilter
 from svg2ooxml.filters.primitives.offset import OffsetFilter
 from svg2ooxml.filters.primitives.tile import TileFilter
 from svg2ooxml.filters.resvg_bridge import ResolvedFilter
-from svg2ooxml.filters.utils import parse_number
+from svg2ooxml.filters.utils.parsing import parse_length
 from svg2ooxml.ir.effects import CustomEffect
 from svg2ooxml.render.filters import FilterPlan
 from svg2ooxml.render.rasterizer import Viewport
@@ -130,13 +131,15 @@ def is_neutral_promotion(tag: str, element: etree._Element, result: FilterResult
     if tag == "fegaussianblur":
         std_x = metadata.get("std_deviation_x")
         std_y = metadata.get("std_deviation_y")
-        try:
-            std_x_val = float(std_x) if std_x is not None else 0.0
-            std_y_val = float(std_y) if std_y is not None else 0.0
-        except (TypeError, ValueError):
-            std_x_val = 0.0
-            std_y_val = 0.0
-        return abs(std_x_val) <= 1e-6 and abs(std_y_val) <= 1e-6
+        if std_x is not None or std_y is not None:
+            try:
+                std_x_val = float(std_x) if std_x is not None else 0.0
+                std_y_val = float(std_y) if std_y is not None else 0.0
+            except (TypeError, ValueError):
+                std_x_val = 0.0
+                std_y_val = 0.0
+            return abs(std_x_val) <= 1e-6 and abs(std_y_val) <= 1e-6
+        return _element_gaussian_blur_is_neutral(element)
 
     if tag == "feoffset":
         dx = metadata.get("dx")
@@ -163,14 +166,17 @@ def is_neutral_promotion(tag: str, element: etree._Element, result: FilterResult
         except (TypeError, ValueError):
             return False
 
-    if tag == "fegaussianblur" and element is not None:
-        std_attr = element.get("stdDeviation")
-        if std_attr:
-            parts = [parse_number(token) for token in std_attr.replace(",", " ").split()]
-            if parts and all(abs(value) <= 1e-6 for value in parts[:2]):
-                return True
-
     return False
+
+
+def _element_gaussian_blur_is_neutral(element: etree._Element | None) -> bool:
+    if element is None:
+        return False
+    std_attr = element.get("stdDeviation")
+    if not std_attr:
+        return False
+    parts = [parse_length(token) for token in split_length_list(std_attr)]
+    return bool(parts) and all(abs(value) <= 1e-6 for value in parts[:2])
 
 
 def is_identity_matrix(values: list[float]) -> bool:

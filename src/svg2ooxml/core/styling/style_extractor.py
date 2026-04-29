@@ -7,6 +7,8 @@ from typing import TYPE_CHECKING, Any
 
 from lxml import etree
 
+from svg2ooxml.common.conversions.opacity import parse_opacity
+from svg2ooxml.common.math_utils import finite_float
 from svg2ooxml.common.style.resolver import StyleResolver
 from svg2ooxml.core.styling.paint import maybe_set_geometry_fallback
 from svg2ooxml.core.styling.paint.gradient import (
@@ -87,8 +89,7 @@ class StyleExtractor:
         )
         metadata: dict[str, Any] = {}
 
-        fill_opacity = float(paint_style.get("fill_opacity", 1.0))
-        fill_opacity = max(0.0, min(1.0, fill_opacity))
+        fill_opacity = parse_opacity(paint_style.get("fill_opacity"), default=1.0)
 
         fill = self._resolve_paint(
             element,
@@ -108,8 +109,7 @@ class StyleExtractor:
             metadata=metadata,
         )
 
-        opacity = float(paint_style.get("opacity", 1.0))
-        opacity = max(0.0, min(1.0, opacity))
+        opacity = parse_opacity(paint_style.get("opacity"), default=1.0)
         effects = self._resolve_effects(element, services, metadata, context)
 
         # Parse paint-order (SVG2): "stroke fill markers", "fill stroke", etc.
@@ -312,7 +312,11 @@ class StyleExtractor:
         if stroke_paint is None:
             return None
 
-        stroke_width = float(paint_style.get("stroke_width_px", 1.0))
+        stroke_width = finite_float(
+            paint_style.get("stroke_width_px"),
+            1.0,
+        )
+        stroke_width = max(0.0, stroke_width if stroke_width is not None else 1.0)
         join_attr = (element.get("stroke-linejoin") or "miter").lower()
         cap_attr = (element.get("stroke-linecap") or "butt").lower()
 
@@ -329,8 +333,11 @@ class StyleExtractor:
         dash_array = _parse_dash_array(element.get("stroke-dasharray"))
         dash_offset = _parse_length(element.get("stroke-dashoffset")) or 0.0
         miter_limit = _parse_optional_float(element.get("stroke-miterlimit")) or 4.0
-        stroke_opacity = float(paint_style.get("stroke_opacity", 1.0) or 0.0)
-        stroke_opacity = max(0.0, min(1.0, stroke_opacity))
+        stroke_opacity_value = paint_style.get("stroke_opacity", 1.0)
+        stroke_opacity = parse_opacity(
+            stroke_opacity_value if stroke_opacity_value is not None else 0.0,
+            default=1.0,
+        )
 
         stroke_obj = Stroke(
             paint=stroke_paint,

@@ -7,7 +7,6 @@ import pytest
 from svg2ooxml.common.geometry.simplify import (
     _curve_fit,
     _demote_flat_beziers,
-    _map_line_runs,
     _merge_collinear,
     _rdp_simplify,
     _remove_degenerates,
@@ -15,7 +14,6 @@ from svg2ooxml.common.geometry.simplify import (
     simplify_segments,
 )
 from svg2ooxml.ir.geometry import BezierSegment, LineSegment, Point
-
 
 # ---------------------------------------------------------------------------
 # Helpers

@@ -64,10 +64,18 @@ def _build_circle_scale_center_motion(
     )
     (from_sx, from_sy), (to_sx, to_sy) = _parse_scale_bounds(scale_member[1])
 
-    x0, x1 = _numeric_bounds(numeric_members.get("x"), default=0.0)
-    y0, y1 = _numeric_bounds(numeric_members.get("y"), default=0.0)
-    cx0, cx1 = _numeric_bounds(numeric_members.get("cx"), default=local_center_x)
-    cy0, cy1 = _numeric_bounds(numeric_members.get("cy"), default=local_center_y)
+    x0, x1 = _numeric_bounds(numeric_members.get("x"), axis="x", default=0.0)
+    y0, y1 = _numeric_bounds(numeric_members.get("y"), axis="y", default=0.0)
+    cx0, cx1 = _numeric_bounds(
+        numeric_members.get("cx"),
+        axis="x",
+        default=local_center_x,
+    )
+    cy0, cy1 = _numeric_bounds(
+        numeric_members.get("cy"),
+        axis="y",
+        default=local_center_y,
+    )
 
     samples = _sample_progress_values()
     center_points = []
@@ -130,8 +138,16 @@ def _build_image_scale_center_motion(
     viewport_rect, content_rect = _image_local_layout(element, local_bbox)
     (from_sx, from_sy), (to_sx, to_sy) = _parse_scale_bounds(scale_member[1])
 
-    x0, x1 = _numeric_bounds(numeric_members.get("x"), default=viewport_rect.x)
-    y0, y1 = _numeric_bounds(numeric_members.get("y"), default=viewport_rect.y)
+    x0, x1 = _numeric_bounds(
+        numeric_members.get("x"),
+        axis="x",
+        default=viewport_rect.x,
+    )
+    y0, y1 = _numeric_bounds(
+        numeric_members.get("y"),
+        axis="y",
+        default=viewport_rect.y,
+    )
     content_offset_x = float(content_rect.x - viewport_rect.x)
     content_offset_y = float(content_rect.y - viewport_rect.y)
     width = float(content_rect.width)

@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 from lxml import etree
 
+from svg2ooxml.core.traversal.marker_geometry import marker_segments_for_element
 from svg2ooxml.core.traversal.markers import (
     apply_local_transform,
     build_marker_transform,
@@ -80,3 +81,14 @@ def test_apply_local_transform_uses_marker_space_before_marker_placement() -> No
     assert start_y == pytest.approx(24.0)
     assert end_x == pytest.approx(34.0)
     assert end_y == pytest.approx(24.0)
+
+
+def test_marker_segments_parse_compact_signed_polyline_points() -> None:
+    element = etree.fromstring("<polyline points='0,0 10-5 20,0'/>")
+
+    segments = marker_segments_for_element(element, "polyline")
+
+    assert len(segments) == 2
+    assert segments[0].start == Point(0.0, 0.0)
+    assert segments[0].end == Point(10.0, -5.0)
+    assert segments[1].end == Point(20.0, 0.0)

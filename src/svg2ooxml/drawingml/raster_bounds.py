@@ -12,6 +12,10 @@ from svg2ooxml.common.math_utils import (
     finite_float,
 )
 from svg2ooxml.common.svg_refs import local_name
+from svg2ooxml.common.units.lengths import (
+    parse_number_or_percent,
+    resolve_user_length_px,
+)
 
 
 def _finite_float(value: object, default: float | None = None) -> float | None:
@@ -122,13 +126,20 @@ def parse_region_value(value: object, *, reference: float) -> float | None:
         return None
     if isinstance(value, str):
         token = value.strip()
-        if token.endswith("%"):
-            percent = _finite_float(token[:-1])
-            finite_reference = _finite_float(reference)
-            if percent is None or finite_reference is None:
-                return None
-            result = (percent / 100.0) * finite_reference
-            return result if math.isfinite(result) else None
+        if not token:
+            return None
+        number = _finite_float(token)
+        if number is not None:
+            return number
+        finite_reference = _finite_float(reference)
+        if "%" in token and finite_reference is None:
+            return None
+        result = resolve_user_length_px(
+            token,
+            math.nan,
+            finite_reference if finite_reference is not None else 0.0,
+        )
+        return result if math.isfinite(result) else None
     return _finite_float(value)
 
 
@@ -139,18 +150,9 @@ def parse_object_bbox_region_value(
 ) -> float | None:
     if value is None:
         return None
-    if isinstance(value, str):
-        token = value.strip()
-        if token.endswith("%"):
-            percent = _finite_float(token[:-1])
-            finite_reference = _finite_float(reference)
-            if percent is None or finite_reference is None:
-                return None
-            result = (percent / 100.0) * finite_reference
-            return result if math.isfinite(result) else None
-    number = _finite_float(value)
+    number = parse_number_or_percent(value, math.nan)
     finite_reference = _finite_float(reference)
-    if number is None or finite_reference is None:
+    if not math.isfinite(number) or finite_reference is None:
         return None
     result = number * finite_reference
     return result if math.isfinite(result) else None

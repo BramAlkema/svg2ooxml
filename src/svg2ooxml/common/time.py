@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from svg2ooxml.common.style.css_math import CSSMathError, evaluate_calc_string
+
 Numeric = int | float
 
 
@@ -13,6 +15,12 @@ def parse_time_value(time_str: str | None) -> float:
     candidate = time_str.strip().lower()
     if not candidate:
         return 0.0
+
+    if candidate.startswith("calc("):
+        try:
+            return evaluate_calc_string(candidate).as_seconds()
+        except (CSSMathError, ZeroDivisionError):
+            return 0.0
 
     if candidate.endswith("ms"):
         return float(candidate[:-2]) / 1000.0

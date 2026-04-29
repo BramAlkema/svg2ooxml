@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from svg2ooxml.color.utils import rgb_channels_to_hex
+from svg2ooxml.common.conversions.opacity import parse_opacity
+from svg2ooxml.common.units.lengths import parse_number_or_percent
 from svg2ooxml.filters.base import FilterResult
 from svg2ooxml.filters.metadata import (
     FilterFallbackAssetPayload,
@@ -55,16 +57,12 @@ def approximate_gradient_color(
             b = int(token[4:6], 16)
         except ValueError:
             continue
-        try:
-            offset = float(stop.get("offset", index / max(1, total - 1)))
-        except (TypeError, ValueError):
-            offset = index / max(1, total - 1)
+        offset = parse_number_or_percent(
+            stop.get("offset"),
+            index / max(1, total - 1),
+        )
         offset = max(0.0, min(1.0, offset))
-        try:
-            opacity = float(stop.get("opacity", 1.0))
-        except (TypeError, ValueError):
-            opacity = 1.0
-        opacity = max(0.0, min(1.0, opacity))
+        opacity = parse_opacity(stop.get("opacity"), 1.0)
         parsed.append((offset, r, g, b, opacity))
 
     if not parsed:

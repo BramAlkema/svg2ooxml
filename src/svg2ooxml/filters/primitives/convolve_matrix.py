@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from lxml import etree
 
 from svg2ooxml.common.units import px_to_emu
+from svg2ooxml.common.units.lengths import split_length_list
 
 # Import centralized XML builders for safe DrawingML generation
 from svg2ooxml.drawingml.xml_builder import a_elem, a_sub, to_string
@@ -104,7 +105,7 @@ class ConvolveMatrixFilter(Filter):
         edge_mode = (primitive.get("edgeMode") or "duplicate").strip().lower()
         preserve_alpha = (primitive.get("preserveAlpha") or "false").strip().lower() == "true"
         kernel_unit = primitive.get("kernelUnitLength")
-        kernel_unit_values = (kernel_unit or "").replace(",", " ").split()
+        kernel_unit_values = split_length_list(kernel_unit or "")
         if len(kernel_unit_values) >= 2:
             kx_str, ky_str = kernel_unit_values[0], kernel_unit_values[1]
         else:

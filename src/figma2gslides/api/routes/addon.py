@@ -97,7 +97,6 @@ def _log_conversion_trace(
 
     geom = trace.get("geometry_totals", {}) if isinstance(trace, dict) else {}
     paint = trace.get("paint_totals", {}) if isinstance(trace, dict) else {}
-    stage = trace.get("stage_totals", {}) if isinstance(trace, dict) else {}
     resvg = trace.get("resvg_metrics", {}) if isinstance(trace, dict) else {}
 
     logger.info(
@@ -181,11 +180,11 @@ async def addon_convert(
                 run_in_threadpool(render_pptx_for_frames, [frame], pptx_path),
                 timeout=CONVERSION_TIMEOUT,
             )
-        except asyncio.TimeoutError:
+        except TimeoutError as exc:
             raise HTTPException(
                 status_code=status.HTTP_504_GATEWAY_TIMEOUT,
                 detail="Conversion timed out. Try a simpler SVG.",
-            )
+            ) from exc
         except Exception as exc:
             logger.error("Add-on conversion failed: %s", exc, exc_info=True)
             raise HTTPException(

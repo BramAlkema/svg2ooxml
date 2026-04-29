@@ -10,6 +10,7 @@ from lxml import etree
 from svg2ooxml.filters.base import FilterContext, FilterResult
 from svg2ooxml.filters.planner import FilterPlanner
 from svg2ooxml.filters.resvg_bridge import resolve_filter_element
+from svg2ooxml.filters.strategies.resvg_promotion import is_neutral_promotion
 
 
 def _descriptor(markup: str):
@@ -53,6 +54,17 @@ def test_resvg_bounds_sanitizes_non_finite_user_space_region_values() -> None:
     )
 
     assert bounds == pytest.approx((10.0, 5.0, 130.0, 105.0))
+
+
+def test_resolve_filter_element_resolves_number_calc_dimensions() -> None:
+    descriptor = _descriptor(
+        "<filter id='calc-region' x='calc(1 + 2)' width='calc(10 * 2)'>"
+        "  <feGaussianBlur stdDeviation='2'/>"
+        "</filter>"
+    )
+
+    assert descriptor.region["x"] == pytest.approx(3.0)
+    assert descriptor.region["width"] == pytest.approx(20.0)
 
 
 def test_resvg_viewport_rejects_non_finite_or_huge_bounds() -> None:
@@ -121,3 +133,23 @@ def test_promotion_policy_ignores_non_finite_limits() -> None:
         result,
         {"max_offset_distance": math.nan},
     )
+
+
+def test_neutral_promotion_falls_back_to_gaussian_blur_element() -> None:
+    non_neutral = etree.fromstring("<feGaussianBlur stdDeviation='calc(1px + 1px)'/>")
+    neutral = etree.fromstring("<feGaussianBlur stdDeviation='calc(0px + 0px), 0'/>")
+    result = FilterResult(success=True, metadata={})
+
+    assert not is_neutral_promotion("fegaussianblur", non_neutral, result)
+    assert is_neutral_promotion("fegaussianblur", neutral, result)
+
+
+def test_descriptor_neutral_detection_accepts_calc_offsets() -> None:
+    planner = FilterPlanner()
+    descriptor = _descriptor(
+        "<filter id='neutral'>"
+        "  <feOffset dx='calc(2 - 2)' dy='calc(3 - 3)'/>"
+        "</filter>"
+    )
+
+    assert planner.descriptor_is_neutral(descriptor)

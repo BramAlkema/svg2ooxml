@@ -7,8 +7,14 @@ from collections.abc import Iterable, Mapping
 from typing import Any
 
 from svg2ooxml.common.numpy_compat import require_numpy
+from svg2ooxml.common.units.lengths import (
+    parse_number_list,
+    parse_number_or_percent,
+    split_length_list,
+)
 from svg2ooxml.core.resvg.painting.paint import parse_color
 from svg2ooxml.core.resvg.usvg_tree import FilterNode, FilterPrimitive
+from svg2ooxml.filters.utils.parsing import parse_length
 from svg2ooxml.render import filters_region as _region
 from svg2ooxml.render.filters_image import plan_image_primitive
 from svg2ooxml.render.filters_model import (
@@ -187,38 +193,26 @@ def _collect_merge_inputs(primitive: FilterPrimitive, available: Iterable[str]) 
 
 
 def _parse_number(value: str | None, default: float = 0.0) -> float:
-    if value is None:
-        return default
-    try:
-        text = str(value).strip()
-        if not text:
-            return default
-        if text.endswith("%"):
-            return float(text[:-1]) / 100.0
-        return float(text)
-    except (TypeError, ValueError):
-        return default
+    return parse_number_or_percent(value, default)
 
 
 def _parse_float_list(payload: str | None) -> list[float]:
-    if not payload:
-        return []
-    values: list[float] = []
-    for token in payload.replace(",", " ").split():
-        try:
-            values.append(float(token))
-        except ValueError:
-            continue
-    return values
+    return parse_number_list(payload)
 
 
 def _parse_std_deviation(value: str | None) -> tuple[float, float]:
-    values = _parse_float_list(value)
+    values = _parse_length_list(value)
     if not values:
         return (0.0, 0.0)
     if len(values) == 1:
         values = [values[0], values[0]]
     return (abs(values[0]), abs(values[1]))
+
+
+def _parse_length_list(value: str | None) -> list[float]:
+    if not value:
+        return []
+    return [parse_length(token) for token in split_length_list(value)]
 
 
 def _parse_radius(value: str | None) -> tuple[float, float]:

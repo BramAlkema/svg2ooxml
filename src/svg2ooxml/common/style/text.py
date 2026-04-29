@@ -6,6 +6,7 @@ from typing import Any
 
 from lxml import etree
 
+from svg2ooxml.common.math_utils import coerce_positive_float
 from svg2ooxml.common.style.cascade import parse_inline_declarations
 from svg2ooxml.common.style.model import (
     CSSDeclaration,
@@ -159,7 +160,10 @@ def apply_text_property(
         return
 
     if descriptor.key == "font_size_pt":
-        base = float(style.get("font_size_pt", DEFAULT_FONT_SIZE_PT))
+        base = coerce_positive_float(
+            style.get("font_size_pt"),
+            DEFAULT_FONT_SIZE_PT,
+        )
         style["font_size_pt"] = parse_font_size_token(
             value,
             base,

@@ -6,6 +6,7 @@ from lxml import etree
 
 from svg2ooxml.common.geometry import Matrix2D
 from svg2ooxml.common.svg_refs import local_name
+from svg2ooxml.common.units.lengths import resolve_length_px_required
 from svg2ooxml.core.traversal.viewbox import (
     resolve_viewbox_dimensions,
     viewbox_matrix_from_element,
@@ -98,7 +99,14 @@ def _to_px(unit_converter, value: str | None, *, axis: str, context=None) -> flo
     if value is None:
         return 0.0
     try:
-        return float(unit_converter.to_px(value, context, axis=axis))
+        return float(
+            resolve_length_px_required(
+                value,
+                context,
+                axis=axis,
+                unit_converter=unit_converter,
+            )
+        )
     except Exception:
         try:
             return float(value)

@@ -11,6 +11,7 @@ from ._helpers import (
     has_visible_paint,
     is_dot_like_path,
     local_name,
+    parse_float_attr,
 )
 
 
@@ -83,21 +84,20 @@ def _determine_line_orientation(element: ET.Element) -> str:
 
     for child in children:
         if local_name(child.tag) == "line":
-            try:
-                x1 = float(child.get("x1", "0"))
-                y1 = float(child.get("y1", "0"))
-                x2 = float(child.get("x2", "1"))
-                y2 = float(child.get("y2", "0"))
-
-                dx = abs(x2 - x1)
-                dy = abs(y2 - y1)
-
-                if dx > dy * 3:
-                    return "horizontal"
-                elif dy > dx * 3:
-                    return "vertical"
-            except (ValueError, TypeError):
+            x1 = parse_float_attr(child, "x1", axis="x", default=0.0)
+            y1 = parse_float_attr(child, "y1", axis="y", default=0.0)
+            x2 = parse_float_attr(child, "x2", axis="x", default=1.0)
+            y2 = parse_float_attr(child, "y2", axis="y", default=0.0)
+            if x1 is None or y1 is None or x2 is None or y2 is None:
                 continue
+
+            dx = abs(x2 - x1)
+            dy = abs(y2 - y1)
+
+            if dx > dy * 3:
+                return "horizontal"
+            elif dy > dx * 3:
+                return "vertical"
 
     return "horizontal"  # Default
 

@@ -8,6 +8,11 @@ from typing import Any
 
 from svg2ooxml.common.conversions.opacity import parse_opacity
 from svg2ooxml.common.numpy_compat import require_numpy
+from svg2ooxml.common.units.lengths import (
+    parse_number,
+    parse_number_list,
+    parse_number_or_percent,
+)
 from svg2ooxml.core.resvg.painting.paint import parse_color
 from svg2ooxml.render import filters_lighting as _lighting
 from svg2ooxml.render import filters_region as _region
@@ -106,7 +111,7 @@ def apply_color_matrix(surface: Surface, attrs: Mapping[str, str]) -> Surface:
     data = surface.data.copy()
 
     if matrix_type == "saturate":
-        value = float(attrs.get("values", "1") or 1.0)
+        value = parse_number_or_percent(attrs.get("values"), 1.0)
         value = max(0.0, min(1.0, value))
         luminance = 0.2126 * data[..., 0] + 0.7152 * data[..., 1] + 0.0722 * data[..., 2]
         data[..., 0] = luminance * (1.0 - value) + data[..., 0] * value
@@ -121,7 +126,7 @@ def apply_color_matrix(surface: Surface, attrs: Mapping[str, str]) -> Surface:
         return result
 
     values = attrs.get("values", "")
-    parts = [float(part) for part in values.replace(",", " ").split() if part]
+    parts = parse_number_list(values)
     if len(parts) != 20:
         return surface.clone()
     matrix = np.array(parts, dtype=np.float32).reshape(4, 5)
@@ -196,8 +201,8 @@ def apply_turbulence(
     units: PrimitiveUnitScale,
     linear: bool,
 ) -> Surface:
-    freq_x = abs(float(params.get("freq_x", 0.0)))
-    freq_y = abs(float(params.get("freq_y", 0.0)))
+    freq_x = abs(parse_number(params.get("freq_x", 0.0), 0.0))
+    freq_y = abs(parse_number(params.get("freq_y", 0.0), 0.0))
     freq_x = max(freq_x, 1e-4)
     freq_y = max(freq_y, 1e-4)
     num_octaves = int(params.get("octaves", 1))

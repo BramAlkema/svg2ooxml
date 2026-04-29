@@ -14,6 +14,8 @@ This module provides conversions between these representations.
 
 from __future__ import annotations
 
+from svg2ooxml.common.units.lengths import parse_number_or_percent
+
 # PowerPoint opacity/alpha unit: 1.0 = 100000 units
 PPT_OPACITY_SCALE = 100000
 
@@ -79,14 +81,7 @@ def parse_opacity(value: str | float | int | None, default: float = 1.0) -> floa
     token = value.strip()
     if not token:
         return clamp_opacity(float(default))
-    try:
-        if token.endswith("%"):
-            parsed = float(token[:-1]) / 100.0
-        else:
-            parsed = float(token)
-    except ValueError:
-        parsed = float(default)
-    return clamp_opacity(parsed)
+    return clamp_opacity(parse_number_or_percent(token, float(default)))
 
 
 def parse_authored_opacity(
@@ -95,12 +90,17 @@ def parse_authored_opacity(
 ) -> float:
     """Parse animation-authored opacity, accepting ``0``-``100`` percent tokens."""
 
-    try:
-        opacity = float(value)
-    except (TypeError, ValueError):
+    if value is None:
         return clamp_opacity(default)
+    token = str(value).strip()
+    if not token:
+        return clamp_opacity(default)
+    opacity = parse_number_or_percent(token, float(default))
+    is_percent_syntax = token.endswith("%") or (
+        token.lower().startswith("calc(") and "%" in token
+    )
     if opacity > 1.0:
-        opacity = opacity / 100.0
+        opacity = opacity if is_percent_syntax else opacity / 100.0
     return clamp_opacity(opacity)
 
 

@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import os
 import logging
+import os
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -66,7 +66,7 @@ class ParallelExportSettings:
         cls,
         *,
         tmp_dir: Path | None = None,
-    ) -> "ParallelExportSettings":
+    ) -> ParallelExportSettings:
         bundle_env = os.getenv("SVG2OOXML_BUNDLE_DIR")
         bundle_dir = Path(bundle_env).expanduser() if bundle_env else None
         if bundle_dir is not None:

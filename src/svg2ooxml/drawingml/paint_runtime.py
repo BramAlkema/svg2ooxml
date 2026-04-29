@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping
 from typing import Any
 
 from svg2ooxml.common.conversions.opacity import clamp_opacity, opacity_to_ppt
+from svg2ooxml.common.units.lengths import resolve_length_px
 from svg2ooxml.drawingml.generator import px_to_emu
 from svg2ooxml.drawingml.paint_dash import _dash_elem
 from svg2ooxml.drawingml.paint_gradients import (
@@ -157,14 +159,23 @@ def stroke_to_xml(
     return to_string(ln)
 
 
+def _clip_length_px(clip_meta: Mapping[str, Any], key: str, *, axis: str, default: float) -> float:
+    if key not in clip_meta:
+        return default
+    return resolve_length_px(clip_meta.get(key), None, axis=axis, default=math.nan)
+
+
 def clip_rect_to_xml(clip_meta: Mapping[str, Any]) -> str:
-    try:
-        x = px_to_emu(float(clip_meta.get("x", 0.0)))
-        y = px_to_emu(float(clip_meta.get("y", 0.0)))
-        width = px_to_emu(float(clip_meta.get("width", 0.0)))
-        height = px_to_emu(float(clip_meta.get("height", 0.0)))
-    except (TypeError, ValueError):
+    x_px = _clip_length_px(clip_meta, "x", axis="x", default=0.0)
+    y_px = _clip_length_px(clip_meta, "y", axis="y", default=0.0)
+    width_px = _clip_length_px(clip_meta, "width", axis="x", default=0.0)
+    height_px = _clip_length_px(clip_meta, "height", axis="y", default=0.0)
+    if not all(math.isfinite(value) for value in (x_px, y_px, width_px, height_px)):
         return ""
+    x = px_to_emu(x_px)
+    y = px_to_emu(y_px)
+    width = px_to_emu(width_px)
+    height = px_to_emu(height_px)
     if width <= 0 or height <= 0:
         return ""
     x2 = x + width

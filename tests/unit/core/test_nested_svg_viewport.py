@@ -70,6 +70,27 @@ def test_nested_svg_percent_viewport_resolves_against_parent_viewport() -> None:
     assert cell.bbox.height == pytest.approx(5.0)
 
 
+def test_nested_svg_calc_viewport_resolves_against_parent_viewport() -> None:
+    svg = """
+    <svg xmlns="http://www.w3.org/2000/svg" width="200" height="100" viewBox="0 0 200 100">
+      <svg x="calc(10% + 5px)" y="calc(20% - 5px)"
+           width="calc(50% - 10px)" height="calc(50% + 10px)"
+           preserveAspectRatio="none"
+           viewBox="0 0 100 100">
+        <rect id="cell" x="50" y="50" width="10" height="10" fill="#000000"/>
+      </svg>
+    </svg>
+    """
+
+    scene = _render(svg)
+
+    cell = _rectangle_with_id(scene.elements, "cell")
+    assert cell.bbox.x == pytest.approx(70.0)
+    assert cell.bbox.y == pytest.approx(45.0)
+    assert cell.bbox.width == pytest.approx(9.0)
+    assert cell.bbox.height == pytest.approx(6.0)
+
+
 def test_nested_svg_viewport_scales_use_geometry() -> None:
     svg = """
     <svg xmlns="http://www.w3.org/2000/svg"

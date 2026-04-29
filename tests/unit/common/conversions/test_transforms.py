@@ -1,10 +1,13 @@
 """Tests for transform parsing utilities."""
 
+import pytest
 
 from svg2ooxml.common.conversions.transforms import (
     parse_angle,
+    parse_angle_strict,
     parse_numeric_list,
     parse_scale_pair,
+    parse_strict_numeric_list,
     parse_translation_pair,
 )
 
@@ -47,6 +50,44 @@ class TestParseNumericList:
     def test_whitespace_handling(self):
         assert parse_numeric_list("  1   2   3  ") == [1.0, 2.0, 3.0]
         assert parse_numeric_list("\t1\n2\r3") == [1.0, 2.0, 3.0]
+
+    def test_calc_numbers_are_single_values(self):
+        assert parse_numeric_list("calc(1 + 2)") == [3.0]
+        assert parse_numeric_list("10 calc(2 * 3), -5") == [10.0, 6.0, -5.0]
+        assert parse_numeric_list("calc((1 + 2) * 3)") == [9.0]
+
+    def test_invalid_calc_preserves_historical_number_extraction(self):
+        assert parse_numeric_list("calc(1px + 2px)") == [1.0, 2.0]
+        assert parse_numeric_list("calc(1 + 2") == [1.0, 2.0]
+
+
+class TestParseStrictNumericList:
+    """Test strict numeric list parsing shared by viewBox-like grammars."""
+
+    def test_accepts_compact_signed_values(self):
+        assert parse_strict_numeric_list("-10-20 100 50") == [-10.0, -20.0, 100.0, 50.0]
+
+    def test_rejects_non_separator_garbage(self):
+        with pytest.raises(ValueError, match="numeric list contains non-numeric values"):
+            parse_strict_numeric_list("garbage 0 0 100 50")
+
+    def test_rejects_trailing_garbage(self):
+        with pytest.raises(ValueError, match="numeric list contains non-numeric values"):
+            parse_strict_numeric_list("0 0 100 50px")
+
+    def test_accepts_calc_when_enabled(self):
+        assert parse_strict_numeric_list(
+            "0 calc(1 + 2), 10-5",
+            allow_calc=True,
+        ) == [0.0, 3.0, 10.0, -5.0]
+
+    def test_rejects_calc_when_disabled(self):
+        with pytest.raises(ValueError, match="numeric list contains non-numeric values"):
+            parse_strict_numeric_list("0 calc(1 + 2)")
+
+    def test_rejects_invalid_calc_list(self):
+        with pytest.raises(ValueError, match="numeric list contains non-numeric values"):
+            parse_strict_numeric_list("0 calc(1px + 2px)", allow_calc=True)
 
 
 class TestParseScalePair:
@@ -114,6 +155,9 @@ class TestParseTranslationPair:
         assert parse_translation_pair("1e2 2e2") == (100.0, 200.0)
         assert parse_translation_pair("1.5e-1 2.5e-1") == (0.15, 0.25)
 
+    def test_calc_values(self):
+        assert parse_translation_pair("calc(5 + 5), calc(4 * 5)") == (10.0, 20.0)
+
 
 class TestParseAngle:
     """Test parse_angle function."""
@@ -149,6 +193,25 @@ class TestParseAngle:
     def test_positive_sign(self):
         assert parse_angle("+45") == 45.0
         assert parse_angle("+90.5") == 90.5
+
+    def test_css_angle_units(self):
+        assert parse_angle("0.25turn") == 90.0
+        assert parse_angle("100grad") == 90.0
+        assert parse_angle("1.5707963267948966rad") == pytest.approx(90.0)
+
+    def test_css_angle_calc(self):
+        assert parse_angle("calc(1turn - 90deg)") == pytest.approx(270.0)
+        assert parse_angle("calc(100grad + 90deg)") == pytest.approx(180.0)
+        assert parse_angle("calc(45 + 45)") == pytest.approx(90.0)
+
+    def test_invalid_css_angle_calc_falls_back(self):
+        assert parse_angle("calc(1deg + 2px)") == 1.0
+
+    def test_strict_angle_rejects_loose_fallback_values(self):
+        assert parse_angle_strict("0.25turn") == pytest.approx(90.0)
+        assert parse_angle_strict("calc(45 + 45)") == pytest.approx(90.0)
+        assert parse_angle_strict("calc(1deg + 2px)") is None
+        assert parse_angle_strict("45 90") is None
 
 
 class TestEdgeCases:

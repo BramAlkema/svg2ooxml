@@ -10,8 +10,6 @@ Run `python -m tests.corpus.kelvin_lawrence.download_corpus` to prefetch.
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 
 from svg2ooxml.public import SvgToPptxExporter

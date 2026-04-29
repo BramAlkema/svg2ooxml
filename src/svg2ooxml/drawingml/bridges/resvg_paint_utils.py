@@ -7,8 +7,10 @@ from copy import deepcopy
 from lxml import etree
 
 from svg2ooxml.color.adapters import color_object_to_hex
+from svg2ooxml.common.math_utils import finite_float
 from svg2ooxml.common.style.css_values import parse_style_declarations
 from svg2ooxml.common.svg_refs import local_name
+from svg2ooxml.common.units.lengths import parse_number_or_percent
 from svg2ooxml.core.resvg.painting.paint import Color
 
 
@@ -17,15 +19,9 @@ def parse_style(style: str | None) -> dict[str, str]:
 
 
 def parse_float(value: str | None, default: float) -> float:
-    if value is None:
-        return default
-    token = value.strip()
-    if not token:
-        return default
-    try:
-        return float(token.strip("%")) / 100.0 if token.endswith("%") else float(token)
-    except ValueError:
-        return default
+    parsed = parse_number_or_percent(value, default)
+    finite = finite_float(parsed)
+    return default if finite is None else finite
 
 
 def format_number(value: float) -> str:

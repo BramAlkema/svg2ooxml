@@ -8,6 +8,7 @@ from typing import Any
 
 from lxml import etree
 
+from svg2ooxml.common.conversions.opacity import parse_opacity
 from svg2ooxml.core.styling.style_extractor import StyleResult
 from svg2ooxml.ir.paint import Stroke, StrokeCap, StrokeJoin
 
@@ -33,7 +34,7 @@ class ResvgStyleSupportMixin:
                 )
             )
             inherited_style = self._materialize_style(element, inherited_paint_style)
-            opacity = float(paint_style.get("opacity", 1.0))
+            opacity = parse_opacity(paint_style.get("opacity"), default=1.0)
         except Exception:
             opacity = (
                 style.opacity
@@ -135,7 +136,7 @@ class ResvgStyleSupportMixin:
         fill = self._style_extractor._resolve_paint(
             element,
             paint_style.get("fill"),
-            opacity=float(paint_style.get("fill_opacity", 1.0)),
+            opacity=parse_opacity(paint_style.get("fill_opacity"), default=1.0),
             services=self._services,
             context=self._css_context,
             metadata=metadata,
@@ -148,7 +149,7 @@ class ResvgStyleSupportMixin:
             context=self._css_context,
             metadata=metadata,
         )
-        opacity = float(paint_style.get("opacity", 1.0))
+        opacity = parse_opacity(paint_style.get("opacity"), default=1.0)
         effects = self._style_extractor._resolve_effects(
             element,
             services=self._services,

@@ -7,6 +7,7 @@ from typing import Any
 
 from svg2ooxml.common.geometry import Matrix2D
 from svg2ooxml.common.geometry.paths import parse_path_data
+from svg2ooxml.common.geometry.points import parse_point_pairs
 from svg2ooxml.common.geometry.segments import (
     ellipse_segments as _ellipse_segments,
 )
@@ -14,6 +15,7 @@ from svg2ooxml.common.geometry.segments import (
     line_segments_from_points,
     transform_segments,
 )
+from svg2ooxml.common.units.lengths import resolve_length_px
 from svg2ooxml.drawingml.generator import CustomGeometry, DrawingMLPathGenerator
 from svg2ooxml.ir.geometry import LineSegment, Point, SegmentType
 
@@ -105,10 +107,10 @@ class PrimitiveSegmentBuilder:
         return segments
 
     def _rect_segments(self, primitive: PrimitiveDict, matrix: Matrix2D) -> SegmentList:
-        x = float(primitive.get("x", 0.0) or 0.0)
-        y = float(primitive.get("y", 0.0) or 0.0)
-        width = float(primitive.get("width", 0.0) or 0.0)
-        height = float(primitive.get("height", 0.0) or 0.0)
+        x = self._primitive_length(primitive, "x", 0.0, axis="x")
+        y = self._primitive_length(primitive, "y", 0.0, axis="y")
+        width = self._primitive_length(primitive, "width", 0.0, axis="x")
+        height = self._primitive_length(primitive, "height", 0.0, axis="y")
         if width <= 0 or height <= 0:
             return []
 
@@ -123,17 +125,17 @@ class PrimitiveSegmentBuilder:
         return list(line_segments_from_points(transformed))
 
     def _ellipse_segments(self, primitive: PrimitiveDict, matrix: Matrix2D) -> SegmentList:
-        cx = float(primitive.get("cx", primitive.get("x", 0.0)) or 0.0)
-        cy = float(primitive.get("cy", primitive.get("y", 0.0)) or 0.0)
-        rx = float(primitive.get("r", primitive.get("rx", 0.0)) or 0.0)
-        ry = float(primitive.get("r", primitive.get("ry", rx)) or 0.0)
+        cx = self._primitive_length(primitive, "cx", primitive.get("x", 0.0), axis="x")
+        cy = self._primitive_length(primitive, "cy", primitive.get("y", 0.0), axis="y")
+        rx = self._primitive_length(primitive, "r", primitive.get("rx", 0.0), axis="x")
+        ry = self._primitive_length(primitive, "r", primitive.get("ry", rx), axis="y")
         return apply_matrix_to_segments(_ellipse_segments(cx, cy, rx, ry), matrix)
 
     def _line_segments(self, primitive: PrimitiveDict, matrix: Matrix2D) -> SegmentList:
-        x1 = float(primitive.get("x1", 0.0) or 0.0)
-        y1 = float(primitive.get("y1", 0.0) or 0.0)
-        x2 = float(primitive.get("x2", 0.0) or 0.0)
-        y2 = float(primitive.get("y2", 0.0) or 0.0)
+        x1 = self._primitive_length(primitive, "x1", 0.0, axis="x")
+        y1 = self._primitive_length(primitive, "y1", 0.0, axis="y")
+        x2 = self._primitive_length(primitive, "x2", 0.0, axis="x")
+        y2 = self._primitive_length(primitive, "y2", 0.0, axis="y")
         start = matrix.transform_point(Point(x1, y1))
         end = matrix.transform_point(Point(x2, y2))
         return [LineSegment(start, end)]
@@ -176,20 +178,18 @@ class PrimitiveSegmentBuilder:
 
     @staticmethod
     def _parse_points(value: str | None) -> list[tuple[float, float]]:
-        if not value:
-            return []
-        cleaned = value.replace(",", " ")
-        parts = cleaned.split()
-        if len(parts) % 2 != 0:
-            parts = parts[:-1]
-        result: list[tuple[float, float]] = []
-        it = iter(parts)
-        for x_str, y_str in zip(it, it, strict=False):
-            try:
-                result.append((float(x_str), float(y_str)))
-            except ValueError:
-                continue
-        return result
+        return parse_point_pairs(value)
+
+    @staticmethod
+    def _primitive_length(
+        primitive: PrimitiveDict,
+        key: str,
+        default: Any,
+        *,
+        axis: str,
+    ) -> float:
+        value = primitive.get(key, default)
+        return resolve_length_px(value, None, axis=axis, default=resolve_length_px(default, None, axis=axis))
 
 
 def apply_matrix_to_segments(segments: Iterable[SegmentType], matrix: Matrix2D) -> SegmentList:

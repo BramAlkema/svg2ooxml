@@ -74,6 +74,26 @@ def test_segments_from_primitives_applies_transform() -> None:
     assert segment.end.y == pytest.approx(12.0)
 
 
+def test_segments_from_primitives_resolves_calc_line_values() -> None:
+    segments = segments_from_primitives(
+        (
+            {
+                "type": "line",
+                "x1": "calc(1px + 2px)",
+                "y1": "calc(2px * 2)",
+                "x2": "calc(10px - 2px)",
+                "y2": "calc(5px + 5px)",
+            },
+        )
+    )
+
+    assert len(segments) == 1
+    segment = segments[0]
+    assert isinstance(segment, LineSegment)
+    assert segment.start == Point(3.0, 4.0)
+    assert segment.end == Point(8.0, 10.0)
+
+
 def test_generate_from_primitives_without_segments_raises() -> None:
     generator = CustGeomGenerator()
 
@@ -123,6 +143,23 @@ def test_segments_from_primitives_for_polygon_closes_loop() -> None:
     assert len(segments) == 3
     assert segments[0].start == Point(0.0, 0.0)
     assert segments[-1].end == Point(0.0, 0.0)
+
+
+def test_segments_from_primitives_parses_compact_signed_points() -> None:
+    segments = segments_from_primitives(
+        (
+            {
+                "type": "polyline",
+                "points": "0,0 10-5 20,0",
+                "transform": (1.0, 0.0, 0.0, 1.0, 0.0, 0.0),
+            },
+        )
+    )
+
+    assert len(segments) == 2
+    assert segments[0].start == Point(0.0, 0.0)
+    assert segments[0].end == Point(10.0, -5.0)
+    assert segments[1].end == Point(20.0, 0.0)
 
 
 def test_segments_from_primitives_for_path_handles_cubic_commands() -> None:

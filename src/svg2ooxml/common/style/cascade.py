@@ -16,6 +16,7 @@ from svg2ooxml.common.style.selectors import (
     compute_specificity,
     parse_selector,
 )
+from svg2ooxml.common.units.lengths import resolve_length_px_required
 
 if TYPE_CHECKING:
     from svg2ooxml.core.parser.units import UnitConverter
@@ -184,14 +185,15 @@ class StylesheetCascade:
             viewport_width=width,
             viewport_height=height,
         )
-        for match in re.finditer(
-            r"(min|max)-(width|height)\s*:\s*([+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?[a-z%]*)",
-            query,
-        ):
-            bound_type, dimension, value = match.group(1), match.group(2), match.group(3)
+        for bound_type, dimension, value in _iter_media_length_conditions(query):
             axis = "x" if dimension == "width" else "y"
             try:
-                threshold = self._unit_converter.to_px(value, conversion, axis=axis)
+                threshold = resolve_length_px_required(
+                    value,
+                    conversion,
+                    axis=axis,
+                    unit_converter=self._unit_converter,
+                )
             except Exception:
                 threshold = 0.0
             actual = width if dimension == "width" else height
@@ -259,6 +261,35 @@ class StylesheetCascade:
                 )
             )
         return selectors
+
+
+def _iter_media_length_conditions(query: str) -> Iterable[tuple[str, str, str]]:
+    try:
+        tokens = tinycss2.parse_component_value_list(query)
+    except Exception:
+        return []
+
+    conditions: list[tuple[str, str, str]] = []
+    for token in tokens:
+        if getattr(token, "type", None) != "() block":
+            continue
+        content = [
+            item
+            for item in getattr(token, "content", ())
+            if getattr(item, "type", None) not in {"whitespace", "comment"}
+        ]
+        if len(content) < 3:
+            continue
+        feature = getattr(content[0], "lower_value", "")
+        if feature not in {"min-width", "max-width", "min-height", "max-height"}:
+            continue
+        if getattr(content[1], "type", None) != "literal" or getattr(content[1], "value", "") != ":":
+            continue
+        bound_type, dimension = feature.split("-", 1)
+        value = tinycss2.serialize(content[2:]).strip()
+        if value:
+            conditions.append((bound_type, dimension, value))
+    return conditions
 
 
 __all__ = [

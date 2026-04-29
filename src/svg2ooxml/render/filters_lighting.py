@@ -7,6 +7,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from svg2ooxml.common.numpy_compat import require_numpy
+from svg2ooxml.common.units.lengths import parse_number
 from svg2ooxml.render.surface import Surface
 
 np = require_numpy("svg2ooxml.render requires NumPy; install the 'render' extra.")
@@ -21,13 +22,13 @@ def apply_diffuse_lighting(
 ) -> Surface:
     light = params.get("light", {})
     color = np.array(params.get("lighting_color", (1.0, 1.0, 1.0)), dtype=np.float32)
-    surface_scale = float(params.get("surface_scale", 1.0))
-    diffuse_constant = float(params.get("constant", 1.0))
+    surface_scale = parse_number(params.get("surface_scale"), 1.0)
+    diffuse_constant = parse_number(params.get("constant"), 1.0)
     kernel_length = params.get("kernel_length", (1.0, 1.0))
 
     height_map = height_map_from_surface(surface) * surface_scale
-    spacing_x = float(kernel_length[0]) if kernel_length else 1.0
-    spacing_y = float(kernel_length[1]) if kernel_length else 1.0
+    spacing_x = _sequence_number(kernel_length, 0, 1.0)
+    spacing_y = _sequence_number(kernel_length, 1, 1.0)
     spacing_x = max(spacing_x, _EPSILON) * (units.scale_x or 1.0)
     spacing_y = max(spacing_y, _EPSILON) * (units.scale_y or 1.0)
 
@@ -58,14 +59,14 @@ def apply_specular_lighting(
     light = params.get("light", {})
     light_type = params.get("light_type")
     color = np.array(params.get("lighting_color", (1.0, 1.0, 1.0)), dtype=np.float32)
-    surface_scale = float(params.get("surface_scale", 1.0))
-    specular_constant = float(params.get("constant", 1.0))
-    specular_exponent = float(params.get("exponent", 1.0))
+    surface_scale = parse_number(params.get("surface_scale"), 1.0)
+    specular_constant = parse_number(params.get("constant"), 1.0)
+    specular_exponent = parse_number(params.get("exponent"), 1.0)
     kernel_length = params.get("kernel_length", (1.0, 1.0))
 
     height_map = height_map_from_surface(surface) * surface_scale
-    spacing_x = float(kernel_length[0]) if kernel_length else 1.0
-    spacing_y = float(kernel_length[1]) if kernel_length else 1.0
+    spacing_x = _sequence_number(kernel_length, 0, 1.0)
+    spacing_y = _sequence_number(kernel_length, 1, 1.0)
     spacing_x = max(spacing_x, _EPSILON) * (units.scale_x or 1.0)
     spacing_y = max(spacing_y, _EPSILON) * (units.scale_y or 1.0)
 
@@ -152,9 +153,9 @@ def light_direction(
 
     light_pos = np.array(
         [
-            float(light.get("x", 0.0)),
-            float(light.get("y", 0.0)),
-            float(light.get("z", 0.0)),
+            parse_number(light.get("x"), 0.0),
+            parse_number(light.get("y"), 0.0),
+            parse_number(light.get("z"), 0.0),
         ],
         dtype=np.float32,
     )
@@ -168,9 +169,9 @@ def light_direction(
     if light.get("type") == "spot":
         axis = np.array(
             [
-                float(light.get("points_at_x", 0.0)) - light_pos[0],
-                float(light.get("points_at_y", 0.0)) - light_pos[1],
-                float(light.get("points_at_z", 0.0)) - light_pos[2],
+                parse_number(light.get("points_at_x"), 0.0) - light_pos[0],
+                parse_number(light.get("points_at_y"), 0.0) - light_pos[1],
+                parse_number(light.get("points_at_z"), 0.0) - light_pos[2],
             ],
             dtype=np.float32,
         )
@@ -186,7 +187,7 @@ def light_direction(
         if limiting is not None:
             mask = cos_angle >= math.cos(limiting)
             weight = np.where(mask, 1.0, 0.0)
-        cone_exp = float(light.get("cone_exponent", 1.0))
+        cone_exp = parse_number(light.get("cone_exponent"), 1.0)
         weight *= np.power(np.clip(cos_angle, 0.0, 1.0), cone_exp)
 
     return direction.astype(np.float32), weight.astype(np.float32)
@@ -217,8 +218,9 @@ def apply_displacement_map(
     x_values = _channel(x_channel)
     y_values = _channel(y_channel)
 
-    scale_x = float(scale) * units.scale_x
-    scale_y = float(scale) * units.scale_y
+    scale_value = parse_number(scale, 0.0)
+    scale_x = scale_value * units.scale_x
+    scale_y = scale_value * units.scale_y
 
     dx = (x_values * 2.0 - 1.0) * scale_x
     dy = (y_values * 2.0 - 1.0) * scale_y
@@ -233,6 +235,16 @@ def apply_displacement_map(
 
     sampled = bilinear_sample(source.data, sample_x, sample_y)
     return Surface(width, height, sampled.astype(np.float32))
+
+
+def _sequence_number(value: object, index: int, default: float) -> float:
+    if not value:
+        return default
+    try:
+        item = value[index]  # type: ignore[index]
+    except (IndexError, KeyError, TypeError):
+        return default
+    return parse_number(item, default)
 
 
 def bilinear_sample(data: np.ndarray, xs: np.ndarray, ys: np.ndarray) -> np.ndarray:

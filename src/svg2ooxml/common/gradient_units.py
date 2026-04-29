@@ -4,9 +4,11 @@ from __future__ import annotations
 
 from typing import Any
 
+from svg2ooxml.common.math_utils import finite_float
 from svg2ooxml.common.units import UnitConverter
 from svg2ooxml.common.units.lengths import (
     parse_number_or_percent,
+    parse_percentage,
     resolve_length_px,
 )
 
@@ -39,9 +41,9 @@ def parse_gradient_coordinate(
     """
 
     token = value if value is not None and value.strip() else default
-    fallback = parse_number_or_percent(default, 0.0)
+    fallback = _finite_number(parse_number_or_percent(default, 0.0), 0.0)
     if normalize_gradient_units(units) != "userSpaceOnUse":
-        return parse_number_or_percent(token, fallback)
+        return _finite_number(parse_number_or_percent(token, fallback), fallback)
 
     if context is None:
         percent_value = _parse_simple_percent(token)
@@ -49,27 +51,32 @@ def parse_gradient_coordinate(
             return percent_value
 
     converter = unit_converter or _UNIT_CONVERTER
-    return resolve_length_px(
-        token,
-        context,
-        axis=axis,
-        default=fallback,
-        unit_converter=converter,
+    return _finite_number(
+        resolve_length_px(
+            token,
+            context,
+            axis=axis,
+            default=fallback,
+            unit_converter=converter,
+        ),
+        fallback,
     )
 
 
 def parse_gradient_offset(value: str | None) -> float:
     """Parse and clamp an SVG gradient stop offset."""
 
-    offset = parse_number_or_percent(value, 0.0)
+    offset = _finite_number(parse_number_or_percent(value, 0.0), 0.0)
     return max(0.0, min(1.0, offset))
 
 
 def _parse_simple_percent(value: str) -> float | None:
-    token = value.strip()
-    if not token.endswith("%"):
+    percent = parse_percentage(value, float("nan"))
+    if percent != percent:
         return None
-    try:
-        return float(token[:-1]) / 100.0
-    except ValueError:
-        return None
+    return percent
+
+
+def _finite_number(value: object, default: float) -> float:
+    number = finite_float(value)
+    return default if number is None else number

@@ -7,6 +7,7 @@ from collections.abc import Iterable, Sequence
 from lxml import etree
 
 from svg2ooxml.common.geometry import Matrix2D
+from svg2ooxml.common.geometry.points import parse_point_pairs
 from svg2ooxml.common.geometry.segments import (
     ellipse_segments,
     line_segments_from_points,
@@ -15,25 +16,13 @@ from svg2ooxml.common.math_utils import clamp01
 from svg2ooxml.common.style.css_values import parse_style_declarations
 from svg2ooxml.common.svg_refs import local_name as _local_name
 from svg2ooxml.common.svg_refs import namespace_uri
+from svg2ooxml.common.units.lengths import resolve_length_px_required
 from svg2ooxml.core.traversal.constants import DEFAULT_TOLERANCE
 from svg2ooxml.ir.geometry import BezierSegment, LineSegment, Point, Rect, SegmentType
 
 
 def _clamp01(value: float) -> float:
     return clamp01(value)
-
-def _parse_float(value: str | None, *, default: float | None = None) -> float | None:
-    if value is None:
-        return default
-    value = value.strip()
-    if not value:
-        return default
-    try:
-        if value.endswith("%"):
-            return float(value[:-1]) / 100.0
-        return float(value)
-    except ValueError:
-        return default
 
 
 def _resolve_svg_length(
@@ -50,7 +39,14 @@ def _resolve_svg_length(
     if not token:
         return default
     try:
-        return float(unit_converter.to_px(token, context, axis=axis))
+        return float(
+            resolve_length_px_required(
+                token,
+                context,
+                axis=axis,
+                unit_converter=unit_converter,
+            )
+        )
     except Exception:
         return default
 
@@ -84,21 +80,7 @@ def _segments_to_points(segments: Sequence[SegmentType], *, closed: bool) -> lis
 
 
 def _parse_points(value: str | None) -> list[Point]:
-    if not value:
-        return []
-    cleaned = value.replace(",", " ")
-    parts = cleaned.split()
-    if len(parts) % 2 != 0:
-        parts = parts[:-1]
-    points: list[Point] = []
-    it = iter(parts)
-    for x_str, y_str in zip(it, it, strict=False):
-        x = _parse_float(x_str)
-        y = _parse_float(y_str)
-        if x is None or y is None:
-            continue
-        points.append(Point(x, y))
-    return points
+    return [Point(x, y) for x, y in parse_point_pairs(value)]
 
 
 def _has_markers(element: etree._Element) -> bool:

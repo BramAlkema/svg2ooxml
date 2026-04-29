@@ -48,6 +48,61 @@ def test_service_references_update_gradient_service() -> None:
     assert pattern_descriptor.pattern_id == "p1"
 
 
+def test_gradient_service_content_uses_shared_calc_offsets() -> None:
+    service = GradientService()
+    gradient = etree.fromstring(
+        """
+        <linearGradient id="grad">
+          <stop offset="calc(25% + 25%)" stop-color="#000000"/>
+          <stop offset="100%" stop-color="#ffffff"/>
+        </linearGradient>
+        """
+    )
+
+    service.register_gradient("grad", gradient)
+    content = service.get_gradient_content("grad")
+
+    assert content is not None
+    assert 'pos="50000"' in content
+    assert 'pos="100000"' in content
+
+
+def test_gradient_service_content_uses_shared_calc_coordinates() -> None:
+    service = GradientService()
+    gradient = etree.fromstring(
+        """
+        <linearGradient id="grad" x1="0" y1="0" x2="calc(1)" y2="calc(1)">
+          <stop offset="0%" stop-color="#000000"/>
+          <stop offset="100%" stop-color="#ffffff"/>
+        </linearGradient>
+        """
+    )
+
+    service.register_gradient("grad", gradient)
+    content = service.get_gradient_content("grad")
+
+    assert content is not None
+    assert 'ang="2700000"' in content
+
+
+def test_pattern_service_detects_calc_rect_line() -> None:
+    service = PatternService()
+    pattern = etree.fromstring(
+        """
+        <pattern id="lines">
+          <rect width="calc(8 + 2)" height="2" fill="#000000"/>
+        </pattern>
+        """
+    )
+
+    service.register_pattern("lines", pattern)
+    content = service.get_pattern_content("lines")
+
+    assert content is not None
+    assert "pattFill" in content
+    assert 'prst="horz"' in content
+
+
 def test_clone_produces_isolated_services() -> None:
     services = configure_services()
     base_gradient = etree.Element("linearGradient", id="base")

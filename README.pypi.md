@@ -56,11 +56,11 @@ pip install svg2ooxml[figma2gslides]  # Figma/Google Slides tool runtime
 
 ## Current Release
 
-`0.8.0` is the fidelity policy, traceability, and converter-hardening release.
-Fidelity tiers now come from one typed policy source, trace reports are typed
-end to end, optional PPTX docProps trace embedding is behind an explicit switch,
-and more shared geometry, color, filter, SVG reference, and policy helpers are
-centralized to reduce duplicate conversion behavior.
+`0.8.1` is the typed CSS value, calc coverage, and parser-hardening release.
+It keeps the 0.8 fidelity policy and tracing work intact while centralizing
+more authored numeric parsing across colors, gradients, filters, masks,
+transforms, text, and animation values. ADR-036 defines the measured-fidelity
+road to 0.9.
 
 ## Quick Start
 

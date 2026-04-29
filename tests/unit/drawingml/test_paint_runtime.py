@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from svg2ooxml.common.geometry import Matrix2D
 from svg2ooxml.drawingml import paint_runtime
+from svg2ooxml.drawingml.generator import px_to_emu
 from svg2ooxml.drawingml.paint_runtime import _dash_elem, _pattern_to_fill_elem
 from svg2ooxml.drawingml.xml_builder import to_string
 from svg2ooxml.ir.geometry import Rect
@@ -239,6 +240,21 @@ def test_dash_elem_normalizes_negative_and_nonfinite_values() -> None:
     xml = to_string(elem)
 
     assert '<a:ds d="400000" sp="200000"/>' in xml
+
+
+def test_clip_rect_to_xml_resolves_calc_metadata_values() -> None:
+    xml = paint_runtime.clip_rect_to_xml(
+        {
+            "x": "calc(1px + 2px)",
+            "y": "calc(3px + 1px)",
+            "width": "calc(6px + 4px)",
+            "height": "calc(2px * 3)",
+        }
+    )
+
+    assert "<a:clipPath>" in xml
+    assert f'<a:pt x="{px_to_emu(3)}" y="{px_to_emu(4)}"/>' in xml
+    assert f'<a:pt x="{px_to_emu(13)}" y="{px_to_emu(10)}"/>' in xml
 
 
 def test_gradient_repeat_expands_stops() -> None:

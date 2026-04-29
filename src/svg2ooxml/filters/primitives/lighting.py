@@ -12,6 +12,7 @@ from svg2ooxml.common.conversions.angles import radians_to_ppt
 from svg2ooxml.common.conversions.opacity import opacity_to_ppt
 from svg2ooxml.common.svg_refs import local_name
 from svg2ooxml.common.units import px_to_emu
+from svg2ooxml.common.units.lengths import split_length_list
 
 # Import centralized XML builders for safe DrawingML generation
 from svg2ooxml.drawingml.xml_builder import a_elem, a_sub, to_string
@@ -187,7 +188,7 @@ def _parse_kernel_unit(
 ) -> tuple[float | None, float | None]:
     if not value:
         return (None, None)
-    parts = value.replace(",", " ").split()
+    parts = split_length_list(value)
     if len(parts) >= 2:
         x_str, y_str = parts[0], parts[1]
     else:
@@ -334,7 +335,7 @@ def _normalise_color_token(value: str) -> str:
 
 
 def _mix_toward_white(token: str, weight: float) -> str:
-    weight = max(0.0, min(float(weight), 1.0))
+    weight = max(0.0, min(parse_number(weight, 1.0), 1.0))
     try:
         red = int(token[0:2], 16)
         green = int(token[2:4], 16)
@@ -351,19 +352,19 @@ def _lighting_direction_ppt(light: LightSource | None) -> int:
     if light is None:
         return 0
     if light.kind == "distant":
-        azimuth = math.radians(float(light.params.get("azimuth", 0.0)))
-        elevation = math.radians(float(light.params.get("elevation", 0.0)))
+        azimuth = math.radians(parse_number(light.params.get("azimuth"), 0.0))
+        elevation = math.radians(parse_number(light.params.get("elevation"), 0.0))
         dx = math.cos(elevation) * math.cos(azimuth)
         dy = math.cos(elevation) * math.sin(azimuth)
     elif light.kind == "spot":
-        dx = float(light.params.get("pointsAtX", 0.0)) - float(light.params.get("x", 0.0))
-        dy = float(light.params.get("pointsAtY", 0.0)) - float(light.params.get("y", 0.0))
+        dx = parse_number(light.params.get("pointsAtX"), 0.0) - parse_number(light.params.get("x"), 0.0)
+        dy = parse_number(light.params.get("pointsAtY"), 0.0) - parse_number(light.params.get("y"), 0.0)
         if abs(dx) <= 1e-6 and abs(dy) <= 1e-6:
-            dx = float(light.params.get("x", 0.0))
-            dy = float(light.params.get("y", 0.0))
+            dx = parse_number(light.params.get("x"), 0.0)
+            dy = parse_number(light.params.get("y"), 0.0)
     else:
-        dx = float(light.params.get("x", 0.0))
-        dy = float(light.params.get("y", 0.0))
+        dx = parse_number(light.params.get("x"), 0.0)
+        dy = parse_number(light.params.get("y"), 0.0)
 
     if abs(dx) <= 1e-6 and abs(dy) <= 1e-6:
         return 0
@@ -375,13 +376,13 @@ def _lighting_distance_px(light: LightSource | None, *, base: float, maximum: fl
         return 0.0
     strength = 0.75
     if light.kind == "distant":
-        elevation = max(0.0, min(float(light.params.get("elevation", 45.0)), 89.0))
+        elevation = max(0.0, min(parse_number(light.params.get("elevation"), 45.0), 89.0))
         strength = max(0.15, math.cos(math.radians(elevation)))
     return min(max(base, 0.0) * strength, maximum)
 
 
 def _clamp_ratio(value: float, *, minimum: float = 0.1, maximum: float = 1.0) -> float:
-    return max(minimum, min(float(value), maximum))
+    return max(minimum, min(parse_number(value, maximum), maximum))
 
 
 def _source_is_svg_image(context: FilterContext) -> bool:

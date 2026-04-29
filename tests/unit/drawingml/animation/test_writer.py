@@ -17,7 +17,7 @@ from svg2ooxml.drawingml.animation.handlers import (
 )
 from svg2ooxml.drawingml.animation.native_fragment import NativeFragment
 from svg2ooxml.drawingml.animation.writer import DrawingMLAnimationWriter
-from svg2ooxml.drawingml.xml_builder import NS_P, p_elem, to_string
+from svg2ooxml.drawingml.xml_builder import p_elem, to_string
 from svg2ooxml.ir.animation import (
     AnimationDefinition,
     AnimationTiming,

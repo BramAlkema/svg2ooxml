@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from svg2ooxml.common.conversions.opacity import opacity_to_ppt
+from svg2ooxml.common.conversions.opacity import opacity_to_ppt, parse_opacity
 from svg2ooxml.drawingml.xml_builder import a_elem, a_sub, graft_xml_fragment, to_string
 from svg2ooxml.filters.base import FilterContext, FilterResult
 from svg2ooxml.filters.primitives.composite_types import CompositeParams
@@ -126,12 +126,12 @@ class CompositeMaskingMixin:
         opacity = 1.0
         if "flood_color" in mask.metadata:
             color = str(mask.metadata.get("flood_color") or "").strip().lstrip("#").upper()
-            opacity = float(mask.metadata.get("flood_opacity", 1.0))
+            opacity = parse_opacity(mask.metadata.get("flood_opacity"), 1.0)
         else:
             fill_meta = mask.metadata.get("fill")
             if isinstance(fill_meta, dict) and fill_meta.get("type") == "solid":
                 color = str(fill_meta.get("rgb") or "").strip().lstrip("#").upper()
-                opacity = float(fill_meta.get("opacity", mask.metadata.get("opacity", 1.0)))
+                opacity = parse_opacity(fill_meta.get("opacity", mask.metadata.get("opacity")), 1.0)
             elif isinstance(fill_meta, dict) and fill_meta.get("type") in {"linearGradient", "radialGradient"}:
                 stops = fill_meta.get("stops")
                 if isinstance(stops, list) and stops:
@@ -143,7 +143,7 @@ class CompositeMaskingMixin:
                 candidate = fill_meta.get("foreground") or fill_meta.get("background")
                 if isinstance(candidate, str) and candidate:
                     color = candidate.strip().lstrip("#").upper()
-                    opacity = float(mask.metadata.get("opacity", 1.0))
+                    opacity = parse_opacity(mask.metadata.get("opacity"), 1.0)
         if not color:
             return None, None
         if len(color) == 3:

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from lxml import etree
 
+from svg2ooxml.common.units.lengths import parse_number
 from svg2ooxml.filters.base import FilterResult
 from svg2ooxml.filters.metadata import FilterFallbackAssetPayload
 from svg2ooxml.filters.primitives.composite_types import (
@@ -56,12 +57,7 @@ class CompositeInputMixin:
         )
 
     def _parse_float(self, token: str | None) -> float:
-        if token is None:
-            return 0.0
-        try:
-            return float(token)
-        except ValueError:
-            return 0.0
+        return parse_number(token, 0.0)
 
     def _lookup_input(
         self,

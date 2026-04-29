@@ -57,6 +57,34 @@ def test_text_policy_allows_overrides() -> None:
     assert payload["embedding"]["embed_when_available"] is False
 
 
+def test_text_policy_ignores_invalid_wordart_threshold_override() -> None:
+    provider = TextPolicyProvider()
+    target = PolicyTarget("text")
+
+    baseline = provider.evaluate(target, {"quality": "balanced"})["decision"]
+    payload = provider.evaluate(
+        target,
+        {"quality": "balanced", "text.wordart.confidence_threshold": "nan"},
+    )
+
+    assert (
+        payload["decision"].wordart.confidence_threshold
+        == baseline.wordart.confidence_threshold
+    )
+
+
+def test_image_policy_invalid_downscale_uses_default() -> None:
+    provider = ImagePolicyProvider()
+    target = PolicyTarget("image")
+
+    payload = provider.evaluate(
+        target,
+        {"quality": "balanced", "image.max_downscale": "nan"},
+    )
+
+    assert payload["max_downscale"] == pytest.approx(0.5)
+
+
 def test_path_policy_limits_adjust_with_quality() -> None:
     provider = PathPolicyProvider()
     target = PolicyTarget("geometry")

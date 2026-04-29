@@ -13,10 +13,10 @@ from svg2ooxml.drawingml.animation.xml_builders import AnimationXMLBuilder
 from svg2ooxml.drawingml.xml_builder import NS_P
 from svg2ooxml.ir.animation import (
     AnimationDefinition,
-    BeginTrigger,
-    BeginTriggerType,
     AnimationTiming,
     AnimationType,
+    BeginTrigger,
+    BeginTriggerType,
     CalcMode,
 )
 
@@ -372,6 +372,25 @@ class TestBuild:
         assert by_elem.get("x") == "400000"
         assert by_elem.get("y") == "100000"
 
+    def test_symmetric_calc_width_animation_uses_autoreverse_scale(
+        self, handler: NumericAnimationHandler
+    ):
+        anim = make_numeric_animation(
+            target_attribute="width",
+            values=["calc(5px * 2)", "calc(20px * 2)", "calc(5px * 2)"],
+        )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        anim_scale = par.find(f".//{{{NS_P}}}animScale")
+        assert anim_scale is not None
+        assert par.find(f".//{{{NS_P}}}anim") is None
+        bhvr_ctn = par.find(f".//{{{NS_P}}}cBhvr/{{{NS_P}}}cTn")
+        assert bhvr_ctn is not None
+        assert bhvr_ctn.get("autoRev") == "1"
+        by_elem = anim_scale.find(f"{{{NS_P}}}by")
+        assert by_elem is not None
+        assert by_elem.get("x") == "400000"
+        assert by_elem.get("y") == "100000"
+
     def test_multi_keyframe_width_animation_with_custom_key_times_uses_segmented_anim_scale(
         self, handler: NumericAnimationHandler
     ):
@@ -479,6 +498,18 @@ class TestMultiKeyframe:
         par = handler.build(anim, par_id=4, behavior_id=5)
         tavs = par.findall(f".//{{{NS_P}}}tav")
         # Distances are 10 then 30, so paced midpoint should be 25%.
+        assert [tav.get("tm") for tav in tavs] == ["0", "25000", "100000"]
+
+    def test_paced_calc_mode_uses_normalized_values(
+        self, handler: NumericAnimationHandler
+    ):
+        anim = make_numeric_animation(
+            values=["calc(0)", "calc(10)", "calc(40)"],
+            key_times=[0.0, 0.5, 1.0],
+            calc_mode=CalcMode.PACED,
+        )
+        par = handler.build(anim, par_id=4, behavior_id=5)
+        tavs = par.findall(f".//{{{NS_P}}}tav")
         assert [tav.get("tm") for tav in tavs] == ["0", "25000", "100000"]
 
     def test_spline_calc_mode_densifies_generic_numeric_tavs(

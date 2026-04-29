@@ -3,10 +3,10 @@ from __future__ import annotations
 from pathlib import Path
 
 from tools.visual.corpus_audit import (
+    AuditResult,
     _artifact_subdir,
     _default_output_dir,
     _svg_has_animation,
-    AuditResult,
     audit_svgs,
     build_summary,
     discover_svg_paths,

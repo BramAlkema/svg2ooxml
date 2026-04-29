@@ -7,7 +7,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from .slides_publisher import upload_to_google_slides
-from .slides_types import SlidesPublishResult, SlidesPublishingError
+from .slides_types import SlidesPublishingError, SlidesPublishResult
 
 
 class ExportServiceStorageMixin:

@@ -57,7 +57,7 @@ def test_composite_mask_approximates_solid_metadata() -> None:
         "mask": FilterResult(
             success=True,
             drawingml="",
-            metadata={"fill": {"type": "solid", "rgb": "00FF00", "opacity": 0.4}},
+            metadata={"fill": {"type": "solid", "rgb": "00FF00", "opacity": "calc(0.2 + 0.2)"}},
         ),
     }
     primitive = etree.fromstring('<feComposite operator="in" in="SourceGraphic" in2="mask"/>')
@@ -79,8 +79,8 @@ def test_composite_mask_approximates_gradient_metadata() -> None:
                 "fill": {
                     "type": "linearGradient",
                     "stops": [
-                        {"offset": 0.0, "rgb": "000000", "opacity": 0.2},
-                        {"offset": 1.0, "rgb": "FFFFFF", "opacity": 0.8},
+                        {"offset": "calc(0)", "rgb": "000000", "opacity": "calc(0.1 + 0.1)"},
+                        {"offset": "calc(50% + 50%)", "rgb": "FFFFFF", "opacity": "80%"},
                     ],
                 }
             },
@@ -140,3 +140,19 @@ def test_composite_mask_uses_effect_dag_when_policy_enabled() -> None:
     assert result.drawingml.startswith("<a:effectDag")
     assert "<a:cont/>" in result.drawingml
     assert "<a:alphaModFix>" in result.drawingml
+
+
+def test_composite_arithmetic_parses_calc_coefficients() -> None:
+    pipeline = {
+        "SourceGraphic": FilterResult(success=True, drawingml="<a:effectLst/>", metadata={}),
+        "mask": FilterResult(success=True, drawingml="<a:effectLst/>", metadata={}),
+    }
+    primitive = etree.fromstring(
+        '<feComposite operator="arithmetic" in="SourceGraphic" in2="mask" '
+        'k1="calc(0.25 + 0.25)" k2="calc(2 * 0.25)"/>'
+    )
+
+    result = CompositeFilter().apply(primitive, _context(pipeline))
+
+    assert result.metadata["k1"] == 0.5
+    assert result.metadata["k2"] == 0.5

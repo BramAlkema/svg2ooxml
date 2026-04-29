@@ -27,8 +27,8 @@ import multiprocessing as mp
 import os
 import queue
 import random
-import time
 import sys
+import time
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -43,6 +43,8 @@ sys.path.insert(0, str(project_root / "src"))
 
 from svg2ooxml.common.openxml_audit import (  # noqa: E402
     resolve_openxml_validator as _resolve_openxml_validator,
+)
+from svg2ooxml.common.openxml_audit import (  # noqa: E402
     run_openxml_audit as _run_openxml_audit,
 )
 from svg2ooxml.core.parser import ParserConfig, SVGParser  # noqa: E402

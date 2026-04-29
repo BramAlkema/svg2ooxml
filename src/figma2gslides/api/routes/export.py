@@ -63,16 +63,16 @@ async def export_frames(
         pptx_path = Path(tmpdir) / "export.pptx"
 
         try:
-            artifacts = await asyncio.wait_for(
+            await asyncio.wait_for(
                 run_in_threadpool(render_pptx_for_frames, request.frames, pptx_path),
                 timeout=CONVERSION_TIMEOUT,
             )
-        except asyncio.TimeoutError:
+        except TimeoutError as exc:
             logger.error("PPTX conversion timed out after %ds", CONVERSION_TIMEOUT)
             raise HTTPException(
                 status_code=status.HTTP_504_GATEWAY_TIMEOUT,
                 detail="Conversion timed out. Try fewer or simpler frames.",
-            )
+            ) from exc
         except Exception as exc:
             logger.error("PPTX conversion failed: %s", exc, exc_info=True)
             raise HTTPException(

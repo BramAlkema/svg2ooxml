@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
+from svg2ooxml.common.math_utils import coerce_float
 from svg2ooxml.policy.engine import PolicyProvider
 from svg2ooxml.policy.providers.common import (
     dotted_overrides,
@@ -121,10 +122,7 @@ class ImagePolicyProvider(PolicyProvider):
             except (TypeError, ValueError):
                 return None
         if field == "max_downscale":
-            try:
-                return float(value)
-            except (TypeError, ValueError):
-                return 0.5
+            return coerce_float(value, 0.5)
         if field == "colorspace_normalization":
             if isinstance(value, str) and value:
                 return value.strip().lower()

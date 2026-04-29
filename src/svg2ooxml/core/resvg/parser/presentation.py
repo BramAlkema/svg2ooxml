@@ -9,7 +9,11 @@ from dataclasses import dataclass
 from svg2ooxml.common.conversions.opacity import parse_opacity
 from svg2ooxml.common.conversions.transforms import parse_numeric_list
 from svg2ooxml.common.units import UnitConverter
-from svg2ooxml.common.units.lengths import resolve_length_px
+from svg2ooxml.common.units.lengths import (
+    parse_number,
+    parse_percentage,
+    resolve_length_px,
+)
 from svg2ooxml.common.units.scalars import PX_PER_INCH
 
 from .tree import SvgNode
@@ -75,18 +79,15 @@ class Presentation:
 
 
 def _parse_float(value: str) -> float | None:
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return None
+    number = parse_number(value, float("nan"))
+    return None if number != number else number
 
 
 def _parse_optional_positive(value: str | None) -> float | None:
     if value is None:
         return None
-    try:
-        number = float(value.strip().rstrip("%"))
-    except ValueError:
+    number = parse_number(value, float("nan"))
+    if number != number:
         return None
     if number < 0:
         return None
@@ -135,11 +136,9 @@ def _parse_font_size(value: str | None) -> float | None:
     token = value.strip().lower()
     if not token or token in {"inherit", "initial", "unset", "medium"}:
         return None
-    if token.endswith("%"):
-        try:
-            return _DEFAULT_FONT_SIZE_PT * max(0.0, float(token[:-1])) / 100.0
-        except ValueError:
-            return None
+    percent = parse_percentage(token, float("nan"))
+    if percent == percent:
+        return _DEFAULT_FONT_SIZE_PT * max(0.0, percent)
     px = resolve_length_px(
         token,
         _default_length_context(),
@@ -158,12 +157,10 @@ def _parse_font_size_scale(value: str | None) -> float | None:
     if value is None:
         return None
     token = value.strip().lower()
-    if not token.endswith("%"):
+    percent = parse_percentage(token, float("nan"))
+    if percent != percent:
         return None
-    try:
-        return max(0.0, float(token[:-1])) / 100.0
-    except ValueError:
-        return None
+    return max(0.0, percent)
 
 
 def _parse_opacity(value: str | None) -> float | None:

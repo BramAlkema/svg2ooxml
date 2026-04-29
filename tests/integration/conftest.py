@@ -4,6 +4,7 @@ import os
 from collections.abc import Generator
 
 import pytest
+
 from figma2gslides.api.testing import LocalAPIConfig, LocalAPIServer
 
 pytestmark = pytest.mark.integration
@@ -21,7 +22,7 @@ def local_api_config() -> LocalAPIConfig:
 
 
 @pytest.fixture(scope="session")
-def local_api_server(local_api_config: LocalAPIConfig) -> Generator[LocalAPIServer, None, None]:
+def local_api_server(local_api_config: LocalAPIConfig) -> Generator[LocalAPIServer]:
     """
     Start a local API server for integration tests.
 

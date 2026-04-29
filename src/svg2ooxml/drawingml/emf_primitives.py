@@ -8,6 +8,7 @@ from typing import Any
 
 from svg2ooxml.color.utils import rgb_channels_to_hex
 from svg2ooxml.common.units import px_to_emu
+from svg2ooxml.common.units.lengths import parse_number
 
 PaletteResolver = Callable[[str, str, Mapping[str, Any]], str | None]
 
@@ -148,15 +149,15 @@ def function_curve(
 
     points: list[tuple[float, float]] = []
     if func_type == "linear":
-        slope = float(params.get("slope", 1.0))
-        intercept = float(params.get("intercept", 0.0))
+        slope = parse_number(params.get("slope"), 1.0)
+        intercept = parse_number(params.get("intercept"), 0.0)
         for t in [0.0, 0.25, 0.5, 0.75, 1.0]:
             y = clamp(slope * t + intercept)
             points.append((left + t * width, top + (1.0 - y) * height))
     elif func_type == "gamma":
-        amplitude = float(params.get("amplitude", 1.0))
-        exponent = float(params.get("exponent", 1.0))
-        offset = float(params.get("offset", 0.0))
+        amplitude = parse_number(params.get("amplitude"), 1.0)
+        exponent = parse_number(params.get("exponent"), 1.0)
+        offset = parse_number(params.get("offset"), 0.0)
         for t in [i / 10 for i in range(11)]:
             y = clamp(amplitude * (t**exponent) + offset)
             points.append((left + t * width, top + (1.0 - y) * height))
@@ -166,7 +167,7 @@ def function_curve(
             values = [0.0, 1.0]
         for idx, value in enumerate(values):
             x = clamp(idx / max(1, len(values) - (0 if func_type == "table" else 1)))
-            y = clamp(float(value))
+            y = clamp(parse_number(value, 0.0))
             x_px = left + x * width
             y_px = top + (1.0 - y) * height
             points.append((x_px, y_px))
@@ -245,13 +246,6 @@ def kernel_value_color(value: float) -> str:
     return rgb_channels_to_hex(245, channel, 130, prefix="#", scale="byte")
 
 
-def safe_float(token: str) -> float:
-    try:
-        return float(token)
-    except (TypeError, ValueError):
-        return 0.0
-
-
 def resolve_with_palette(
     palette_resolver: PaletteResolver | None,
     filter_type: str,
@@ -284,5 +278,4 @@ __all__ = [
     "rect_points",
     "resolve_with_palette",
     "rounded_rect",
-    "safe_float",
 ]

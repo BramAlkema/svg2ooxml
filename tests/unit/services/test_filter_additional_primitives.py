@@ -18,7 +18,9 @@ from svg2ooxml.filters.base import FilterContext
 from svg2ooxml.filters.primitives.gaussian_blur import GaussianBlurFilter
 from svg2ooxml.filters.primitives.lighting import (
     DiffuseLightingFilter,
+    LightSource,
     SpecularLightingFilter,
+    _lighting_direction_ppt,
 )
 from svg2ooxml.services.filter_service import FilterService
 from svg2ooxml.services.filter_types import FilterEffectResult
@@ -120,6 +122,22 @@ def test_morphology_dilate_resolves_named_flood_color_and_percentage_alpha() -> 
     assert effect.metadata["alpha"] == pytest.approx(0.25)
     assert 'val="0000FF"' in effect.effect.drawingml
     assert '<a:alpha val="25000"/>' in effect.effect.drawingml
+
+
+def test_morphology_dilate_resolves_calc_alpha() -> None:
+    service = FilterService()
+    results = _resolve(
+        service,
+        "<filter id='f'>"
+        "  <feMorphology operator='dilate' radius='2' flood-color='blue' "
+        "flood-opacity='calc(25% + 25%)'/>"
+        "</filter>",
+    )
+
+    effect = results[0]
+
+    assert effect.metadata["alpha"] == pytest.approx(0.5)
+    assert '<a:alpha val="50000"/>' in effect.effect.drawingml
 
 
 def test_morphology_erode_emits_soft_edge_effect() -> None:
@@ -296,6 +314,23 @@ def test_convolve_matrix_uses_svg_defaults_and_length_units() -> None:
     assert effect.metadata["divisor"] == pytest.approx(16.0)
     assert effect.metadata["kernel_unit_length"][0] == pytest.approx(96.0 / 2.54)
     assert effect.metadata["kernel_unit_length"][1] == pytest.approx(2 * 96.0 / 2.54)
+
+
+def test_convolve_matrix_accepts_calc_kernel_unit_lengths() -> None:
+    service = FilterService()
+    kernel = " ".join(["1"] * 16)
+    results = _resolve(
+        service,
+        "<filter id='f'>"
+        f"  <feConvolveMatrix order='4,4' kernelMatrix='{kernel}' "
+        "kernelUnitLength='calc(1cm + 2px), calc(2cm - 4px)'/>"
+        "</filter>",
+    )
+
+    effect = results[0]
+
+    assert effect.metadata["kernel_unit_length"][0] == pytest.approx(96.0 / 2.54 + 2.0)
+    assert effect.metadata["kernel_unit_length"][1] == pytest.approx(2 * 96.0 / 2.54 - 4.0)
 
 
 def test_displacement_map_resvg_path() -> None:
@@ -622,6 +657,38 @@ def test_diffuse_lighting_resolves_color_and_kernel_unit_lengths() -> None:
     assert result.metadata["lighting_color"] == "663399"
     assert result.metadata["kernel_unit_length"][0] == pytest.approx(96.0 / 2.54)
     assert result.metadata["kernel_unit_length"][1] == pytest.approx(2 * 96.0 / 2.54)
+
+
+def test_diffuse_lighting_accepts_calc_kernel_unit_lengths() -> None:
+    primitive = etree.fromstring(
+        "<feDiffuseLighting surfaceScale='2' diffuseConstant='1.3' "
+        "lighting-color='rebeccapurple' kernelUnitLength='calc(1cm + 2px), calc(2cm - 4px)'>"
+        "  <feDistantLight azimuth='45' elevation='45'/>"
+        "</feDiffuseLighting>"
+    )
+    context = FilterContext(
+        filter_element=primitive,
+        options={"policy": {"approximation_allowed": True}},
+    )
+
+    result = DiffuseLightingFilter().apply(primitive, context)
+
+    assert result.metadata["kernel_unit_length"][0] == pytest.approx(96.0 / 2.54 + 2.0)
+    assert result.metadata["kernel_unit_length"][1] == pytest.approx(2 * 96.0 / 2.54 - 4.0)
+
+
+def test_lighting_direction_accepts_calc_metadata_values() -> None:
+    light = LightSource(
+        kind="spot",
+        params={
+            "x": "calc(1)",
+            "y": "calc(1)",
+            "pointsAtX": "calc(2 + 1)",
+            "pointsAtY": "calc(2 + 1)",
+        },
+    )
+
+    assert _lighting_direction_ppt(light) == 2700000
 
 
 def test_diffuse_lighting_blocks_approximation_for_image_source() -> None:

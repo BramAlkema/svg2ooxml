@@ -10,6 +10,7 @@ from svg2ooxml.color.utils import color_to_hex
 from svg2ooxml.common.conversions.opacity import opacity_to_ppt, parse_opacity
 from svg2ooxml.common.style.css_values import parse_style_declarations
 from svg2ooxml.common.units import px_to_emu
+from svg2ooxml.common.units.lengths import parse_number_or_percent
 
 # Import centralized XML builders for safe DrawingML generation
 from svg2ooxml.drawingml.xml_builder import a_elem, a_sub, to_string
@@ -254,7 +255,9 @@ class MorphologyFilter(Filter):
                     token = candidate.strip()
                     if not token:
                         continue
-                    alpha_value = float(token[:-1]) / 100.0 if token.endswith("%") else float(token)
+                    alpha_value = parse_number_or_percent(token, float("nan"))
+                    if alpha_value != alpha_value:
+                        continue
                 else:
                     alpha_value = float(candidate)
             except (ValueError, TypeError):

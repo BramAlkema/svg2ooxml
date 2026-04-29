@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 from typing import Final
 
 from lxml import etree
 
+from svg2ooxml.common.conversions.transforms import parse_strict_numeric_list
 from svg2ooxml.common.geometry.transforms.matrix import Matrix2D
 from svg2ooxml.common.units import ConversionContext, UnitConverter
+from svg2ooxml.common.units.lengths import resolve_length_px_required
 
 ALIGN_MAP: Final[dict[str, tuple[float, float]]] = {
     "xminymin": (0.0, 0.0),
@@ -22,8 +23,6 @@ ALIGN_MAP: Final[dict[str, tuple[float, float]]] = {
     "xmidymax": (0.5, 1.0),
     "xmaxymax": (1.0, 1.0),
 }
-_NUMBER_RE = re.compile(r"[-+]?(?:(?:\d+\.\d*)|(?:\.\d+)|(?:\d+))(?:[eE][-+]?\d+)?")
-_NUMERIC_SEPARATOR_RE = re.compile(r"^[\s,]*$")
 
 
 @dataclass(slots=True, frozen=True)
@@ -193,27 +192,16 @@ def parse_viewbox_attribute(value: str | None) -> ViewBox | None:
     cleaned = value.strip()
     if not cleaned:
         return None
-    parts = _parse_viewbox_numbers(cleaned)
+    try:
+        parts = parse_strict_numeric_list(cleaned)
+    except ValueError as exc:
+        raise ValueError(f"viewBox contains non-numeric values: {value!r}") from exc
     if len(parts) != 4:
         raise ValueError(f"viewBox must provide four numbers (got {value!r})")
     min_x, min_y, width, height = parts
     if width <= 0 or height <= 0:
         raise ValueError("viewBox width/height must be positive")
     return ViewBox(min_x, min_y, width, height)
-
-
-def _parse_viewbox_numbers(value: str) -> list[float]:
-    values: list[float] = []
-    position = 0
-    for match in _NUMBER_RE.finditer(value):
-        separator = value[position : match.start()]
-        if not _NUMERIC_SEPARATOR_RE.match(separator):
-            raise ValueError(f"viewBox contains non-numeric values: {value!r}")
-        values.append(float(match.group(0)))
-        position = match.end()
-    if not _NUMERIC_SEPARATOR_RE.match(value[position:]):
-        raise ValueError(f"viewBox contains non-numeric values: {value!r}")
-    return values
 
 
 def resolve_viewbox_dimensions(
@@ -283,7 +271,12 @@ def _to_px_safely(
     if value is None:
         return None
     try:
-        return converter.to_px(value, context, axis=axis)
+        return resolve_length_px_required(
+            value,
+            context,
+            axis=axis,
+            unit_converter=converter,
+        )
     except Exception:  # pragma: no cover - defensive
         return None
 

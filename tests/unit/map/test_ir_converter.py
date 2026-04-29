@@ -279,6 +279,24 @@ def test_convert_rect_produces_rectangle() -> None:
     assert rect.fill is not None and rect.fill.rgb == "FF0000"
 
 
+def test_convert_rect_resolves_calc_geometry() -> None:
+    parse_result = _build_parse_result(
+        "<svg width='200' height='200' xmlns='http://www.w3.org/2000/svg'>"
+        "<rect x='calc(10% + 5px)' y='calc(20% - 5px)' "
+        "width='calc(50% - 10px)' height='calc(50% + 10px)' fill='#ff0000'/>"
+        "</svg>"
+    )
+
+    scene = _convert_with_resvg(parse_result)
+
+    rect = scene.elements[0]
+    assert isinstance(rect, Rectangle)
+    assert rect.bounds.x == pytest.approx(25.0)
+    assert rect.bounds.y == pytest.approx(35.0)
+    assert rect.bounds.width == pytest.approx(90.0)
+    assert rect.bounds.height == pytest.approx(110.0)
+
+
 def test_convert_rect_with_corner_radius_preserves_native_shape() -> None:
     parse_result = _build_parse_result(
         "<svg width='100' height='100' xmlns='http://www.w3.org/2000/svg'>"

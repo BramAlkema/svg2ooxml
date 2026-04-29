@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 
+from svg2ooxml.common.math_utils import coerce_float
 from svg2ooxml.ir.text import TextFrame
 
 from . import shapes_runtime
@@ -48,7 +49,10 @@ class DrawingMLTextRenderer:
         policy_text = self._policy_for(metadata, "text")
         detection_meta = policy_text.get("wordart_detection")
         if isinstance(detection_meta, dict):
-            threshold = float(detection_meta.get("confidence_threshold", 0.5))
+            threshold = coerce_float(
+                detection_meta.get("confidence_threshold"),
+                0.5,
+            )
         else:
             threshold = 0.5
 

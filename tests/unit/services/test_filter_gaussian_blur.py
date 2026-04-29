@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 from lxml import etree
+from tests.unit.filters.policy import assert_fallback, assert_strategy
 
 from svg2ooxml.ir.effects import CustomEffect
 from svg2ooxml.services.filter_service import FilterService
 from svg2ooxml.services.filter_types import FilterEffectResult
-from tests.unit.filters.policy import assert_fallback, assert_strategy
 
 
 def test_gaussian_blur_native_support() -> None:

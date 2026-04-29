@@ -136,8 +136,8 @@ class NumericAnimationHandler(NumericScaleMixin, AnimationHandler):
     ) -> etree._Element:
         """Build ``<p:animMotion>`` for x/y position changes."""
         values = animation.values
-        from_val = float(self._normalize_value(ppt_attribute, values[0]))
-        to_val = float(self._normalize_value(ppt_attribute, values[-1]))
+        from_val = self._normalized_float(ppt_attribute, values[0])
+        to_val = self._normalized_float(ppt_attribute, values[-1])
 
         is_x = ppt_attribute in ("ppt_x", "x", "cx")
         delta_x = (to_val - from_val) if is_x else 0.0
@@ -338,7 +338,7 @@ class NumericAnimationHandler(NumericScaleMixin, AnimationHandler):
         # Paced calcMode: compute keyTimes from inter-value distances
         if animation.calc_mode == CalcMode.PACED and len(values) > 2:
             try:
-                floats = [float(v) for v in values]
+                floats = [float(value) for value in normalized]
                 paced_times = compute_paced_key_times(floats)
                 if paced_times is not None:
                     key_times = paced_times

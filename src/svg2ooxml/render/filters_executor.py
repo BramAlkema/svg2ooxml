@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from svg2ooxml.common.units.lengths import parse_number
 from svg2ooxml.render import filters_lighting as _lighting
 from svg2ooxml.render import filters_ops as _ops
 from svg2ooxml.render import filters_region as _region
@@ -80,10 +81,10 @@ def apply_filter(
                     primary,
                     inputs[1],
                     operator,
-                    k1=float(primitive_plan.extra.get("k1", 0.0)),
-                    k2=float(primitive_plan.extra.get("k2", 0.0)),
-                    k3=float(primitive_plan.extra.get("k3", 0.0)),
-                    k4=float(primitive_plan.extra.get("k4", 0.0)),
+                    k1=parse_number(primitive_plan.extra.get("k1"), 0.0),
+                    k2=parse_number(primitive_plan.extra.get("k2"), 0.0),
+                    k3=parse_number(primitive_plan.extra.get("k3"), 0.0),
+                    k4=parse_number(primitive_plan.extra.get("k4"), 0.0),
                 )
             elif tag_lower == "feblend":
                 if len(inputs) < 2:

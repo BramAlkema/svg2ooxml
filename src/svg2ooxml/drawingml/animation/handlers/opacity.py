@@ -357,10 +357,7 @@ class OpacityAnimationHandler(AnimationHandler):
             return False
         if self._resolve_authored_fade(animation) is not None:
             return False
-        try:
-            start_opacity = float(animation.values[0])
-        except (TypeError, ValueError):
-            start_opacity = 1.0
+        start_opacity = self._opacity_float(animation.values[0])
         if start_opacity > 0.0:
             return True
         return False

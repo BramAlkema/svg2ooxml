@@ -8,7 +8,7 @@ from typing import Literal
 from svg2ooxml.color.models import Color
 from svg2ooxml.color.parsers import parse_color
 from svg2ooxml.color.utils import rgb_channels_to_hex, rgb_object_to_hex
-from svg2ooxml.common.math_utils import clamp01
+from svg2ooxml.common.math_utils import clamp01, finite_float
 
 RgbaTuple = tuple[float, float, float, float]
 RgbScale = Literal["unit", "byte", "auto"]
@@ -112,9 +112,8 @@ def color_object_alpha(color: object | None, *, default: float = 1.0) -> float:
 
     if color is None:
         return _clamp01(default)
-    try:
-        alpha = float(getattr(color, "a", default))
-    except (TypeError, ValueError):
+    alpha = finite_float(getattr(color, "a", default), default)
+    if alpha is None:
         return _clamp01(default)
     if alpha > 1.0:
         alpha /= 255.0

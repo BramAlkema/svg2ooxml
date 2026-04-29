@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import Any
 
-from svg2ooxml.common.conversions.transforms import parse_numeric_list
+from svg2ooxml.common.geometry.points import parse_point_values
 from svg2ooxml.common.svg_refs import href_value, strip_svg_namespace
 from svg2ooxml.common.units.lengths import parse_number_or_percent
 
@@ -47,9 +47,7 @@ def parse_number(value: str | None, default: float = 0.0) -> float:
 
 
 def parse_points(raw: str) -> tuple[float, ...]:
-    if not raw:
-        return ()
-    return tuple(parse_numeric_list(raw))
+    return parse_point_values(raw)
 
 
 def parse_view_box(raw: str | None) -> tuple[float, float, float, float] | None:

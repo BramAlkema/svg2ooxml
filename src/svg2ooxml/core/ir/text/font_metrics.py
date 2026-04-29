@@ -11,6 +11,9 @@ from dataclasses import replace
 from typing import Any
 
 from svg2ooxml.color.adapters import color_object_to_hex
+from svg2ooxml.common.conversions.opacity import parse_opacity
+from svg2ooxml.common.math_utils import coerce_positive_float, finite_float
+from svg2ooxml.common.units.lengths import parse_number_or_percent
 from svg2ooxml.ir.text import Run
 from svg2ooxml.policy.text_policy import TextPolicyDecision
 
@@ -166,8 +169,9 @@ def run_from_resvg_node(resvg_node: Any, text: str) -> Run:
         if families:
             font_family = families[0] or font_family
         size = getattr(text_style, "font_size", None)
-        if isinstance(size, (int, float)) and size > 0:
-            font_size_pt = float(size)
+        resolved_size = finite_float(size)
+        if resolved_size is not None and resolved_size > 0:
+            font_size_pt = resolved_size
         weight = str(getattr(text_style, "font_weight", "") or "").strip().lower()
         if weight:
             if weight in {"bold", "bolder"}:
@@ -192,7 +196,7 @@ def run_from_resvg_node(resvg_node: Any, text: str) -> Run:
             rgb = resvg_color_to_hex(color)
         opacity = getattr(fill_style, "opacity", None)
         if isinstance(opacity, (int, float)):
-            fill_opacity = float(opacity)
+            fill_opacity = parse_opacity(opacity)
 
     stroke_rgb = None
     stroke_width_px = None
@@ -202,11 +206,12 @@ def run_from_resvg_node(resvg_node: Any, text: str) -> Run:
         if color is not None:
             stroke_rgb = resvg_color_to_hex(color)
         width = getattr(stroke_style, "width", None)
-        if isinstance(width, (int, float)):
-            stroke_width_px = float(width)
+        resolved_width = finite_float(width)
+        if resolved_width is not None and resolved_width >= 0:
+            stroke_width_px = resolved_width
         opacity = getattr(stroke_style, "opacity", None)
         if isinstance(opacity, (int, float)):
-            stroke_opacity = float(opacity)
+            stroke_opacity = parse_opacity(opacity)
 
     return Run(
         text=text,
@@ -239,7 +244,8 @@ def create_run_from_style(
     """
     fill = style.get("fill") or "#000000"
     hex_color = coerce_hex_color(fill)
-    fill_opacity = float(style.get("fill_opacity", 1.0))
+    fill_opacity = parse_opacity(style.get("fill_opacity"), default=1.0)
+    font_size = coerce_positive_float(style.get("font_size_pt"), 12.0)
 
     stroke = style.get("stroke")
     stroke_rgb = None
@@ -252,11 +258,10 @@ def create_run_from_style(
         stroke_width = resolve_text_length_fn(
             stroke_width_raw,
             axis="x",
-            font_size_pt=float(style.get("font_size_pt", 12.0)),
+            font_size_pt=font_size,
         )
-        stroke_opacity = float(style.get("stroke_opacity", 1.0))
+        stroke_opacity = parse_opacity(style.get("stroke_opacity"), default=1.0)
 
-    font_size = float(style.get("font_size_pt", 12.0))
     font_family_raw = normalize_font_family_list(style.get("font_family"))
     weight_token = (style.get("font_weight") or "normal").lower()
     bold = weight_token in {"bold", "bolder", "600", "700", "800", "900"}
@@ -349,14 +354,5 @@ def apply_text_decision(
 def parse_float(
     value: str | None, *, default: float | None = None
 ) -> float | None:
-    if value is None:
-        return default
-    value = str(value).strip()
-    if not value:
-        return default
-    try:
-        if value.endswith("%"):
-            return float(value[:-1]) / 100.0
-        return float(value)  # type: ignore[arg-type]
-    except ValueError:
-        return default
+    parsed = parse_number_or_percent(value, float("nan"))
+    return default if parsed != parsed else parsed

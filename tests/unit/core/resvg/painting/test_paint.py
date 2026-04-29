@@ -147,6 +147,14 @@ class TestParseColor:
         # 99.9% → 255 (with round) → 255/255 = 1.0
         assert color.r == 1.0
 
+    def test_parse_rgb_function_accepts_calc_components(self):
+        color = parse_color("rgb(calc(255 - 127), calc(25% + 25%), 0)", 1.0)
+
+        assert color is not None
+        assert abs(color.r - 128 / 255) < 0.001
+        assert abs(color.g - 128 / 255) < 0.001
+        assert color.b == 0.0
+
     def test_parse_with_opacity(self):
         """Test that opacity is properly applied."""
         color = parse_color("#FFFFFF", 0.5)

@@ -228,6 +228,27 @@ class TestTextLayoutAnalyzer:
         assert analyzer.is_plain_text_layout(node) is False
         assert analyzer.get_complexity_reason(node) == TextLayoutComplexity.HAS_COMPLEX_POSITIONING
 
+    def test_text_with_calc_rotate_attribute_is_complex(self):
+        """Test that calc rotate lists use shared numeric parsing."""
+        analyzer = TextLayoutAnalyzer()
+        node = MockTextNode(
+            text_content="Hello",
+            attributes={"rotate": "calc(0) calc(30 + 30)"},
+        )
+
+        assert analyzer.is_plain_text_layout(node) is False
+        assert analyzer.get_complexity_reason(node) == TextLayoutComplexity.HAS_COMPLEX_POSITIONING
+
+    def test_text_with_same_calc_rotate_values_is_plain(self):
+        """Test that repeated calc rotate values are not considered complex."""
+        analyzer = TextLayoutAnalyzer()
+        node = MockTextNode(
+            text_content="Hello",
+            attributes={"rotate": "calc(0) calc(0)"},
+        )
+
+        assert analyzer.is_plain_text_layout(node) is True
+
     def test_text_with_multiple_x_positions_is_complex(self):
         """Test that text with per-character x positions is complex."""
         analyzer = TextLayoutAnalyzer()

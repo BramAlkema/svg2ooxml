@@ -4,10 +4,13 @@ from __future__ import annotations
 
 import logging
 
-from lxml import etree
 import pytest
+from lxml import etree
 
-from svg2ooxml.filters.lightweight import LightweightFilterPlanner, LightweightFilterRenderer
+from svg2ooxml.filters.lightweight import (
+    LightweightFilterPlanner,
+    LightweightFilterRenderer,
+)
 from svg2ooxml.services import filter_service as filter_service_module
 from svg2ooxml.services.filter_service import FilterService
 from svg2ooxml.services.filter_service_stub import DisabledFilterService

@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 from typing import TYPE_CHECKING
 
+from svg2ooxml.common.conversions.transforms import parse_strict_numeric_list
 from svg2ooxml.common.geometry.transforms.decompose import classify_linear_transform
 from svg2ooxml.core.resvg.text.layout_complexity import TextLayoutComplexity
 
@@ -66,7 +67,9 @@ class TextLayoutChecksMixin:
         rotate_attr = attrs.get("rotate", "").strip()
         if rotate_attr:
             try:
-                vals = [float(v) for v in rotate_attr.replace(",", " ").split() if v]
+                vals = parse_strict_numeric_list(rotate_attr, allow_calc=True)
+                if not vals:
+                    return True
                 if len(set(vals)) > 1:
                     return True
             except ValueError:

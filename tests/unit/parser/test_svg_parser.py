@@ -139,6 +139,16 @@ def test_parse_computes_viewbox_scale_when_available() -> None:
     assert result.viewbox_scale == (2.0, 2.0)
 
 
+def test_parse_viewbox_accepts_compact_signed_numbers() -> None:
+    parser = SVGParser()
+    svg = "<svg width='200' height='100' viewBox='-10-20 100 50'><rect/></svg>"
+
+    result = parser.parse(svg)
+
+    assert result.success is True
+    assert result.viewbox_scale == (2.0, 2.0)
+
+
 def test_parse_emits_metrics(monkeypatch) -> None:
     calls: list[dict[str, object]] = []
 

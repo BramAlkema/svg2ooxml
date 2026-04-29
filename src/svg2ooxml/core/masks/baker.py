@@ -8,7 +8,10 @@ from typing import Any
 from lxml import etree
 
 from svg2ooxml.common.boundaries import parse_wrapped_xml_fragment
+from svg2ooxml.common.conversions.opacity import parse_opacity
+from svg2ooxml.common.gradient_units import parse_gradient_offset
 from svg2ooxml.common.style.css_values import parse_style_declarations
+from svg2ooxml.common.units.lengths import parse_number_or_percent
 from svg2ooxml.ir.paint import GradientStop, LinearGradientPaint, Paint, SolidPaint
 from svg2ooxml.ir.scene import MaskRef
 
@@ -66,12 +69,14 @@ def try_bake_mask(fill: Paint, mask_ref: MaskRef | None, services: Any = None, d
             g = grad[0]
             stops = []
             for stop in g.xpath(".//svg:stop", namespaces=ns) or g.xpath(".//stop"):
-                offset = _parse_percent(stop.get("offset", "0"))
+                offset = parse_gradient_offset(stop.get("offset", "0"))
                 
                 # Check style attribute too
                 style = _parse_style(stop.get("style"))
                 color = stop.get("stop-color") or style.get("stop-color") or "#ffffff"
-                stop_opacity = _parse_float(stop.get("stop-opacity") or style.get("stop-opacity") or "1.0")
+                stop_opacity = parse_opacity(
+                    stop.get("stop-opacity") or style.get("stop-opacity") or "1.0"
+                )
                 
                 brightness = _calculate_luminance(color)
                 effective_alpha = brightness * stop_opacity
@@ -106,33 +111,8 @@ def try_bake_mask(fill: Paint, mask_ref: MaskRef | None, services: Any = None, d
         
     return fill, mask_ref
 
-def _parse_percent(val: str) -> float:
-    val = val.strip()
-    if val.endswith("%"):
-        return float(val[:-1]) / 100.0
-    try:
-        return float(val)
-    except ValueError:
-        return 0.0
-
-def _parse_coord(val: str) -> float:
-    if val is None:
-        return 0.0
-    val = val.strip()
-    if val.endswith("%"):
-        return float(val[:-1]) / 100.0
-    try:
-        return float(val)
-    except ValueError:
-        return 0.0
-
-def _parse_float(val: str) -> float:
-    if val is None:
-        return 1.0
-    try:
-        return float(val)
-    except ValueError:
-        return 1.0
+def _parse_coord(val: str | None) -> float:
+    return parse_number_or_percent(val, 0.0)
 
 def _calculate_luminance(color: str) -> float:
     color = color.strip().lstrip("#")

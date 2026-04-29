@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
+from svg2ooxml.common.units.lengths import parse_number
 from svg2ooxml.filters.planner_common import is_identity_color_matrix
 from svg2ooxml.filters.utils import parse_float_list
 
@@ -53,12 +54,8 @@ class NeutralPrimitiveMixin:
 
     @staticmethod
     def _parse_float(value: str | None) -> float | None:
-        if value is None:
-            return None
-        try:
-            return float(str(value).strip())
-        except (TypeError, ValueError):
-            return None
+        parsed = parse_number(value, float("nan"))
+        return None if parsed != parsed else parsed
 
     @staticmethod
     def _is_identity_matrix(values: list[float]) -> bool:

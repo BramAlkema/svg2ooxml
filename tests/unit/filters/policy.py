@@ -7,7 +7,7 @@ Set SVG2OOXML_FILTER_POLICY_STRICT=0 to allow broader fallbacks.
 from __future__ import annotations
 
 import os
-from typing import Iterable
+from collections.abc import Iterable
 
 
 def _policy_mode() -> str:

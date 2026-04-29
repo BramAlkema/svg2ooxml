@@ -9,6 +9,7 @@ from typing import Any
 
 from lxml import etree
 
+from svg2ooxml.common.math_utils import finite_float
 from svg2ooxml.common.svg_refs import local_name as svg_local_name
 from svg2ooxml.core.parser.xml_utils import children
 from svg2ooxml.core.pipeline.navigation import NavigationSpec, parse_svg_navigation
@@ -54,10 +55,8 @@ class ElementTraversal:
                 if conversion_context is not None:
                     width_value = getattr(conversion_context, "width", None)
                     height_value = getattr(conversion_context, "height", None)
-                    if width_value:
-                        default_width = float(width_value)
-                    if height_value:
-                        default_height = float(height_value)
+                    default_width = finite_float(width_value, default_width) or default_width
+                    default_height = finite_float(height_value, default_height) or default_height
                 viewbox_matrix, _ = viewbox_matrix_from_element(
                     svg_root,
                     unit_converter,

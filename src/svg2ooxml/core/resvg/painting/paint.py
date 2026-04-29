@@ -5,18 +5,13 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
+from svg2ooxml.color.adapters import color_object_alpha
 from svg2ooxml.color.parsers import parse_color as parse_global_color
-from svg2ooxml.common.units import UnitConverter
+from svg2ooxml.common.dash_patterns import parse_dash_array
+from svg2ooxml.common.units.lengths import parse_number_or_percent
 
 _RGB_RE = re.compile(r"^rgb\(([^)]+)\)$")
 _URL_RE = re.compile(r"url\((#[^)]+)\)")
-_UNIT_CONVERTER = UnitConverter()
-_LENGTH_CONTEXT = _UNIT_CONVERTER.create_context(
-    width=0.0,
-    height=0.0,
-    font_size=12.0,
-    root_font_size=12.0,
-)
 
 _FONT_FAMILY_ALIASES = {
     "sans-serif": "Arial",
@@ -88,17 +83,13 @@ def _parse_component(value: str) -> int | None:
         Integer 0-255, or None if parsing fails
     """
     value = value.strip()
-    if value.endswith("%"):
-        try:
-            pct = float(value[:-1])
-        except ValueError:
-            return None
-        # Use round() instead of int() for fidelity: 99.9% → 255, not 254
-        return round(_clamp(pct / 100.0) * 255)
-    try:
-        return int(value)
-    except ValueError:
+    parsed = parse_number_or_percent(value, float("nan"))
+    if parsed != parsed:
         return None
+    if value.endswith("%") or (value.lower().startswith("calc(") and "%" in value):
+        # Use round() instead of int() for fidelity: 99.9% → 255, not 254
+        return round(_clamp(parsed) * 255)
+    return int(parsed)
 
 
 def _parse_rgb_function(value: str) -> tuple[int, int, int] | None:
@@ -122,7 +113,9 @@ def parse_color(value: str | None, opacity: float | None) -> Color | None:
     if global_color is None:
         return None
 
-    a = _clamp(opacity if opacity is not None else 1.0) * float(getattr(global_color, "a", 1.0))
+    a = _clamp(opacity if opacity is not None else 1.0) * color_object_alpha(
+        global_color
+    )
     return Color(r=global_color.r, g=global_color.g, b=global_color.b, a=a)
 
 
@@ -141,25 +134,6 @@ def resolve_fill(fill_value: str | None, fill_opacity: float | None, opacity: fl
     else:
         color = None
     return FillStyle(color=color, opacity=effective_opacity, reference=reference)
-
-
-def _parse_dash_array(value: str | None) -> list[float] | None:
-    """Parse SVG stroke-dasharray into a list of floats."""
-    if not value:
-        return None
-    token = value.strip()
-    if not token or token.lower() == "none":
-        return None
-    numbers: list[float] = []
-    for part in token.replace(",", " ").split():
-        try:
-            if part.endswith("%"):
-                numbers.append(float(part[:-1]))
-            else:
-                numbers.append(_UNIT_CONVERTER.to_px(part, _LENGTH_CONTEXT, axis="font-size"))
-        except ValueError:
-            return None
-    return numbers or None
 
 
 def resolve_stroke(
@@ -195,7 +169,7 @@ def resolve_stroke(
         width=width,
         opacity=effective_opacity,
         reference=reference,
-        dash_array=_parse_dash_array(dasharray),
+        dash_array=parse_dash_array(dasharray),
         dash_offset=dashoffset or 0.0,
         linecap=linecap,
         linejoin=linejoin,

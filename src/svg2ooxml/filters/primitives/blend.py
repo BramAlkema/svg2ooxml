@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 from lxml import etree
 
-from svg2ooxml.common.conversions.opacity import opacity_to_ppt
+from svg2ooxml.common.conversions.opacity import opacity_to_ppt, parse_opacity
 
 # Import centralized XML builders for safe DrawingML generation
 from svg2ooxml.drawingml.xml_builder import a_elem, a_sub, to_string
@@ -278,7 +278,7 @@ class BlendFilter(Filter):
             color = str(metadata["flood_color"]).strip().lstrip("#").upper()
             if len(color) == 3:
                 color = "".join(ch * 2 for ch in color)
-            opacity = float(metadata.get("flood_opacity", 1.0))
+            opacity = parse_opacity(metadata.get("flood_opacity"), 1.0)
             return OverlayInfo(color=color, opacity=opacity)
 
         fill_meta = metadata.get("fill")
@@ -289,7 +289,7 @@ class BlendFilter(Filter):
                 color = "".join(ch * 2 for ch in color)
             if len(color) != 6:
                 return None
-            opacity = float(fill_meta.get("opacity", metadata.get("opacity", 1.0)))
+            opacity = parse_opacity(fill_meta.get("opacity", metadata.get("opacity")), 1.0)
             return OverlayInfo(color=color, opacity=opacity)
 
         if isinstance(fill_meta, dict) and fill_meta.get("type") in {
@@ -312,7 +312,7 @@ class BlendFilter(Filter):
                 if len(token) == 3:
                     token = "".join(ch * 2 for ch in token)
                 if len(token) == 6:
-                    opacity = float(metadata.get("opacity", 1.0))
+                    opacity = parse_opacity(metadata.get("opacity"), 1.0)
                     return OverlayInfo(
                         color=token, opacity=opacity, approximation="pattern_color"
                     )

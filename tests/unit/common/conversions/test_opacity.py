@@ -5,6 +5,7 @@ from svg2ooxml.common.conversions.opacity import (
     PPT_OPACITY_SCALE,
     alpha_to_ppt,
     opacity_to_ppt,
+    parse_authored_opacity,
     parse_opacity,
     percentage_to_ppt,
     ppt_to_alpha,
@@ -75,12 +76,30 @@ class TestParseOpacity:
     def test_percentage(self):
         assert parse_opacity("50%") == 0.5
 
+    def test_calc_number_and_percentage(self):
+        assert parse_opacity("calc(0.25 + 0.25)") == 0.5
+        assert parse_opacity("calc(25% + 25%)") == 0.5
+
     def test_clamps_numeric_values(self):
         assert parse_opacity("50") == 1.0
         assert parse_opacity("-2") == 0.0
 
     def test_invalid_uses_default(self):
         assert parse_opacity("bad", default=0.25) == 0.25
+        assert parse_opacity("calc(1px + 2px)", default=0.25) == 0.25
+
+
+class TestParseAuthoredOpacity:
+    """Test animation-authored opacity parsing."""
+
+    def test_number_and_percent_scales(self):
+        assert parse_authored_opacity("0.5") == 0.5
+        assert parse_authored_opacity("50") == 0.5
+        assert parse_authored_opacity("50%") == 0.5
+
+    def test_calc_number_and_percentage(self):
+        assert parse_authored_opacity("calc(25 + 25)") == 0.5
+        assert parse_authored_opacity("calc(25% + 25%)") == 0.5
 
 
 class TestAlphaToPPT:

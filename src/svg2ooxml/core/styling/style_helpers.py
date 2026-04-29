@@ -5,9 +5,11 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import Any
 
+from svg2ooxml.color.adapters import color_object_alpha
 from svg2ooxml.color.parsers import parse_color
 from svg2ooxml.common.conversions.colors import color_to_hex
 from svg2ooxml.common.conversions.opacity import parse_opacity
+from svg2ooxml.common.dash_patterns import parse_dash_array as _parse_dash_array
 from svg2ooxml.common.geometry import Matrix2D
 from svg2ooxml.common.gradient_units import parse_gradient_offset
 from svg2ooxml.common.numpy_compat import NUMPY_AVAILABLE, np
@@ -15,9 +17,9 @@ from svg2ooxml.common.style.css_values import parse_style_declarations
 from svg2ooxml.common.svg_refs import reference_id
 from svg2ooxml.common.units import UnitConverter
 from svg2ooxml.common.units.lengths import (
+    parse_number,
     parse_number_or_percent,
     resolve_length_px,
-    split_length_list,
 )
 
 _UNIT_CONVERTER = UnitConverter()
@@ -49,18 +51,7 @@ def normalize_hex(token: str) -> str | None:
 
 
 def parse_dash_array(value: str | None) -> list[float] | None:
-    if not value:
-        return None
-    token = value.strip()
-    if not token or token.lower() == "none":
-        return None
-    numbers: list[float] = []
-    for part in split_length_list(token):
-        length = parse_length(part)
-        if length is None:
-            return None
-        numbers.append(length)
-    return numbers or None
+    return _parse_dash_array(value)
 
 
 def parse_length(value: str | None) -> float | None:
@@ -69,8 +60,9 @@ def parse_length(value: str | None) -> float | None:
     token = value.strip()
     if not token:
         return None
-    if token.endswith("%"):
-        return parse_number_or_percent(token, 0.0) * 100.0
+    fraction = parse_number_or_percent(token, float("nan"))
+    if fraction == fraction and (token.endswith("%") or token.lower().startswith("calc(")):
+        return fraction * 100.0
     resolved = resolve_length_px(
         token,
         _LENGTH_CONTEXT,
@@ -86,10 +78,10 @@ def parse_length(value: str | None) -> float | None:
 def parse_optional_float(value: str | None) -> float | None:
     if value is None:
         return None
-    try:
-        return float(value)
-    except ValueError:
+    parsed = parse_number(value, float("nan"))
+    if parsed != parsed:
         return None
+    return parsed
 
 
 def parse_style_attr(style: str | None) -> dict[str, str]:
@@ -189,6 +181,6 @@ def parse_stop_color(stop_element, style_parser=None) -> tuple[str, float]:
     parsed_color = parse_color(color)
     color = color_to_hex(color, default="000000")
     opacity_str = stop_element.get("stop-opacity") or style_attrs.get("stop-opacity")
-    color_alpha = float(getattr(parsed_color, "a", 1.0)) if parsed_color is not None else 1.0
+    color_alpha = color_object_alpha(parsed_color) if parsed_color is not None else 1.0
     opacity = color_alpha * parse_opacity(opacity_str, default=1.0)
     return color, opacity

@@ -6,15 +6,15 @@ import asyncio
 import logging
 import os
 import time
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import AsyncGenerator
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel
 
-from figma2gslides.api.middleware.rate_limit import RateLimitMiddleware, RateLimiter
+from figma2gslides.api.middleware.rate_limit import RateLimiter, RateLimitMiddleware
 from figma2gslides.api.routes.addon import router as addon_router
 from figma2gslides.api.routes.export import router as export_router
 
@@ -40,7 +40,7 @@ async def _periodic_cleanup() -> None:
 
 
 @asynccontextmanager
-async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
+async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
     task = asyncio.create_task(_periodic_cleanup())
     yield
     task.cancel()

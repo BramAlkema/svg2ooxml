@@ -4,6 +4,12 @@ from __future__ import annotations
 
 from typing import Any
 
+from svg2ooxml.common.math_utils import (
+    coerce_float,
+    coerce_positive_float,
+    finite_float,
+)
+
 try:  # pragma: no cover - skia optional during transition
     import skia  # type: ignore
 except Exception:  # pragma: no cover - gracefully degrade without skia
@@ -13,18 +19,11 @@ _UNSUPPORTED_SOURCE_STYLE = object()
 
 
 def _float_or(value: Any, default: float) -> float:
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return default
+    return coerce_float(value, default)
 
 
 def _is_number(value: object) -> bool:
-    try:
-        float(value)
-        return True
-    except (TypeError, ValueError):
-        return False
+    return finite_float(value) is not None
 
 
 def _is_point_pair(value: Any) -> bool:
@@ -34,13 +33,7 @@ def _is_point_pair(value: Any) -> bool:
 
 
 def _coerce_positive(value: object | None, fallback: float | None = None) -> float:
-    if _is_number(value):
-        number = float(value)  # type: ignore[arg-type]
-        if number > 0:
-            return number
-    if fallback is not None:
-        return float(fallback)
-    return 0.0
+    return coerce_positive_float(value, fallback if fallback is not None else 0.0)
 
 
 def _transform_is_identity(transform: Any) -> bool:

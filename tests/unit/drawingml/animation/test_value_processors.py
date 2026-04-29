@@ -48,6 +48,7 @@ class TestParseOpacity:
         assert ValueProcessor.parse_opacity("50") == "50000"
         assert ValueProcessor.parse_opacity("100") == "100000"
         assert ValueProcessor.parse_opacity("50%") == "50000"
+        assert ValueProcessor.parse_opacity("calc(25% + 25%)") == "50000"
 
     def test_opacity_invalid_defaults_to_opaque(self):
         assert ValueProcessor.parse_opacity("invalid") == "100000"
@@ -89,6 +90,14 @@ class TestNormalizeNumericValue:
         assert ValueProcessor.normalize_numeric_value("rotate", "180", unit_converter=uc) == "10800000"
         assert ValueProcessor.normalize_numeric_value("ppt_angle", "360", unit_converter=uc) == "21600000"
         assert ValueProcessor.normalize_numeric_value("ppt_angle", "90deg", unit_converter=uc) == "5400000"
+        assert (
+            ValueProcessor.normalize_numeric_value(
+                "ppt_angle",
+                "calc(1turn - 90deg)",
+                unit_converter=uc,
+            )
+            == "16200000"
+        )
 
     def test_position_attributes_x_axis(self):
         uc = UnitConverter()
@@ -105,6 +114,37 @@ class TestNormalizeNumericValue:
         result = ValueProcessor.normalize_numeric_value("ppt_x", "1in", unit_converter=uc)
 
         assert result == "914400"
+
+    def test_position_attributes_accept_absolute_calc_lengths(self):
+        uc = UnitConverter()
+
+        result = ValueProcessor.normalize_numeric_value(
+            "ppt_x",
+            "calc(1in + 10px)",
+            unit_converter=uc,
+        )
+
+        assert result == "1009650"
+
+    def test_position_attributes_keep_unresolved_calc_lengths(self):
+        uc = UnitConverter()
+
+        assert (
+            ValueProcessor.normalize_numeric_value(
+                "ppt_x",
+                "calc(1em + 2px)",
+                unit_converter=uc,
+            )
+            == "calc(1em + 2px)"
+        )
+        assert (
+            ValueProcessor.normalize_numeric_value(
+                "ppt_x",
+                "calc(1px / 0)",
+                unit_converter=uc,
+            )
+            == "calc(1px / 0)"
+        )
 
     def test_position_attributes_y_axis(self):
         uc = UnitConverter()

@@ -2,9 +2,14 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from svg2ooxml.drawingml.animation.handlers.motion_path_types import PointPair
+
+_SIMPLE_PATH_TOKEN_PATTERN = re.compile(
+    r"[MLml]|[-+]?(?:(?:\d+\.\d*)|(?:\.\d+)|(?:\d+))(?:[eE][-+]?\d+)?"
+)
 
 
 def resolve_initial_tangent_vector(path_value: str) -> PointPair | None:
@@ -140,7 +145,7 @@ def simple_path_parse(path_value: str) -> list[PointPair]:
     """Fallback parser for basic M/L commands."""
 
     points: list[PointPair] = []
-    tokens = path_value.replace(",", " ").split()
+    tokens = _SIMPLE_PATH_TOKEN_PATTERN.findall(path_value)
 
     index = 0
     while index < len(tokens):

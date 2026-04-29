@@ -348,6 +348,18 @@ def test_simple_path_parse_handles_comma_separated_values() -> None:
     assert result == [(0.0, 0.0), (100.0, 100.0)]
 
 
+def test_simple_path_parse_handles_compact_commands() -> None:
+    result = motion_path.simple_path_parse("M0,0 L100,100")
+
+    assert result == [(0.0, 0.0), (100.0, 100.0)]
+
+
+def test_simple_path_parse_handles_compact_signed_values() -> None:
+    result = motion_path.simple_path_parse("M 10-20 L 30,40")
+
+    assert result == [(10.0, -20.0), (30.0, 40.0)]
+
+
 def test_simple_path_parse_handles_multiple_lines() -> None:
     result = motion_path.simple_path_parse("M 0 0 L 50 50 L 100 100")
 

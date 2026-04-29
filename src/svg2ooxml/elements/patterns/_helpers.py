@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import math
+
 from lxml import etree as ET
 
 from svg2ooxml.common.style.css_values import parse_style_declarations
 from svg2ooxml.common.svg_refs import local_name
+from svg2ooxml.common.units.lengths import resolve_length_px
 from svg2ooxml.core.styling.style_helpers import parse_percentage
 
 
@@ -86,12 +89,18 @@ def pattern_opacity(value: str | None, default: float = 1.0) -> float:
         return default
 
 
-def parse_float_attr(element: ET.Element, attribute: str) -> float | None:
-    """Parse a float attribute, returning None on failure."""
+def parse_float_attr(
+    element: ET.Element,
+    attribute: str,
+    *,
+    axis: str = "x",
+    default: float | None = None,
+) -> float | None:
+    """Parse a numeric SVG length attribute, returning ``default`` on failure."""
     value = element.get(attribute)
     if value is None:
-        return None
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return None
+        return default
+    parsed = resolve_length_px(value, None, axis=axis, default=math.nan)
+    if parsed == parsed:
+        return parsed
+    return default

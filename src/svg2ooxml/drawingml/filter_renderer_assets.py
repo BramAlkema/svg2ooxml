@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-import math
-
 from lxml import etree
 
 from svg2ooxml.common.boundaries import is_safe_relationship_id
+from svg2ooxml.common.math_utils import finite_float
 from svg2ooxml.drawingml.xml_builder import a_elem, a_sub, to_string
 from svg2ooxml.filters.base import FilterResult
 from svg2ooxml.filters.metadata import (
@@ -340,11 +339,8 @@ class FilterRendererAssetMixin:
 
     @staticmethod
     def _coerce_int(value: object) -> int | None:
-        try:
-            parsed = float(value)  # type: ignore[arg-type]
-        except (TypeError, ValueError):
-            return None
-        if not math.isfinite(parsed):
+        parsed = finite_float(value)
+        if parsed is None:
             return None
         return int(parsed)
 

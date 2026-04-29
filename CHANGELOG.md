@@ -5,6 +5,59 @@ Empirical PowerPoint behavior research, authored control decks, and durable
 oracle evidence live in the companion repository
 [`openxml-audit`](https://github.com/BramAlkema/openxml-audit).
 
+## 0.8.1 - 2026-04-29
+
+Release focus: typed CSS value evaluation, calc coverage, parser hardening, and
+the accepted ADR for the measured-fidelity 0.9 release stream.
+
+Full diff: https://github.com/BramAlkema/svg2ooxml/compare/v0.8.0...v0.8.1
+
+### Added
+
+- added ADR-036, defining the road to 0.9 as a measured fidelity release driven
+  by ranked browser-vs-PowerPoint evidence
+- added a small typed CSS math evaluator for number, percentage, length,
+  length-percentage, angle, and time contexts
+- added focused regressions for calc parsing across colors, opacity, dash
+  patterns, transforms, units, gradients, filters, masks, animation values, and
+  text/style boundaries
+- added regression coverage for non-finite authored values so `nan` and `inf`
+  fall back at parser boundaries instead of leaking into DrawingML output
+
+### Changed
+
+- centralized more calc, color, opacity, transform, dash, gradient, filter,
+  viewport, marker, and animation numeric parsing through shared helpers
+- tightened figma2gslides export configuration and untouched test behavior
+  while keeping the converter package boundary explicit
+- kept NumPy optional by routing shared numeric helpers through lightweight
+  compatibility boundaries
+- updated 0.9 planning to make measurement the first task and to keep broad
+  splitter/dedupe work out of scope unless a ranked fidelity bug requires it
+
+### Fixed
+
+- fixed remaining raw `float()` parser boundaries around style extraction,
+  resvg style materialization, text run creation, WordArt threshold metadata,
+  gradient coordinates, stop alpha, and foreign color objects
+- fixed shared number/percentage parsing so non-finite values honor finite
+  defaults
+- fixed calc handling in RGB/HSL/OKLab/OKLCh color functions, gradient and
+  pattern geometry, filter offsets/dimensions, and authored animation values
+- preserved valid zero stroke widths while still rejecting invalid/non-finite
+  stroke width inputs
+
+### Validation
+
+- local `ruff check src tests` passed
+- local `git diff --check` passed
+- local `python -m compileall -q src tests` passed
+- local full unit suite passed: `2921 passed`
+- local `python -m build` produced `svg2ooxml-0.8.1.tar.gz` and
+  `svg2ooxml-0.8.1-py3-none-any.whl`
+- wheel metadata inspection confirmed `Version: 0.8.1` and
+  `Requires-Python: >=3.13`
+
 ## 0.8.0 - 2026-04-29
 
 Release focus: fidelity policy, traceability, typed metadata boundaries, and

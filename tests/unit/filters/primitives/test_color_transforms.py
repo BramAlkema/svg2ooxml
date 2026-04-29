@@ -4,7 +4,10 @@ from lxml import etree
 
 from svg2ooxml.filters.base import FilterContext
 from svg2ooxml.filters.primitives.color_matrix import ColorMatrixFilter
-from svg2ooxml.filters.primitives.component_transfer import ComponentTransferFilter
+from svg2ooxml.filters.primitives.component_transfer import (
+    ComponentFunction,
+    ComponentTransferFilter,
+)
 
 
 def _context(*, enable_native_color_transforms: bool) -> FilterContext:
@@ -41,6 +44,18 @@ def test_component_transfer_alpha_linear_records_blip_transform_candidates() -> 
 
     assert result.fallback == "emf"
     assert result.metadata.get("blip_color_transforms") == [{"tag": "alphaModFix", "amt": 40000}]
+
+
+def test_component_transfer_calc_params_use_shared_numeric_parser() -> None:
+    function = ComponentFunction(
+        channel="a",
+        func_type="linear",
+        params={"slope": "calc(0.2 + 0.2)", "intercept": "calc(0)"},
+    )
+
+    candidates = ComponentTransferFilter._blip_transform_candidates([function])
+
+    assert candidates == [{"tag": "alphaModFix", "amt": 40000}]
 
 
 def test_component_transfer_ignores_blip_transform_candidates_when_disabled() -> None:

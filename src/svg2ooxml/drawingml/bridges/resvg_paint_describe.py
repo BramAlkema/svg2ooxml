@@ -268,7 +268,9 @@ def _parse_stops(element: etree._Element) -> tuple[GradientStopDescriptor, ...]:
         parsed_color = parse_color(color_attr)
         color_hex = f"#{css_color_to_hex(color_attr, default='000000')}"
         opacity_attr = stop_el.get("stop-opacity") or style_map.get("stop-opacity")
-        color_alpha = float(getattr(parsed_color, "a", 1.0)) if parsed_color is not None else 1.0
+        color_alpha = (
+            color_object_alpha(parsed_color) if parsed_color is not None else 1.0
+        )
         opacity = color_alpha * parse_opacity(opacity_attr, default=1.0)
         offset = parse_gradient_offset(stop_el.get("offset", "0"))
         stops.append(

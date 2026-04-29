@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -8,6 +9,7 @@ import pytest
 from svg2ooxml.core.resvg.parser.presentation import Presentation
 from svg2ooxml.core.resvg.usvg_tree import FilterNode, FilterPrimitive
 from svg2ooxml.render.filters import apply_filter, plan_filter
+from svg2ooxml.render.filters_lighting import light_direction
 from svg2ooxml.render.filters_region import parse_user_length
 from svg2ooxml.render.rasterizer import Viewport
 from svg2ooxml.render.surface import Surface
@@ -143,6 +145,34 @@ def test_apply_filter_flood_accepts_percent_opacity() -> None:
     assert result.data[0, 0, 3] == pytest.approx(0.5)
 
 
+def test_apply_filter_color_matrix_saturate_accepts_calc() -> None:
+    color_matrix = FilterPrimitive(
+        tag="feColorMatrix",
+        attributes={"type": "saturate", "values": "calc(0.25 + 0.25)"},
+        styles={},
+    )
+    filter_node = _make_filter_node([color_matrix])
+    plan = plan_filter(filter_node)
+    assert plan is not None
+
+    surface = Surface.make(1, 1)
+    surface.data[0, 0, :] = np.array([1.0, 0.0, 0.0, 1.0], dtype=np.float32)
+
+    result = apply_filter(
+        surface,
+        plan,
+        (0.0, 0.0, 1.0, 1.0),
+        Viewport(width=1, height=1, min_x=0.0, min_y=0.0, scale_x=1.0, scale_y=1.0),
+    )
+
+    np.testing.assert_allclose(
+        result.data[0, 0, :3],
+        np.array([0.6063, 0.1063, 0.1063], dtype=np.float32),
+        atol=1e-4,
+    )
+    assert result.data[0, 0, 3] == pytest.approx(1.0)
+
+
 def test_apply_filter_composite_arithmetic() -> None:
     flood_a = FilterPrimitive(
         tag="feFlood",
@@ -170,6 +200,8 @@ def test_apply_filter_composite_arithmetic() -> None:
     filter_node = _make_filter_node([flood_a, flood_b, composite])
     plan = plan_filter(filter_node)
     assert plan is not None
+    plan.primitives[-1].extra["k2"] = "calc(0.25)"
+    plan.primitives[-1].extra["k3"] = "calc(0.5 + 0.25)"
 
     surface = Surface.make(2, 2)
     bounds = (0.0, 0.0, 2.0, 2.0)
@@ -516,3 +548,24 @@ def test_apply_filter_specular_lighting_basic() -> None:
     result = apply_filter(surface, plan, bounds, viewport)
     assert np.any(result.data[..., 0] > 0.0)
     assert 0.0 <= result.data[..., 3].max() <= 1.0
+
+
+def test_light_direction_accepts_calc_metadata_values() -> None:
+    units = SimpleNamespace(scale_x=1.0, scale_y=1.0)
+    height_map = np.zeros((1, 1), dtype=np.float32)
+
+    direction, weight = light_direction(
+        {
+            "type": "point",
+            "x": "calc(0.25 + 0.25)",
+            "y": "calc(0.25 + 0.25)",
+            "z": "calc(2 + 3)",
+        },
+        1,
+        1,
+        units,
+        height_map,
+    )
+
+    np.testing.assert_allclose(direction[0, 0], np.array([0.0, 0.0, 1.0]), atol=1e-6)
+    assert weight[0, 0] == pytest.approx(1.0)

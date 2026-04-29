@@ -2,8 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from svg2ooxml.export import RequestedFont, SVGFrame
-from svg2ooxml.export import render_pptx_for_frames
+from svg2ooxml.export import RequestedFont, SVGFrame, render_pptx_for_frames
 
 
 def _sample_frame() -> SVGFrame:

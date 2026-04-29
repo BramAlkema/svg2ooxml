@@ -11,6 +11,7 @@ from svg2ooxml.color.utils import color_to_hex
 from svg2ooxml.common.conversions.angles import radians_to_ppt
 from svg2ooxml.common.conversions.opacity import opacity_to_ppt, parse_opacity
 from svg2ooxml.common.units import px_to_emu
+from svg2ooxml.common.units.lengths import parse_number
 from svg2ooxml.common.units.scalars import EMU_PER_INCH
 from svg2ooxml.drawingml.xml_builder import a_elem, a_sub, to_string
 
@@ -48,11 +49,8 @@ class FilterRendererHookMixin:
         return to_string(effectLst)
 
     def _build_offset(self, name, attrs, remainder, result, context) -> str:
-        try:
-            dx = float(attrs.get("dx", "0"))
-            dy = float(attrs.get("dy", "0"))
-        except ValueError:
-            dx = dy = 0.0
+        dx = parse_number(attrs.get("dx"), 0.0)
+        dy = parse_number(attrs.get("dy"), 0.0)
 
         dx_emu = int(px_to_emu(dx))
         dy_emu = int(px_to_emu(dy))

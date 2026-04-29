@@ -10,6 +10,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Any
 
+from svg2ooxml.common.math_utils import coerce_float, coerce_int, finite_float
 from svg2ooxml.ir.geometry import SegmentType
 from svg2ooxml.policy.constants import FALLBACK_BITMAP, FALLBACK_EMF, FALLBACK_NATIVE
 
@@ -43,23 +44,27 @@ def apply_geometry_policy(
     elif force_emf:
         mode = FALLBACK_EMF
 
-    max_segments = policy.get("max_segments")
+    max_segments = coerce_int(policy.get("max_segments"))
     simplify = bool(policy.get("simplify_paths"))
 
-    simplify_min = int(policy.get("simplify_min_segments", 16))
+    simplify_min = coerce_int(policy.get("simplify_min_segments"), 16) or 16
     if simplify and len(current) >= simplify_min:
         from svg2ooxml.common.geometry.simplify import simplify_segments
 
         before = len(current)
-        curve_fit_tol = float(policy.get("curve_fit_tolerance_px", 1.5)) if policy.get("curve_fit_enabled", True) else 0.0
+        curve_fit_tol = (
+            coerce_float(policy.get("curve_fit_tolerance_px"), 1.5)
+            if policy.get("curve_fit_enabled", True)
+            else 0.0
+        )
         current = simplify_segments(
             current,
-            epsilon=float(policy.get("simplify_epsilon_px", 0.01)),
-            bezier_flatness=float(policy.get("bezier_flatness_px", 0.5)),
-            collinear_angle_deg=float(policy.get("collinear_angle_deg", 0.5)),
-            rdp_tolerance=float(policy.get("rdp_tolerance_px", 1.0)),
+            epsilon=coerce_float(policy.get("simplify_epsilon_px"), 0.01),
+            bezier_flatness=coerce_float(policy.get("bezier_flatness_px"), 0.5),
+            collinear_angle_deg=coerce_float(policy.get("collinear_angle_deg"), 0.5),
+            rdp_tolerance=coerce_float(policy.get("rdp_tolerance_px"), 1.0),
             curve_fit_tolerance=curve_fit_tol,
-            curve_fit_min_points=int(policy.get("curve_fit_min_points", 8)),
+            curve_fit_min_points=coerce_int(policy.get("curve_fit_min_points"), 8) or 8,
         )
         after = len(current)
         if after < before:
@@ -71,7 +76,7 @@ def apply_geometry_policy(
     if bool(policy.get("detect_preset_shapes", True)) and mode == FALLBACK_NATIVE:
         from svg2ooxml.common.geometry.shape_detect import detect_preset_shape
 
-        shape_tol = float(policy.get("shape_detect_tolerance_px", 2.0))
+        shape_tol = coerce_float(policy.get("shape_detect_tolerance_px"), 2.0)
         match = detect_preset_shape(current, tolerance=shape_tol)
         if match is not None:
             metadata["preset_shape"] = match.preset
@@ -88,7 +93,7 @@ def apply_geometry_policy(
         if mode != FALLBACK_BITMAP:
             mode = FALLBACK_EMF
 
-    max_complexity = policy.get("max_complexity")
+    max_complexity = finite_float(policy.get("max_complexity"))
     if max_complexity is not None:
         if max_segments:
             complexity_ratio = len(current) / max_segments

@@ -5,6 +5,8 @@ from __future__ import annotations
 import math
 from typing import Protocol
 
+from svg2ooxml.common.conversions.transforms import parse_numeric_list
+
 Vector2 = tuple[float, float]
 
 
@@ -53,6 +55,21 @@ def normalize_vector(
     return (vector[0] / length, vector[1] / length)
 
 
+def parse_point_pairs(value: str | None) -> list[Vector2]:
+    """Parse an SVG ``points``-style coordinate list into ``(x, y)`` pairs."""
+
+    values = parse_numeric_list(value or "")
+    if len(values) % 2 == 1:
+        values = values[:-1]
+    return [(values[index], values[index + 1]) for index in range(0, len(values), 2)]
+
+
+def parse_point_values(value: str | None) -> tuple[float, ...]:
+    """Parse an SVG ``points`` list and return flattened coordinate values."""
+
+    return tuple(coord for point in parse_point_pairs(value) for coord in point)
+
+
 def points_collinear_by_angle(
     start: PointLike,
     mid: PointLike,
@@ -79,6 +96,8 @@ __all__ = [
     "PointLike",
     "dot_vectors",
     "normalize_vector",
+    "parse_point_pairs",
+    "parse_point_values",
     "point_distance",
     "point_to_line_distance",
     "points_collinear_by_angle",

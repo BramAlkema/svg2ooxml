@@ -3,12 +3,17 @@
 from __future__ import annotations
 
 import logging
+import math
 from typing import Any
 
 from lxml import etree as ET
 
 from svg2ooxml.common.geometry import parse_transform_list
-from svg2ooxml.common.units.lengths import parse_number_or_percent, resolve_length_px
+from svg2ooxml.common.units.lengths import (
+    parse_number,
+    parse_number_or_percent,
+    resolve_length_px,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -48,8 +53,9 @@ def extract_pattern_geometry(element: ET.Element) -> Any:
 
 def parse_dimension(dim_str: str) -> float:
     """Parse dimension string to float value."""
-    if dim_str.endswith("%"):
-        return parse_number_or_percent(dim_str, 10.0)
+    fraction = parse_number_or_percent(dim_str, math.nan)
+    if fraction == fraction:
+        return fraction
     return resolve_length_px(dim_str, None, axis="x", default=10.0)
 
 
@@ -91,7 +97,7 @@ def identify_pattern_optimizations(
         optimizations.append(PatternOptimization.COLOR_SIMPLIFICATION)
 
     recommended_space = color_summary.get("recommended_space")
-    complexity_score = float(color_summary.get("complexity", 0.0) or 0.0)
+    complexity_score = parse_number(color_summary.get("complexity"), 0.0)
     if recommended_space and recommended_space != "srgb":
         optimizations.append(PatternOptimization.COLOR_SPACE_OPTIMIZATION)
     elif complexity_score > 0.6:
@@ -117,7 +123,7 @@ def estimate_performance_impact(
     PatternComplexity: type,
 ) -> str:
     """Estimate performance impact."""
-    color_complexity = float(color_summary.get("complexity", 0.0) or 0.0)
+    color_complexity = parse_number(color_summary.get("complexity"), 0.0)
 
     if (
         complexity == PatternComplexity.SIMPLE

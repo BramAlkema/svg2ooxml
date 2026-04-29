@@ -18,6 +18,7 @@ from svg2ooxml.drawingml.bridges import (
 
 # Import centralized XML builders for safe DrawingML generation
 from svg2ooxml.drawingml.xml_builder import a_elem, a_sub, to_string
+from svg2ooxml.elements.patterns._helpers import parse_float_attr
 
 logger = logging.getLogger(__name__)
 
@@ -239,10 +240,9 @@ class PatternService:
             return "lines"
         for child, tag in zip(children, tags, strict=True):
             if tag == "rect":
-                try:
-                    width = float(child.get("width", "0") or 0)
-                    height = float(child.get("height", "0") or 0)
-                except ValueError:
+                width = parse_float_attr(child, "width", axis="x", default=0.0)
+                height = parse_float_attr(child, "height", axis="y", default=0.0)
+                if width is None or height is None:
                     continue
                 if width == 0 or height == 0:
                     continue

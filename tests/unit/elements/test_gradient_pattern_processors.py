@@ -4,6 +4,7 @@ from lxml import etree as ET
 
 from svg2ooxml.color.bridge import ADVANCED_COLOR_ENGINE_AVAILABLE
 from svg2ooxml.elements.gradient_processor import GradientProcessor
+from svg2ooxml.elements.gradients.analyzer import analyze_gradient_stops
 from svg2ooxml.elements.pattern_processor import PatternProcessor
 from svg2ooxml.services import ConversionServices
 
@@ -36,6 +37,26 @@ def test_gradient_processor_color_statistics() -> None:
     assert analysis.color_statistics["recommended_space"] in {"srgb", "linear_rgb"}
     if ADVANCED_COLOR_ENGINE_AVAILABLE and analysis.color_statistics.get("advanced_available"):
         assert "hue_spread" in analysis.color_statistics
+
+
+def test_gradient_processor_analyzes_calc_stop_offsets() -> None:
+    services = _make_services()
+    processor = GradientProcessor(services)
+
+    gradient = ET.fromstring(
+        """
+        <linearGradient>
+            <stop offset="calc(25% + 25%)" stop-color="#ff0000" />
+            <stop offset="100%" stop-color="#008000" />
+        </linearGradient>
+        """
+    )
+
+    processor.analyze_gradient_element(gradient, context=None)
+    stop_analysis = analyze_gradient_stops(gradient)
+
+    assert stop_analysis["positions"] == [0.5, 1.0]
+    assert stop_analysis["irregular_spacing"] is False
 
 
 def test_pattern_processor_palette_summary() -> None:

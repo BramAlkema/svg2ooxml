@@ -10,6 +10,10 @@ from svg2ooxml.core.export.animation_predicates import (
     _is_simple_line_endpoint_animation,
     _simple_position_axis,
 )
+from svg2ooxml.core.export.animation_values import (
+    animation_axis,
+    animation_length_delta_px,
+)
 from svg2ooxml.core.export.motion_geometry import _project_linear_motion_delta
 from svg2ooxml.core.export.scene_index import (
     _build_element_alias_map,
@@ -211,7 +215,10 @@ def _resolve_endpoint_deltas(
         member = attr_to_member.get(attr_name)
         if member is None:
             return 0.0
-        return float(member[1].values[-1]) - float(member[1].values[0])
+        delta = animation_length_delta_px(member[1], axis=animation_axis(attr_name))
+        if delta is None:
+            raise ValueError(f"Invalid endpoint animation value for {attr_name}")
+        return delta
 
     try:
         return (
@@ -228,18 +235,17 @@ def _resolve_world_delta(
     x_members: Sequence[AnimationMember],
     y_members: Sequence[AnimationMember],
 ) -> tuple[float, float] | None:
-    try:
-        world_dx = (
-            float(x_members[0][2].values[-1]) - float(x_members[0][2].values[0])
-            if x_members
-            else 0.0
-        )
-        world_dy = (
-            float(y_members[0][2].values[-1]) - float(y_members[0][2].values[0])
-            if y_members
-            else 0.0
-        )
-    except (TypeError, ValueError):
+    world_dx = (
+        animation_length_delta_px(x_members[0][2], axis="x")
+        if x_members
+        else 0.0
+    )
+    world_dy = (
+        animation_length_delta_px(y_members[0][2], axis="y")
+        if y_members
+        else 0.0
+    )
+    if world_dx is None or world_dy is None:
         return None
     return world_dx, world_dy
 

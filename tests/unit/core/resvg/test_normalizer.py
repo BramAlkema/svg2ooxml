@@ -6,6 +6,7 @@ import pytest
 
 from svg2ooxml.core.resvg.normalizer import NormalizationResult, normalize_svg_string
 from svg2ooxml.core.resvg.painting.paint import PaintReference
+from svg2ooxml.core.resvg.text.layout import build_text_layout
 
 
 def test_normalize_svg_string_round_trips_basic_tree() -> None:
@@ -104,6 +105,22 @@ def test_resvg_stroke_dasharray_resolves_absolute_lengths() -> None:
     assert rect.stroke.dash_array == pytest.approx([24.0, 8.0])
 
 
+def test_resvg_stroke_dasharray_resolves_calc_lengths() -> None:
+    svg_markup = """
+        <svg xmlns="http://www.w3.org/2000/svg" width="100" height="100">
+            <rect width="10" height="10"
+                  stroke="#000000" stroke-width="1"
+                  stroke-dasharray="calc(0.25in + 6pt), calc(2 * 1em)"/>
+        </svg>
+    """
+
+    result = normalize_svg_string(svg_markup)
+    rect = next(child for child in result.tree.root.children if child.tag == "rect")
+
+    assert rect.stroke is not None
+    assert rect.stroke.dash_array == pytest.approx([32.0, 24.0])
+
+
 def test_resvg_tree_resolves_image_geometry_units() -> None:
     png_data = (
         "iVBORw0KGgoAAAANSUhEUgAAAAQAAAADCAYAAAC09K7GAAAAFUlEQVR4nGP8z8DwnwEJ"
@@ -193,6 +210,37 @@ def test_resvg_tree_resolves_relative_font_size_against_parent() -> None:
     assert group.text_style.font_size == pytest.approx(20.0)
     assert text.text_style is not None
     assert text.text_style.font_size == pytest.approx(30.0)
+
+
+def test_resvg_tree_resolves_calc_font_size_percentage() -> None:
+    svg_markup = """
+        <svg xmlns="http://www.w3.org/2000/svg" width="100" height="100">
+            <text font-size="calc(100% + 50%)">Hello</text>
+        </svg>
+    """
+
+    result = normalize_svg_string(svg_markup)
+    text = next(child for child in result.tree.root.children if child.tag == "text")
+
+    assert text.text_style is not None
+    assert text.text_style.font_size == pytest.approx(18.0)
+
+
+def test_resvg_text_layout_resolves_calc_numeric_positions() -> None:
+    svg_markup = """
+        <svg xmlns="http://www.w3.org/2000/svg" width="100" height="100">
+            <text id="target" x="calc(10 + 5)" y="calc(20 + 5)"
+                  dx="calc(1 + 2)" dy="calc(2 * 3)">Hello</text>
+        </svg>
+    """
+
+    result = normalize_svg_string(svg_markup)
+    build_text_layout(result.tree)
+    text = next(child for child in result.tree.root.children if child.tag == "text")
+
+    assert text.spans
+    assert text.spans[0].x == pytest.approx(18.0)
+    assert text.spans[0].y == pytest.approx(31.0)
 
 
 def test_resvg_stylesheet_important_beats_more_specific_normal_rule() -> None:

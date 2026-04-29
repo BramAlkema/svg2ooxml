@@ -410,6 +410,173 @@ Consequences:
 - Each pass should leave behind a small regression suite for the seam it
   hardened, not only ad hoc bug tests.
 
+### Road to 0.9: Measured Fidelity Release (ADR-036)
+
+Status: accepted for the 0.9 release stream.
+
+Context:
+
+The 0.7.x stream split oversized modules, hardened packaging and optional
+dependency boundaries, and centralized repeated conversion helpers. The 0.8.0
+release made fidelity tiers, trace payloads, fallback metadata, and PPTX trace
+embedding typed and explicit. The 0.8.1 patch then tightened typed CSS value
+evaluation, calc handling, non-finite authored numeric parsing, and conversion
+helper reuse across colors, gradients, filters, masks, transforms, text, and
+animation values.
+
+That means the next release should not be another broad architecture pass. The
+converter now has enough policy, typed parsing, and tracing infrastructure to
+choose work by measured user-visible fidelity.
+
+The remaining risk is not that the converter cannot emit a PPTX. It is that
+some legal, editable PPTX output still differs from the SVG/browser reference
+in PowerPoint slideshow mode. The most important 0.9 work is therefore to rank
+those differences, fix the highest-impact causes, and keep every degradation
+local, explicit, and measurable.
+
+Decision:
+
+0.9 is a measured fidelity release. Its release story is:
+
+> make PowerPoint output visibly closer to browser-rendered SVG, with ranked
+> evidence and explicit fallback accounting.
+
+Target order:
+
+1. **Ranked fidelity report first**
+
+   Run larger W3C/static/animation/body passes against the 0.8 baseline and
+   produce a single ranked report. The report must include build/open status,
+   browser render status, PowerPoint slideshow render status, SSIM or equivalent
+   similarity metric, max pixel diff, fallback counts by type, and skipped
+   animation reason codes.
+
+   Exit criteria:
+
+   - a current top-offender list exists before implementation begins
+   - report output is stable enough to compare before/after runs
+   - each major 0.9 fix names the ranked failure it addresses
+
+2. **Slideshow-first animation parity**
+
+   Improve authored PowerPoint animation behavior where current output is legal
+   but visually inert or wrong at slideshow time. Prioritize `mainSeq`,
+   build-list, `grpId`, click/autoplay wiring, begin references, delay offsets,
+   and effect-family mapping.
+
+   Durable mapping preference:
+
+   - scale pulse -> authored scale / Grow-Shrink style behavior
+   - opacity pulse -> transparency emphasis behavior
+   - discrete visibility -> `set` / discrete effect groups
+   - path motion -> authored motion path when available
+   - multi-keyframe color -> segmented effects rather than first/last collapse
+
+   Exit criteria:
+
+   - targeted animation control decks play in slideshow mode
+   - pane-visible but inert timing regressions have focused tests
+   - unsupported animation fragments emit stable reason codes
+
+3. **Filter, lighting, and source-surface fidelity**
+
+   Fix the static visual failures where current fallback or native mapping loses
+   SVG source semantics. Prioritize `SourceGraphic`, `SourceAlpha`, filter input
+   routing, diffuse/specular lighting composition, alpha masking, and smallest
+   correct-unit raster fallback.
+
+   Exit criteria:
+
+   - filter and lighting tests cover actual shape geometry, not synthetic square
+     placeholder surfaces
+   - diffuse lighting is treated as an opaque light map and specular lighting as
+     a non-opaque highlight map where the SVG primitive requires it
+   - fallback assets remain typed, bounded, and traceable
+
+4. **Typed CSS value and calc evaluation**
+
+   `calc()` is not a standalone headline feature for 0.9, but it is a fidelity
+   enabler for geometry, gradients, filters, stroke widths, and transforms. The
+   current code resolves context-free and several contextual `calc()` values
+   through a small typed evaluator. 0.9 should finish the property-context
+   coverage that still affects ranked fidelity failures, rather than expanding
+   CSS support as an abstract feature.
+
+   Decision:
+
+   - keep `tinycss2` as the CSS token source
+   - keep SVG/PPTX-specific evaluation local to this repo
+   - represent typed values explicitly: number, length, percentage,
+     length-percentage, angle, and time
+   - require an explicit resolution context carrying axis, viewport, object
+     bounding box, font size, DPI, and fallback unit
+   - leave values unresolved until the correct property context is available
+   - do not silently coerce invalid `calc()` expressions to zero
+
+   Exit criteria:
+
+   - wrong-axis percentages cannot leak between x/y/filter/gradient contexts
+   - `var()` resolution feeds typed calc evaluation without losing fallback or
+     cycle semantics
+   - README claims about `calc()` match the implemented support level
+
+5. **Static fidelity cheap wins**
+
+   Use the ranked report to decide order, but likely bounded wins include slide
+   background detection/emission, viewBox stroke-width verification,
+   `vector-effect: non-scaling-stroke`, group opacity multiplication for
+   non-overlapping children, and `<use>` / group fill inheritance audits.
+
+   Exit criteria:
+
+   - each fix has a focused fixture and before/after visual evidence
+   - no fix broadens raster fallback without a trace reason
+
+6. **Browser export integration gate**
+
+   Finish end-to-end browser export workflow testing only to the extent needed
+   to keep converter confidence. App-specific operational hardening remains
+   subordinate to package/runtime fidelity unless it blocks the public converter
+   contract.
+
+   Exit criteria:
+
+   - browser export smoke path is covered end to end
+   - integration failures are fixed where they affect converter output or
+     published package behavior
+
+0.9 release gates:
+
+- full unit suite
+- full integration suite
+- fast end-to-end suite
+- local build and wheel metadata inspection
+- W3C build/open gates remain green
+- ranked browser-vs-PowerPoint report generated for the release candidate
+- top-offender list updated with what improved and what remains broken
+- no new base-install optional dependency leaks
+- no broad fallback-rate increase without explicit reason-code accounting
+
+Non-targets for 0.9:
+
+- no broad file-splitting or dedupe pass unless a ranked fidelity bug forces it
+- no whole CSS layout engine dependency just to evaluate `calc()`
+- no full `foreignObject`, full `@import`, or browser runtime emulation unless
+  the ranked corpus proves it is a top blocker
+- no expansion of empirical PowerPoint research assets in this repo; evidence
+  still belongs in `openxml-audit` per ADR-033
+
+Consequences:
+
+- the first 0.9 task is measurement, not another dedupe implementation pass
+- fidelity fixes should be selected from the ranked report, not from whichever
+  file looks large or messy
+- typed CSS/calc work after 0.8.1 is justified only where it removes real
+  context drift in geometry, gradients, filters, stroke widths, or transforms
+- docs must stop overstating CSS support; README and release notes should
+  distinguish supported typed contexts from unresolved or intentionally deferred
+  CSS features
+
 ---
 
 ## Text Rendering Strategy

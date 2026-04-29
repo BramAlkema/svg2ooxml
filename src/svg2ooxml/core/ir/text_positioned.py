@@ -7,6 +7,7 @@ from typing import Any
 
 from lxml import etree
 
+from svg2ooxml.common.math_utils import coerce_positive_float
 from svg2ooxml.core.ir.font_metrics import estimate_run_width as _estimate_run_width
 from svg2ooxml.core.ir.text.font_metrics import scale_run_metrics
 from svg2ooxml.core.ir.text.layout import (
@@ -180,7 +181,10 @@ class PositionedTextMixin:
                     parent_style=dict(style),
                 )
 
-            font_size_pt = float(node_style.get("font_size_pt", 12.0))
+            font_size_pt = coerce_positive_float(
+                node_style.get("font_size_pt"),
+                12.0,
+            )
             x_values = parse_text_length_list(
                 node.get("x"), font_size_pt, axis="x", context=self._context
             )

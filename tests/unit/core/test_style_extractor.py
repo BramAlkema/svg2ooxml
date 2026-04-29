@@ -88,6 +88,93 @@ def test_style_extractor_resolves_absolute_stroke_dash_lengths() -> None:
     assert style.stroke.dash_offset == 4.0
 
 
+def test_style_extractor_resolves_calc_stroke_dash_lengths() -> None:
+    markup = """
+        <svg xmlns='http://www.w3.org/2000/svg'>
+            <rect id='target' width='10' height='10'
+                  fill='none' stroke='#000000' stroke-width='1'
+                  stroke-dasharray='calc(0.25in + 6pt), calc(2 * 1em)'
+                  stroke-dashoffset='calc(1pt + 3pt)'/>
+        </svg>
+    """
+    root, rect = _build_svg(markup)
+
+    resolver = StyleResolver()
+    resolver.collect_css(root)
+    extractor = StyleExtractor(resolver)
+
+    style = extractor.extract(rect, DummyServices())
+
+    assert style.stroke is not None
+    assert style.stroke.dash_array == [32.0, 24.0]
+    assert style.stroke.dash_offset == pytest.approx(16.0 / 3.0)
+
+
+def test_style_extractor_accepts_calc_opacity_and_stroke_width() -> None:
+    markup = """
+        <svg xmlns='http://www.w3.org/2000/svg'>
+            <rect id='target' width='10' height='10'
+                  fill='#ffffff' fill-opacity='calc(25% + 25%)'
+                  opacity='50%' stroke='#000000'
+                  stroke-opacity='calc(20% + 30%)'
+                  stroke-width='calc(1px + 1px)'/>
+        </svg>
+    """
+    root, rect = _build_svg(markup)
+
+    resolver = StyleResolver()
+    resolver.collect_css(root)
+    extractor = StyleExtractor(resolver)
+
+    style = extractor.extract(rect, DummyServices())
+
+    assert isinstance(style.fill, SolidPaint)
+    assert style.fill.opacity == pytest.approx(0.5)
+    assert style.opacity == pytest.approx(0.5)
+    assert style.stroke is not None
+    assert style.stroke.width == pytest.approx(2.0)
+    assert style.stroke.opacity == pytest.approx(0.5)
+
+
+def test_style_extractor_preserves_zero_stroke_width() -> None:
+    markup = """
+        <svg xmlns='http://www.w3.org/2000/svg'>
+            <rect id='target' width='10' height='10'
+                  fill='none' stroke='#000000' stroke-width='0'/>
+        </svg>
+    """
+    root, rect = _build_svg(markup)
+
+    resolver = StyleResolver()
+    resolver.collect_css(root)
+    extractor = StyleExtractor(resolver)
+
+    style = extractor.extract(rect, DummyServices())
+
+    assert style.stroke is not None
+    assert style.stroke.width == 0.0
+
+
+def test_style_extractor_accepts_calc_stroke_miterlimit() -> None:
+    markup = """
+        <svg xmlns='http://www.w3.org/2000/svg'>
+            <rect id='target' width='10' height='10'
+                  fill='none' stroke='#000000'
+                  stroke-miterlimit='calc(2 + 2)'/>
+        </svg>
+    """
+    root, rect = _build_svg(markup)
+
+    resolver = StyleResolver()
+    resolver.collect_css(root)
+    extractor = StyleExtractor(resolver)
+
+    style = extractor.extract(rect, DummyServices())
+
+    assert style.stroke is not None
+    assert style.stroke.miter_limit == pytest.approx(4.0)
+
+
 def test_style_extractor_resolves_userspace_gradient_coordinates() -> None:
     markup = """
         <svg xmlns='http://www.w3.org/2000/svg' width='200' height='100'>

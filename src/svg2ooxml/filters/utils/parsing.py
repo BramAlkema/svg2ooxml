@@ -7,7 +7,14 @@ from typing import Any
 
 from lxml import etree
 
+from svg2ooxml.common.math_utils import finite_float
 from svg2ooxml.common.units import UnitConverter
+from svg2ooxml.common.units.lengths import (
+    parse_number as parse_css_number,
+)
+from svg2ooxml.common.units.lengths import (
+    resolve_length_px_required,
+)
 
 _CHANNELS = {"R", "G", "B", "A"}
 
@@ -48,12 +55,7 @@ def parse_float_list(payload: str | None) -> list[float]:
 
 
 def parse_number(value: str | None, default: float = 0.0) -> float:
-    if value is None:
-        return default
-    try:
-        return float(value)
-    except ValueError:
-        return default
+    return parse_css_number(value, default)
 
 
 def parse_length(
@@ -86,8 +88,8 @@ def parse_length(
     if conversion_context is None and context is not None:
         viewport = getattr(context, "viewport", None)
         if isinstance(viewport, dict):
-            width = float(viewport.get("width") or 0.0)
-            height = float(viewport.get("height") or 0.0)
+            width = finite_float(viewport.get("width"), 0.0) or 0.0
+            height = finite_float(viewport.get("height"), 0.0) or 0.0
             conversion_context = unit_converter.create_context(
                 width=width,
                 height=height,
@@ -98,7 +100,14 @@ def parse_length(
             )
 
     try:
-        return float(unit_converter.to_px(token, conversion_context, axis=axis))
+        return float(
+            resolve_length_px_required(
+                token,
+                conversion_context,
+                axis=axis,
+                unit_converter=unit_converter,
+            )
+        )
     except Exception:
         return parse_number(token, default=default)
 
@@ -119,17 +128,19 @@ def parse_displacement_map(element: etree._Element) -> DisplacementMapParameters
 def parse_turbulence(element: etree._Element) -> TurbulenceParameters:
     """Return structured parameters for an ``feTurbulence`` element."""
 
-    base_frequency = (element.get("baseFrequency") or "0").strip()
-    if " " in base_frequency:
-        fx_str, fy_str = base_frequency.split(" ", 1)
+    base_frequency = parse_float_list(element.get("baseFrequency") or "0")
+    if not base_frequency:
+        freq_x = freq_y = 0.0
+    elif len(base_frequency) == 1:
+        freq_x = freq_y = base_frequency[0]
     else:
-        fx_str = fy_str = base_frequency
+        freq_x, freq_y = base_frequency[:2]
 
     stitch_tiles = (element.get("stitchTiles") or "no").strip().lower() == "stitch"
 
     return TurbulenceParameters(
-        base_frequency_x=parse_number(fx_str),
-        base_frequency_y=parse_number(fy_str),
+        base_frequency_x=freq_x,
+        base_frequency_y=freq_y,
         num_octaves=max(0, int(parse_number(element.get("numOctaves"), default=1))),
         seed=parse_number(element.get("seed")),
         turbulence_type=(element.get("type") or "turbulence").strip(),

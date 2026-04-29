@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import math
 from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from svg2ooxml.common.units.lengths import resolve_length_px
 from svg2ooxml.drawingml.image import render_picture
 from svg2ooxml.filters.metadata import (
     FilterFallbackAssetPayload,
@@ -45,15 +47,25 @@ def resolve_filter_fallback_bounds(
     base_width = default_bounds.width if default_bounds is not None else 0.0
     base_height = default_bounds.height if default_bounds is not None else 0.0
 
-    try:
-        return Rect(
-            float(bounds_dict.get("x", base_x)),
-            float(bounds_dict.get("y", base_y)),
-            float(bounds_dict.get("width", base_width)),
-            float(bounds_dict.get("height", base_height)),
-        )
-    except (TypeError, ValueError):
+    x = _metadata_length_px(bounds_dict, "x", axis="x", default=base_x)
+    y = _metadata_length_px(bounds_dict, "y", axis="y", default=base_y)
+    width = _metadata_length_px(bounds_dict, "width", axis="x", default=base_width)
+    height = _metadata_length_px(bounds_dict, "height", axis="y", default=base_height)
+    if not all(math.isfinite(value) for value in (x, y, width, height)):
         return default_bounds
+    return Rect(x, y, width, height)
+
+
+def _metadata_length_px(
+    metadata: Mapping[str, object],
+    key: str,
+    *,
+    axis: str,
+    default: float,
+) -> float:
+    if key not in metadata:
+        return default
+    return resolve_length_px(metadata.get(key), None, axis=axis, default=math.nan)
 
 
 def iter_filter_fallback_assets(

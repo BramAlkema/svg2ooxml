@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 
 from lxml import etree
@@ -122,13 +123,13 @@ class ComponentTransferFilter(Filter):
         if func_type == "identity":
             return True
         if func_type == "linear":
-            slope = float(params.get("slope", 1.0))
-            intercept = float(params.get("intercept", 0.0))
+            slope = parse_number(params.get("slope"), default=1.0)
+            intercept = parse_number(params.get("intercept"))
             return abs(slope - 1.0) <= tol and abs(intercept) <= tol
         if func_type == "gamma":
-            amplitude = float(params.get("amplitude", 1.0))
-            exponent = float(params.get("exponent", 1.0))
-            offset = float(params.get("offset", 0.0))
+            amplitude = parse_number(params.get("amplitude"), default=1.0)
+            exponent = parse_number(params.get("exponent"), default=1.0)
+            offset = parse_number(params.get("offset"))
             return (
                 abs(amplitude - 1.0) <= tol
                 and abs(exponent - 1.0) <= tol
@@ -140,9 +141,8 @@ class ComponentTransferFilter(Filter):
                 return True
             n = len(values)
             for idx, raw in enumerate(values):
-                try:
-                    val = float(raw)
-                except (TypeError, ValueError):
+                val = parse_number(raw, default=math.nan)
+                if val != val:
                     return False
                 expected = idx / (n - 1)
                 if abs(val - expected) > 1e-4:
@@ -165,10 +165,9 @@ class ComponentTransferFilter(Filter):
         func = functions[0]
         if func.channel != "a" or func.func_type != "linear":
             return []
-        try:
-            slope = float(func.params.get("slope", 1.0))
-            intercept = float(func.params.get("intercept", 0.0))
-        except (TypeError, ValueError):
+        slope = parse_number(func.params.get("slope"), default=math.nan)
+        intercept = parse_number(func.params.get("intercept"), default=math.nan)
+        if slope != slope or intercept != intercept:
             return []
         if abs(intercept) > 1e-6:
             return []

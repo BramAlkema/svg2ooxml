@@ -13,15 +13,15 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
-from svg2ooxml.services.fonts import FontFetcher
-
-from ..caching.status import job_status_cache
+from figma2gslides.api.caching.status import job_status_cache
 from svg2ooxml.export import (
     RequestedFont,
     SVGFrame,
     render_pptx_for_frames,
     render_pptx_for_frames_parallel,
 )
+from svg2ooxml.services.fonts import FontFetcher
+
 from .dependencies import ExportServiceDependencies, build_export_service_dependencies
 from .export_service_assets import ExportServiceAssetsMixin
 from .export_service_data import ExportServiceDataMixin
@@ -130,7 +130,7 @@ class ExportService(
 
         # Add user authentication info if provided.
         if user:
-            from ..auth.encryption import encrypt_token
+            from figma2gslides.api.auth.encryption import encrypt_token
 
             job_data["user"] = {
                 "uid": user["uid"],
@@ -226,7 +226,7 @@ class ExportService(
             # Decrypt refresh token if available (needed for OAuth operations like Slides publishing).
             user_refresh_token = None
             if job_data.get("auth_refresh_token_encrypted"):
-                from ..auth.encryption import decrypt_token
+                from figma2gslides.api.auth.encryption import decrypt_token
 
                 try:
                     user_refresh_token = decrypt_token(job_data["auth_refresh_token_encrypted"])

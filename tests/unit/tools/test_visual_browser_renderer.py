@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from tools.visual.browser_renderer import (
     _extract_dimensions as extract_browser_dimensions,
+)
+from tools.visual.browser_renderer import (
     _prepare_browser_source_text,
-    _resolve_svg_src,
     _resolve_inline_svg_markup,
+    _resolve_svg_src,
 )
 from tools.visual.suite_runner import _extract_dimensions as extract_suite_dimensions
 

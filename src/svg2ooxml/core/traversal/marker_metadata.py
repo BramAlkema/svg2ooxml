@@ -7,8 +7,8 @@ from typing import Any
 
 from lxml import etree
 
-from svg2ooxml.common.conversions.transforms import parse_numeric_list
 from svg2ooxml.common.geometry.paths import parse_path_data
+from svg2ooxml.common.geometry.points import parse_point_pairs
 from svg2ooxml.common.style.css_values import parse_style_declarations
 from svg2ooxml.core.traversal.markers import MarkerDefinition
 from svg2ooxml.core.traversal.runtime import local_name as _local_name
@@ -138,11 +138,9 @@ def _extract_points_for_classification(node: etree._Element, local_name: str) ->
                 points.append((segment.end.x, segment.end.y))
         return _dedupe_points(points)
     if local_name in {"polygon", "polyline"}:
-        points_attr = node.get("points") or ""
-        values = parse_numeric_list(points_attr)
-        if len(values) < 6:
+        points = parse_point_pairs(node.get("points"))
+        if len(points) < 3:
             return []
-        points = [(values[i], values[i + 1]) for i in range(0, len(values) - 1, 2)]
         return _dedupe_points(points)
     return []
 

@@ -27,6 +27,22 @@ def test_region_value_parsers_reject_non_finite_values() -> None:
     assert parse_object_bbox_region_value("25%", reference=math.nan) is None
 
 
+def test_region_value_parsers_accept_calc_values() -> None:
+    assert parse_region_value("calc(50% - 5px)", reference=100.0) == pytest.approx(
+        45.0
+    )
+    assert parse_region_value("calc(0.25in - 6pt)", reference=100.0) == pytest.approx(
+        16.0
+    )
+    assert parse_object_bbox_region_value(
+        "calc(25% + 25%)",
+        reference=80.0,
+    ) == pytest.approx(40.0)
+    assert parse_object_bbox_region_value("calc(2 * 0.5)", reference=80.0) == pytest.approx(
+        80.0
+    )
+
+
 def test_resolved_filter_bounds_ignores_non_finite_bounds_and_region() -> None:
     bounds = {
         "x": math.inf,

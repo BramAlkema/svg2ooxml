@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+from svg2ooxml.common.math_utils import finite_float
 from svg2ooxml.common.units import UnitConverter
 from svg2ooxml.drawingml.bridges import EMFPathAdapter, PathStyle
 from svg2ooxml.drawingml.mask_generator import compute_mask_geometry
@@ -376,7 +377,10 @@ def _tuple_from_rect(value) -> tuple[float, float, float, float] | None:
     if isinstance(value, Rect):
         return (value.x, value.y, value.width, value.height)
     if isinstance(value, (tuple, list)) and len(value) == 4:
-        return (float(value[0]), float(value[1]), float(value[2]), float(value[3]))
+        values = tuple(finite_float(item) for item in value)
+        x, y, width, height = values
+        if x is not None and y is not None and width is not None and height is not None:
+            return (x, y, width, height)
     return None
 
 

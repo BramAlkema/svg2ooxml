@@ -32,7 +32,7 @@ def test_blend_multiply_uses_fill_overlay_when_flood_metadata() -> None:
         "layer": FilterResult(
             success=True,
             drawingml="",
-            metadata={"flood_color": "008000", "flood_opacity": 0.5},
+            metadata={"flood_color": "008000", "flood_opacity": "calc(25% + 25%)"},
         ),
     }
     context = _context_with_pipeline(pipeline)
@@ -61,8 +61,8 @@ def test_blend_multiply_approximates_gradient_overlay() -> None:
                 "fill": {
                     "type": "linearGradient",
                     "stops": [
-                        {"offset": 0.0, "rgb": "FF0000", "opacity": 1.0},
-                        {"offset": 1.0, "rgb": "0000FF", "opacity": 1.0},
+                        {"offset": "calc(0)", "rgb": "FF0000", "opacity": "calc(1)"},
+                        {"offset": "calc(50% + 50%)", "rgb": "0000FF", "opacity": "100%"},
                     ],
                 }
             },

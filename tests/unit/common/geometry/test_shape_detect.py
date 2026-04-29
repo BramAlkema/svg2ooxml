@@ -1,11 +1,9 @@
 """Tests for preset shape detection."""
 
-import math
 
 import pytest
 
 from svg2ooxml.common.geometry.shape_detect import (
-    PresetShapeMatch,
     detect_preset_shape,
 )
 from svg2ooxml.ir.geometry import BezierSegment, LineSegment, Point

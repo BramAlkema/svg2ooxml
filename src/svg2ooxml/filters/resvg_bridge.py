@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 
@@ -10,6 +11,7 @@ from lxml import etree
 from svg2ooxml.common.style.css_values import parse_style_declarations
 from svg2ooxml.common.svg_refs import local_name as _local_name
 from svg2ooxml.common.svg_refs import local_url_id
+from svg2ooxml.common.units.lengths import parse_number
 from svg2ooxml.core.resvg.parser.presentation import Presentation
 from svg2ooxml.core.resvg.usvg_tree import FilterNode, FilterPrimitive, Tree
 
@@ -292,10 +294,10 @@ def _coerce_dimension(value: str | None) -> float | str | None:
     token = value.strip()
     if not token:
         return None
-    try:
-        return float(token)
-    except ValueError:
-        return token
+    number = parse_number(token, math.nan)
+    if math.isfinite(number):
+        return number
+    return token
 
 
 __all__ = [

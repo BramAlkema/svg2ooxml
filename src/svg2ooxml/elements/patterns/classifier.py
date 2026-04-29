@@ -13,6 +13,7 @@ from ._helpers import (
     has_visible_paint,
     is_dot_like_path,
     local_name,
+    parse_float_attr,
     style_map,
 )
 
@@ -122,18 +123,16 @@ def _analyze_rectangles(children: list[ET.Element]) -> dict[str, bool]:
 
     for child in children:
         if local_name(child.tag) == "rect":
-            try:
-                width = float(child.get("width", "1"))
-                height = float(child.get("height", "1"))
-
-                if width > height * 3:
-                    horizontal_lines += 1
-                elif height > width * 3:
-                    vertical_lines += 1
-                elif abs(width - height) < min(width, height) * 0.1:
-                    squares += 1
-            except (ValueError, TypeError):
+            width = parse_float_attr(child, "width", axis="x", default=1.0)
+            height = parse_float_attr(child, "height", axis="y", default=1.0)
+            if width is None or height is None:
                 continue
+            if width > height * 3:
+                horizontal_lines += 1
+            elif height > width * 3:
+                vertical_lines += 1
+            elif abs(width - height) < min(width, height) * 0.1:
+                squares += 1
 
     total_rects = horizontal_lines + vertical_lines + squares
 
