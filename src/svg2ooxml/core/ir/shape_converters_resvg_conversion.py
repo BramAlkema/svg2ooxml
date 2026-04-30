@@ -17,6 +17,9 @@ from svg2ooxml.core.ir.shape_converters_resvg_context import (
 from svg2ooxml.core.ir.shape_converters_resvg_paint_overrides import (
     ResvgPaintOverrideMixin,
 )
+from svg2ooxml.core.styling.stroke_width_policy import (
+    apply_transform_stroke_width_policy,
+)
 from svg2ooxml.core.traversal.coordinate_space import CoordinateSpace
 from svg2ooxml.ir.scene import Group
 
@@ -38,12 +41,22 @@ class ResvgConversionMixin(
             context.resvg_node,
             context.global_transform,
         )
+        shape_style = (
+            apply_transform_stroke_width_policy(
+                context.style,
+                element=element,
+                matrix=context.global_transform,
+                metadata=context.metadata,
+            )
+            if node_type in ("RectNode", "CircleNode", "EllipseNode")
+            else context.style
+        )
 
         primitive_shape = self._resvg_fast_primitive_shape(
             node_type=node_type,
             element=element,
             proxy_node=proxy_node,
-            style=context.style,
+            style=shape_style,
             metadata=context.metadata,
             clip_ref=context.clip_ref,
             mask_ref=context.mask_ref,
@@ -78,11 +91,17 @@ class ResvgConversionMixin(
                     self._trace_geometry_decision(element, "resvg", group.metadata)
                     return group
 
+        shape_style = apply_transform_stroke_width_policy(
+            context.style,
+            element=element,
+            matrix=context.global_transform,
+            metadata=context.metadata,
+        )
         return self._resvg_adapted_shape(
             node_type=node_type,
             proxy_node=proxy_node,
             element=element,
-            style=context.style,
+            style=shape_style,
             metadata=context.metadata,
             clip_ref=context.clip_ref,
             mask_ref=context.mask_ref,

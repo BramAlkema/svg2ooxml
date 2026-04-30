@@ -71,7 +71,10 @@ class EMFPathAdapter:
         if not subpaths:
             return None
 
-        flattened = [flatten_segments(path, tolerance=self._flatten_tolerance) for path in subpaths]
+        flattened = [
+            flatten_segments(path, tolerance=self._flatten_tolerance)
+            for path in subpaths
+        ]
         flattened = [points for points in flattened if len(points) >= 2]
         if not flattened:
             return None
@@ -80,8 +83,12 @@ class EMFPathAdapter:
         width = max(1.0, max_x - min_x)
         height = max(1.0, max_y - min_y)
 
-        width_emu = max(1, int(round(unit_converter.to_emu(width, conversion_context, axis="x"))))
-        height_emu = max(1, int(round(unit_converter.to_emu(height, conversion_context, axis="y"))))
+        width_emu = max(
+            1, int(round(unit_converter.to_emu(width, conversion_context, axis="x")))
+        )
+        height_emu = max(
+            1, int(round(unit_converter.to_emu(height, conversion_context, axis="y")))
+        )
 
         blob = EMFBlob(width_emu, height_emu, dpi=max(1, int(round(dpi))))
 
@@ -100,11 +107,21 @@ class EMFPathAdapter:
             blob.set_poly_fill_mode(fill_mode)
 
         stroke_enabled = False
-        if style.stroke is not None and style.stroke.paint and isinstance(style.stroke.paint, SolidPaint):
+        if (
+            style.stroke is not None
+            and style.stroke.paint
+            and isinstance(style.stroke.paint, SolidPaint)
+        ):
             stroke_color = _colorref(style.stroke.paint.rgb)
             stroke_width_emu = max(
                 1,
-                int(round(unit_converter.to_emu(style.stroke.width, conversion_context, axis="x"))),
+                int(
+                    round(
+                        unit_converter.to_emu(
+                            style.stroke.width, conversion_context, axis="x"
+                        )
+                    )
+                ),
             )
             stroke_handle = blob.get_pen(
                 stroke_color,
@@ -113,7 +130,9 @@ class EMFPathAdapter:
                 line_join=pen_join,
                 pen_style=pen_style,
             )
-            stroke_dash = _dash_pattern(style.stroke, unit_converter, conversion_context)
+            stroke_dash = _dash_pattern(
+                style.stroke, unit_converter, conversion_context
+            )
             stroke_enabled = True
         else:
             stroke_handle = None
@@ -123,7 +142,9 @@ class EMFPathAdapter:
         origin = (min_x, min_y)
 
         for points in flattened:
-            emu_points = _convert_points(points, origin, unit_converter, conversion_context)
+            emu_points = _convert_points(
+                points, origin, unit_converter, conversion_context
+            )
             if style.fill is not None and _is_closed(points):
                 polygons.append(list(emu_points))
             if stroke_enabled:
@@ -141,7 +162,7 @@ class EMFPathAdapter:
                     polyline,
                     pen_handle=stroke_handle,
                     dash_pattern=stroke_dash,
-                    pen_width_px=stroke_width_emu,
+                    pen_width_emu=stroke_width_emu,
                     line_cap=pen_cap,
                     line_join=pen_join,
                     pen_style=pen_style,
@@ -160,12 +181,18 @@ class EMFPathAdapter:
     # Internal helpers
     # ------------------------------------------------------------------
 
-    def _group_segments(self, segments: Sequence[SegmentType]) -> Iterator[list[SegmentType]]:
+    def _group_segments(
+        self, segments: Sequence[SegmentType]
+    ) -> Iterator[list[SegmentType]]:
         current: list[SegmentType] = []
         last_end = None
         for segment in segments:
             start_point = _segment_start(segment)
-            if current and last_end is not None and not _points_close(start_point, last_end):
+            if (
+                current
+                and last_end is not None
+                and not _points_close(start_point, last_end)
+            ):
                 yield current
                 current = []
             current.append(segment)
@@ -174,7 +201,9 @@ class EMFPathAdapter:
             yield current
 
 
-def _extents(paths: Sequence[Sequence[tuple[float, float]]]) -> tuple[float, float, float, float]:
+def _extents(
+    paths: Sequence[Sequence[tuple[float, float]]],
+) -> tuple[float, float, float, float]:
     xs = [pt[0] for path in paths for pt in path]
     ys = [pt[1] for path in paths for pt in path]
     return min(xs), max(xs), min(ys), max(ys)
@@ -225,7 +254,9 @@ def _colorref(hex_color: str) -> int:
 
 def _fill_mode(rule: str) -> int:
     token = (rule or "").strip().lower()
-    return _FILL_MODE_ALTERNATE if token in {"evenodd", "even-odd"} else _FILL_MODE_WINDING
+    return (
+        _FILL_MODE_ALTERNATE if token in {"evenodd", "even-odd"} else _FILL_MODE_WINDING
+    )
 
 
 def _is_closed(points: Sequence[tuple[float, float]]) -> bool:
@@ -244,7 +275,9 @@ def _dash_pattern(
             1,
             int(
                 round(
-                    emu_to_px(unit_converter.to_emu(length, conversion_context, axis="x"))
+                    emu_to_px(
+                        unit_converter.to_emu(length, conversion_context, axis="x")
+                    )
                 )
             ),
         )
@@ -252,7 +285,15 @@ def _dash_pattern(
     ]
     if not converted:
         return None
-    phase = int(round(emu_to_px(unit_converter.to_emu(stroke.dash_offset or 0.0, conversion_context, axis="x"))))
+    phase = int(
+        round(
+            emu_to_px(
+                unit_converter.to_emu(
+                    stroke.dash_offset or 0.0, conversion_context, axis="x"
+                )
+            )
+        )
+    )
     return DashPattern(pattern=tuple(converted), offset=phase)
 
 

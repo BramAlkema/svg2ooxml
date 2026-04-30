@@ -172,12 +172,16 @@ def test_render_scene_from_ir_preserves_filter_png_alpha_by_default() -> None:
             },
         },
     )
-    scene = IRScene(elements=[rect], width_px=20, height_px=20, background_color="FFFFFF")
+    scene = IRScene(
+        elements=[rect], width_px=20, height_px=20, background_color="FFFFFF"
+    )
 
     result = writer.render_scene_from_ir(scene)
 
     filter_media = next(
-        asset for asset in result.assets.media if asset.relationship_id == "rIdRasterTest"
+        asset
+        for asset in result.assets.media
+        if asset.relationship_id == "rIdRasterTest"
     )
     preserved = PILImage.open(BytesIO(filter_media.data)).convert("RGBA")
     assert preserved.getpixel((0, 0)) == (255, 0, 0, 255)
@@ -216,19 +220,25 @@ def test_render_scene_from_ir_flattens_filter_png_assets_when_requested() -> Non
             },
         },
     )
-    scene = IRScene(elements=[rect], width_px=20, height_px=20, background_color="FFFFFF")
+    scene = IRScene(
+        elements=[rect], width_px=20, height_px=20, background_color="FFFFFF"
+    )
 
     result = writer.render_scene_from_ir(scene)
 
     filter_media = next(
-        asset for asset in result.assets.media if asset.relationship_id == "rIdRasterTest"
+        asset
+        for asset in result.assets.media
+        if asset.relationship_id == "rIdRasterTest"
     )
     flattened = PILImage.open(BytesIO(filter_media.data)).convert("RGBA")
     assert flattened.getpixel((0, 0)) == (255, 0, 0, 255)
     assert flattened.getpixel((1, 0)) == (255, 255, 255, 255)
 
 
-def test_render_scene_from_ir_flattens_filter_png_assets_against_scene_background() -> None:
+def test_render_scene_from_ir_flattens_filter_png_assets_against_scene_background() -> (
+    None
+):
     writer = DrawingMLWriter()
     image = PILImage.new("RGBA", (2, 1), (0, 0, 0, 0))
     image.putpixel((0, 0), (255, 0, 0, 255))
@@ -259,12 +269,16 @@ def test_render_scene_from_ir_flattens_filter_png_assets_against_scene_backgroun
             },
         },
     )
-    scene = IRScene(elements=[rect], width_px=20, height_px=20, background_color="00FF00")
+    scene = IRScene(
+        elements=[rect], width_px=20, height_px=20, background_color="00FF00"
+    )
 
     result = writer.render_scene_from_ir(scene)
 
     filter_media = next(
-        asset for asset in result.assets.media if asset.relationship_id == "rIdRasterTest"
+        asset
+        for asset in result.assets.media
+        if asset.relationship_id == "rIdRasterTest"
     )
     flattened = PILImage.open(BytesIO(filter_media.data)).convert("RGBA")
     assert flattened.getpixel((1, 0)) == (0, 255, 0, 255)
@@ -909,7 +923,9 @@ def test_leaf_group_with_filter_fallback_renders_single_picture() -> None:
     assert 'r:embed="rIdFilterBlur"' in result.slide_xml
 
 
-def test_leaf_group_filter_fallback_without_relationship_id_avoids_slide_layout_rid() -> None:
+def test_leaf_group_filter_fallback_without_relationship_id_avoids_slide_layout_rid() -> (
+    None
+):
     writer = DrawingMLWriter()
     group = Group(
         children=[
@@ -1787,6 +1803,87 @@ def test_preserved_group_children_use_group_local_coordinates() -> None:
     ]
 
 
+def test_preserved_group_per_char_text_uses_group_local_coordinates() -> None:
+    pytest.importorskip("skia")
+    writer = DrawingMLWriter()
+    text = TextFrame(
+        origin=Point(60, 30),
+        anchor=TextAnchor.START,
+        bbox=Rect(60, 15, 20, 18),
+        runs=[Run("is", "Arial", 15)],
+        metadata={
+            "per_char": {
+                "abs_x": [60.0, 64.0],
+                "abs_y": [30.0, 30.0],
+                "rotate": [45.0, 90.0],
+            }
+        },
+    )
+    group = Group(children=[text], metadata={"element_ids": ["animated_group"]})
+    animation = AnimationDefinition(
+        element_id="animated_group",
+        animation_type=AnimationType.ANIMATE_TRANSFORM,
+        target_attribute="transform",
+        values=["0,0", "10,0"],
+        timing=AnimationTiming(begin=0.0, duration=1.0),
+        transform_type=TransformType.TRANSLATE,
+    )
+
+    result = writer.render_scene(
+        [group],
+        animation_payload={"definitions": [animation]},
+    )
+
+    root = ET.fromstring(result.slide_xml.encode("utf-8"))
+    ns = {
+        "a": "http://schemas.openxmlformats.org/drawingml/2006/main",
+        "p": "http://schemas.openxmlformats.org/presentationml/2006/main",
+    }
+    glyph_offsets = root.xpath(
+        ".//p:grpSp/p:sp[p:nvSpPr/p:cNvPr[starts-with(@name, 'Glyph')]]"
+        "/p:spPr/a:xfrm/a:off",
+        namespaces=ns,
+    )
+
+    assert len(glyph_offsets) == 2
+    assert all(int(off.get("x", "0")) < px_to_emu(20) for off in glyph_offsets)
+    assert all(int(off.get("y", "0")) < px_to_emu(20) for off in glyph_offsets)
+
+
+def test_per_char_text_glyphs_preserve_run_stroke() -> None:
+    pytest.importorskip("skia")
+    writer = DrawingMLWriter()
+    text = TextFrame(
+        origin=Point(20, 60),
+        anchor=TextAnchor.START,
+        bbox=Rect(20, 25, 24, 36),
+        runs=[
+            Run(
+                "A",
+                "Arial",
+                32,
+                rgb="00AA00",
+                stroke_rgb="00FF00",
+                stroke_width_px=0.5,
+                stroke_opacity=0.5,
+            )
+        ],
+        metadata={
+            "per_char": {
+                "abs_x": [20.0],
+                "abs_y": [60.0],
+                "rotate": [15.0],
+            }
+        },
+    )
+
+    result = writer.render_scene([text])
+
+    assert '<a:solidFill><a:srgbClr val="00AA00">' in result.slide_xml
+    assert '<a:ln w="' in result.slide_xml
+    assert '<a:srgbClr val="00FF00"><a:alpha val="50000"/>' in result.slide_xml
+
+
 def test_nested_group_uses_real_group_bounds() -> None:
     writer = DrawingMLWriter()
     group = Group(
@@ -1856,7 +1953,9 @@ def test_render_shapes_from_ir_returns_shape_fragments() -> None:
     assert "Rectangle 2" in fragments[0]
 
 
-def test_render_shapes_from_ir_uses_scene_metadata_for_w3c_test_frame_suppression() -> None:
+def test_render_shapes_from_ir_uses_scene_metadata_for_w3c_test_frame_suppression() -> (
+    None
+):
     writer = DrawingMLWriter()
     rect = Rectangle(
         bounds=Rect(0, 0, 20, 10),

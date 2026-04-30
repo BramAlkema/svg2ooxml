@@ -45,7 +45,7 @@ def test_style_extractor_inherits_parent_fill() -> None:
 
     style = extractor.extract(rect, DummyServices())
     assert isinstance(style.fill, SolidPaint)
-    assert style.fill.rgb.upper() == '008000'
+    assert style.fill.rgb.upper() == "008000"
 
 
 def test_style_extractor_respects_inline_override() -> None:
@@ -64,7 +64,7 @@ def test_style_extractor_respects_inline_override() -> None:
 
     style = extractor.extract(rect, DummyServices())
     assert isinstance(style.fill, SolidPaint)
-    assert style.fill.rgb.upper() == 'FF0000'
+    assert style.fill.rgb.upper() == "FF0000"
 
 
 def test_style_extractor_resolves_absolute_stroke_dash_lengths() -> None:
@@ -155,6 +155,27 @@ def test_style_extractor_preserves_zero_stroke_width() -> None:
     assert style.stroke.width == 0.0
 
 
+def test_style_extractor_records_vector_effect_from_css() -> None:
+    markup = """
+        <svg xmlns='http://www.w3.org/2000/svg'>
+            <style>
+                #target { vector-effect: non-scaling-stroke; }
+            </style>
+            <rect id='target' width='10' height='10'
+                  fill='none' stroke='#000000' stroke-width='2'/>
+        </svg>
+    """
+    root, rect = _build_svg(markup)
+
+    resolver = StyleResolver()
+    resolver.collect_css(root)
+    extractor = StyleExtractor(resolver)
+
+    style = extractor.extract(rect, DummyServices())
+
+    assert style.metadata["vector_effect"] == "non-scaling-stroke"
+
+
 def test_style_extractor_accepts_calc_stroke_miterlimit() -> None:
     markup = """
         <svg xmlns='http://www.w3.org/2000/svg'>
@@ -192,7 +213,9 @@ def test_style_extractor_resolves_userspace_gradient_coordinates() -> None:
     gradient = root.xpath(".//*[local-name()='linearGradient']")[0]
     services = configure_services()
     assert services.gradient_service is not None
-    services.gradient_service.register_gradient("grad", describe_gradient_element(gradient))
+    services.gradient_service.register_gradient(
+        "grad", describe_gradient_element(gradient)
+    )
 
     resolver = StyleResolver()
     resolver.collect_css(root)

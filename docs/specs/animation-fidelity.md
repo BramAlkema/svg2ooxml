@@ -42,13 +42,15 @@ The animation pipeline works end-to-end:
 - Support multi-keyframe opacity via `<p:anim>` with `style.opacity` attribute
 - Only use entrance fade when the element starts invisible (opacity=0 at begin)
 
-### 2.3. calcMode="discrete" Not Handled Correctly
+### 2.3. calcMode="discrete" Implemented
 
-SVG `calcMode="discrete"` means instant jumps between values. The current TAV builder generates linear interpolation.
+SVG `calcMode="discrete"` means instant jumps between values. Numeric, color,
+transform, motion, opacity, and set paths now emit `<p:set>` segments or
+discrete TAV/path entries rather than relying on PowerPoint interpolation.
 
-**Fix:** When `calcMode="discrete"`:
-- Set `calcMode="discrete"` on the `<p:cBhvr>` element
-- OR use `fmla="0"` to disable interpolation on `<p:tav>` entries
+**Current approach:** Prefer timed `<p:set>` segments for attributes where
+PowerPoint silently ignores `calcmode="discrete"`; use discrete TAV/path entries
+only for paths that PowerPoint preserves.
 
 ### 2.4. additive="sum" and accumulate="sum"
 
@@ -94,7 +96,7 @@ The W3C test `animate-elem-02-t.svg` has multiple `<animate>` elements targeting
 
 ### Phase 4: Handle calcMode, additive, accumulate
 - Pre-compute effective values for additive="sum"
-- Implement discrete calcMode
+- Keep discrete calcMode covered by handler-level regression tests
 - Verify fill="freeze" maps to fill="hold"
 
 ### Phase 5: Validate against W3C animation suite
@@ -110,7 +112,7 @@ The W3C test `animate-elem-02-t.svg` has multiple `<animate>` elements targeting
 |------|--------|
 | `src/svg2ooxml/drawingml/animation/handlers/numeric.py` | Property-specific preset selection |
 | `src/svg2ooxml/drawingml/animation/handlers/opacity.py` | Multi-keyframe support, emph vs entr |
-| `src/svg2ooxml/drawingml/animation/tav_builder.py` | calcMode="discrete" support |
+| `src/svg2ooxml/drawingml/animation/tav_builder.py` | discrete TAV support, additive/accumulate pre-computation |
 | `src/svg2ooxml/drawingml/animation/xml_builders.py` | additive/accumulate pre-computation |
 | `src/svg2ooxml/drawingml/animation/constants.py` | Preset lookup table |
 

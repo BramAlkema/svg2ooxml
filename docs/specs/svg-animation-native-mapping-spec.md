@@ -153,7 +153,7 @@ Visually verified with rectangle → parallelogram skew morph.
 | `calcMode="linear"` | Native from/to, TAV linear values, or segment durations. | `exact-native` | no | should be preferred. |
 | `calcMode="paced"` numeric | Compute paced keyTimes, emit native TAV/segments. | `expand-native` | no | Exact for scalar distance model. |
 | `calcMode="paced"` motion | Compute path-distance keyTimes where path sampling is stable. | `expand-native` | maybe | Depends on path length approximation. |
-| `calcMode="discrete"` | Use `<p:set>` segments or discrete TAV entries. | `exact-native` / `expand-native` | no | Needs visual checks per attr. |
+| `calcMode="discrete"` | Use `<p:set>` segments or discrete TAV/path entries. | `exact-native` / `expand-native` | no | Implemented for numeric, color, transform, motion, opacity, and set paths; still validate new attr families visually. |
 | `calcMode="spline"` | Sample cubic timing into dense linear TAVs or segments. | `mimic-native` | yes | PowerPoint has accel/decel but not arbitrary SMIL cubic per segment. |
 | `keyTimes` | TAV `tm` or nested segment delays. | `exact-native` | no | Must preserve non-uniform segment timing. |
 | `keySplines` | Sampled TAV/segments. | `mimic-native` | yes | Store raw spline metadata for trace/oracle. |

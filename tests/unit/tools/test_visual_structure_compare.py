@@ -40,6 +40,40 @@ def test_compare_substructures_preserves_leaf_order_and_bbox(tmp_path: Path) -> 
     assert max(pair.max_abs_delta for pair in report.pairs) < 0.05
 
 
+def test_compare_substructures_accumulates_slide_group_transforms(
+    tmp_path: Path,
+) -> None:
+    svg = """
+    <svg xmlns="http://www.w3.org/2000/svg" width="200" height="120">
+      <g transform="translate(50, 20)">
+        <rect id="rect1" x="10" y="10" width="30" height="20" fill="#ff0000" />
+        <rect id="rect2" x="80" y="40" width="25" height="15" fill="#0000ff" />
+      </g>
+    </svg>
+    """
+    pptx_path = tmp_path / "grouped.pptx"
+
+    builder = PptxBuilder(
+        filter_strategy="resvg",
+        geometry_mode="resvg",
+        slide_size_mode="same",
+        allow_promotion=False,
+    )
+    builder.build_from_svg(svg, pptx_path)
+
+    report = compare_substructures(
+        svg,
+        pptx_path,
+        filter_strategy="resvg",
+        geometry_mode="resvg",
+    )
+
+    assert report.source_count == 2
+    assert report.target_count == 2
+    assert [pair.source.element_id for pair in report.pairs] == ["rect1", "rect2"]
+    assert max(pair.max_abs_delta for pair in report.pairs) < 0.05
+
+
 def test_compare_substructures_flags_rasterized_fallbacks(tmp_path: Path) -> None:
     svg = """
     <svg xmlns="http://www.w3.org/2000/svg" width="120" height="80">
@@ -79,6 +113,80 @@ def test_compare_substructures_flags_rasterized_fallbacks(tmp_path: Path) -> Non
     assert rasterized[0].source.element_id == "patterned"
     assert rasterized[0].target.shape_tag == "pic"
     assert rasterized[0].geometry_decision == "bitmap"
+
+
+def test_compare_substructures_skips_suppressed_w3c_test_frame(
+    tmp_path: Path,
+) -> None:
+    svg = """
+    <svg xmlns="http://www.w3.org/2000/svg" width="480" height="360">
+      <rect id="test-frame" x="1" y="1" width="478" height="358"
+            fill="none" stroke="#000000"/>
+      <rect id="content" x="20" y="30" width="40" height="20" fill="#ff0000"/>
+    </svg>
+    """
+    pptx_path = tmp_path / "w3c_frame.pptx"
+    source_path = Path("tests/svg/example.svg")
+
+    builder = PptxBuilder(
+        filter_strategy="resvg",
+        geometry_mode="resvg",
+        slide_size_mode="same",
+        allow_promotion=False,
+    )
+    builder.build_from_svg(svg, pptx_path, source_path=source_path)
+
+    report = compare_substructures(
+        svg,
+        pptx_path,
+        source_path=source_path,
+        filter_strategy="resvg",
+        geometry_mode="resvg",
+    )
+
+    assert report.source_count == 1
+    assert report.target_count == 1
+    assert report.pairs[0].source.element_id == "content"
+    assert report.pairs[0].max_abs_delta < 0.05
+
+
+def test_compare_substructures_expands_positioned_text_glyphs(
+    tmp_path: Path,
+) -> None:
+    svg = """
+    <svg xmlns="http://www.w3.org/2000/svg" width="480" height="120">
+      <text id="testText" x="240" y="30" font-family="Arial" font-size="15"
+            text-anchor="middle">
+        This <tspan rotate="45,90">is</tspan> a test.
+      </text>
+      <text id="after" x="30" y="80" font-family="Arial" font-size="15">After</text>
+    </svg>
+    """
+    pptx_path = tmp_path / "positioned_text_glyphs.pptx"
+
+    builder = PptxBuilder(
+        filter_strategy="resvg",
+        geometry_mode="resvg",
+        slide_size_mode="same",
+        allow_promotion=False,
+    )
+    builder.build_from_svg(svg, pptx_path)
+
+    report = compare_substructures(
+        svg,
+        pptx_path,
+        filter_strategy="resvg",
+        geometry_mode="resvg",
+    )
+
+    assert report.source_count == report.target_count
+    assert report.source_kind_totals["TextGlyph"] == 2
+    glyph_pairs = tuple(
+        pair for pair in report.pairs if pair.target.shape_name.startswith("Glyph")
+    )
+    assert len(glyph_pairs) == 2
+    assert max(pair.max_abs_delta for pair in glyph_pairs) < 0.1
+    assert report.pairs[-1].source.element_id == "after"
 
 
 def test_compare_substructures_keeps_interactive_annotations_aligned(

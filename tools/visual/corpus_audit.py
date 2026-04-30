@@ -4,19 +4,27 @@
 from __future__ import annotations
 
 import argparse
-import json
 import logging
 import os
-from dataclasses import asdict, dataclass, field
+import sys
+from collections import Counter
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Sequence
 
-from PIL import Image
 from lxml import etree as ET
+from PIL import Image
 
 from svg2ooxml.core.tracing import ConversionTracer
 from tools.visual.browser_renderer import BrowserRenderError, default_browser_renderer
 from tools.visual.builder import PptxBuilder, VisualBuildError
+from tools.visual.corpus_audit_report import (
+    AuditRunMetadata,
+    build_run_metadata,
+    build_summary,
+    render_markdown_summary,
+    write_audit_report,
+)
 from tools.visual.corpus_sources import (
     default_external_corpus_root,
     list_named_corpora,
@@ -40,10 +48,13 @@ _SKIP_DIR_NAMES = {"__pycache__", "baselines", "output"}
 class AuditResult:
     svg_path: str
     artifact_dir: str
+    corpus_name: str | None = None
+    fidelity_tier: str | None = None
     build_status: str = "pending"
     render_status: str = "pending"
     browser_status: str = "pending"
     diff_status: str = "pending"
+    error_category: str | None = None
     source_count: int | None = None
     target_count: int | None = None
     count_delta: int | None = None
@@ -60,6 +71,11 @@ class AuditResult:
     animation_min_ssim: float | None = None
     animation_max_pixel_diff_percentage: float | None = None
     geometry_totals: dict[str, int] = field(default_factory=dict)
+    paint_totals: dict[str, int] = field(default_factory=dict)
+    stage_totals: dict[str, int] = field(default_factory=dict)
+    resvg_metrics: dict[str, int] = field(default_factory=dict)
+    fallback_asset_counts: dict[str, int] = field(default_factory=dict)
+    fallback_reason_counts: dict[str, int] = field(default_factory=dict)
     notes: list[str] = field(default_factory=list)
     errors: dict[str, str] = field(default_factory=dict)
     score: float = 0.0
@@ -183,6 +199,7 @@ def audit_svgs(
             check_animation=check_animation,
             animation_duration=animation_duration,
             animation_fps=animation_fps,
+            fidelity_tier=fidelity_tier,
         )
         for svg_path in svg_paths
     ]
@@ -204,6 +221,7 @@ def audit_svg(
     check_animation: bool,
     animation_duration: float,
     animation_fps: float,
+    fidelity_tier: str | None = None,
 ) -> AuditResult:
     """Audit a single SVG and persist its artefacts under *output_dir*."""
     artifact_dir = output_dir / _artifact_subdir(svg_path)
@@ -211,6 +229,8 @@ def audit_svg(
     result = AuditResult(
         svg_path=svg_path.as_posix(),
         artifact_dir=artifact_dir.as_posix(),
+        corpus_name=_classify_corpus(svg_path),
+        fidelity_tier=fidelity_tier,
         render_status="skipped" if skip_render else "pending",
         browser_status="skipped" if skip_browser else "pending",
         diff_status="skipped",
@@ -223,6 +243,7 @@ def audit_svg(
         result.build_status = "error"
         result.errors["read"] = str(exc)
         result.notes.append("Unable to read SVG source.")
+        _set_error_category(result)
         result.score = score_audit_result(result)
         return result
 
@@ -241,12 +262,7 @@ def audit_svg(
         build_ok = True
         result.build_status = "ok"
         trace_report = tracer.report().to_dict()
-        _apply_animation_trace_metrics(result, trace_report)
-        geometry_totals = trace_report.get("geometry_totals", {})
-        if isinstance(geometry_totals, dict):
-            result.geometry_totals = {
-                str(key): int(value) for key, value in geometry_totals.items()
-            }
+        _apply_trace_metrics(result, trace_report)
 
     if build_ok:
         try:
@@ -360,6 +376,7 @@ def audit_svg(
             fps=animation_fps,
         )
 
+    _set_error_category(result)
     result.score = score_audit_result(result)
     return result
 
@@ -520,7 +537,11 @@ def _apply_animation_trace_metrics(
             continue
         if action == "fragment_skipped":
             skipped += 1
-            _bump(str(metadata_dict.get("reason")) if metadata_dict.get("reason") else None)
+            _bump(
+                str(metadata_dict.get("reason"))
+                if metadata_dict.get("reason")
+                else None
+            )
             continue
         if action == "parse_fallback":
             reason = metadata_dict.get("reason")
@@ -530,7 +551,9 @@ def _apply_animation_trace_metrics(
             except (TypeError, ValueError):
                 count_value = 1
             if reason:
-                reason_counts[str(reason)] = reason_counts.get(str(reason), 0) + count_value
+                reason_counts[str(reason)] = (
+                    reason_counts.get(str(reason), 0) + count_value
+                )
             continue
         if action in {"timing_skipped", "unmapped_begin_trigger_target"}:
             _bump(action)
@@ -544,6 +567,97 @@ def _apply_animation_trace_metrics(
         result.animation_reason_counts = dict(
             sorted(reason_counts.items(), key=lambda pair: (-pair[1], pair[0]))
         )
+
+
+def _apply_trace_metrics(
+    result: AuditResult,
+    trace_report: dict[str, object] | None,
+) -> None:
+    """Attach stable trace-derived counters to an audit result."""
+    if not isinstance(trace_report, dict):
+        return
+    result.geometry_totals = _coerce_counter(trace_report.get("geometry_totals"))
+    result.paint_totals = _coerce_counter(trace_report.get("paint_totals"))
+    result.stage_totals = _coerce_counter(trace_report.get("stage_totals"))
+    result.resvg_metrics = _coerce_counter(trace_report.get("resvg_metrics"))
+    (
+        result.fallback_asset_counts,
+        result.fallback_reason_counts,
+    ) = _collect_trace_fallback_metrics(trace_report)
+    _apply_animation_trace_metrics(result, trace_report)
+
+
+def _collect_trace_fallback_metrics(
+    trace_report: Mapping[str, object],
+) -> tuple[dict[str, int], dict[str, int]]:
+    asset_counts: Counter[str] = Counter()
+    reason_counts: Counter[str] = Counter()
+
+    for action, metadata in _iter_trace_event_metadata(trace_report):
+        raw_assets = metadata.get("fallback_assets")
+        if isinstance(raw_assets, list):
+            for raw_asset in raw_assets:
+                if not isinstance(raw_asset, Mapping):
+                    continue
+                asset_type = raw_asset.get("type")
+                asset_counts[str(asset_type or "unknown")] += 1
+
+        reason = metadata.get("fallback_reason")
+        if isinstance(reason, str) and reason:
+            reason_counts[reason] += 1
+        fallback = metadata.get("fallback")
+        if isinstance(fallback, str) and fallback:
+            reason_counts[f"fallback:{fallback}"] += 1
+        if "fallback" in action and not reason and not fallback:
+            reason_counts[f"action:{action}"] += 1
+
+    return _sort_counter(asset_counts), _sort_counter(reason_counts)
+
+
+def _iter_trace_event_metadata(
+    trace_report: Mapping[str, object],
+) -> Sequence[tuple[str, Mapping[str, object]]]:
+    entries: list[tuple[str, Mapping[str, object]]] = []
+    for bucket in ("geometry_events", "paint_events", "stage_events"):
+        events = trace_report.get(bucket)
+        if not isinstance(events, list):
+            continue
+        for event in events:
+            if not isinstance(event, Mapping):
+                continue
+            metadata = event.get("metadata")
+            if not isinstance(metadata, Mapping):
+                continue
+            action = event.get("action")
+            if not isinstance(action, str):
+                action = str(event.get("decision") or "")
+            entries.append((action, metadata))
+    return entries
+
+
+def _coerce_counter(value: object) -> dict[str, int]:
+    counter: Counter[str] = Counter()
+    if not isinstance(value, Mapping):
+        return {}
+    for key, item in value.items():
+        if not isinstance(key, str):
+            continue
+        try:
+            count = int(item)
+        except (TypeError, ValueError):
+            continue
+        if count:
+            counter[key] += count
+    return _sort_counter(counter)
+
+
+def _sort_counter(counter: Mapping[str, int]) -> dict[str, int]:
+    return dict(sorted(counter.items(), key=lambda pair: (-pair[1], pair[0])))
+
+
+def _set_error_category(result: AuditResult) -> None:
+    if result.error_category is None and result.errors:
+        result.error_category = next(iter(result.errors))
 
 
 def score_audit_result(result: AuditResult) -> float:
@@ -587,150 +701,30 @@ def score_audit_result(result: AuditResult) -> float:
     return round(score, 3)
 
 
-def write_audit_report(
-    results: Sequence[AuditResult],
-    output_dir: Path,
-    *,
-    top_n: int = 25,
-) -> tuple[Path, Path]:
-    """Write JSON and Markdown audit reports under *output_dir*."""
-    json_path = output_dir / "audit.json"
-    summary_path = output_dir / "summary.md"
-    payload = {
-        "summary": build_summary(results),
-        "results": [asdict(result) for result in results],
-    }
-    json_path.write_text(
-        json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8"
-    )
-    summary_path.write_text(
-        render_markdown_summary(results, top_n=top_n), encoding="utf-8"
-    )
-    return json_path, summary_path
+def _classify_corpus(svg_path: Path) -> str:
+    parts = svg_path.as_posix().split("/")
+    if "resvg-test-suite" in parts:
+        return "resvg-test-suite"
+    if "harness" in parts:
+        return "w3c-harness"
+    if _contains_path(parts, ("tests", "corpus", "w3c")):
+        return "w3c"
+    if _contains_path(parts, ("tests", "visual", "fixtures")):
+        return "visual-fixtures"
+    if _contains_path(parts, ("tests", "corpus")):
+        return "tests-corpus"
+    if _contains_path(parts, ("tests", "svg")):
+        return "tests-svg"
+    return "external"
 
 
-def build_summary(results: Sequence[AuditResult]) -> dict[str, object]:
-    """Build an aggregate summary for a set of audit results."""
-    total = len(results)
-    animation_reason_totals: dict[str, int] = {}
-    for item in results:
-        for reason, count in (item.animation_reason_counts or {}).items():
-            animation_reason_totals[reason] = (
-                animation_reason_totals.get(reason, 0) + count
-            )
-    return {
-        "total": total,
-        "build_errors": sum(1 for item in results if item.build_status == "error"),
-        "render_errors": sum(1 for item in results if item.render_status == "error"),
-        "browser_errors": sum(1 for item in results if item.browser_status == "error"),
-        "browser_unavailable": sum(
-            1 for item in results if item.browser_status == "unavailable"
-        ),
-        "diff_mismatches": sum(1 for item in results if item.diff_status == "mismatch"),
-        "animation_errors": sum(
-            1 for item in results if item.animation_status == "error"
-        ),
-        "animation_mismatches": sum(
-            1 for item in results if item.animation_status == "mismatch"
-        ),
-        "animation_fragments_emitted": sum(
-            item.animation_emitted_count or 0 for item in results
-        ),
-        "animation_fragments_skipped": sum(
-            item.animation_skipped_count or 0 for item in results
-        ),
-        "animation_reason_totals": dict(
-            sorted(
-                animation_reason_totals.items(),
-                key=lambda pair: (-pair[1], pair[0]),
-            )
-        ),
-        "total_rasterized": sum(item.rasterized_count or 0 for item in results),
-        "max_score": max((item.score for item in results), default=0.0),
-        "top_offenders": [item.svg_path for item in results[:5]],
-    }
-
-
-def render_markdown_summary(
-    results: Sequence[AuditResult],
-    *,
-    top_n: int = 25,
-) -> str:
-    """Render a compact Markdown summary sorted by descending score."""
-    summary = build_summary(results)
-    lines = [
-        "# Corpus Audit",
-        "",
-        f"- Total SVGs: {summary['total']}",
-        f"- Build errors: {summary['build_errors']}",
-        f"- Render errors: {summary['render_errors']}",
-        f"- Browser diff mismatches: {summary['diff_mismatches']}",
-        f"- Animation mismatches: {summary['animation_mismatches']}",
-        f"- Animation fragments emitted: {summary['animation_fragments_emitted']}",
-        f"- Animation fragments skipped: {summary['animation_fragments_skipped']}",
-        f"- Total rasterized leaves: {summary['total_rasterized']}",
-        "",
-    ]
-    reason_totals = summary.get("animation_reason_totals", {})
-    if isinstance(reason_totals, dict) and reason_totals:
-        lines.extend(
-            [
-                "## Animation Reason Codes",
-                "",
-                "| Reason | Count |",
-                "| --- | ---: |",
-            ]
-        )
-        for reason, count in reason_totals.items():
-            lines.append(f"| {reason} | {count} |")
-        lines.append("")
-    lines.extend(
-        [
-        "## Top Offenders",
-        "",
-        "| Score | SVG | Build | Render | Browser | Diff | Anim | Anim Frag | SSIM | Anim SSIM | Bitmaps | Max Δ |",
-        "| ---: | --- | --- | --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: |",
-    ])
-    for item in list(results)[: max(top_n, 0)]:
-        ssim = f"{item.ssim_score:.4f}" if item.ssim_score is not None else "-"
-        animation_ssim = (
-            f"{item.animation_min_ssim:.4f}"
-            if item.animation_min_ssim is not None
-            else "-"
-        )
-        animation_fragments = "-"
-        if item.animation_emitted_count is not None or item.animation_skipped_count is not None:
-            emitted = item.animation_emitted_count or 0
-            skipped = item.animation_skipped_count or 0
-            animation_fragments = f"{emitted}/{skipped}"
-        bitmaps = (
-            str(item.rasterized_count) if item.rasterized_count is not None else "-"
-        )
-        bbox = f"{item.max_bbox_delta:.2f}" if item.max_bbox_delta is not None else "-"
-        lines.append(
-            "| "
-            f"{item.score:.1f} | {item.svg_path} | {item.build_status} | "
-            f"{item.render_status} | {item.browser_status} | {item.diff_status} | "
-            f"{item.animation_status} | {animation_fragments} | {ssim} | {animation_ssim} | {bitmaps} | {bbox} |"
-        )
-        if item.notes:
-            lines.append(
-                "|  | notes: " f"{'; '.join(item.notes)} |  |  |  |  |  |  |  |  |  |  |"
-            )
-        if item.animation_reason_counts:
-            reason_summary = "; ".join(
-                f"{reason}={count}"
-                for reason, count in sorted(
-                    item.animation_reason_counts.items(),
-                    key=lambda pair: (-pair[1], pair[0]),
-                )
-            )
-            lines.append(
-                "|  | animation reasons: "
-                f"{reason_summary} |  |  |  |  |  |  |  |  |  |  |"
-            )
-    lines.append("")
-    return "\n".join(lines)
+def _contains_path(parts: Sequence[str], needle: Sequence[str]) -> bool:
+    if len(needle) > len(parts):
+        return False
+    for index in range(len(parts) - len(needle) + 1):
+        if tuple(parts[index : index + len(needle)]) == tuple(needle):
+            return True
+    return False
 
 
 def _artifact_subdir(svg_path: Path) -> Path:
@@ -936,7 +930,29 @@ def main() -> None:
         animation_duration=args.animation_duration,
         animation_fps=args.animation_fps,
     )
-    json_path, summary_path = write_audit_report(results, output_dir, top_n=args.top)
+    run_metadata = build_run_metadata(
+        command=[sys.executable, "-m", "tools.visual.corpus_audit", *sys.argv[1:]],
+        inputs=inputs,
+        output_dir=output_dir,
+        renderer=args.renderer,
+        browser_threshold=args.browser_threshold,
+        skip_render=args.skip_render,
+        skip_browser=args.skip_browser,
+        check_animation=args.check_animation,
+        animation_duration=args.animation_duration,
+        animation_fps=args.animation_fps,
+        fidelity_tier=args.fidelity_tier,
+        powerpoint_backend=(
+            args.powerpoint_backend if args.renderer == "powerpoint" else None
+        ),
+        soffice_path=args.soffice,
+    )
+    json_path, summary_path = write_audit_report(
+        results,
+        output_dir,
+        top_n=args.top,
+        run_metadata=run_metadata,
+    )
 
     logger.info("Audit complete: %d SVGs", len(results))
     logger.info("JSON report: %s", json_path)
@@ -957,7 +973,9 @@ def main() -> None:
 
 __all__ = [
     "AuditResult",
+    "AuditRunMetadata",
     "audit_svgs",
+    "build_run_metadata",
     "build_summary",
     "discover_svg_paths",
     "render_markdown_summary",

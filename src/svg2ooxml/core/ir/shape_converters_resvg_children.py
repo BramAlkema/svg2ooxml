@@ -9,6 +9,9 @@ from lxml import etree
 
 from svg2ooxml.common.geometry import Matrix2D
 from svg2ooxml.core.ir.shape_converters_resvg_context import GlobalTransformProxy
+from svg2ooxml.core.styling.stroke_width_policy import (
+    apply_transform_stroke_width_policy,
+)
 from svg2ooxml.core.styling.style_extractor import StyleResult
 from svg2ooxml.ir.scene import ClipRef, Group, MaskInstance, MaskRef
 
@@ -137,10 +140,16 @@ class ResvgChildConversionMixin:
                 element_local=element_local,
                 use_paint_dict=use_paint_dict,
             )
-            child_metadata = self._resvg_metadata_for_node(child, child_style)
             child_source_element = self._resvg_node_source_element(child)
             child_element = (
                 child_source_element if child_source_element is not None else element
+            )
+            child_metadata = self._resvg_metadata_for_node(child, child_style)
+            child_style = apply_transform_stroke_width_policy(
+                child_style,
+                element=child_element,
+                matrix=child_global,
+                metadata=child_metadata,
             )
             child_clip_ref, child_mask_ref, child_mask_instance = (
                 self._resvg_clip_mask_for_source(child_source_element)

@@ -6,6 +6,9 @@ from typing import TYPE_CHECKING
 
 from lxml import etree
 
+from svg2ooxml.core.styling.stroke_width_policy import (
+    apply_transform_stroke_width_policy,
+)
 from svg2ooxml.core.styling.style_runtime import extract_style
 from svg2ooxml.core.traversal.geometry_utils import (
     is_axis_aligned,
@@ -60,6 +63,12 @@ def convert_rect(
     clip_ref = converter._resolve_clip_ref(element)
     mask_ref, mask_instance = converter._resolve_mask_ref(element)
     matrix = coord_space.current
+    style = apply_transform_stroke_width_policy(
+        style,
+        element=element,
+        matrix=matrix,
+        metadata=metadata,
+    )
 
     if (
         not clip_ref
@@ -105,7 +114,9 @@ def convert_rect(
     return path
 
 
-def _rect_segments(x: float, y: float, width: float, height: float) -> list[SegmentType]:
+def _rect_segments(
+    x: float, y: float, width: float, height: float
+) -> list[SegmentType]:
     top_left = Point(x, y)
     top_right = Point(x + width, y)
     bottom_right = Point(x + width, y + height)

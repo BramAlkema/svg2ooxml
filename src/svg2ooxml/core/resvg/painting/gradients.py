@@ -49,6 +49,7 @@ class RadialGradient:
     specified: tuple[str, ...] = ()
     raw_attributes: dict[str, str] = field(default_factory=dict)
     context: ConversionContext | None = None
+    fr: float = 0.0
 
 
 @dataclass(slots=True)

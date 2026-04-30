@@ -169,7 +169,9 @@ def test_resvg_tree_resolves_userspace_gradient_units() -> None:
     assert gradient.y2 == pytest.approx(0.0)
 
 
-def test_resvg_gradient_inheritance_reinterprets_coordinates_in_effective_units() -> None:
+def test_resvg_gradient_inheritance_reinterprets_coordinates_in_effective_units() -> (
+    None
+):
     svg_markup = """
         <svg xmlns="http://www.w3.org/2000/svg" width="200" height="100">
             <defs>
@@ -191,6 +193,29 @@ def test_resvg_gradient_inheritance_reinterprets_coordinates_in_effective_units(
     assert gradient.units == "userSpaceOnUse"
     assert gradient.x1 == pytest.approx(24.0)
     assert gradient.x2 == pytest.approx(200.0)
+
+
+def test_resvg_radial_gradient_resolves_focal_radius_inheritance() -> None:
+    svg_markup = """
+        <svg xmlns="http://www.w3.org/2000/svg" width="200" height="100">
+            <defs>
+                <radialGradient id="base" r="50%" fr="25%">
+                    <stop offset="0" stop-color="#000000"/>
+                    <stop offset="1" stop-color="#ffffff"/>
+                </radialGradient>
+                <radialGradient id="child" href="#base" cx="25%"/>
+            </defs>
+            <rect width="100" height="50" fill="url(#child)"/>
+        </svg>
+    """
+
+    result = normalize_svg_string(svg_markup)
+    gradient = result.tree.resolve_paint(PaintReference("#child"))
+
+    assert gradient is not None
+    assert gradient.r == pytest.approx(0.5)
+    assert gradient.fr == pytest.approx(0.25)
+    assert "fr" in gradient.specified
 
 
 def test_resvg_tree_resolves_relative_font_size_against_parent() -> None:

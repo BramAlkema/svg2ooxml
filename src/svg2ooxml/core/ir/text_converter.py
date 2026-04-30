@@ -36,11 +36,20 @@ from svg2ooxml.core.ir.text.layout import (
     resvg_text_origin,
     text_scale_for_coord_space,
 )
+from svg2ooxml.core.ir.text.positioning_metadata import (
+    collect_per_character_text_layout,
+)
+from svg2ooxml.core.ir.text_fallbacks import TextFallbackMixin
+from svg2ooxml.core.ir.text_fallbacks import has_rotate_tree as _has_rotate_tree
+from svg2ooxml.core.ir.text_fallbacks import (
+    vector_outline_available as _fallback_vector_outline_available,
+)
 from svg2ooxml.core.ir.text_pipeline import TextConversionPipeline
 from svg2ooxml.core.ir.text_positioned import PositionedTextMixin
 from svg2ooxml.core.ir.text_runs import TextRunsMixin
 from svg2ooxml.core.traversal.coordinate_space import CoordinateSpace
 from svg2ooxml.ir.geometry import Point
+from svg2ooxml.ir.scene import Image
 from svg2ooxml.ir.text import Run, TextFrame
 from svg2ooxml.policy.text_policy import TextPolicyDecision
 
@@ -48,7 +57,7 @@ if TYPE_CHECKING:  # pragma: no cover - type checking only
     from svg2ooxml.core.ir.context import IRConverterContext
 
 
-class TextConverter(PositionedTextMixin, TextRunsMixin):
+class TextConverter(TextFallbackMixin, PositionedTextMixin, TextRunsMixin):
     """Handle text element extraction, policy application, and metadata."""
 
     def __init__(
@@ -79,9 +88,17 @@ class TextConverter(PositionedTextMixin, TextRunsMixin):
         element: etree._Element,
         coord_space: CoordinateSpace,
         resvg_node: Any | None = None,
-    ) -> TextFrame | list[TextFrame] | None:
+    ) -> TextFrame | Image | list[TextFrame] | None:
         if resvg_node is None:
             return None
+        if self._needs_positioned_text(element) and not _has_rotate_tree(element):
+            base_style = self._compute_text_style_with_inheritance(element)
+            return self._convert_positioned_text(
+                element=element,
+                coord_space=coord_space,
+                base_style=base_style,
+                run_metadata={},
+            )
         return self._convert_resvg_text(
             element=element,
             coord_space=coord_space,
@@ -98,7 +115,7 @@ class TextConverter(PositionedTextMixin, TextRunsMixin):
         element: etree._Element,
         coord_space: CoordinateSpace,
         resvg_node: Any,
-    ) -> TextFrame | None:
+    ) -> TextFrame | Image | list[TextFrame] | None:
         text_content = getattr(resvg_node, "text_content", None) or ""
         if not text_content.strip():
             return None
@@ -129,10 +146,24 @@ class TextConverter(PositionedTextMixin, TextRunsMixin):
         run = scale_run_metrics(run, text_scale)
         updated, run_policy = self.apply_policy(run)
         runs = [updated]
-
         origin_x, origin_y = resvg_text_origin(resvg_node, coord_space)
         anchor = resvg_text_anchor(resvg_node)
         direction = resvg_text_direction(resvg_node)
+        positioned_layout = collect_per_character_text_layout(
+            element,
+            run=updated,
+            context=self._context,
+            coord_space=coord_space,
+            anchor=anchor,
+            dense_only=False,
+        )
+        if (
+            positioned_layout is not None
+            and positioned_layout.has_dense_rotation
+            and positioned_layout.text
+        ):
+            updated = _replace(updated, text=positioned_layout.text)
+            runs = [updated]
 
         # dominant-baseline / alignment-baseline -> y-offset from real font metrics
         dom_baseline = (element.get("dominant-baseline") or "").strip().lower()
@@ -159,14 +190,14 @@ class TextConverter(PositionedTextMixin, TextRunsMixin):
                 origin_y += ascent
 
         font_service = self._context.services.resolve("font")
-        bbox = estimate_text_bbox(
-            runs, origin_x, origin_y, font_service=font_service
-        )
-        bbox = apply_text_anchor(bbox, anchor)
+        bbox = estimate_text_bbox(runs, origin_x, origin_y, font_service=font_service)
+        bbox = apply_text_anchor(bbox, anchor, direction=direction)
 
         metadata: dict[str, Any] = {}
         attach_text_path_metadata(
-            element, metadata, resvg_node=resvg_node,
+            element,
+            metadata,
+            resvg_node=resvg_node,
             context=self._context,
             text_path_positioner=self._text_path_positioner,
         )
@@ -186,73 +217,104 @@ class TextConverter(PositionedTextMixin, TextRunsMixin):
                 wm = re.search(r"writing-mode\s*:\s*([^;]+)", style_attr)
                 if wm:
                     writing_mode = wm.group(1).strip().lower()
-        # Per-character positioning: dx/dy/x/y/rotate arrays
-        _per_char_attrs: dict[str, list[float]] = {}
-        for attr_name in ("dx", "dy"):
-            raw = element.get(attr_name, "").strip()
-            if raw:
-                vals = parse_text_length_list(
-                    raw,
-                    updated.font_size_pt,
-                    axis="x" if attr_name == "dx" else "y",
-                    context=self._context,
-                )
-                if vals:
-                    _per_char_attrs[attr_name] = vals
-        raw_rotate = element.get("rotate", "").strip()
-        if raw_rotate:
-            vals = parse_number_list(raw_rotate)
-            if vals:
-                _per_char_attrs["rotate"] = vals
-        # x/y arrays (multiple values = per-character absolute positioning)
-        for attr_name in ("x", "y"):
-            raw = element.get(attr_name, "").strip()
-            if raw:
-                vals = parse_text_length_list(
-                    raw,
-                    updated.font_size_pt,
-                    axis=attr_name,
-                    context=self._context,
-                )
-                if len(vals) > 1:
-                    _per_char_attrs[f"abs_{attr_name}"] = vals
-        if _per_char_attrs:
-            # Uniform rotation -> xfrm rot on shape (keeps text native)
-            rotate_vals = _per_char_attrs.get("rotate")
-            if rotate_vals and len(set(rotate_vals)) == 1:
-                metadata["text_rotation_deg"] = rotate_vals[0]
-                del _per_char_attrs["rotate"]  # consumed
-
-            # If only dx with uniform values, convert to letter_spacing
-            # to keep text native + editable (font embedding via FontForge)
-            dx_only = (
-                "dx" in _per_char_attrs
-                and "dy" not in _per_char_attrs
-                and "rotate" not in _per_char_attrs
-                and "abs_x" not in _per_char_attrs
-                and "abs_y" not in _per_char_attrs
+        decision = self._resolve_policy_decision()
+        bidi_image = self._convert_bidi_override_text_fallback(
+            element=element,
+            text_content=text_content,
+            metadata=metadata,
+            style_attr=style_attr,
+            decision=decision,
+        )
+        if bidi_image is not None:
+            return bidi_image
+        if positioned_layout is not None and positioned_layout.has_dense_rotation:
+            dense_image = self._convert_dense_rotated_text_fallback(
+                element=element,
+                metadata=metadata,
+                decision=decision,
             )
-            if dx_only:
-                dx_vals = _per_char_attrs["dx"]
-                if len(dx_vals) >= 1:
-                    avg_dx = (sum(dx_vals) / len(dx_vals)) * text_scale
-                    is_uniform = (
-                        all(
-                            abs((v * text_scale) - avg_dx)
-                            / max(abs(avg_dx), 0.01)
-                            < 0.1
-                            for v in dx_vals
-                        )
-                        if avg_dx != 0
-                        else all(abs(v * text_scale) < 0.5 for v in dx_vals)
+            if dense_image is not None:
+                return dense_image
+            metadata["per_char"] = positioned_layout.metadata()
+        elif positioned_layout is not None and positioned_layout.has_rotated_text:
+            frames = self._convert_sparse_rotated_text(
+                element=element,
+                layout=positioned_layout,
+                run=updated,
+                metadata=metadata,
+                direction=direction,
+                decision=decision,
+                font_service=font_service,
+            )
+            if frames:
+                return frames
+        else:
+            # Per-character positioning: dx/dy/x/y/rotate arrays
+            _per_char_attrs: dict[str, list[float]] = {}
+            for attr_name in ("dx", "dy"):
+                raw = element.get(attr_name, "").strip()
+                if raw:
+                    vals = parse_text_length_list(
+                        raw,
+                        updated.font_size_pt,
+                        axis="x" if attr_name == "dx" else "y",
+                        context=self._context,
                     )
-                    if is_uniform and abs(avg_dx) > 0.01:
-                        base_ls = updated.letter_spacing or 0.0
-                        updated = _replace(updated, letter_spacing=base_ls + avg_dx)
-                        runs = [updated]
-                        _per_char_attrs = {}  # clear -- handled as native spc
+                    if vals:
+                        _per_char_attrs[attr_name] = vals
+            raw_rotate = element.get("rotate", "").strip()
+            if raw_rotate:
+                vals = parse_number_list(raw_rotate)
+                if vals:
+                    _per_char_attrs["rotate"] = vals
+            # x/y arrays (multiple values = per-character absolute positioning)
+            for attr_name in ("x", "y"):
+                raw = element.get(attr_name, "").strip()
+                if raw:
+                    vals = parse_text_length_list(
+                        raw,
+                        updated.font_size_pt,
+                        axis=attr_name,
+                        context=self._context,
+                    )
+                    if len(vals) > 1:
+                        _per_char_attrs[f"abs_{attr_name}"] = vals
             if _per_char_attrs:
-                metadata["per_char"] = _per_char_attrs
+                # Uniform rotation -> xfrm rot on shape (keeps text native)
+                rotate_vals = _per_char_attrs.get("rotate")
+                if rotate_vals and len(set(rotate_vals)) == 1:
+                    metadata["text_rotation_deg"] = rotate_vals[0]
+                    del _per_char_attrs["rotate"]  # consumed
+
+                # If only dx with uniform values, convert to letter_spacing
+                # to keep text native + editable (font embedding via FontForge)
+                dx_only = (
+                    "dx" in _per_char_attrs
+                    and "dy" not in _per_char_attrs
+                    and "rotate" not in _per_char_attrs
+                    and "abs_x" not in _per_char_attrs
+                    and "abs_y" not in _per_char_attrs
+                )
+                if dx_only:
+                    dx_vals = _per_char_attrs["dx"]
+                    if len(dx_vals) >= 1:
+                        avg_dx = (sum(dx_vals) / len(dx_vals)) * text_scale
+                        is_uniform = (
+                            all(
+                                abs((v * text_scale) - avg_dx) / max(abs(avg_dx), 0.01)
+                                < 0.1
+                                for v in dx_vals
+                            )
+                            if avg_dx != 0
+                            else all(abs(v * text_scale) < 0.5 for v in dx_vals)
+                        )
+                        if is_uniform and abs(avg_dx) > 0.01:
+                            base_ls = updated.letter_spacing or 0.0
+                            updated = _replace(updated, letter_spacing=base_ls + avg_dx)
+                            runs = [updated]
+                            _per_char_attrs = {}  # clear -- handled as native spc
+                if _per_char_attrs:
+                    metadata["per_char"] = _per_char_attrs
 
         # font-stretch -> append width keyword to font family
         font_stretch = element.get("font-stretch", "").strip().lower()
@@ -334,7 +396,6 @@ class TextConverter(PositionedTextMixin, TextRunsMixin):
             direction=direction,
             metadata=metadata,
         )
-        decision = self._resolve_policy_decision()
         if self._pipeline is not None:
             frame = self._pipeline.plan_frame(frame, runs, decision)
         if self._smart_font_bridge is not None:
@@ -419,14 +480,18 @@ class TextConverter(PositionedTextMixin, TextRunsMixin):
             return candidate
         return None
 
-# ---------------------------------------------------------------
-# Module-level backward-compat alias
-# ---------------------------------------------------------------
+    @staticmethod
+    def _vector_outline_available() -> bool:
+        return _vector_outline_available()
 
 
 def _parse_float(value: str | None, *, default: float | None = None) -> float | None:
     """Backward-compatible alias -- delegates to sub-module."""
     return _module_parse_float(value, default=default)
+
+
+def _vector_outline_available() -> bool:
+    return _fallback_vector_outline_available()
 
 
 __all__ = ["TextConverter", "FONT_FALLBACKS"]

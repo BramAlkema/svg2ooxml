@@ -79,11 +79,7 @@ class DrawingMLTextRenderer:
                 if glyph_xml:
                     return glyph_xml
 
-        if (
-            candidate is not None
-            and is_confident
-            and prefer_native
-        ):
+        if candidate is not None and is_confident and prefer_native:
             xml = shapes_runtime.render_wordart(
                 element,
                 candidate,
@@ -169,7 +165,10 @@ class DrawingMLTextRenderer:
         return all(abs(v - avg) / max(abs(avg), 0.01) < 0.1 for v in dx)
 
     def _render_per_char_glyphs(
-        self, element, shape_id: int, per_char: dict,
+        self,
+        element,
+        shape_id: int,
+        per_char: dict,
     ) -> tuple[str, int] | None:
         """Render per-character positioned text as glyph outlines."""
         from svg2ooxml.drawingml.glyph_renderer import (
@@ -208,6 +207,10 @@ class DrawingMLTextRenderer:
             shape_id_start=shape_id,
             fill_rgb=run.rgb,
             fill_opacity=run.fill_opacity,
+            stroke_rgb=run.stroke_rgb,
+            stroke_theme_color=run.stroke_theme_color,
+            stroke_width_px=run.stroke_width_px,
+            stroke_opacity=run.stroke_opacity,
         )
         if xml:
             return xml, next_id
@@ -232,18 +235,18 @@ def _build_overline_shape(element, shape_id: int) -> str:
     sw = px_to_emu(stroke_width)
 
     return (
-        f'<p:cxnSp>'
-        f'<p:nvCxnSpPr>'
+        f"<p:cxnSp>"
+        f"<p:nvCxnSpPr>"
         f'<p:cNvPr id="{shape_id}" name="Overline {shape_id}"/>'
         f'<p:cNvCxnSpPr><a:cxnSpLocks noGrp="1"/></p:cNvCxnSpPr>'
-        f'<p:nvPr/>'
-        f'</p:nvCxnSpPr>'
-        f'<p:spPr>'
+        f"<p:nvPr/>"
+        f"</p:nvCxnSpPr>"
+        f"<p:spPr>"
         f'<a:xfrm><a:off x="{x}" y="{y}"/><a:ext cx="{w}" cy="0"/></a:xfrm>'
         f'<a:prstGeom prst="line"><a:avLst/></a:prstGeom>'
         f'<a:ln w="{sw}"><a:solidFill><a:srgbClr val="{stroke_rgb.upper()}"/></a:solidFill></a:ln>'
-        f'</p:spPr>'
-        f'</p:cxnSp>'
+        f"</p:spPr>"
+        f"</p:cxnSp>"
     )
 
 

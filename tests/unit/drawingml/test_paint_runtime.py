@@ -101,6 +101,25 @@ def test_userspace_radial_gradient_is_projected_to_shape_bbox() -> None:
     assert '<a:fillToRect l="25000" t="25000" r="25000" b="25000"/>' in xml
 
 
+def test_radial_gradient_focal_radius_flattens_initial_stops() -> None:
+    paint = RadialGradientPaint(
+        stops=[
+            GradientStop(0.0, "FF0000"),
+            GradientStop(1.0, "0000FF"),
+        ],
+        center=(0.5, 0.5),
+        radius=0.5,
+        focal_radius=0.125,
+    )
+
+    xml = paint_runtime.radial_gradient_to_fill(paint)
+
+    assert xml.count("<a:gs ") == 3
+    assert '<a:gs pos="0"><a:srgbClr val="FF0000">' in xml
+    assert '<a:gs pos="25000"><a:srgbClr val="FF0000">' in xml
+    assert '<a:gs pos="100000"><a:srgbClr val="0000FF">' in xml
+
+
 def test_pattern_fill_supports_theme_slots() -> None:
     paint = PatternPaint(
         pattern_id="pat_theme",

@@ -135,27 +135,51 @@ class AnimationPolicy:
         if fallback_mode != "native":
             return "fallback_mode_not_native"
 
+        raw_animation_type = getattr(animation, "animation_type", None)
+        animation_type = getattr(raw_animation_type, "value", raw_animation_type)
+        if (
+            animation_type == "animate"
+            and getattr(animation, "target_attribute", None) == "stroke-width"
+        ):
+            return "dead_path_stroke_weight"
+
         # Unsupported begin="indefinite" has no native PowerPoint equivalent.
-        begin_triggers = getattr(getattr(animation, "timing", None), "begin_triggers", None)
+        begin_triggers = getattr(
+            getattr(animation, "timing", None), "begin_triggers", None
+        )
         if not isinstance(begin_triggers, list):
             begin_triggers = []
         for trigger in begin_triggers:
-            trigger_type = getattr(getattr(trigger, "trigger_type", None), "value", None)
+            trigger_type = getattr(
+                getattr(trigger, "trigger_type", None), "value", None
+            )
             if trigger_type == "indefinite":
                 return "unsupported_begin_indefinite"
             if trigger_type in {"access_key", "wallclock", "event", "element_repeat"}:
                 return f"unsupported_begin_{trigger_type}"
-            if trigger_type in {"element_begin", "element_end"} and not getattr(trigger, "target_element_id", None):
+            if trigger_type in {"element_begin", "element_end"} and not getattr(
+                trigger, "target_element_id", None
+            ):
                 return "unsupported_begin_target_missing"
 
         end_triggers = getattr(getattr(animation, "timing", None), "end_triggers", None)
         if not isinstance(end_triggers, list):
             end_triggers = []
         for trigger in end_triggers:
-            trigger_type = getattr(getattr(trigger, "trigger_type", None), "value", None)
-            if trigger_type in {"access_key", "wallclock", "event", "element_repeat", "indefinite"}:
+            trigger_type = getattr(
+                getattr(trigger, "trigger_type", None), "value", None
+            )
+            if trigger_type in {
+                "access_key",
+                "wallclock",
+                "event",
+                "element_repeat",
+                "indefinite",
+            }:
                 return f"unsupported_end_{trigger_type}"
-            if trigger_type in {"element_begin", "element_end"} and not getattr(trigger, "target_element_id", None):
+            if trigger_type in {"element_begin", "element_end"} and not getattr(
+                trigger, "target_element_id", None
+            ):
                 return "unsupported_end_target_missing"
 
         allow_native_flag = self._coerce_bool_option(
@@ -191,15 +215,11 @@ class AnimationPolicy:
             return 0.0
 
         return max(
-            self._estimate_spline_error(spline)
-            for spline in animation.key_splines
+            self._estimate_spline_error(spline) for spline in animation.key_splines
         )
 
     def _estimate_spline_error(
-        self,
-        spline: list[float],
-        *,
-        samples: int = 20
+        self, spline: list[float], *, samples: int = 20
     ) -> float:
         """Estimate approximation error for a single Bezier spline.
 

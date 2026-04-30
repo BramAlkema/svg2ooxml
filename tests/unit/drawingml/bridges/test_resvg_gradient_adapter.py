@@ -314,6 +314,28 @@ class TestRadialGradientConversion:
         assert paint.center == (0.5, 0.5)
         assert paint.focal_point == (0.3, 0.3)  # Different from center
 
+    def test_radial_gradient_with_focal_radius(self):
+        """Test radial gradient with SVG2 focal circle radius."""
+        resvg_gradient = RadialGradient(
+            cx=0.5,
+            cy=0.5,
+            r=0.5,
+            fx=0.5,
+            fy=0.5,
+            fr=0.125,
+            units="objectBoundingBox",
+            spread_method="pad",
+            transform=Matrix.identity(),
+            stops=(
+                GradientStop(offset=0.0, color=Color(r=255, g=0, b=0, a=1.0)),
+                GradientStop(offset=1.0, color=Color(r=0, g=0, b=255, a=1.0)),
+            ),
+        )
+
+        paint = radial_gradient_to_paint(resvg_gradient)
+
+        assert paint.focal_radius == pytest.approx(0.125)
+
     def test_radial_gradient_in_user_space(self):
         """Test radial gradient in userSpaceOnUse."""
         resvg_gradient = RadialGradient(
@@ -531,7 +553,7 @@ class TestGradientTransformApplication:
 
         # Start and end should be translated
         assert paint.start == (100.0, 200.0)  # (0, 0) + (100, 200)
-        assert paint.end == (150.0, 200.0)    # (50, 0) + (100, 200)
+        assert paint.end == (150.0, 200.0)  # (50, 0) + (100, 200)
         assert paint.transform is None  # Transform baked into coordinates
 
     def test_linear_gradient_with_rotation(self):
@@ -557,8 +579,8 @@ class TestGradientTransformApplication:
         paint = linear_gradient_to_paint(resvg_gradient)
 
         # After 90° rotation: (x, y) → (-y, x)
-        assert paint.start == pytest.approx((0.0, 10.0))   # (-0, 10)
-        assert paint.end == pytest.approx((-50.0, 10.0))   # (-50, 10)
+        assert paint.start == pytest.approx((0.0, 10.0))  # (-0, 10)
+        assert paint.end == pytest.approx((-50.0, 10.0))  # (-50, 10)
         assert paint.transform is None
 
     def test_linear_gradient_with_scale(self):
@@ -583,8 +605,8 @@ class TestGradientTransformApplication:
         paint = linear_gradient_to_paint(resvg_gradient)
 
         # Coordinates should be scaled
-        assert paint.start == (20.0, 30.0)   # (10*2, 10*3)
-        assert paint.end == (40.0, 90.0)     # (20*2, 30*3)
+        assert paint.start == (20.0, 30.0)  # (10*2, 10*3)
+        assert paint.end == (40.0, 90.0)  # (20*2, 30*3)
         assert paint.transform is None
 
     def test_radial_gradient_with_translation(self):
@@ -778,7 +800,7 @@ class TestMatrixConversion:
         assert paint.transform is None
         # Coordinates should be transformed
         assert paint.start == (50.0, 100.0)  # (0, 0) + (50, 100)
-        assert paint.end == (51.0, 100.0)    # (1, 0) + (50, 100)
+        assert paint.end == (51.0, 100.0)  # (1, 0) + (50, 100)
 
 
 class TestColorConversion:

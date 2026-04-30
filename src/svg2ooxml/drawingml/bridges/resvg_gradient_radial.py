@@ -39,6 +39,11 @@ def radial_gradient_to_paint(gradient: RadialGradient) -> RadialGradientPaint:
         center=center,
         use_raw_coordinates=context.use_raw_coordinates,
     )
+    focal_radius = _gradient_focal_radius(
+        gradient,
+        radius=radius,
+        use_raw_coordinates=context.use_raw_coordinates,
+    )
     focal_point = _gradient_focal_point(
         gradient,
         use_raw_coordinates=context.use_raw_coordinates,
@@ -49,6 +54,7 @@ def radial_gradient_to_paint(gradient: RadialGradient) -> RadialGradientPaint:
         center=center,
         radius=radius,
         focal_point=focal_point,
+        focal_radius=focal_radius,
         transform=context.transform_matrix,
         gradient_id=gradient_id_or_none(gradient.href),
         gradient_transform=gradient.transform,
@@ -188,11 +194,29 @@ def _gradient_focal_point(
     *,
     use_raw_coordinates: bool,
 ) -> tuple[float, float] | None:
-    if abs(gradient.fx - gradient.cx) <= 1e-6 and abs(gradient.fy - gradient.cy) <= 1e-6:
+    if (
+        abs(gradient.fx - gradient.cx) <= 1e-6
+        and abs(gradient.fy - gradient.cy) <= 1e-6
+    ):
         return None
     if use_raw_coordinates:
         return (gradient.fx, gradient.fy)
     return _apply_matrix_to_point(gradient.fx, gradient.fy, gradient.transform)
+
+
+def _gradient_focal_radius(
+    gradient: RadialGradient,
+    *,
+    radius: float,
+    use_raw_coordinates: bool,
+) -> float | None:
+    if gradient.fr <= 1e-6:
+        return None
+    if gradient.transform is None or use_raw_coordinates:
+        return gradient.fr
+    if abs(gradient.r) <= 1e-6:
+        return None
+    return abs(gradient.fr * radius / gradient.r)
 
 
 __all__ = ["radial_gradient_to_paint"]

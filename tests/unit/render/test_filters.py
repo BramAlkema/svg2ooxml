@@ -50,6 +50,49 @@ def _make_filter_node(primitives: list[FilterPrimitive]) -> FilterNode:
     )
 
 
+def _rect_descriptor(
+    *,
+    fill: dict[str, object] | None = None,
+    stroke: dict[str, object] | None = None,
+) -> dict[str, object]:
+    return {
+        "shape_type": "Rectangle",
+        "geometry": [
+            {"type": "line", "start": (0.0, 0.0), "end": (10.0, 0.0)},
+            {"type": "line", "start": (10.0, 0.0), "end": (10.0, 10.0)},
+            {"type": "line", "start": (10.0, 10.0), "end": (0.0, 10.0)},
+            {"type": "line", "start": (0.0, 10.0), "end": (0.0, 0.0)},
+        ],
+        "closed": True,
+        "fill": fill,
+        "stroke": stroke,
+        "opacity": 1.0,
+        "bbox": {"x": 0.0, "y": 0.0, "width": 10.0, "height": 10.0},
+    }
+
+
+def _paint_input_options() -> dict[str, object]:
+    return {
+        "filter_inputs": {
+            "FillPaint": _rect_descriptor(
+                fill={"type": "solid", "rgb": "FF0000", "opacity": 1.0}
+            ),
+            "StrokePaint": _rect_descriptor(
+                stroke={
+                    "width": 2.0,
+                    "paint": {"type": "solid", "rgb": "0000FF", "opacity": 1.0},
+                    "join": "miter",
+                    "cap": "butt",
+                    "miter_limit": 4.0,
+                    "dash_array": None,
+                    "dash_offset": 0.0,
+                    "opacity": 1.0,
+                }
+            ),
+        }
+    }
+
+
 def test_plan_filter_rejects_unsupported_primitive() -> None:
     primitive = FilterPrimitive(
         tag="feDropShadow",
@@ -61,6 +104,111 @@ def test_plan_filter_rejects_unsupported_primitive() -> None:
     plan = plan_filter(filter_node)
 
     assert plan is None
+
+
+def test_plan_filter_accepts_declared_fill_paint_input() -> None:
+    blur = FilterPrimitive(
+        tag="feGaussianBlur",
+        attributes={"in": "FillPaint", "stdDeviation": "0"},
+        styles={},
+    )
+    filter_node = _make_filter_node([blur])
+
+    plan = plan_filter(filter_node, options=_paint_input_options())
+
+    assert plan is not None
+    assert plan.primitives[0].inputs == ("FillPaint",)
+    assert "FillPaint" in plan.input_descriptors
+
+
+def test_plan_filter_derives_fill_paint_input_from_source_graphic() -> None:
+    blur = FilterPrimitive(
+        tag="feGaussianBlur",
+        attributes={"in": "FillPaint", "stdDeviation": "0"},
+        styles={},
+    )
+    filter_node = _make_filter_node([blur])
+
+    plan = plan_filter(
+        filter_node,
+        options={
+            "filter_inputs": {
+                "SourceGraphic": _rect_descriptor(
+                    fill={"type": "solid", "rgb": "FF0000", "opacity": 1.0},
+                    stroke={
+                        "width": 2.0,
+                        "paint": {"type": "solid", "rgb": "0000FF", "opacity": 1.0},
+                    },
+                )
+            }
+        },
+    )
+
+    assert plan is not None
+    assert plan.input_descriptors["FillPaint"]["stroke"] is None
+
+
+def test_plan_filter_rejects_undeclared_fill_paint_input() -> None:
+    blur = FilterPrimitive(
+        tag="feGaussianBlur",
+        attributes={"in": "FillPaint", "stdDeviation": "0"},
+        styles={},
+    )
+    filter_node = _make_filter_node([blur])
+
+    assert plan_filter(filter_node) is None
+
+
+def test_apply_filter_uses_declared_fill_paint_surface() -> None:
+    pytest.importorskip("skia")
+
+    blur = FilterPrimitive(
+        tag="feGaussianBlur",
+        attributes={"in": "FillPaint", "stdDeviation": "0"},
+        styles={},
+    )
+    filter_node = _make_filter_node([blur])
+    plan = plan_filter(filter_node, options=_paint_input_options())
+    assert plan is not None
+
+    surface = Surface.make(10, 10)
+    viewport = Viewport(
+        width=10, height=10, min_x=0.0, min_y=0.0, scale_x=1.0, scale_y=1.0
+    )
+
+    result = apply_filter(surface, plan, (0.0, 0.0, 10.0, 10.0), viewport)
+
+    center = result.data[5, 5]
+    assert center[0] > 0.8
+    assert center[1] < 0.05
+    assert center[2] < 0.05
+    assert center[3] > 0.8
+
+
+def test_apply_filter_uses_declared_stroke_paint_surface() -> None:
+    pytest.importorskip("skia")
+
+    blur = FilterPrimitive(
+        tag="feGaussianBlur",
+        attributes={"in": "StrokePaint", "stdDeviation": "0"},
+        styles={},
+    )
+    filter_node = _make_filter_node([blur])
+    plan = plan_filter(filter_node, options=_paint_input_options())
+    assert plan is not None
+
+    surface = Surface.make(10, 10)
+    viewport = Viewport(
+        width=10, height=10, min_x=0.0, min_y=0.0, scale_x=1.0, scale_y=1.0
+    )
+
+    result = apply_filter(surface, plan, (0.0, 0.0, 10.0, 10.0), viewport)
+
+    edge = result.data[0, 5]
+    center = result.data[5, 5]
+    assert edge[2] > 0.4
+    assert edge[3] > 0.4
+    assert center[3] < 0.05
 
 
 def test_apply_filter_blend_lighten() -> None:
@@ -83,12 +231,16 @@ def test_apply_filter_blend_lighten() -> None:
     surface.data[..., 3] = 1.0  # alpha
 
     bounds = (0.0, 0.0, 4.0, 4.0)
-    viewport = Viewport(width=4, height=4, min_x=0.0, min_y=0.0, scale_x=1.0, scale_y=1.0)
+    viewport = Viewport(
+        width=4, height=4, min_x=0.0, min_y=0.0, scale_x=1.0, scale_y=1.0
+    )
 
     result = apply_filter(surface, plan, bounds, viewport)
 
     pixel = result.data[0, 0]
-    np.testing.assert_allclose(pixel[:3], np.array([1.0, 0.0, 1.0]), rtol=1e-4, atol=1e-4)
+    np.testing.assert_allclose(
+        pixel[:3], np.array([1.0, 0.0, 1.0]), rtol=1e-4, atol=1e-4
+    )
     assert pixel[3] == pytest.approx(1.0)
 
 
@@ -103,7 +255,9 @@ def test_apply_filter_merge_layers() -> None:
         attributes={},
         styles={},
         children=(
-            FilterPrimitive(tag="feMergeNode", attributes={"in": "SourceGraphic"}, styles={}),
+            FilterPrimitive(
+                tag="feMergeNode", attributes={"in": "SourceGraphic"}, styles={}
+            ),
             FilterPrimitive(tag="feMergeNode", attributes={"in": "half"}, styles={}),
         ),
     )
@@ -116,12 +270,16 @@ def test_apply_filter_merge_layers() -> None:
     surface.data[..., 3] = 1.0
 
     bounds = (0.0, 0.0, 2.0, 2.0)
-    viewport = Viewport(width=2, height=2, min_x=0.0, min_y=0.0, scale_x=1.0, scale_y=1.0)
+    viewport = Viewport(
+        width=2, height=2, min_x=0.0, min_y=0.0, scale_x=1.0, scale_y=1.0
+    )
 
     result = apply_filter(surface, plan, bounds, viewport)
 
     pixel = result.data[0, 0]
-    np.testing.assert_allclose(pixel[:3], np.array([0.5, 0.5, 0.0]), rtol=1e-4, atol=1e-4)
+    np.testing.assert_allclose(
+        pixel[:3], np.array([0.5, 0.5, 0.0]), rtol=1e-4, atol=1e-4
+    )
     assert pixel[3] == pytest.approx(1.0)
 
 
@@ -137,7 +295,9 @@ def test_apply_filter_flood_accepts_percent_opacity() -> None:
 
     surface = Surface.make(2, 2)
     bounds = (0.0, 0.0, 2.0, 2.0)
-    viewport = Viewport(width=2, height=2, min_x=0.0, min_y=0.0, scale_x=1.0, scale_y=1.0)
+    viewport = Viewport(
+        width=2, height=2, min_x=0.0, min_y=0.0, scale_x=1.0, scale_y=1.0
+    )
 
     result = apply_filter(surface, plan, bounds, viewport)
 
@@ -205,11 +365,15 @@ def test_apply_filter_composite_arithmetic() -> None:
 
     surface = Surface.make(2, 2)
     bounds = (0.0, 0.0, 2.0, 2.0)
-    viewport = Viewport(width=2, height=2, min_x=0.0, min_y=0.0, scale_x=1.0, scale_y=1.0)
+    viewport = Viewport(
+        width=2, height=2, min_x=0.0, min_y=0.0, scale_x=1.0, scale_y=1.0
+    )
 
     result = apply_filter(surface, plan, bounds, viewport)
     pixel = result.data[0, 0]
-    np.testing.assert_allclose(pixel[:3], np.array([0.25, 0.0, 0.75], dtype=np.float32), atol=1e-6)
+    np.testing.assert_allclose(
+        pixel[:3], np.array([0.25, 0.0, 0.75], dtype=np.float32), atol=1e-6
+    )
     assert pixel[3] == pytest.approx(1.0)
 
 
@@ -219,7 +383,9 @@ def test_apply_filter_component_transfer_linear_and_table() -> None:
         attributes={"result": "adjusted"},
         styles={},
         children=(
-            FilterPrimitive(tag="feFuncR", attributes={"type": "linear", "slope": "0.5"}, styles={}),
+            FilterPrimitive(
+                tag="feFuncR", attributes={"type": "linear", "slope": "0.5"}, styles={}
+            ),
             FilterPrimitive(tag="feFuncG", attributes={"type": "identity"}, styles={}),
             FilterPrimitive(
                 tag="feFuncB",
@@ -237,16 +403,22 @@ def test_apply_filter_component_transfer_linear_and_table() -> None:
     surface.data[0, 0, :3] *= surface.data[0, 0, 3]
 
     bounds = (0.0, 0.0, 1.0, 1.0)
-    viewport = Viewport(width=1, height=1, min_x=0.0, min_y=0.0, scale_x=1.0, scale_y=1.0)
+    viewport = Viewport(
+        width=1, height=1, min_x=0.0, min_y=0.0, scale_x=1.0, scale_y=1.0
+    )
 
     result = apply_filter(surface, plan, bounds, viewport)
     pixel = result.data[0, 0]
-    np.testing.assert_allclose(pixel[:3], np.array([0.3, 0.4, 0.8], dtype=np.float32), atol=1e-3)
+    np.testing.assert_allclose(
+        pixel[:3], np.array([0.3, 0.4, 0.8], dtype=np.float32), atol=1e-3
+    )
     assert pixel[3] == pytest.approx(1.0)
 
 
 def test_apply_filter_morphology_dilate() -> None:
-    morphology = FilterPrimitive(tag="feMorphology", attributes={"operator": "dilate", "radius": "1"}, styles={})
+    morphology = FilterPrimitive(
+        tag="feMorphology", attributes={"operator": "dilate", "radius": "1"}, styles={}
+    )
     filter_node = _make_filter_node([morphology])
     plan = plan_filter(filter_node)
     assert plan is not None
@@ -256,7 +428,9 @@ def test_apply_filter_morphology_dilate() -> None:
     surface.data[2, 2, 3] = 1.0
 
     bounds = (0.0, 0.0, 5.0, 5.0)
-    viewport = Viewport(width=5, height=5, min_x=0.0, min_y=0.0, scale_x=1.0, scale_y=1.0)
+    viewport = Viewport(
+        width=5, height=5, min_x=0.0, min_y=0.0, scale_x=1.0, scale_y=1.0
+    )
 
     result = apply_filter(surface, plan, bounds, viewport)
     active = result.data[..., 3] > 0.5
@@ -269,7 +443,9 @@ def test_plan_filter_component_transfer_gamma_triggers_fallback() -> None:
         attributes={},
         styles={},
         children=(
-            FilterPrimitive(tag="feFuncR", attributes={"type": "gamma", "amplitude": "1"}, styles={}),
+            FilterPrimitive(
+                tag="feFuncR", attributes={"type": "gamma", "amplitude": "1"}, styles={}
+            ),
         ),
     )
     filter_node = _make_filter_node([component])
@@ -290,16 +466,16 @@ def test_fe_tile_pass_through() -> None:
     surface.data[..., 3] = 1.0
 
     bounds = (0.0, 0.0, 2.0, 2.0)
-    viewport = Viewport(width=2, height=2, min_x=0.0, min_y=0.0, scale_x=1.0, scale_y=1.0)
+    viewport = Viewport(
+        width=2, height=2, min_x=0.0, min_y=0.0, scale_x=1.0, scale_y=1.0
+    )
 
     result = apply_filter(surface, plan, bounds, viewport)
     np.testing.assert_allclose(result.data, surface.data, atol=1e-6)
 
 
 def test_fe_image_embedded_data_uri() -> None:
-    png_data = (
-        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg=="
-    )
+    png_data = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg=="
     image = FilterPrimitive(
         tag="feImage",
         attributes={"href": f"data:image/png;base64,{png_data}"},
@@ -311,7 +487,9 @@ def test_fe_image_embedded_data_uri() -> None:
 
     surface = Surface.make(1, 1)
     bounds = (0.0, 0.0, 1.0, 1.0)
-    viewport = Viewport(width=1, height=1, min_x=0.0, min_y=0.0, scale_x=1.0, scale_y=1.0)
+    viewport = Viewport(
+        width=1, height=1, min_x=0.0, min_y=0.0, scale_x=1.0, scale_y=1.0
+    )
 
     result = apply_filter(surface, plan, bounds, viewport)
     pixel = result.data[0, 0]
@@ -332,12 +510,16 @@ def test_fe_image_local_file_with_source_path(tmp_path) -> None:
         styles={},
     )
     filter_node = _make_filter_node([image])
-    plan = plan_filter(filter_node, options={"source_path": str(tmp_path / "scene.svg")})
+    plan = plan_filter(
+        filter_node, options={"source_path": str(tmp_path / "scene.svg")}
+    )
     assert plan is not None
 
     surface = Surface.make(1, 1)
     bounds = (0.0, 0.0, 1.0, 1.0)
-    viewport = Viewport(width=1, height=1, min_x=0.0, min_y=0.0, scale_x=1.0, scale_y=1.0)
+    viewport = Viewport(
+        width=1, height=1, min_x=0.0, min_y=0.0, scale_x=1.0, scale_y=1.0
+    )
 
     result = apply_filter(surface, plan, bounds, viewport)
     pixel = result.data[0, 0]
@@ -352,7 +534,9 @@ def test_fe_image_local_file_missing_returns_no_plan(tmp_path) -> None:
         styles={},
     )
     filter_node = _make_filter_node([image])
-    plan = plan_filter(filter_node, options={"source_path": str(tmp_path / "scene.svg")})
+    plan = plan_filter(
+        filter_node, options={"source_path": str(tmp_path / "scene.svg")}
+    )
     assert plan is None
 
 
@@ -374,7 +558,10 @@ def test_fe_image_local_file_outside_asset_root_returns_no_plan(tmp_path) -> Non
 
     plan = plan_filter(
         filter_node,
-        options={"source_path": str(asset_root / "scene.svg"), "asset_root": str(asset_root)},
+        options={
+            "source_path": str(asset_root / "scene.svg"),
+            "asset_root": str(asset_root),
+        },
     )
 
     assert plan is None
@@ -393,7 +580,9 @@ def test_fe_image_file_uri_returns_no_plan(tmp_path) -> None:
     )
     filter_node = _make_filter_node([image])
 
-    plan = plan_filter(filter_node, options={"source_path": str(tmp_path / "scene.svg")})
+    plan = plan_filter(
+        filter_node, options={"source_path": str(tmp_path / "scene.svg")}
+    )
 
     assert plan is None
 
@@ -429,7 +618,9 @@ def test_apply_filter_displacement_map_shifts_pixels() -> None:
     surface.data[1, 1, 3] = 1.0
 
     bounds = (0.0, 0.0, 3.0, 3.0)
-    viewport = Viewport(width=3, height=3, min_x=0.0, min_y=0.0, scale_x=1.0, scale_y=1.0)
+    viewport = Viewport(
+        width=3, height=3, min_x=0.0, min_y=0.0, scale_x=1.0, scale_y=1.0
+    )
 
     result = apply_filter(surface, plan, bounds, viewport)
 
@@ -440,7 +631,12 @@ def test_apply_filter_displacement_map_shifts_pixels() -> None:
 def test_apply_filter_turbulence_deterministic() -> None:
     turbulence = FilterPrimitive(
         tag="feTurbulence",
-        attributes={"baseFrequency": "0.05 0.08", "numOctaves": "2", "seed": "7", "type": "fractalNoise"},
+        attributes={
+            "baseFrequency": "0.05 0.08",
+            "numOctaves": "2",
+            "seed": "7",
+            "type": "fractalNoise",
+        },
         styles={},
     )
     filter_node = _make_filter_node([turbulence])
@@ -449,7 +645,9 @@ def test_apply_filter_turbulence_deterministic() -> None:
 
     surface = Surface.make(8, 6)
     bounds = (0.0, 0.0, 8.0, 6.0)
-    viewport = Viewport(width=8, height=6, min_x=0.0, min_y=0.0, scale_x=1.0, scale_y=1.0)
+    viewport = Viewport(
+        width=8, height=6, min_x=0.0, min_y=0.0, scale_x=1.0, scale_y=1.0
+    )
 
     result_a = apply_filter(surface, plan, bounds, viewport)
     result_b = apply_filter(surface, plan, bounds, viewport)
@@ -474,7 +672,9 @@ def test_apply_filter_turbulence_stitch_tiles_edges_match() -> None:
 
     surface = Surface.make(24, 16)
     bounds = (0.0, 0.0, 24.0, 16.0)
-    viewport = Viewport(width=24, height=16, min_x=0.0, min_y=0.0, scale_x=1.0, scale_y=1.0)
+    viewport = Viewport(
+        width=24, height=16, min_x=0.0, min_y=0.0, scale_x=1.0, scale_y=1.0
+    )
     result = apply_filter(surface, plan, bounds, viewport)
 
     np.testing.assert_allclose(result.data[:, 0, :], result.data[:, -1, :], atol=1e-3)
@@ -491,7 +691,11 @@ def test_apply_filter_diffuse_lighting_basic() -> None:
         },
         styles={"lighting-color": "#ffcc66"},
         children=(
-            FilterPrimitive(tag="feDistantLight", attributes={"azimuth": "45", "elevation": "60"}, styles={}),
+            FilterPrimitive(
+                tag="feDistantLight",
+                attributes={"azimuth": "45", "elevation": "60"},
+                styles={},
+            ),
         ),
     )
     filter_node = _make_filter_node([diffuse])
@@ -501,7 +705,9 @@ def test_apply_filter_diffuse_lighting_basic() -> None:
     surface = Surface.make(5, 5)
     surface.data[..., 3] = np.linspace(0.0, 1.0, 5, dtype=np.float32)[None, :]
     bounds = (0.0, 0.0, 5.0, 5.0)
-    viewport = Viewport(width=5, height=5, min_x=0.0, min_y=0.0, scale_x=1.0, scale_y=1.0)
+    viewport = Viewport(
+        width=5, height=5, min_x=0.0, min_y=0.0, scale_x=1.0, scale_y=1.0
+    )
 
     result = apply_filter(surface, plan, bounds, viewport)
     assert np.any(result.data[..., 0] > 0.0)
@@ -539,11 +745,16 @@ def test_apply_filter_specular_lighting_basic() -> None:
     assert plan is not None
 
     surface = Surface.make(5, 5)
-    yy, xx = np.meshgrid(np.linspace(0.0, 1.0, 5, dtype=np.float32), np.linspace(0.0, 1.0, 5, dtype=np.float32))
+    yy, xx = np.meshgrid(
+        np.linspace(0.0, 1.0, 5, dtype=np.float32),
+        np.linspace(0.0, 1.0, 5, dtype=np.float32),
+    )
     surface.data[..., 3] = np.clip(xx * yy * 2.0, 0.0, 1.0)
 
     bounds = (0.0, 0.0, 5.0, 5.0)
-    viewport = Viewport(width=5, height=5, min_x=0.0, min_y=0.0, scale_x=1.0, scale_y=1.0)
+    viewport = Viewport(
+        width=5, height=5, min_x=0.0, min_y=0.0, scale_x=1.0, scale_y=1.0
+    )
 
     result = apply_filter(surface, plan, bounds, viewport)
     assert np.any(result.data[..., 0] > 0.0)

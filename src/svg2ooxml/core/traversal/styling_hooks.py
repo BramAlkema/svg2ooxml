@@ -8,6 +8,7 @@ from typing import Any
 from lxml import etree
 
 from svg2ooxml.core.styling.style_helpers import parse_style_attr
+from svg2ooxml.filters.input_descriptors import paint_input_descriptors
 from svg2ooxml.ir.effects import CustomEffect
 from svg2ooxml.ir.scene import Group
 from svg2ooxml.services.filter_types import FilterEffectResult
@@ -151,7 +152,9 @@ class StylingHooksMixin:
                 if effective_fallback is None:
                     effective_fallback = candidate_fallback
                     continue
-                if fallback_ranks[candidate_fallback] > fallback_ranks.get(effective_fallback, 0):
+                if fallback_ranks[candidate_fallback] > fallback_ranks.get(
+                    effective_fallback, 0
+                ):
                     effective_fallback = candidate_fallback
 
         filter_entry["strategy"] = chosen_strategy
@@ -205,7 +208,9 @@ class StylingHooksMixin:
                 fallback_stack = selected_meta.get("stack_type")
                 if isinstance(fallback_stack, str) and fallback_stack:
                     stack_types = {fallback_stack.lower()}
-            targets = self._collect_group_effect_targets(ir_object, filter_types, stack_types)
+            targets = self._collect_group_effect_targets(
+                ir_object, filter_types, stack_types
+            )
         elif hasattr(ir_object, "effects"):
             targets = [ir_object]
         else:
@@ -285,7 +290,9 @@ class StylingHooksMixin:
             "diffuse_lighting_composite",
             "specular_lighting_composite",
         }
-        if "gaussian_blur" not in filter_types and not (stack_types & supported_stack_types):
+        if "gaussian_blur" not in filter_types and not (
+            stack_types & supported_stack_types
+        ):
             return []
 
         targets: list[Any] = []
@@ -313,7 +320,9 @@ class StylingHooksMixin:
             "bbox": copy.deepcopy(descriptor.get("bbox")),
             "alpha_source": "SourceGraphic",
         }
-        return {
+        inputs = {
             "SourceGraphic": graphic_meta,
             "SourceAlpha": alpha_meta,
         }
+        inputs.update(paint_input_descriptors(inputs))
+        return inputs

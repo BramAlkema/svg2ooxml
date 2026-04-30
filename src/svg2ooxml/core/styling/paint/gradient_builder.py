@@ -182,6 +182,15 @@ def _build_radial_gradient_paint(
         axis="x",
         unit_converter=unit_converter,
     )
+    focal_radius = resolve_gradient_length(
+        chain,
+        "fr",
+        default="0%",
+        units=gradient_units,
+        conversion=conversion,
+        axis="x",
+        unit_converter=unit_converter,
+    )
     if gradient_units == "userSpaceOnUse":
         default_focal = (str(center[0]), str(center[1]))
     else:
@@ -206,6 +215,7 @@ def _build_radial_gradient_paint(
         center=center,
         radius=radius,
         focal_point=focal,
+        focal_radius=focal_radius if focal_radius > 1e-6 else None,
         transform=matrix2d_to_numpy(transform_matrix),
         gradient_id=gradient_id,
         gradient_units=gradient_units,

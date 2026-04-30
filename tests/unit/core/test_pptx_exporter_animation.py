@@ -130,7 +130,9 @@ def _timing_group_ids(slide_xml: str) -> set[str]:
     }
     group_shape_ids = {
         c_nv_pr.get("id")
-        for c_nv_pr in root.xpath(".//p:spTree/p:grpSp/p:nvGrpSpPr/p:cNvPr", namespaces=_NS)
+        for c_nv_pr in root.xpath(
+            ".//p:spTree/p:grpSp/p:nvGrpSpPr/p:cNvPr", namespaces=_NS
+        )
         if c_nv_pr.get("id")
     }
     return timing_shape_ids & group_shape_ids
@@ -140,7 +142,10 @@ def _shape_fill_alpha(slide_xml: str, shape_id: int) -> list[str]:
     root = ET.fromstring(slide_xml.encode("utf-8"))
     return root.xpath(
         f'./p:cSld/p:spTree/p:sp[p:nvSpPr/p:cNvPr/@id="{shape_id}"]/p:spPr/a:solidFill/a:srgbClr/a:alpha/@val',
-        namespaces={**_NS, "a": "http://schemas.openxmlformats.org/drawingml/2006/main"},
+        namespaces={
+            **_NS,
+            "a": "http://schemas.openxmlformats.org/drawingml/2006/main",
+        },
     )
 
 
@@ -161,8 +166,13 @@ def test_render_svg_emits_animation_metadata() -> None:
     assert animation_meta["definition_count"] == 1
     assert animation_meta["definitions"][0]["element_id"] == "rect1"
     assert animation_meta["definitions"][0]["native_match"]["level"] == "exact-native"
-    assert animation_meta["definitions"][0]["native_match"]["reason"] == "opacity-authored-fade"
-    assert animation_meta["definitions"][0]["native_match"]["required_evidence_tiers"] == [
+    assert (
+        animation_meta["definitions"][0]["native_match"]["reason"]
+        == "opacity-authored-fade"
+    )
+    assert animation_meta["definitions"][0]["native_match"][
+        "required_evidence_tiers"
+    ] == [
         "schema-valid",
         "loadable",
         "slideshow-verified",
@@ -318,7 +328,9 @@ def test_use_line_endpoint_animation_composes_into_motion_and_scale() -> None:
     assert not skipped
 
 
-def test_multi_keyframe_line_endpoint_animation_is_not_collapsed_to_linear_scale() -> None:
+def test_multi_keyframe_line_endpoint_animation_is_not_collapsed_to_linear_scale() -> (
+    None
+):
     svg = """
     <svg xmlns="http://www.w3.org/2000/svg" width="100" height="100">
       <defs>
@@ -432,7 +444,9 @@ def test_motion_and_origin_rotate_stack_uses_sampled_orbit_path() -> None:
     assert _shape_offset(render_result.slide_xml, 2) != (0, 0)
 
 
-def test_polyline_stroke_width_and_opacity_still_materializes_line_segments() -> None:
+def test_polyline_stroke_width_dead_path_does_not_block_opacity_materialization() -> (
+    None
+):
     svg = """
     <svg xmlns="http://www.w3.org/2000/svg" width="100" height="100">
       <polyline id="base" fill="none" stroke="#105D8C" stroke-width="2"
@@ -447,7 +461,7 @@ def test_polyline_stroke_width_and_opacity_still_materializes_line_segments() ->
 
     assert render_result.slide_xml.count("<p:cxnSp>") == 2
     assert "<a:custGeom" not in render_result.slide_xml
-    assert render_result.slide_xml.count("<p:attrName>stroke.weight</p:attrName>") == 2
+    assert "<p:attrName>stroke.weight</p:attrName>" not in render_result.slide_xml
     assert render_result.slide_xml.count('filter="image"') >= 2
 
     skipped = [
@@ -455,7 +469,10 @@ def test_polyline_stroke_width_and_opacity_still_materializes_line_segments() ->
         for event in tracer.report().stage_events
         if event.stage == "animation" and event.action == "fragment_skipped"
     ]
-    assert not skipped
+    assert [event.metadata.get("reason") for event in skipped] == [
+        "dead_path_stroke_weight",
+        "dead_path_stroke_weight",
+    ]
 
 
 def test_motion_animation_metadata_infers_triangle_heading() -> None:
@@ -471,7 +488,9 @@ def test_motion_animation_metadata_infers_triangle_heading() -> None:
 
     animation_meta = scene.metadata.get("animation")
     assert animation_meta is not None
-    assert animation_meta["definitions"][0]["element_heading_deg"] == pytest.approx(-90.0)
+    assert animation_meta["definitions"][0]["element_heading_deg"] == pytest.approx(
+        -90.0
+    )
 
 
 def test_animation_parse_fallback_reasons_are_traced() -> None:
@@ -529,7 +548,10 @@ def test_scale_animation_emits_origin_compensation_motion_when_center_known() ->
     render_result, _, _ = _render(svg)
 
     assert "<p:animScale" in render_result.slide_xml
-    assert '<p:animMotion origin="layout" path="M 0 0 L 0.25 0.15 E"' in render_result.slide_xml
+    assert (
+        '<p:animMotion origin="layout" path="M 0 0 L 0.25 0.15 E"'
+        in render_result.slide_xml
+    )
 
 
 def test_spline_easing_on_scale_uses_from_to() -> None:
@@ -650,7 +672,7 @@ def test_animate_motion_path_emits_point_list() -> None:
 
     assert "<p:animMotion" in render_result.slide_xml
     assert 'path="M' in render_result.slide_xml
-    assert "pathEditMode=\"relative\"" in render_result.slide_xml
+    assert 'pathEditMode="relative"' in render_result.slide_xml
 
 
 def test_animate_motion_projects_path_into_shape_position_space() -> None:
@@ -665,7 +687,10 @@ def test_animate_motion_projects_path_into_shape_position_space() -> None:
     render_result, _, _ = _render(svg)
 
     assert '<a:off x="571500" y="1885950"/>' in render_result.slide_xml
-    assert '<p:animMotion origin="layout" path="M 0 0 L 0.625 -0.216667 E"' in render_result.slide_xml
+    assert (
+        '<p:animMotion origin="layout" path="M 0 0 L 0.625 -0.216667 E"'
+        in render_result.slide_xml
+    )
 
 
 def test_motion_rotate_auto_emits_fidelity_downgrade_trace() -> None:
@@ -926,7 +951,13 @@ def test_begin_indefinite_bookmark_trigger_preserves_chained_begin() -> None:
 
 
 @pytest.mark.parametrize(
-    ("label", "timing_attr", "trigger_expr", "expected_skip_reason", "expected_native_reason"),
+    (
+        "label",
+        "timing_attr",
+        "trigger_expr",
+        "expected_skip_reason",
+        "expected_native_reason",
+    ),
     [
         (
             "access_key_begin",
@@ -1056,7 +1087,7 @@ def test_text_fill_animation_routes_to_text_color() -> None:
     assert not skipped
     assert 'presetID="3"' in render_result.slide_xml
     assert "<p:attrName>style.color</p:attrName>" in render_result.slide_xml
-    assert "<p:iterate type=\"lt\">" in render_result.slide_xml
+    assert '<p:iterate type="lt">' in render_result.slide_xml
 
 
 def test_text_fill_round_trip_routes_to_color_pulse() -> None:
@@ -1192,8 +1223,8 @@ def test_symmetric_multi_keyframe_width_animation_uses_autoreverse_scale() -> No
 
     assert "<p:animScale" in render_result.slide_xml
     assert '<p:by x="400000" y="100000"/>' in render_result.slide_xml
-    assert '<p:attrName>ScaleX</p:attrName>' not in render_result.slide_xml
-    assert '<p:attrName>ScaleY</p:attrName>' not in render_result.slide_xml
+    assert "<p:attrName>ScaleX</p:attrName>" not in render_result.slide_xml
+    assert "<p:attrName>ScaleY</p:attrName>" not in render_result.slide_xml
     assert 'autoRev="1"' in render_result.slide_xml
 
 
@@ -1216,7 +1247,9 @@ def test_multi_keyframe_width_animation_with_custom_key_times_uses_segmented_sca
     assert render_result.slide_xml.count('animBg="1"') == 3
 
 
-def test_animate_elem_10_linear_calc_mode_uses_playable_scale_and_retimed_motion() -> None:
+def test_animate_elem_10_linear_calc_mode_uses_playable_scale_and_retimed_motion() -> (
+    None
+):
     svg = Path("tests/svg/animate-elem-10-t.svg").read_text(encoding="utf-8")
 
     render_result, _, _ = _render(svg)
@@ -1226,7 +1259,9 @@ def test_animate_elem_10_linear_calc_mode_uses_playable_scale_and_retimed_motion
     assert render_result.slide_xml.count(" L ") > 3
 
 
-def test_animate_elem_11_paced_calc_mode_uses_playable_scale_and_retimed_motion() -> None:
+def test_animate_elem_11_paced_calc_mode_uses_playable_scale_and_retimed_motion() -> (
+    None
+):
     svg = Path("tests/svg/animate-elem-11-t.svg").read_text(encoding="utf-8")
 
     render_result, _, _ = _render(svg)
@@ -1273,7 +1308,9 @@ def test_group_translate_animation_targets_emitted_group_shape() -> None:
     assert _timing_group_ids(render_result.slide_xml)
 
 
-def test_group_translate_with_animated_child_lowers_parent_translate_and_flattens() -> None:
+def test_group_translate_with_animated_child_lowers_parent_translate_and_flattens() -> (
+    None
+):
     svg = """
     <svg xmlns="http://www.w3.org/2000/svg" width="40" height="20">
       <g id="bee_group">
@@ -1304,7 +1341,8 @@ def test_group_translate_with_animated_child_lowers_parent_translate_and_flatten
         for animation in scene.animations
         if animation.animation_type == AnimationType.ANIMATE_TRANSFORM
         and animation.transform_type == TransformType.TRANSLATE
-        and animation.raw_attributes.get("svg2ooxml_group_transform_split") == "bee_group"
+        and animation.raw_attributes.get("svg2ooxml_group_transform_split")
+        == "bee_group"
     }
     assert lowered_translates == {"body", "child"}
     assert any(
@@ -1315,7 +1353,9 @@ def test_group_translate_with_animated_child_lowers_parent_translate_and_flatten
     )
 
 
-def test_group_translate_with_fill_animated_child_lowers_parent_translate_and_flattens() -> None:
+def test_group_translate_with_fill_animated_child_lowers_parent_translate_and_flattens() -> (
+    None
+):
     svg = """
     <svg xmlns="http://www.w3.org/2000/svg" width="40" height="20">
       <g id="bee_group">
@@ -1347,7 +1387,8 @@ def test_group_translate_with_fill_animated_child_lowers_parent_translate_and_fl
         for animation in scene.animations
         if animation.animation_type == AnimationType.ANIMATE_TRANSFORM
         and animation.transform_type == TransformType.TRANSLATE
-        and animation.raw_attributes.get("svg2ooxml_group_transform_split") == "bee_group"
+        and animation.raw_attributes.get("svg2ooxml_group_transform_split")
+        == "bee_group"
     }
     assert lowered_translates == {"body", "child"}
     assert any(
@@ -1358,7 +1399,9 @@ def test_group_translate_with_fill_animated_child_lowers_parent_translate_and_fl
     )
 
 
-def test_group_translate_rotate_with_animated_child_lowers_translate_and_drops_rotate() -> None:
+def test_group_translate_rotate_with_animated_child_lowers_translate_and_drops_rotate() -> (
+    None
+):
     svg = """
     <svg xmlns="http://www.w3.org/2000/svg" width="40" height="20">
       <g id="bee_group">
@@ -1390,14 +1433,19 @@ def test_group_translate_rotate_with_animated_child_lowers_translate_and_drops_r
     lowered_translates = [
         animation
         for animation in scene.animations
-        if animation.raw_attributes.get("svg2ooxml_group_transform_split") == "bee_group"
+        if animation.raw_attributes.get("svg2ooxml_group_transform_split")
+        == "bee_group"
         and animation.transform_type == TransformType.TRANSLATE
     ]
-    assert {animation.element_id for animation in lowered_translates} == {"body", "child"}
+    assert {animation.element_id for animation in lowered_translates} == {
+        "body",
+        "child",
+    }
     assert not [
         animation
         for animation in scene.animations
-        if animation.raw_attributes.get("svg2ooxml_group_transform_split") == "bee_group"
+        if animation.raw_attributes.get("svg2ooxml_group_transform_split")
+        == "bee_group"
         and animation.transform_type == TransformType.ROTATE
     ]
     assert any(
@@ -1479,7 +1527,7 @@ def test_timing_tree_uses_powerpoint_autostart_wrapper() -> None:
     assert f'<p:tn val="{main_seq_id}"/>' in render_result.slide_xml
 
 
-def test_stroke_width_animation_maps_to_stroke_weight() -> None:
+def test_stroke_width_animation_dead_path_is_skipped() -> None:
     svg = """
     <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">
       <rect id="rect1" width="10" height="10" fill="#000" stroke="#000">
@@ -1488,12 +1536,15 @@ def test_stroke_width_animation_maps_to_stroke_weight() -> None:
     </svg>
     """
 
-    render_result, _, _ = _render(svg)
+    render_result, _, tracer = _render(svg)
 
-    assert "<p:anim>" in render_result.slide_xml
-    assert "<p:attrName>stroke.weight</p:attrName>" in render_result.slide_xml
-    assert '<p:fltVal val="9525"/>' in render_result.slide_xml
-    assert '<p:fltVal val="19050"/>' in render_result.slide_xml
+    assert "<p:attrName>stroke.weight</p:attrName>" not in render_result.slide_xml
+    assert any(
+        event.stage == "animation"
+        and event.action == "fragment_skipped"
+        and event.metadata.get("reason") == "dead_path_stroke_weight"
+        for event in tracer.report().stage_events
+    )
 
 
 def test_use_alias_x_and_y_motion_collapse_into_single_diagonal_path() -> None:
@@ -1581,7 +1632,9 @@ def test_animate_elem_31_t_rewrites_display_to_native_visibility() -> None:
 
     assert "<p:attrName>display</p:attrName>" not in render_result.slide_xml
     assert "<p:attrName>visibility</p:attrName>" not in render_result.slide_xml
-    assert render_result.slide_xml.count("<p:attrName>style.visibility</p:attrName>") >= 8
+    assert (
+        render_result.slide_xml.count("<p:attrName>style.visibility</p:attrName>") >= 8
+    )
     assert '<p:strVal val="hidden"/>' in render_result.slide_xml
     assert '<p:strVal val="visible"/>' in render_result.slide_xml
     assert scene.metadata is not None
@@ -1663,7 +1716,9 @@ def test_display_set_repeat_timing_base_expands_integer_repeat_begin_triggers() 
         "time_offset",
         "time_offset",
     ]
-    assert [trigger["delay_seconds"] for trigger in timing["begin_triggers"]] == pytest.approx([1.0, 4.0])
+    assert [
+        trigger["delay_seconds"] for trigger in timing["begin_triggers"]
+    ] == pytest.approx([1.0, 4.0])
     assert x_defs[0]["raw_attributes"]["svg2ooxml_repeat_trigger_expanded"] == "true"
 
 
@@ -1748,8 +1803,12 @@ def test_display_set_repeat_timing_base_expands_integer_repeat_end_triggers() ->
         "time_offset",
         "time_offset",
     ]
-    assert [trigger["delay_seconds"] for trigger in end_triggers] == pytest.approx([2.0, 5.0])
-    assert opacity_defs[0]["raw_attributes"]["svg2ooxml_repeat_trigger_expanded"] == "true"
+    assert [trigger["delay_seconds"] for trigger in end_triggers] == pytest.approx(
+        [2.0, 5.0]
+    )
+    assert (
+        opacity_defs[0]["raw_attributes"]["svg2ooxml_repeat_trigger_expanded"] == "true"
+    )
 
 
 def test_repeat_end_triggers_are_relative_to_dependent_begin_time() -> None:
@@ -1788,7 +1847,9 @@ def test_repeat_end_triggers_are_relative_to_dependent_begin_time() -> None:
     assert len(opacity_defs) == 1
     end_triggers = opacity_defs[0]["timing"]["end_triggers"]
     assert [trigger["trigger_type"] for trigger in end_triggers] == ["time_offset"]
-    assert [trigger["delay_seconds"] for trigger in end_triggers] == pytest.approx([3.0])
+    assert [trigger["delay_seconds"] for trigger in end_triggers] == pytest.approx(
+        [3.0]
+    )
 
 
 def test_fractional_repeat_begin_stays_metadata_only() -> None:
@@ -1880,8 +1941,13 @@ def test_numeric_discrete_calc_mode_emits_set_segments() -> None:
     render_result, _, _ = _render(svg)
 
     assert render_result.slide_xml.count("<p:set>") >= 3
-    assert "<p:anim " not in render_result.slide_xml or "calcmode" not in render_result.slide_xml
-    assert "<p:set><p:cBhvr><p:cTn" not in render_result.slide_xml.replace("\n", "").replace(" ", "")
+    assert (
+        "<p:anim " not in render_result.slide_xml
+        or "calcmode" not in render_result.slide_xml
+    )
+    assert "<p:set><p:cBhvr><p:cTn" not in render_result.slide_xml.replace(
+        "\n", ""
+    ).replace(" ", "")
 
 
 def test_numeric_discrete_calc_mode_keeps_delays_outside_set_behavior_core() -> None:
@@ -1898,7 +1964,10 @@ def test_numeric_discrete_calc_mode_keeps_delays_outside_set_behavior_core() -> 
     ns = {"p": "http://schemas.openxmlformats.org/presentationml/2006/main"}
 
     assert not slide_xml.xpath(".//p:set/p:cBhvr/p:cTn/p:stCondLst", namespaces=ns)
-    delays = [cond.get("delay") for cond in slide_xml.xpath(".//p:par/p:cTn/p:stCondLst/p:cond", namespaces=ns)]
+    delays = [
+        cond.get("delay")
+        for cond in slide_xml.xpath(".//p:par/p:cTn/p:stCondLst/p:cond", namespaces=ns)
+    ]
     assert "0" in delays
     assert "400" in delays
     assert "1000" in delays

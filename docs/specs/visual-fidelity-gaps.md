@@ -83,8 +83,10 @@ When an SVG has a viewBox that differs from the viewport (e.g. `viewBox="0 0 100
 - No explicit viewBox scaling verification
 
 ### Known gaps
-- `vector-effect: non-scaling-stroke` is not implemented
-- Unclear if resvg's stroke width is already viewport-scaled or in viewBox units
+- `vector-effect: non-scaling-stroke` is implemented for shape strokes that pass
+  through the IR converters.
+- Stylesheet/transform edge cases still need corpus validation, especially
+  non-uniform transforms and fallback paths.
 
 ### Proposed fix
 
@@ -92,7 +94,7 @@ When an SVG has a viewBox that differs from the viewport (e.g. `viewBox="0 0 100
 - `viewBox="0 0 100 100"` on 1000px canvas, stroke-width="1" → should render as 10px stroke in PPTX
 - Same with `vector-effect: non-scaling-stroke` → should render as 1px
 
-**Phase 2: Handle non-scaling-stroke.** Check for `vector-effect` attribute in style extraction, and when present, don't apply viewBox transform to stroke width.
+**Phase 2: Handle non-scaling-stroke.** Check for `vector-effect` during style extraction. Normal transformed strokes scale with baked geometry; `non-scaling-stroke` keeps the authored width.
 
 ### Files to modify
 - `src/svg2ooxml/core/styling/style_extractor.py` — check `vector-effect`
@@ -117,13 +119,13 @@ Overlapping semi-transparent shapes may composite differently between SVG (Porte
 
 ### Known gaps
 - **Non-overlapping group opacity**: children rendered individually without multiplying group opacity. DrawingML has no group-level alpha, so each child gets its own opacity. This is correct for non-overlapping shapes but may differ from SVG compositing for edge cases.
-- **Overlap detection**: `_children_overlap()` uses bounding-box check, which may over-trigger (rasterize when not needed) or under-trigger (miss partial overlaps).
+- **Overlap detection**: `children_overlap()` uses rendered child bounds, including stroke width and zero-area stroked lines. It also uses exact intersection for simple filled circle pairs. It remains conservative for complex curves and effects, so it may over-trigger rasterization in some edge cases.
 
 ### Proposed fix
 
 **Phase 1: Multiply group opacity into children.** When a group has `opacity < 1.0` and children don't overlap, multiply the group's opacity into each child's opacity before rendering. Currently this is skipped.
 
-**Phase 2: Improve overlap detection.** Use actual shape bounds (not bounding boxes) for tighter overlap detection. This reduces unnecessary rasterization.
+**Phase 2: Improve overlap detection.** Use rendered bounds rather than raw geometry bounds, including stroke width for lines and stroke-only shapes. Simple filled circle pairs use radius-based intersection to avoid diagonal bounding-box false positives. Future tightening can add exact shape intersection for more shape pairs to reduce unnecessary rasterization further.
 
 ### Files to modify
 - `src/svg2ooxml/drawingml/writer.py` — `_render_group()`, multiply group opacity into children

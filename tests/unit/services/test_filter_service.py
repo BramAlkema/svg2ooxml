@@ -314,6 +314,100 @@ def test_descriptor_fallback_prefers_vector_hint() -> None:
     assert fallback.metadata["bounds"]["width"] == 120.0
 
 
+def test_auto_strategy_lets_paint_inputs_reach_resvg(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = FilterService(registry=_NoopRegistry())
+    service.register_filter(
+        "paint-input",
+        _make_descriptor(
+            "<filter id='paint-input'>"
+            "<feGaussianBlur in='FillPaint' stdDeviation='2'/>"
+            "</filter>"
+        ),
+    )
+
+    monkeypatch.setattr(service, "_ensure_pipeline", lambda: True)
+    monkeypatch.setattr(
+        service,
+        "_render_resvg_filter",
+        lambda *args, **kwargs: FilterEffectResult(
+            effect=None,
+            strategy="resvg",
+            fallback="bitmap",
+            metadata={"renderer": "resvg"},
+        ),
+    )
+    monkeypatch.setattr(
+        service,
+        "_render_native",
+        lambda *args, **kwargs: [],
+    )
+    monkeypatch.setattr(
+        service,
+        "_render_vector",
+        lambda *args, **kwargs: pytest.fail("paint input should not reach fallback"),
+    )
+    monkeypatch.setattr(
+        service,
+        "_descriptor_fallback",
+        lambda *args, **kwargs: pytest.fail("paint input should not reach fallback"),
+    )
+    monkeypatch.setattr(
+        service,
+        "_render_raster",
+        lambda *args, **kwargs: pytest.fail(
+            "paint input should not short-circuit to raster"
+        ),
+    )
+
+    results = service.resolve_effects("paint-input")
+
+    assert len(results) == 1
+    assert results[0].strategy == "resvg"
+    assert results[0].fallback == "bitmap"
+    assert results[0].metadata["renderer"] == "resvg"
+
+
+def test_raster_strategy_rasterizes_nested_background_merge_input(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = FilterService(registry=_NoopRegistry())
+    service.set_strategy("raster")
+    service.register_filter(
+        "background-input",
+        _make_descriptor(
+            "<filter id='background-input'>"
+            "<feMerge><feMergeNode in='BackgroundImage'/></feMerge>"
+            "</filter>"
+        ),
+    )
+
+    monkeypatch.setattr(service, "_ensure_pipeline", lambda: True)
+    monkeypatch.setattr(
+        service,
+        "_render_native",
+        lambda *args, **kwargs: pytest.fail("special filter input should rasterize"),
+    )
+    monkeypatch.setattr(
+        service,
+        "_render_raster",
+        lambda *args, **kwargs: [
+            FilterEffectResult(
+                effect=None,
+                strategy="raster",
+                fallback="bitmap",
+                metadata={},
+            )
+        ],
+    )
+
+    results = service.resolve_effects("background-input")
+
+    assert len(results) == 1
+    assert results[0].metadata["raster_reason"] == "svg_filter_input_surface"
+
+
 def test_descriptor_fallback_produces_placeholder_when_rendering_absent() -> None:
     service = FilterService(registry=_NoopRegistry())
     service.register_filter(

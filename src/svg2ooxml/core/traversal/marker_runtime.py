@@ -23,11 +23,12 @@ from svg2ooxml.core.traversal.marker_geometry import (
 )
 from svg2ooxml.core.traversal.marker_metadata import apply_marker_metadata
 from svg2ooxml.core.traversal.markers import (
+    MarkerDefinition,
     MarkerInstance,
     apply_local_transform,
     build_marker_transform,
 )
-from svg2ooxml.ir.geometry import SegmentType
+from svg2ooxml.ir.geometry import LineSegment, Point, Rect, SegmentType
 from svg2ooxml.ir.paint import GradientPaintRef, PatternPaint, SolidPaint, Stroke
 from svg2ooxml.ir.scene import Path
 from svg2ooxml.policy.constants import FALLBACK_BITMAP
@@ -116,7 +117,9 @@ def _collect_marker_instances(
 ) -> list[MarkerInstance]:
     instances: list[MarkerInstance] = []
 
-    start_anchor = _compute_marker_anchor(segments, position="start", tolerance=tolerance)
+    start_anchor = _compute_marker_anchor(
+        segments, position="start", tolerance=tolerance
+    )
     end_anchor = _compute_marker_anchor(segments, position="end", tolerance=tolerance)
     mid_anchors = _compute_mid_markers(segments, tolerance=tolerance)
 
@@ -200,6 +203,7 @@ def _realize_marker_instance(
         "marker_position": instance.position,
         "source_element": source_element,
     }
+    clip_bounds = None
     if clip_rect:
         metadata_seed["marker_clip"] = {
             "x": clip_rect[0],
@@ -207,6 +211,14 @@ def _realize_marker_instance(
             "width": clip_rect[2],
             "height": clip_rect[3],
         }
+        clip_bounds = _transformed_marker_clip_bounds(matrix, instance.definition)
+        if clip_bounds is not None:
+            metadata_seed["marker_clip_bounds"] = {
+                "x": clip_bounds.x,
+                "y": clip_bounds.y,
+                "width": clip_bounds.width,
+                "height": clip_bounds.height,
+            }
     if instance.definition.viewbox is not None:
         viewbox = instance.definition.viewbox
         metadata_seed["marker_viewbox"] = {
@@ -237,15 +249,24 @@ def _realize_marker_instance(
     if not marker_shapes:
         return []
 
-    segment_total = sum(len(getattr(shape, "segments", []) or []) for shape in marker_shapes)
+    segment_total = sum(
+        len(getattr(shape, "segments", []) or []) for shape in marker_shapes
+    )
     policy_meta: dict[str, Any] | None = None
 
-    marker_policy = converter._policy_options("marker") or converter._policy_options("geometry")
+    marker_policy = converter._policy_options("marker") or converter._policy_options(
+        "geometry"
+    )
     if marker_policy:
         force_bitmap = bool(marker_policy.get("force_bitmap"))
-        allow_bitmap = bool(marker_policy.get("allow_bitmap_fallback", True)) or force_bitmap
+        allow_bitmap = (
+            bool(marker_policy.get("allow_bitmap_fallback", True)) or force_bitmap
+        )
         max_segments = marker_policy.get("max_segments")
-        if allow_bitmap and (force_bitmap or (isinstance(max_segments, (int, float)) and segment_total > max_segments)):
+        if allow_bitmap and (
+            force_bitmap
+            or (isinstance(max_segments, (int, float)) and segment_total > max_segments)
+        ):
             policy_meta = {
                 "render_mode": FALLBACK_BITMAP,
                 "reason": "marker_complexity",
@@ -320,7 +341,6 @@ def _convert_marker_node(
     if not segments:
         return []
 
-    transformed_segments = converter._transform_segments(segments, combined_matrix)
     style = extract_style(converter, element)
     fill, stroke = _resolve_marker_paints(
         element=element,
@@ -328,6 +348,15 @@ def _convert_marker_node(
         base_style=base_style,
         instance=instance,
     )
+    transformed_segments = converter._transform_segments(segments, combined_matrix)
+    transformed_segments = _clip_marker_segments(
+        transformed_segments,
+        metadata_seed,
+        has_fill=fill is not None,
+        tolerance=tolerance,
+    )
+    if not transformed_segments:
+        return []
 
     clip_ref = converter._resolve_clip_ref(element)
     mask_ref, mask_instance = converter._resolve_mask_ref(element)
@@ -376,6 +405,164 @@ def _convert_marker_node(
     return [marker_path]
 
 
+def _transformed_marker_clip_bounds(
+    matrix: Matrix2D,
+    definition: MarkerDefinition,
+) -> Rect | None:
+    if definition.viewbox is not None:
+        x = definition.viewbox.min_x
+        y = definition.viewbox.min_y
+        width = definition.viewbox.width
+        height = definition.viewbox.height
+    else:
+        x = 0.0
+        y = 0.0
+        width = definition.marker_width
+        height = definition.marker_height
+    if width <= 0.0 or height <= 0.0:
+        return None
+    points = [
+        matrix.transform_point(Point(x, y)),
+        matrix.transform_point(Point(x + width, y)),
+        matrix.transform_point(Point(x + width, y + height)),
+        matrix.transform_point(Point(x, y + height)),
+    ]
+    min_x = min(point.x for point in points)
+    min_y = min(point.y for point in points)
+    max_x = max(point.x for point in points)
+    max_y = max(point.y for point in points)
+    if max_x <= min_x or max_y <= min_y:
+        return None
+    return Rect(min_x, min_y, max_x - min_x, max_y - min_y)
+
+
+def _clip_marker_segments(
+    segments: list[SegmentType],
+    metadata_seed: Mapping[str, Any],
+    *,
+    has_fill: bool,
+    tolerance: float,
+) -> list[SegmentType]:
+    if not has_fill:
+        return segments
+    if metadata_seed.get("marker_overflow") != "hidden":
+        return segments
+    raw_bounds = metadata_seed.get("marker_clip_bounds")
+    if not isinstance(raw_bounds, Mapping):
+        return segments
+    clip_bounds = _rect_from_mapping(raw_bounds)
+    if clip_bounds is None:
+        return segments
+
+    polygon = _closed_line_polygon(segments, tolerance=tolerance)
+    if polygon is None:
+        return segments
+    clipped = _clip_polygon_to_rect(polygon, clip_bounds)
+    if len(clipped) < 3:
+        return []
+    return _polygon_to_segments(clipped)
+
+
+def _rect_from_mapping(raw: Mapping[str, Any]) -> Rect | None:
+    try:
+        x = float(raw["x"])
+        y = float(raw["y"])
+        width = float(raw["width"])
+        height = float(raw["height"])
+    except (KeyError, TypeError, ValueError):
+        return None
+    if width <= 0.0 or height <= 0.0:
+        return None
+    return Rect(x, y, width, height)
+
+
+def _closed_line_polygon(
+    segments: list[SegmentType],
+    *,
+    tolerance: float,
+) -> list[Point] | None:
+    if not segments or not all(
+        isinstance(segment, LineSegment) for segment in segments
+    ):
+        return None
+    points = [segments[0].start]
+    previous = segments[0].start
+    for segment in segments:
+        if _point_distance(previous, segment.start) > tolerance:
+            return None
+        points.append(segment.end)
+        previous = segment.end
+    if len(points) < 4 or _point_distance(points[0], points[-1]) > tolerance:
+        return None
+    return points[:-1]
+
+
+def _clip_polygon_to_rect(points: list[Point], clip: Rect) -> list[Point]:
+    clipped = points
+    for edge in ("left", "right", "top", "bottom"):
+        if not clipped:
+            return []
+        clipped = _clip_polygon_edge(clipped, clip, edge)
+    return clipped
+
+
+def _clip_polygon_edge(points: list[Point], clip: Rect, edge: str) -> list[Point]:
+    output: list[Point] = []
+    previous = points[-1]
+    previous_inside = _inside_clip_edge(previous, clip, edge)
+    for current in points:
+        current_inside = _inside_clip_edge(current, clip, edge)
+        if current_inside:
+            if not previous_inside:
+                output.append(_intersect_clip_edge(previous, current, clip, edge))
+            output.append(current)
+        elif previous_inside:
+            output.append(_intersect_clip_edge(previous, current, clip, edge))
+        previous = current
+        previous_inside = current_inside
+    return output
+
+
+def _inside_clip_edge(point: Point, clip: Rect, edge: str) -> bool:
+    if edge == "left":
+        return point.x >= clip.left
+    if edge == "right":
+        return point.x <= clip.right
+    if edge == "top":
+        return point.y >= clip.top
+    return point.y <= clip.bottom
+
+
+def _intersect_clip_edge(start: Point, end: Point, clip: Rect, edge: str) -> Point:
+    dx = end.x - start.x
+    dy = end.y - start.y
+    if edge in {"left", "right"}:
+        x = clip.left if edge == "left" else clip.right
+        if abs(dx) <= 1e-12:
+            return Point(x, start.y)
+        t = (x - start.x) / dx
+        return Point(x, start.y + t * dy)
+
+    y = clip.top if edge == "top" else clip.bottom
+    if abs(dy) <= 1e-12:
+        return Point(start.x, y)
+    t = (y - start.y) / dy
+    return Point(start.x + t * dx, y)
+
+
+def _polygon_to_segments(points: list[Point]) -> list[SegmentType]:
+    return [
+        LineSegment(start=start, end=end)
+        for start, end in zip(points, [*points[1:], points[0]], strict=True)
+    ]
+
+
+def _point_distance(a: Point, b: Point) -> float:
+    dx = a.x - b.x
+    dy = a.y - b.y
+    return (dx * dx + dy * dy) ** 0.5
+
+
 def _resolve_marker_paints(
     *,
     element: etree._Element,
@@ -389,7 +576,9 @@ def _resolve_marker_paints(
     fill_attr = element.get("fill")
     if fill_attr:
         token = fill_attr.strip().lower()
-        if token == "context-stroke" and isinstance(base_style.get("stroke"), SolidPaint):
+        if token == "context-stroke" and isinstance(
+            base_style.get("stroke"), SolidPaint
+        ):
             fill = base_style["stroke"]
         elif token == "context-fill" and isinstance(base_style.get("fill"), SolidPaint):
             fill = base_style["fill"]
@@ -409,9 +598,13 @@ def _resolve_marker_paints(
                 opacity=style.stroke.opacity if style.stroke else 1.0,
             )
 
-    if isinstance(fill, GradientPaintRef) and isinstance(base_style.get("fill"), SolidPaint):
+    if isinstance(fill, GradientPaintRef) and isinstance(
+        base_style.get("fill"), SolidPaint
+    ):
         fill = base_style["fill"]
-    if isinstance(fill, PatternPaint) and isinstance(base_style.get("fill"), SolidPaint):
+    if isinstance(fill, PatternPaint) and isinstance(
+        base_style.get("fill"), SolidPaint
+    ):
         fill = base_style["fill"]
 
     if stroke is None and isinstance(base_style.get("stroke"), SolidPaint):

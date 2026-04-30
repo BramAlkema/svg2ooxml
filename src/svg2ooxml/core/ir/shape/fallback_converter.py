@@ -8,6 +8,9 @@ from svg2ooxml.core.ir.shape_converters_utils import (
     _local_name,
 )
 from svg2ooxml.core.styling import style_runtime as styles_runtime
+from svg2ooxml.core.styling.stroke_width_policy import (
+    apply_transform_stroke_width_policy,
+)
 from svg2ooxml.core.traversal.constants import DEFAULT_TOLERANCE
 from svg2ooxml.ir.geometry import LineSegment, Point, SegmentType
 from svg2ooxml.ir.scene import Path
@@ -35,6 +38,12 @@ class ShapeFallbackPathMixin:
         bitmap_limits = self._bitmap_fallback_limits(policy)
         metadata = dict(style.metadata)
         self._attach_policy_metadata(metadata, "geometry")
+        style = apply_transform_stroke_width_policy(
+            style,
+            element=element,
+            matrix=coord_space.current,
+            metadata=metadata,
+        )
         if geom_meta:
             policy_meta = metadata.setdefault("policy", {}).setdefault("geometry", {})
             policy_meta.update(geom_meta)

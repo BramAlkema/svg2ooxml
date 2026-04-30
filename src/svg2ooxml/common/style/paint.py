@@ -27,6 +27,7 @@ DEFAULT_PAINT_STYLE: dict[str, Any] = {
     "stroke_opacity": 1.0,
     "stroke_width_px": 1.0,
     "opacity": 1.0,
+    "vector_effect": "none",
 }
 
 
@@ -111,6 +112,8 @@ def compute_paint_style(
     unit_converter: UnitConverter,
 ) -> dict[str, Any]:
     style = dict(parent_style) if parent_style else default_paint_style()
+    # vector-effect is not inherited; reset it before applying local cascade.
+    style["vector_effect"] = "none"
     app = PaintApplication(style=style, importance={}, origin={})
     skip_stylesheet = element.get("data-svg2ooxml-use-clone") == "true"
 
@@ -120,19 +123,45 @@ def compute_paint_style(
 
     fill_opacity = element.get("fill-opacity")
     if fill_opacity is not None:
-        set_float_property(app, "fill_opacity", "fill-opacity", fill_opacity, CSSOrigin.PRESENTATION_ATTR)
+        set_float_property(
+            app,
+            "fill_opacity",
+            "fill-opacity",
+            fill_opacity,
+            CSSOrigin.PRESENTATION_ATTR,
+        )
 
     stroke_opacity = element.get("stroke-opacity")
     if stroke_opacity is not None:
-        set_float_property(app, "stroke_opacity", "stroke-opacity", stroke_opacity, CSSOrigin.PRESENTATION_ATTR)
+        set_float_property(
+            app,
+            "stroke_opacity",
+            "stroke-opacity",
+            stroke_opacity,
+            CSSOrigin.PRESENTATION_ATTR,
+        )
 
     stroke_width = element.get("stroke-width")
     if stroke_width is not None:
-        set_stroke_width(app, stroke_width, context, unit_converter, CSSOrigin.PRESENTATION_ATTR)
+        set_stroke_width(
+            app, stroke_width, context, unit_converter, CSSOrigin.PRESENTATION_ATTR
+        )
 
     opacity = element.get("opacity")
     if opacity is not None:
-        set_float_property(app, "opacity", "opacity", opacity, CSSOrigin.PRESENTATION_ATTR)
+        set_float_property(
+            app, "opacity", "opacity", opacity, CSSOrigin.PRESENTATION_ATTR
+        )
+
+    vector_effect = element.get("vector-effect")
+    if vector_effect is not None:
+        set_keyword_property(
+            app,
+            "vector_effect",
+            "vector-effect",
+            vector_effect,
+            CSSOrigin.PRESENTATION_ATTR,
+        )
 
     if not skip_stylesheet:
         apply_stylesheet_paints(
@@ -158,15 +187,42 @@ def compute_paint_style(
             elif name == "fill":
                 app.apply_fill(value, important, CSSOrigin.INLINE)
             elif name == "fill-opacity":
-                set_float_property(app, "fill_opacity", "fill-opacity", value, CSSOrigin.INLINE, important)
+                set_float_property(
+                    app,
+                    "fill_opacity",
+                    "fill-opacity",
+                    value,
+                    CSSOrigin.INLINE,
+                    important,
+                )
             elif name == "stroke":
                 app.apply_stroke(value, important, CSSOrigin.INLINE)
             elif name == "stroke-opacity":
-                set_float_property(app, "stroke_opacity", "stroke-opacity", value, CSSOrigin.INLINE, important)
+                set_float_property(
+                    app,
+                    "stroke_opacity",
+                    "stroke-opacity",
+                    value,
+                    CSSOrigin.INLINE,
+                    important,
+                )
             elif name == "stroke-width":
-                set_stroke_width(app, value, context, unit_converter, CSSOrigin.INLINE, important)
+                set_stroke_width(
+                    app, value, context, unit_converter, CSSOrigin.INLINE, important
+                )
             elif name == "opacity":
-                set_float_property(app, "opacity", "opacity", value, CSSOrigin.INLINE, important)
+                set_float_property(
+                    app, "opacity", "opacity", value, CSSOrigin.INLINE, important
+                )
+            elif name == "vector-effect":
+                set_keyword_property(
+                    app,
+                    "vector_effect",
+                    "vector-effect",
+                    value,
+                    CSSOrigin.INLINE,
+                    important,
+                )
 
     return style
 
@@ -185,7 +241,9 @@ def apply_stylesheet_paints(
 ) -> tuple[dict[str, bool], dict[str, CSSOrigin]]:
     applied_importance = importance_map if importance_map is not None else {}
     applied_origin = origin_map if origin_map is not None else {}
-    app = PaintApplication(style=style, importance=applied_importance, origin=applied_origin)
+    app = PaintApplication(
+        style=style, importance=applied_importance, origin=applied_origin
+    )
 
     for decl in declarations:
         name = decl.name
@@ -196,15 +254,37 @@ def apply_stylesheet_paints(
         elif name == "fill":
             apply_fill(value, decl.important, decl.origin)
         elif name == "fill-opacity":
-            set_float_property(app, "fill_opacity", "fill-opacity", value, decl.origin, decl.important)
+            set_float_property(
+                app, "fill_opacity", "fill-opacity", value, decl.origin, decl.important
+            )
         elif name == "stroke":
             apply_stroke(value, decl.important, decl.origin)
         elif name == "stroke-opacity":
-            set_float_property(app, "stroke_opacity", "stroke-opacity", value, decl.origin, decl.important)
+            set_float_property(
+                app,
+                "stroke_opacity",
+                "stroke-opacity",
+                value,
+                decl.origin,
+                decl.important,
+            )
         elif name == "stroke-width":
-            set_stroke_width(app, value, context, unit_converter, decl.origin, decl.important)
+            set_stroke_width(
+                app, value, context, unit_converter, decl.origin, decl.important
+            )
         elif name == "opacity":
-            set_float_property(app, "opacity", "opacity", value, decl.origin, decl.important)
+            set_float_property(
+                app, "opacity", "opacity", value, decl.origin, decl.important
+            )
+        elif name == "vector-effect":
+            set_keyword_property(
+                app,
+                "vector_effect",
+                "vector-effect",
+                value,
+                decl.origin,
+                decl.important,
+            )
 
     return applied_importance, applied_origin
 
@@ -217,7 +297,25 @@ def set_float_property(
     origin: CSSOrigin,
     importance_flag: bool = False,
 ) -> None:
-    app.style[style_key] = parse_style_float(value, default=app.style.get(style_key, 1.0))
+    app.style[style_key] = parse_style_float(
+        value, default=app.style.get(style_key, 1.0)
+    )
+    app.importance[css_name] = importance_flag
+    app.origin[css_name] = origin
+
+
+def set_keyword_property(
+    app: PaintApplication,
+    style_key: str,
+    css_name: str,
+    value: str | None,
+    origin: CSSOrigin,
+    importance_flag: bool = False,
+) -> None:
+    token = (value or "").strip()
+    if not token:
+        return
+    app.style[style_key] = token
     app.importance[css_name] = importance_flag
     app.origin[css_name] = origin
 
@@ -230,7 +328,9 @@ def set_stroke_width(
     origin: CSSOrigin,
     importance_flag: bool = False,
 ) -> None:
-    app.style["stroke_width_px"] = length_to_px(unit_converter, value, context, axis="x")
+    app.style["stroke_width_px"] = length_to_px(
+        unit_converter, value, context, axis="x"
+    )
     app.importance["stroke-width"] = importance_flag
     app.origin["stroke-width"] = origin
 

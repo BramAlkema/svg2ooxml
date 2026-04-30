@@ -130,6 +130,10 @@ class StyleExtractor:
         if isolation == "isolate":
             metadata["isolation"] = "isolate"
 
+        vector_effect = str(paint_style.get("vector_effect") or "none").strip()
+        if vector_effect and vector_effect != "none":
+            metadata["vector_effect"] = vector_effect
+
         return StyleResult(
             fill=fill,
             stroke=stroke,

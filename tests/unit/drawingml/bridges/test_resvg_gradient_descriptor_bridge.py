@@ -7,12 +7,16 @@ from svg2ooxml.drawingml.bridges.resvg_paint_bridge import (
     LinearGradientDescriptor,
     MeshGradientDescriptor,
     PatternDescriptor,
+    RadialGradientDescriptor,
+    build_radial_gradient_element,
     describe_gradient_element,
     describe_pattern_element,
 )
 
 
-def test_describe_gradient_element_resolves_css_stop_colors_and_percent_opacity() -> None:
+def test_describe_gradient_element_resolves_css_stop_colors_and_percent_opacity() -> (
+    None
+):
     element = etree.fromstring(
         """
         <linearGradient id="grad">
@@ -49,7 +53,9 @@ def test_describe_gradient_element_resolves_absolute_coordinate_units() -> None:
     assert descriptor.x2 == pytest.approx(96.0)
 
 
-def test_describe_gradient_element_preserves_contextless_userspace_percentages() -> None:
+def test_describe_gradient_element_preserves_contextless_userspace_percentages() -> (
+    None
+):
     element = etree.fromstring(
         """
         <linearGradient id="grad" gradientUnits="userSpaceOnUse"
@@ -103,6 +109,24 @@ def test_describe_gradient_element_parses_full_transform_list() -> None:
 
     assert isinstance(descriptor, LinearGradientDescriptor)
     assert descriptor.transform == pytest.approx((2.0, 0.0, 0.0, 2.0, 10.0, 20.0))
+
+
+def test_describe_radial_gradient_element_preserves_focal_radius() -> None:
+    element = etree.fromstring(
+        """
+        <radialGradient id="grad" r="50%" fr="25%">
+          <stop offset="0" stop-color="#000000"/>
+          <stop offset="1" stop-color="#ffffff"/>
+        </radialGradient>
+        """
+    )
+
+    descriptor = describe_gradient_element(element)
+
+    assert isinstance(descriptor, RadialGradientDescriptor)
+    assert descriptor.fr == pytest.approx(0.25)
+    assert "fr" in descriptor.specified
+    assert build_radial_gradient_element(descriptor).get("fr") == "25%"
 
 
 def test_describe_mesh_gradient_collects_css_stop_colors() -> None:

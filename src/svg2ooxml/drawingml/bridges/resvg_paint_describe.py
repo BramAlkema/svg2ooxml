@@ -45,7 +45,9 @@ from svg2ooxml.drawingml.bridges.resvg_paint_utils import (
 )
 
 
-def describe_linear_gradient(gradient_id: str, gradient: LinearGradient) -> LinearGradientDescriptor:
+def describe_linear_gradient(
+    gradient_id: str, gradient: LinearGradient
+) -> LinearGradientDescriptor:
     return LinearGradientDescriptor(
         gradient_id=gradient_id or None,
         x1=gradient.x1,
@@ -62,7 +64,9 @@ def describe_linear_gradient(gradient_id: str, gradient: LinearGradient) -> Line
     )
 
 
-def describe_radial_gradient(gradient_id: str, gradient: RadialGradient) -> RadialGradientDescriptor:
+def describe_radial_gradient(
+    gradient_id: str, gradient: RadialGradient
+) -> RadialGradientDescriptor:
     return RadialGradientDescriptor(
         gradient_id=gradient_id or None,
         cx=gradient.cx,
@@ -70,6 +74,7 @@ def describe_radial_gradient(gradient_id: str, gradient: RadialGradient) -> Radi
         r=gradient.r,
         fx=gradient.fx,
         fy=gradient.fy,
+        fr=gradient.fr,
         units=gradient.units or "objectBoundingBox",
         spread_method=gradient.spread_method or "pad",
         transform=matrix_to_tuple(gradient.transform),
@@ -92,9 +97,13 @@ def describe_pattern(pattern_id: str, node: PatternNode) -> PatternDescriptor:
     y = pattern.y if pattern is not None else 0.0
     width = pattern.width if pattern is not None else 0.0
     height = pattern.height if pattern is not None else 0.0
-    units = pattern.units if pattern is not None and pattern.units else "objectBoundingBox"
+    units = (
+        pattern.units if pattern is not None and pattern.units else "objectBoundingBox"
+    )
     content_units = (
-        pattern.content_units if pattern is not None and pattern.content_units else "userSpaceOnUse"
+        pattern.content_units
+        if pattern is not None and pattern.content_units
+        else "userSpaceOnUse"
     )
     transform = matrix_to_tuple(pattern.transform if pattern is not None else None)
     href = pattern.href if pattern is not None else None
@@ -146,7 +155,9 @@ def describe_gradient_element(element: etree._Element) -> GradientDescriptor:
 
 
 def describe_pattern_element(element: etree._Element) -> PatternDescriptor:
-    attributes = {name: value for name, value in element.attrib.items() if value is not None}
+    attributes = {
+        name: value for name, value in element.attrib.items() if value is not None
+    }
     matrix = parse_matrix_transform(element.get("patternTransform"))
     child_clones = tuple(clone_element(child) for child in element)
     return PatternDescriptor(
@@ -164,7 +175,9 @@ def describe_pattern_element(element: etree._Element) -> PatternDescriptor:
     )
 
 
-def _describe_stops(stops: Sequence[GradientStop]) -> tuple[GradientStopDescriptor, ...]:
+def _describe_stops(
+    stops: Sequence[GradientStop],
+) -> tuple[GradientStopDescriptor, ...]:
     return tuple(
         GradientStopDescriptor(
             offset=max(0.0, min(1.0, stop.offset)),
@@ -175,16 +188,26 @@ def _describe_stops(stops: Sequence[GradientStop]) -> tuple[GradientStopDescript
     )
 
 
-def _linear_descriptor_from_element(element: etree._Element) -> LinearGradientDescriptor:
+def _linear_descriptor_from_element(
+    element: etree._Element,
+) -> LinearGradientDescriptor:
     transform = parse_matrix_transform(element.get("gradientTransform"))
     stops = _parse_stops(element)
     units = normalize_gradient_units(element.get("gradientUnits"))
     return LinearGradientDescriptor(
         gradient_id=element.get("id"),
-        x1=parse_gradient_coordinate(element.get("x1"), units=units, axis="x", default="0%"),
-        y1=parse_gradient_coordinate(element.get("y1"), units=units, axis="y", default="0%"),
-        x2=parse_gradient_coordinate(element.get("x2"), units=units, axis="x", default="100%"),
-        y2=parse_gradient_coordinate(element.get("y2"), units=units, axis="y", default="0%"),
+        x1=parse_gradient_coordinate(
+            element.get("x1"), units=units, axis="x", default="0%"
+        ),
+        y1=parse_gradient_coordinate(
+            element.get("y1"), units=units, axis="y", default="0%"
+        ),
+        x2=parse_gradient_coordinate(
+            element.get("x2"), units=units, axis="x", default="100%"
+        ),
+        y2=parse_gradient_coordinate(
+            element.get("y2"), units=units, axis="y", default="0%"
+        ),
         units=units,
         spread_method=element.get("spreadMethod") or "pad",
         transform=transform,
@@ -203,23 +226,40 @@ def _linear_descriptor_from_element(element: etree._Element) -> LinearGradientDe
             )
             if key in element.attrib
         ),
-        raw_attributes={name: value for name, value in element.attrib.items() if value is not None},
+        raw_attributes={
+            name: value for name, value in element.attrib.items() if value is not None
+        },
     )
 
 
-def _radial_descriptor_from_element(element: etree._Element) -> RadialGradientDescriptor:
+def _radial_descriptor_from_element(
+    element: etree._Element,
+) -> RadialGradientDescriptor:
     transform = parse_matrix_transform(element.get("gradientTransform"))
     stops = _parse_stops(element)
     units = normalize_gradient_units(element.get("gradientUnits"))
-    cx = parse_gradient_coordinate(element.get("cx"), units=units, axis="x", default="50%")
-    cy = parse_gradient_coordinate(element.get("cy"), units=units, axis="y", default="50%")
+    cx = parse_gradient_coordinate(
+        element.get("cx"), units=units, axis="x", default="50%"
+    )
+    cy = parse_gradient_coordinate(
+        element.get("cy"), units=units, axis="y", default="50%"
+    )
     return RadialGradientDescriptor(
         gradient_id=element.get("id"),
         cx=cx,
         cy=cy,
-        r=parse_gradient_coordinate(element.get("r"), units=units, axis="x", default="50%"),
-        fx=parse_gradient_coordinate(element.get("fx"), units=units, axis="x", default=str(cx)),
-        fy=parse_gradient_coordinate(element.get("fy"), units=units, axis="y", default=str(cy)),
+        r=parse_gradient_coordinate(
+            element.get("r"), units=units, axis="x", default="50%"
+        ),
+        fx=parse_gradient_coordinate(
+            element.get("fx"), units=units, axis="x", default=str(cx)
+        ),
+        fy=parse_gradient_coordinate(
+            element.get("fy"), units=units, axis="y", default=str(cy)
+        ),
+        fr=parse_gradient_coordinate(
+            element.get("fr"), units=units, axis="x", default="0%"
+        ),
         units=units,
         spread_method=element.get("spreadMethod") or "pad",
         transform=transform,
@@ -233,18 +273,23 @@ def _radial_descriptor_from_element(element: etree._Element) -> RadialGradientDe
                 "r",
                 "fx",
                 "fy",
+                "fr",
                 "gradientUnits",
                 "spreadMethod",
                 "gradientTransform",
             )
             if key in element.attrib
         ),
-        raw_attributes={name: value for name, value in element.attrib.items() if value is not None},
+        raw_attributes={
+            name: value for name, value in element.attrib.items() if value is not None
+        },
     )
 
 
 def _mesh_descriptor_from_element(element: etree._Element) -> MeshGradientDescriptor:
-    attributes = {name: value for name, value in element.attrib.items() if value is not None}
+    attributes = {
+        name: value for name, value in element.attrib.items() if value is not None
+    }
     rows, cols, patch_count, stop_count, colors = _analyze_mesh_structure(element)
     return MeshGradientDescriptor(
         gradient_id=element.get("id"),
@@ -261,10 +306,14 @@ def _mesh_descriptor_from_element(element: etree._Element) -> MeshGradientDescri
 
 def _parse_stops(element: etree._Element) -> tuple[GradientStopDescriptor, ...]:
     stops: list[GradientStopDescriptor] = []
-    stop_elements = element.findall(".//{http://www.w3.org/2000/svg}stop") + element.findall(".//stop")
+    stop_elements = element.findall(
+        ".//{http://www.w3.org/2000/svg}stop"
+    ) + element.findall(".//stop")
     for stop_el in stop_elements:
         style_map = parse_style(stop_el.get("style"))
-        color_attr = stop_el.get("stop-color") or style_map.get("stop-color") or "#000000"
+        color_attr = (
+            stop_el.get("stop-color") or style_map.get("stop-color") or "#000000"
+        )
         parsed_color = parse_color(color_attr)
         color_hex = f"#{css_color_to_hex(color_attr, default='000000')}"
         opacity_attr = stop_el.get("stop-opacity") or style_map.get("stop-opacity")
@@ -283,7 +332,9 @@ def _parse_stops(element: etree._Element) -> tuple[GradientStopDescriptor, ...]:
     return tuple(stops)
 
 
-def _analyze_mesh_structure(element: etree._Element) -> tuple[int, int, int, int, set[str]]:
+def _analyze_mesh_structure(
+    element: etree._Element,
+) -> tuple[int, int, int, int, set[str]]:
     rows = 0
     cols = 0
     patch_count = 0

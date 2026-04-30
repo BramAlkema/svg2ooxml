@@ -20,7 +20,9 @@ from svg2ooxml.drawingml.bridges.resvg_paint_utils import (
 )
 
 
-def build_linear_gradient_element(descriptor: LinearGradientDescriptor) -> etree._Element:
+def build_linear_gradient_element(
+    descriptor: LinearGradientDescriptor,
+) -> etree._Element:
     element = etree.Element("linearGradient")
     if descriptor.gradient_id:
         element.set("id", descriptor.gradient_id)
@@ -40,7 +42,9 @@ def build_linear_gradient_element(descriptor: LinearGradientDescriptor) -> etree
     return element
 
 
-def build_radial_gradient_element(descriptor: RadialGradientDescriptor) -> etree._Element:
+def build_radial_gradient_element(
+    descriptor: RadialGradientDescriptor,
+) -> etree._Element:
     element = etree.Element("radialGradient")
     if descriptor.gradient_id:
         element.set("id", descriptor.gradient_id)
@@ -57,6 +61,7 @@ def build_radial_gradient_element(descriptor: RadialGradientDescriptor) -> etree
     _set_descriptor_attr(element, descriptor, "r", descriptor.r)
     _set_descriptor_attr(element, descriptor, "fx", descriptor.fx)
     _set_descriptor_attr(element, descriptor, "fy", descriptor.fy)
+    _set_descriptor_attr(element, descriptor, "fr", descriptor.fr)
     _append_stop_descriptors(element, descriptor.stops)
     return element
 
@@ -142,7 +147,9 @@ def _assign_explicit_common_gradient_attrs(
             element.set("gradientTransform", raw_transform)
 
 
-def _append_stop_descriptors(parent: etree._Element, stops: Iterable[GradientStopDescriptor]) -> None:
+def _append_stop_descriptors(
+    parent: etree._Element, stops: Iterable[GradientStopDescriptor]
+) -> None:
     for stop in stops:
         stop_el = etree.SubElement(parent, "stop")
         stop_el.set("offset", format_number(stop.offset))

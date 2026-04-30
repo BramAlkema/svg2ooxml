@@ -133,11 +133,19 @@ def resolve_stroke_style(stroke: StrokeStyle | None, tree: Tree) -> Stroke | Non
         return None
 
     # Map stroke line join
-    join_map = {"miter": StrokeJoin.MITER, "round": StrokeJoin.ROUND, "bevel": StrokeJoin.BEVEL}
+    join_map = {
+        "miter": StrokeJoin.MITER,
+        "round": StrokeJoin.ROUND,
+        "bevel": StrokeJoin.BEVEL,
+    }
     join = join_map.get(getattr(stroke, "linejoin", None) or "", StrokeJoin.MITER)
 
     # Map stroke line cap
-    cap_map = {"butt": StrokeCap.BUTT, "round": StrokeCap.ROUND, "square": StrokeCap.SQUARE}
+    cap_map = {
+        "butt": StrokeCap.BUTT,
+        "round": StrokeCap.ROUND,
+        "square": StrokeCap.SQUARE,
+    }
     cap = cap_map.get(getattr(stroke, "linecap", None) or "", StrokeCap.BUTT)
 
     miter_limit = _coerce_float(getattr(stroke, "miterlimit", None), 4.0)
@@ -172,7 +180,9 @@ def _resolve_paint_reference(reference: PaintReference, tree: Tree) -> Paint:
     return None
 
 
-def _convert_linear_gradient(definition_id: str, gradient: LinearGradient) -> LinearGradientPaint | None:
+def _convert_linear_gradient(
+    definition_id: str, gradient: LinearGradient
+) -> LinearGradientPaint | None:
     stops = _convert_stops(gradient.stops)
     if not stops:
         return None
@@ -188,17 +198,24 @@ def _convert_linear_gradient(definition_id: str, gradient: LinearGradient) -> Li
     )
 
 
-def _convert_radial_gradient(definition_id: str, gradient: RadialGradient) -> RadialGradientPaint | None:
+def _convert_radial_gradient(
+    definition_id: str, gradient: RadialGradient
+) -> RadialGradientPaint | None:
     stops = _convert_stops(gradient.stops)
     if not stops:
         return None
     transform = _matrix_to_array(gradient.transform)
-    focal = (gradient.fx, gradient.fy) if (gradient.fx, gradient.fy) != (gradient.cx, gradient.cy) else None
+    focal = (
+        (gradient.fx, gradient.fy)
+        if (gradient.fx, gradient.fy) != (gradient.cx, gradient.cy)
+        else None
+    )
     return RadialGradientPaint(
         stops=stops,
         center=(gradient.cx, gradient.cy),
         radius=gradient.r,
         focal_point=focal,
+        focal_radius=gradient.fr if gradient.fr > 1e-6 else None,
         transform=transform,
         gradient_id=definition_id,
         gradient_units=gradient.units,

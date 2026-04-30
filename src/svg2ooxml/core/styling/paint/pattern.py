@@ -4,6 +4,10 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from lxml import etree
+
+from svg2ooxml.color import parse_color
+from svg2ooxml.color.utils import rgb_object_to_hex
 from svg2ooxml.common.geometry import parse_transform_list
 from svg2ooxml.core.styling.paint import (
     ensure_paint_policy,
@@ -16,7 +20,13 @@ from svg2ooxml.core.styling.style_helpers import (
 )
 from svg2ooxml.drawingml.bridges.resvg_paint_bridge import PatternDescriptor
 from svg2ooxml.elements.pattern_processor import PatternComplexity, PatternType
-from svg2ooxml.ir.paint import PatternPaint
+from svg2ooxml.elements.patterns._helpers import (
+    local_name,
+    parse_float_attr,
+    pattern_opacity,
+    style_map,
+)
+from svg2ooxml.ir.paint import PatternPaint, SolidPaint
 from svg2ooxml.policy.constants import FALLBACK_EMF
 from svg2ooxml.services import ConversionServices
 
@@ -36,7 +46,7 @@ def build_pattern_paint(
     pattern_id: str,
     services: ConversionServices,
     context: Any | None = None,
-) -> PatternPaint | None:
+) -> PatternPaint | SolidPaint | None:
     pattern_service = services.pattern_service
     if pattern_service is None:
         return None
@@ -44,6 +54,10 @@ def build_pattern_paint(
     if pattern_descriptor is None:
         return None
     pattern_element = pattern_service.as_element(pattern_descriptor)
+    solid = _solid_tile_pattern_paint(pattern_element, pattern_descriptor)
+    if solid is not None:
+        return solid
+
     transform_attr = pattern_element.get("patternTransform")
     transform_matrix = None
     if transform_attr:
@@ -108,6 +122,90 @@ def build_pattern_paint(
     )
 
 
+def _solid_tile_pattern_paint(
+    pattern_element: etree._Element,
+    descriptor: PatternDescriptor,
+) -> SolidPaint | None:
+    children = [
+        child
+        for child in pattern_element
+        if isinstance(getattr(child, "tag", None), str)
+    ]
+    if len(children) != 1:
+        return None
+
+    child = children[0]
+    if local_name(child.tag) != "rect":
+        return None
+    if _has_solid_tile_modifier(child):
+        return None
+    if _visible_stroke(child):
+        return None
+
+    tile_width = float(descriptor.width or 0.0)
+    tile_height = float(descriptor.height or 0.0)
+    if tile_width <= 0.0 or tile_height <= 0.0:
+        return None
+
+    x = parse_float_attr(child, "x", axis="x", default=0.0) or 0.0
+    y = parse_float_attr(child, "y", axis="y", default=0.0) or 0.0
+    width = parse_float_attr(child, "width", axis="x", default=0.0) or 0.0
+    height = parse_float_attr(child, "height", axis="y", default=0.0) or 0.0
+    if x > 0.0 or y > 0.0:
+        return None
+    if x + width < tile_width or y + height < tile_height:
+        return None
+
+    styles = style_map(child)
+    fill = child.get("fill") or styles.get("fill")
+    color = parse_color(fill)
+    if color is None or color.a <= 0.0:
+        return None
+    rgb = rgb_object_to_hex(color, default=None)
+    if rgb is None:
+        return None
+
+    opacity = color.a
+    opacity *= pattern_opacity(child.get("opacity") or styles.get("opacity"))
+    opacity *= pattern_opacity(child.get("fill-opacity") or styles.get("fill-opacity"))
+    return SolidPaint(rgb=rgb, opacity=max(0.0, min(1.0, opacity)))
+
+
+def _has_solid_tile_modifier(element: etree._Element) -> bool:
+    styles = style_map(element)
+    for name in ("transform", "clip-path", "mask", "filter"):
+        if _visible_modifier_value(element.get(name) or styles.get(name)):
+            return True
+    display = (element.get("display") or styles.get("display") or "").strip().lower()
+    visibility = (
+        (element.get("visibility") or styles.get("visibility") or "").strip().lower()
+    )
+    if display == "none" or visibility == "hidden":
+        return True
+    if element.get("class"):
+        return True
+    return False
+
+
+def _visible_modifier_value(value: str | None) -> bool:
+    if value is None:
+        return False
+    token = value.strip().lower()
+    return bool(token) and token != "none"
+
+
+def _visible_stroke(element: etree._Element) -> bool:
+    styles = style_map(element)
+    stroke = element.get("stroke") or styles.get("stroke")
+    color = parse_color(stroke)
+    if color is None or color.a <= 0.0:
+        return False
+    stroke_opacity = pattern_opacity(
+        element.get("stroke-opacity") or styles.get("stroke-opacity")
+    )
+    return stroke_opacity > 0.0
+
+
 def record_pattern_metadata(
     *,
     pattern_id: str,
@@ -147,9 +245,7 @@ def record_pattern_metadata(
             pattern_element = None
         if pattern_element is not None:
             try:
-                analysis = processor.analyze_pattern_element(
-                    pattern_element, context
-                )
+                analysis = processor.analyze_pattern_element(pattern_element, context)
             except Exception:  # pragma: no cover - defensive
                 analysis = None
 
@@ -159,9 +255,7 @@ def record_pattern_metadata(
     if analysis is not None:
         pattern_type = getattr(analysis, "pattern_type", None)
         if pattern_type is not None:
-            analysis_entry["type"] = getattr(
-                pattern_type, "value", str(pattern_type)
-            )
+            analysis_entry["type"] = getattr(pattern_type, "value", str(pattern_type))
 
         complexity_attr = getattr(analysis, "complexity", None)
         if complexity_attr is not None:
@@ -203,9 +297,9 @@ def record_pattern_metadata(
         if preset_candidate:
             analysis_entry["preset_candidate"] = preset_candidate
 
-    metadata.setdefault("paint_analysis", {}).setdefault(role, {})[
-        "pattern"
-    ] = analysis_entry
+    metadata.setdefault("paint_analysis", {}).setdefault(role, {})["pattern"] = (
+        analysis_entry
+    )
 
     paint_policy = ensure_paint_policy(metadata, role)
     paint_policy.setdefault("type", "pattern")
@@ -232,9 +326,7 @@ def record_pattern_metadata(
 
     if tracer is not None:
         decision = (
-            "emf"
-            if paint_policy.get("suggest_fallback") == FALLBACK_EMF
-            else "native"
+            "emf" if paint_policy.get("suggest_fallback") == FALLBACK_EMF else "native"
         )
         tracer.record_paint_decision(
             paint_type="pattern",

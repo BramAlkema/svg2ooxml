@@ -53,8 +53,7 @@ def text_scale_for_coord_space(
         return max(scale_x, 1.0)
 
     dot_product = abs(
-        float(matrix.a) * float(matrix.c)
-        + float(matrix.b) * float(matrix.d)
+        float(matrix.a) * float(matrix.c) + float(matrix.b) * float(matrix.d)
     )
     max_scale = max(scale_x, scale_y)
     if (
@@ -64,8 +63,7 @@ def text_scale_for_coord_space(
         return (scale_x + scale_y) / 2.0
 
     determinant = abs(
-        float(matrix.a) * float(matrix.d)
-        - float(matrix.b) * float(matrix.c)
+        float(matrix.a) * float(matrix.d) - float(matrix.b) * float(matrix.c)
     )
     if determinant > tolerance:
         return math.sqrt(determinant)
@@ -186,9 +184,7 @@ def parse_text_length_list(
 # ---------------------------------------------------------------
 
 
-def normalize_text_segment(
-    text: str | None, *, preserve_space: bool = False
-) -> str:
+def normalize_text_segment(text: str | None, *, preserve_space: bool = False) -> str:
     if not text:
         return ""
     token = text.replace("\r\n", "\n").replace("\r", "\n")
@@ -299,12 +295,32 @@ def estimate_text_bbox(
     return Rect(origin_x, origin_y - y_offset, max_width, height)
 
 
-def apply_text_anchor(bbox: Rect, anchor: TextAnchor) -> Rect:
-    if anchor == TextAnchor.MIDDLE:
+def apply_text_anchor(
+    bbox: Rect,
+    anchor: TextAnchor,
+    *,
+    direction: str | None = None,
+) -> Rect:
+    resolved_anchor = _inline_anchor_for_direction(anchor, direction=direction)
+    if resolved_anchor == TextAnchor.MIDDLE:
         return Rect(bbox.x - bbox.width / 2.0, bbox.y, bbox.width, bbox.height)
-    if anchor == TextAnchor.END:
+    if resolved_anchor == TextAnchor.END:
         return Rect(bbox.x - bbox.width, bbox.y, bbox.width, bbox.height)
     return bbox
+
+
+def _inline_anchor_for_direction(
+    anchor: TextAnchor,
+    *,
+    direction: str | None,
+) -> TextAnchor:
+    if direction != "rtl":
+        return anchor
+    if anchor == TextAnchor.START:
+        return TextAnchor.END
+    if anchor == TextAnchor.END:
+        return TextAnchor.START
+    return anchor
 
 
 # ---------------------------------------------------------------
@@ -332,7 +348,9 @@ def attach_text_path_metadata(
             continue
         href = node.get("{http://www.w3.org/1999/xlink}href") or node.get("href")
         record_text_path_reference(
-            href, metadata, context=context,
+            href,
+            metadata,
+            context=context,
             text_path_positioner=text_path_positioner,
         )
         if metadata.get("text_path_id"):
@@ -342,7 +360,9 @@ def attach_text_path_metadata(
     href = attrs.get("textPath")
     if isinstance(href, str):
         record_text_path_reference(
-            href, metadata, context=context,
+            href,
+            metadata,
+            context=context,
             text_path_positioner=text_path_positioner,
         )
 
@@ -361,7 +381,8 @@ def record_text_path_reference(
         return
     metadata.setdefault("text_path_id", path_id)
     sampled = sample_text_path(
-        path_id, context=context,
+        path_id,
+        context=context,
         text_path_positioner=text_path_positioner,
     )
     if sampled is not None:
@@ -384,9 +405,7 @@ def sample_text_path(
     if not path_data:
         return None
     try:
-        points = text_path_positioner.sample_path_for_text(
-            path_data, num_samples=96
-        )
+        points = text_path_positioner.sample_path_for_text(path_data, num_samples=96)
         return {"points": points, "path_data": path_data}
     except Exception:  # pragma: no cover - defensive fallback
         return None

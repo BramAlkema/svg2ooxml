@@ -11,6 +11,7 @@ from svg2ooxml.render import filters_region as _region
 from svg2ooxml.render.filters_model import (
     ComponentTransferPlan,
     FilterPlan,
+    FilterPrimitivePlan,
     UnsupportedPrimitiveError,
 )
 from svg2ooxml.render.surface import Surface
@@ -29,6 +30,13 @@ def apply_filter(
         "SourceGraphic": surface.clone(),
         "SourceAlpha": _ops.extract_alpha(surface),
     }
+    _seed_declared_input_surfaces(
+        images,
+        plan,
+        bounds=bounds,
+        width_px=surface.width,
+        height_px=surface.height,
+    )
     current = surface.clone()
 
     for primitive_plan in plan.primitives:
@@ -55,13 +63,22 @@ def apply_filter(
         elif tag_lower == "feimage":
             image_info = primitive_plan.extra.get("image")
             if image_info is None:
-                raise UnsupportedPrimitiveError(primitive_plan.tag, "missing decoded image data", primitive=primitive)
+                raise UnsupportedPrimitiveError(
+                    primitive_plan.tag,
+                    "missing decoded image data",
+                    primitive=primitive,
+                )
             image_surface: Surface = image_info["surface"].clone()
             work_input = _region.convert_to_colorspace(image_surface, linear)
-            work_result = _ops.place_image_surface(work_input, surface.width, surface.height)
+            work_result = _ops.place_image_surface(
+                work_input, surface.width, surface.height
+            )
         else:
+            _ensure_declared_inputs_available(images, plan, primitive_plan)
             inputs = _ops.resolve_inputs(images, primitive_plan.inputs, current, linear)
-            primary = inputs[0] if inputs else _region.convert_to_colorspace(current, linear)
+            primary = (
+                inputs[0] if inputs else _region.convert_to_colorspace(current, linear)
+            )
             if tag_lower == "fegaussianblur":
                 sigma_x, sigma_y = primitive_plan.extra.get("std_deviation", (0.0, 0.0))
                 sigma_x *= unit_scale.scale_x
@@ -75,7 +92,11 @@ def apply_filter(
                 work_result = _ops.apply_color_matrix(primary, primitive.attributes)
             elif tag_lower == "fecomposite":
                 if len(inputs) < 2:
-                    raise UnsupportedPrimitiveError(primitive_plan.tag, "feComposite requires two inputs", primitive=primitive)
+                    raise UnsupportedPrimitiveError(
+                        primitive_plan.tag,
+                        "feComposite requires two inputs",
+                        primitive=primitive,
+                    )
                 operator = primitive_plan.extra.get("operator", "over")
                 work_result = _ops.apply_composite(
                     primary,
@@ -88,7 +109,11 @@ def apply_filter(
                 )
             elif tag_lower == "feblend":
                 if len(inputs) < 2:
-                    raise UnsupportedPrimitiveError(primitive_plan.tag, "feBlend requires two inputs", primitive=primitive)
+                    raise UnsupportedPrimitiveError(
+                        primitive_plan.tag,
+                        "feBlend requires two inputs",
+                        primitive=primitive,
+                    )
                 mode = primitive_plan.extra.get("mode")
                 work_result = _ops.apply_blend(primary, inputs[1], mode, linear)
             elif tag_lower == "fediffuselighting":
@@ -106,7 +131,9 @@ def apply_filter(
             elif tag_lower == "fedisplacementmap":
                 if len(inputs) < 2:
                     raise UnsupportedPrimitiveError(
-                        primitive_plan.tag, "feDisplacementMap requires two inputs", primitive=primitive
+                        primitive_plan.tag,
+                        "feDisplacementMap requires two inputs",
+                        primitive=primitive,
                     )
                 work_result = _lighting.apply_displacement_map(
                     primary,
@@ -121,13 +148,23 @@ def apply_filter(
             elif tag_lower == "fecomponenttransfer":
                 functions = primitive_plan.extra.get("functions")
                 if not isinstance(functions, ComponentTransferPlan):
-                    raise UnsupportedPrimitiveError(primitive_plan.tag, "component transfer plan missing", primitive=primitive)
+                    raise UnsupportedPrimitiveError(
+                        primitive_plan.tag,
+                        "component transfer plan missing",
+                        primitive=primitive,
+                    )
                 work_result = _ops.apply_component_transfer(primary, functions)
             elif tag_lower == "femorphology":
                 operator = primitive_plan.extra.get("operator", "erode")
-                radius_x = primitive_plan.extra.get("radius_x", 0.0) * unit_scale.scale_x
-                radius_y = primitive_plan.extra.get("radius_y", 0.0) * unit_scale.scale_y
-                work_result = _ops.apply_morphology(primary, operator, radius_x, radius_y)
+                radius_x = (
+                    primitive_plan.extra.get("radius_x", 0.0) * unit_scale.scale_x
+                )
+                radius_y = (
+                    primitive_plan.extra.get("radius_y", 0.0) * unit_scale.scale_y
+                )
+                work_result = _ops.apply_morphology(
+                    primary, operator, radius_x, radius_y
+                )
             elif tag_lower == "fetile":
                 work_result = primary.clone()
             else:  # pragma: no cover - defensive
@@ -145,6 +182,62 @@ def apply_filter(
 
     _region.apply_filter_region(current, region, surface.width, surface.height)
     return current
+
+
+def _seed_declared_input_surfaces(
+    images: dict[str, Surface],
+    plan: FilterPlan,
+    *,
+    bounds: tuple[float, float, float, float],
+    width_px: int,
+    height_px: int,
+) -> None:
+    if not plan.input_descriptors:
+        return
+    try:
+        from svg2ooxml.drawingml.skia_bridge import render_surface_from_descriptor
+    except Exception:  # pragma: no cover - optional raster support
+        return
+
+    bounds_payload = _bounds_payload(bounds)
+    for name, descriptor in plan.input_descriptors.items():
+        if name in images:
+            continue
+        try:
+            input_surface = render_surface_from_descriptor(
+                descriptor=descriptor,
+                bounds=bounds_payload,
+                width_px=width_px,
+                height_px=height_px,
+            )
+        except Exception:  # pragma: no cover - defensive
+            input_surface = None
+        if input_surface is not None:
+            images[name] = input_surface
+
+
+def _ensure_declared_inputs_available(
+    images: dict[str, Surface],
+    plan: FilterPlan,
+    primitive_plan: FilterPrimitivePlan,
+) -> None:
+    for input_name in primitive_plan.inputs:
+        if input_name in plan.input_descriptors and input_name not in images:
+            raise UnsupportedPrimitiveError(
+                primitive_plan.tag,
+                f"input '{input_name}' could not be synthesized",
+                primitive=primitive_plan.primitive,
+            )
+
+
+def _bounds_payload(bounds: tuple[float, float, float, float]) -> dict[str, float]:
+    x0, y0, x1, y1 = bounds
+    return {
+        "x": x0,
+        "y": y0,
+        "width": max(0.0, x1 - x0),
+        "height": max(0.0, y1 - y0),
+    }
 
 
 __all__ = ["apply_filter"]

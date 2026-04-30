@@ -26,6 +26,8 @@ class TextFallbackPolicy:
 
     missing_font_behavior: str
     glyph_fallback: str
+    dense_rotation_fallback: str
+    bidi_override_fallback: str
     fallback_order: tuple[str, ...]
     max_vectorized_glyphs: int
     prefer_vector_fallback: bool
@@ -96,6 +98,8 @@ def _build_high_quality_decision() -> TextPolicyDecision:
         fallback=TextFallbackPolicy(
             missing_font_behavior="embedded",
             glyph_fallback="vector_outline",
+            dense_rotation_fallback="auto",
+            bidi_override_fallback="svg",
             fallback_order=("Segoe UI", "Arial", "sans-serif"),
             max_vectorized_glyphs=4096,
             prefer_vector_fallback=True,
@@ -132,6 +136,8 @@ def _build_balanced_decision() -> TextPolicyDecision:
         fallback=TextFallbackPolicy(
             missing_font_behavior="outline",
             glyph_fallback="vector_outline",
+            dense_rotation_fallback="auto",
+            bidi_override_fallback="svg",
             fallback_order=("Calibri", "Arial", "sans-serif"),
             max_vectorized_glyphs=2048,
             prefer_vector_fallback=True,
@@ -168,6 +174,8 @@ def _build_low_quality_decision() -> TextPolicyDecision:
         fallback=TextFallbackPolicy(
             missing_font_behavior="fallback_family",
             glyph_fallback="raster",
+            dense_rotation_fallback="svg",
+            bidi_override_fallback="svg",
             fallback_order=("Arial", "Calibri", "sans-serif"),
             max_vectorized_glyphs=512,
             prefer_vector_fallback=False,
@@ -221,7 +229,9 @@ def _apply_overrides(
     for path, value in overrides.items():
         match path:
             case "text.embed_fonts":
-                embedding = replace(decision.embedding, embed_when_available=bool(value))
+                embedding = replace(
+                    decision.embedding, embed_when_available=bool(value)
+                )
                 decision = replace(decision, embedding=embedding)
             case "text.subset_strategy":
                 embedding = replace(decision.embedding, subset_strategy=str(value))
@@ -256,6 +266,18 @@ def _apply_overrides(
                 decision = replace(decision, fallback=fallback)
             case "text.glyph_fallback":
                 fallback = replace(decision.fallback, glyph_fallback=str(value))
+                decision = replace(decision, fallback=fallback)
+            case "text.dense_rotation_fallback":
+                fallback = replace(
+                    decision.fallback,
+                    dense_rotation_fallback=str(value),
+                )
+                decision = replace(decision, fallback=fallback)
+            case "text.bidi_override_fallback":
+                fallback = replace(
+                    decision.fallback,
+                    bidi_override_fallback=str(value),
+                )
                 decision = replace(decision, fallback=fallback)
             case "text.kerning_mode":
                 layout = replace(decision.layout, kerning_mode=str(value))

@@ -36,11 +36,11 @@ Empirical PowerPoint behavior research, authored control decks, and durable orac
 
 ## Current Release
 
-`0.8.1` is the typed CSS value, calc coverage, and parser-hardening release.
-It keeps the 0.8 fidelity policy and tracing work intact while centralizing
-more authored numeric parsing across colors, gradients, filters, masks,
-transforms, text, and animation values. ADR-036 defines the measured-fidelity
-road to 0.9.
+`0.8.2` is a micro fidelity-hardening release on the road to 0.9. It keeps the
+editable-first promise for default filter fallbacks, adds typed filter input
+surface handling, tightens transformed per-character text placement, preserves
+root text fallback styles, and keeps the recent audit/refactor splits within
+the maintainability guardrails.
 
 ## Comparison
 

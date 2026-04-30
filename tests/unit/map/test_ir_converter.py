@@ -21,7 +21,7 @@ from svg2ooxml.ir.paint import (
 )
 from svg2ooxml.ir.scene import Group, Image, Path
 from svg2ooxml.ir.shapes import Circle, Ellipse, Rectangle
-from svg2ooxml.ir.text import TextFrame
+from svg2ooxml.ir.text import TextAnchor, TextFrame
 from svg2ooxml.policy import PolicyContext, PolicyEngine
 from svg2ooxml.policy.constants import FALLBACK_BITMAP, FALLBACK_EMF
 from svg2ooxml.services import configure_services
@@ -85,6 +85,19 @@ def _convert_with_resvg(parse_result: ParseResult) -> IRScene:
     )
 
 
+def _convert_with_resvg_text_overrides(
+    parse_result: ParseResult,
+    text_overrides: dict[str, object],
+) -> IRScene:
+    return convert_parser_output(
+        parse_result,
+        overrides={
+            "geometry": {"geometry_mode": "resvg-only"},
+            "text": text_overrides,
+        },
+    )
+
+
 def _unwrap_use_rectangle(element: object) -> tuple[Rectangle, dict[str, object]]:
     if isinstance(element, Group):
         rect = next(child for child in element.children if isinstance(child, Rectangle))
@@ -110,6 +123,40 @@ def _collect_rectangles(elements: list[object]) -> list[Rectangle]:
         if isinstance(current, Group):
             stack.extend(current.children)
     return rectangles
+
+
+def test_transformed_svg_stroke_width_scales_with_geometry() -> None:
+    svg = """
+        <svg xmlns="http://www.w3.org/2000/svg" width="100" height="100">
+          <rect id="target" width="10" height="10" transform="scale(3)"
+                fill="none" stroke="#000000" stroke-width="2"/>
+        </svg>
+    """
+
+    scene = _convert_with_resvg(_build_parse_result(svg))
+    rect = _collect_rectangles(scene.elements)[0]
+
+    assert rect.stroke is not None
+    assert rect.stroke.width == pytest.approx(6.0)
+    assert rect.metadata["stroke_width"]["policy"] == "scaled-with-transform"
+
+
+def test_non_scaling_stroke_keeps_authored_width_under_transform() -> None:
+    svg = """
+        <svg xmlns="http://www.w3.org/2000/svg" width="100" height="100">
+          <rect id="target" width="10" height="10" transform="scale(3)"
+                fill="none" stroke="#000000" stroke-width="2"
+                vector-effect="non-scaling-stroke"/>
+        </svg>
+    """
+
+    scene = _convert_with_resvg(_build_parse_result(svg))
+    rect = _collect_rectangles(scene.elements)[0]
+
+    assert rect.stroke is not None
+    assert rect.stroke.width == pytest.approx(2.0)
+    assert rect.metadata["vector_effect"] == "non-scaling-stroke"
+    assert rect.metadata["stroke_width"]["policy"] == "non-scaling-stroke"
 
 
 def _fixture_path(name: str) -> FilePath:
@@ -592,7 +639,10 @@ def test_use_group_preserves_child_fill_none() -> None:
     rectangles = _collect_rectangles(group.children)
     assert len(rectangles) == 2
     assert all(rect.fill is None for rect in rectangles)
-    assert all(rect.stroke is not None and rect.stroke.paint.rgb == "0000FF" for rect in rectangles)
+    assert all(
+        rect.stroke is not None and rect.stroke.paint.rgb == "0000FF"
+        for rect in rectangles
+    )
 
 
 def test_use_image_expands_when_resvg_use_node_is_unsupported() -> None:
@@ -1043,6 +1093,454 @@ def test_text_tspan_produces_multiple_runs() -> None:
         assert "Green" in runs_xml
 
 
+def test_nested_tspan_rotate_and_positioning_metadata_flattens_per_character_layout() -> (
+    None
+):
+    svg = (
+        "<svg width='480' height='360' xmlns='http://www.w3.org/2000/svg'>"
+        "<text font-size='35' fill='green' x='20' y='120' "
+        "rotate='5,15,25,35,45,55'>"
+        "  Not"
+        "  <tspan rotate='-10,-20,-30,-40'>"
+        "    all characters"
+        "    <tspan rotate='70,60,50,40,30,20,10'>"
+        "      in"
+        "      <tspan>the</tspan>"
+        "    </tspan>"
+        "    <tspan x='20' y='180'>text</tspan>"
+        "    have a"
+        "  </tspan>"
+        "  <tspan rotate='-10'>specified</tspan>"
+        "  rotation"
+        "</text>"
+        "</svg>"
+    )
+    parse_result = _build_parse_result(svg)
+
+    scene = _convert_with_resvg_text_overrides(
+        parse_result,
+        {"dense_rotation_fallback": "vector_outline"},
+    )
+
+    text = next(
+        element
+        for root in scene.elements
+        for element in _iter_scene_elements(root)
+        if isinstance(element, TextFrame)
+    )
+    assert (
+        text.text_content == "Not all characters in the text have a specified rotation"
+    )
+    per_char = text.metadata.get("per_char")
+    assert isinstance(per_char, dict)
+    rotate = per_char["rotate"]
+    abs_x = per_char["abs_x"]
+    abs_y = per_char["abs_y"]
+    assert len(rotate) == len(text.text_content)
+    assert len(abs_x) == len(text.text_content)
+    assert len(abs_y) == len(text.text_content)
+
+    def rotations_for(token: str) -> list[float]:
+        start = text.text_content.index(token)
+        return rotate[start : start + len(token)]
+
+    assert rotations_for("all") == [-10.0, -20.0, -30.0]
+    assert rotations_for("in the") == [70.0, 60.0, 50.0, 40.0, 30.0, 20.0]
+    assert set(rotations_for("text have a")) == {-40.0}
+    assert set(rotations_for("specified")) == {-10.0}
+    assert set(rotations_for("rotation")) == {55.0}
+
+    second_line = text.text_content.index("text have a")
+    assert abs_x[second_line] == pytest.approx(20.0)
+    assert abs_y[second_line] == pytest.approx(180.0)
+
+
+def test_dense_rotation_auto_uses_vector_outline_for_simple_text() -> None:
+    svg = (
+        "<svg width='200' height='200' xmlns='http://www.w3.org/2000/svg'>"
+        "<style>.dense-fill{fill:#123456}</style>"
+        "<g font-family='Arial' font-size='20'>"
+        "<text id='dense' class='dense-fill' x='10' y='80' "
+        "rotate='0 10 20 30'>ABCD</text>"
+        "</g>"
+        "</svg>"
+    )
+    parse_result = _build_parse_result(svg)
+
+    scene = _convert_with_resvg(parse_result)
+
+    frames = [
+        element
+        for root in scene.elements
+        for element in _iter_scene_elements(root)
+        if isinstance(element, TextFrame)
+    ]
+    images = [
+        element
+        for root in scene.elements
+        for element in _iter_scene_elements(root)
+        if isinstance(element, Image)
+    ]
+    assert images == []
+    assert len(frames) == 1
+    frame = frames[0]
+    assert frame.text_content == "ABCD"
+    per_char = frame.metadata.get("per_char")
+    assert isinstance(per_char, dict)
+    assert per_char["rotate"] == [0.0, 10.0, 20.0, 30.0]
+    assert (
+        frame.metadata["policy"]["text"]["fallback"]["dense_rotation_fallback"]
+        == "auto"
+    )
+
+
+def test_dense_rotation_auto_uses_svg_for_nested_tspan_rotation() -> None:
+    svg = (
+        "<svg width='200' height='200' xmlns='http://www.w3.org/2000/svg'>"
+        "<text font-size='20' x='10' y='80' rotate='0 10 20'>"
+        "A<tspan rotate='30 40'>BC</tspan>"
+        "</text>"
+        "</svg>"
+    )
+    parse_result = _build_parse_result(svg)
+
+    scene = _convert_with_resvg(parse_result)
+
+    images = [
+        element
+        for root in scene.elements
+        for element in _iter_scene_elements(root)
+        if isinstance(element, Image)
+    ]
+    frames = [
+        element
+        for root in scene.elements
+        for element in _iter_scene_elements(root)
+        if isinstance(element, TextFrame)
+    ]
+    assert len(images) == 1
+    assert frames == []
+    assert images[0].metadata["text_fallback"] == {
+        "mode": "svg",
+        "reason": "dense_tspan_rotation",
+        "requested_mode": "auto",
+    }
+
+
+def test_dense_tspan_rotation_falls_back_to_svg_without_outline_backend(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    svg = (
+        "<svg width='200' height='200' xmlns='http://www.w3.org/2000/svg'>"
+        "<style>.dense-fill{fill:#123456}</style>"
+        "<g font-family='Arial' font-size='20'>"
+        "<text id='dense' class='dense-fill' x='10' y='80' "
+        "rotate='0 10 20 30'>ABCD</text>"
+        "</g>"
+        "</svg>"
+    )
+    parse_result = _build_parse_result(svg)
+    monkeypatch.setattr(
+        "svg2ooxml.core.ir.text_converter._vector_outline_available",
+        lambda: False,
+    )
+
+    scene = _convert_with_resvg(parse_result)
+
+    images = [
+        element
+        for root in scene.elements
+        for element in _iter_scene_elements(root)
+        if isinstance(element, Image)
+    ]
+    frames = [
+        element
+        for root in scene.elements
+        for element in _iter_scene_elements(root)
+        if isinstance(element, TextFrame)
+    ]
+    assert len(images) == 1
+    assert frames == []
+    image = images[0]
+    assert image.format == "svg"
+    assert image.size.width == pytest.approx(200.0)
+    assert image.size.height == pytest.approx(200.0)
+    assert image.metadata["image_source"] == "dense_rotated_text"
+    assert image.metadata["text_fallback"] == {
+        "mode": "svg",
+        "reason": "dense_per_character_rotation_skia_unavailable",
+        "requested_mode": "auto",
+    }
+    assert image.metadata["policy"]["text"]["dense_rotation_fallback"] == "svg"
+    assert image.data is not None
+    assert b"<style" in image.data
+    assert b"<text" in image.data
+    assert b'class="dense-fill"' in image.data
+    assert b"rotate=" in image.data
+
+
+def test_rtl_end_anchor_keeps_text_frame_inside_viewport() -> None:
+    svg = (
+        "<svg width='200' height='120' xmlns='http://www.w3.org/2000/svg'>"
+        "<text x='10' y='60' direction='rtl' text-anchor='end'>"
+        'Text "אני יכול לאכול זכוכית" is in Hebrew'
+        "</text>"
+        "</svg>"
+    )
+    parse_result = _build_parse_result(svg)
+
+    scene = _convert_with_resvg(parse_result)
+
+    text = next(
+        element
+        for root in scene.elements
+        for element in _iter_scene_elements(root)
+        if isinstance(element, TextFrame)
+    )
+    assert text.anchor is TextAnchor.END
+    assert text.direction == "rtl"
+    assert text.bbox.x == pytest.approx(10.0)
+
+
+def test_bidi_override_mixed_script_defaults_to_svg_text_fallback() -> None:
+    svg = (
+        "<svg width='240' height='120' xmlns='http://www.w3.org/2000/svg'>"
+        "<text x='10' y='60' direction='rtl' unicode-bidi='bidi-override'>"
+        'Text "אני יכול לאכול זכוכית" is in Hebrew'
+        "</text>"
+        "</svg>"
+    )
+    parse_result = _build_parse_result(svg)
+
+    scene = _convert_with_resvg(parse_result)
+
+    images = [
+        element
+        for root in scene.elements
+        for element in _iter_scene_elements(root)
+        if isinstance(element, Image)
+    ]
+    frames = [
+        element
+        for root in scene.elements
+        for element in _iter_scene_elements(root)
+        if isinstance(element, TextFrame)
+    ]
+    assert len(images) == 1
+    assert frames == []
+    image = images[0]
+    assert image.format == "svg"
+    assert image.metadata["image_source"] == "bidi_override_text"
+    assert image.metadata["text_fallback"]["reason"] == "bidi_override_mixed_script"
+    assert image.metadata["policy"]["text"]["bidi_override_fallback"] == "svg"
+    assert image.data is not None
+    assert b"unicode-bidi" in image.data
+
+
+def test_bidi_override_native_override_keeps_text_frame() -> None:
+    svg = (
+        "<svg width='240' height='120' xmlns='http://www.w3.org/2000/svg'>"
+        "<text x='10' y='60' direction='rtl' unicode-bidi='bidi-override'>"
+        'Text "אני יכול לאכול זכוכית" is in Hebrew'
+        "</text>"
+        "</svg>"
+    )
+    parse_result = _build_parse_result(svg)
+
+    scene = _convert_with_resvg_text_overrides(
+        parse_result,
+        {"bidi_override_fallback": "native"},
+    )
+
+    images = [
+        element
+        for root in scene.elements
+        for element in _iter_scene_elements(root)
+        if isinstance(element, Image)
+    ]
+    frames = [
+        element
+        for root in scene.elements
+        for element in _iter_scene_elements(root)
+        if isinstance(element, TextFrame)
+    ]
+    assert images == []
+    assert len(frames) == 1
+    assert frames[0].direction == "rtl"
+
+
+def test_positioned_tspans_without_rotation_emit_separate_native_text_frames() -> None:
+    svg = (
+        "<svg width='200' height='200' xmlns='http://www.w3.org/2000/svg'>"
+        "<text font-size='8'>"
+        "  <tspan x='30' y='135'>5 15 25</tspan>"
+        "  <tspan x='80' y='130'>-10 -20 -30</tspan>"
+        "</text>"
+        "</svg>"
+    )
+    parse_result = _build_parse_result(svg)
+
+    scene = _convert_with_resvg(parse_result)
+
+    frames = [
+        element
+        for root in scene.elements
+        for element in _iter_scene_elements(root)
+        if isinstance(element, TextFrame)
+    ]
+    assert [frame.text_content for frame in frames] == ["5 15 25", "-10 -20 -30"]
+    assert frames[0].origin.x == pytest.approx(30.0)
+    assert frames[0].origin.y == pytest.approx(135.0)
+    assert frames[1].origin.x == pytest.approx(80.0)
+    assert frames[1].origin.y == pytest.approx(130.0)
+    assert all("per_char" not in frame.metadata for frame in frames)
+
+
+def test_rotated_text_consumes_multi_value_xy_lists_per_character() -> None:
+    svg = (
+        "<svg width='200' height='200' xmlns='http://www.w3.org/2000/svg'>"
+        "<text font-size='20' x='10 30 50' y='100 90 80' "
+        "rotate='0 10 20'>ABC</text>"
+        "</svg>"
+    )
+    parse_result = _build_parse_result(svg)
+
+    scene = _convert_with_resvg_text_overrides(
+        parse_result,
+        {"dense_rotation_fallback": "vector_outline"},
+    )
+
+    text = next(
+        element
+        for root in scene.elements
+        for element in _iter_scene_elements(root)
+        if isinstance(element, TextFrame)
+    )
+    per_char = text.metadata.get("per_char")
+    assert isinstance(per_char, dict)
+    assert per_char["abs_x"] == [10.0, 30.0, 50.0]
+    assert per_char["abs_y"] == [100.0, 90.0, 80.0]
+    assert per_char["rotate"] == [0.0, 10.0, 20.0]
+
+
+def test_rotated_text_per_character_positions_include_group_transform() -> None:
+    svg = (
+        "<svg width='200' height='200' xmlns='http://www.w3.org/2000/svg'>"
+        "<g transform='translate(50,20)'>"
+        "<text font-size='20' x='10 30' y='40 60' rotate='10 20'>AB</text>"
+        "</g>"
+        "</svg>"
+    )
+    parse_result = _build_parse_result(svg)
+
+    scene = _convert_with_resvg_text_overrides(
+        parse_result,
+        {"dense_rotation_fallback": "vector_outline"},
+    )
+
+    text = next(
+        element
+        for root in scene.elements
+        for element in _iter_scene_elements(root)
+        if isinstance(element, TextFrame)
+    )
+    per_char = text.metadata.get("per_char")
+    assert isinstance(per_char, dict)
+    assert per_char["abs_x"] == [60.0, 80.0]
+    assert per_char["abs_y"] == [60.0, 80.0]
+
+
+def test_tspan_rotation_with_middle_anchor_offsets_positioned_chunk() -> None:
+    svg = (
+        "<svg width='200' height='200' xmlns='http://www.w3.org/2000/svg'>"
+        "<text font-size='20' x='100' y='40' text-anchor='middle' rotate='10 20'>"
+        "AA"
+        "</text>"
+        "</svg>"
+    )
+    parse_result = _build_parse_result(svg)
+
+    scene = _convert_with_resvg_text_overrides(
+        parse_result,
+        {"dense_rotation_fallback": "vector_outline"},
+    )
+
+    text = next(
+        element
+        for root in scene.elements
+        for element in _iter_scene_elements(root)
+        if isinstance(element, TextFrame)
+    )
+    assert text.anchor is TextAnchor.MIDDLE
+    per_char = text.metadata.get("per_char")
+    assert isinstance(per_char, dict)
+    assert per_char["abs_x"][0] < 100.0
+    assert per_char["abs_x"][1] == pytest.approx(100.0)
+
+
+def test_tspan_rotation_with_end_anchor_offsets_each_positioned_chunk() -> None:
+    svg = (
+        "<svg width='200' height='200' xmlns='http://www.w3.org/2000/svg'>"
+        "<text font-size='20' text-anchor='end' rotate='10'>"
+        "<tspan x='100' y='40'>AA</tspan>"
+        "<tspan x='100' y='80'>AA</tspan>"
+        "</text>"
+        "</svg>"
+    )
+    parse_result = _build_parse_result(svg)
+
+    scene = _convert_with_resvg_text_overrides(
+        parse_result,
+        {"dense_rotation_fallback": "vector_outline"},
+    )
+
+    text = next(
+        element
+        for root in scene.elements
+        for element in _iter_scene_elements(root)
+        if isinstance(element, TextFrame)
+    )
+    assert text.anchor is TextAnchor.END
+    per_char = text.metadata.get("per_char")
+    assert isinstance(per_char, dict)
+    assert per_char["abs_x"][1] == pytest.approx(per_char["abs_x"][3])
+    assert per_char["abs_x"][1] < 100.0
+    assert per_char["abs_y"][2] == pytest.approx(80.0)
+
+
+def test_sparse_tspan_rotation_splits_native_text_and_outline_span() -> None:
+    svg = (
+        "<svg width='200' height='200' xmlns='http://www.w3.org/2000/svg'>"
+        "<text x='100' y='40' text-anchor='middle'>"
+        "This <tspan rotate='45 90'>is</tspan> mostly native"
+        "</text>"
+        "</svg>"
+    )
+    parse_result = _build_parse_result(svg)
+
+    scene = _convert_with_resvg(parse_result)
+
+    frames = [
+        element
+        for root in scene.elements
+        for element in _iter_scene_elements(root)
+        if isinstance(element, TextFrame)
+    ]
+    assert [frame.text_content for frame in frames] == [
+        "This ",
+        "is",
+        " mostly native",
+    ]
+    assert all(frame.anchor is TextAnchor.START for frame in frames)
+    assert "per_char" not in frames[0].metadata
+    assert "per_char" not in frames[2].metadata
+    assert "resvg_text" not in frames[0].metadata
+
+    per_char = frames[1].metadata.get("per_char")
+    assert isinstance(per_char, dict)
+    assert per_char["rotate"] == [45.0, 90.0]
+
+
 def test_textpath_metadata_captured() -> None:
     svg = (
         "<svg width='200' height='200' xmlns='http://www.w3.org/2000/svg'>"
@@ -1311,7 +1809,9 @@ def test_grouped_gaussian_blur_policy_override_attaches_mimic_effects() -> None:
         if getattr(effect, "drawingml", "")
     ]
     assert any("<a:blur " in xml for xml in effect_xml)
-    assert not any("Group Gaussian blur rendered via raster fallback" in xml for xml in effect_xml)
+    assert not any(
+        "Group Gaussian blur rendered via raster fallback" in xml for xml in effect_xml
+    )
 
 
 def test_grouped_diffuse_lighting_policy_override_attaches_mimic_effects() -> None:
@@ -1531,6 +2031,49 @@ def test_pattern_fill_records_policy_metadata() -> None:
     assert analysis["id"] == "grid"
 
 
+def test_full_tile_rect_pattern_collapses_to_solid_fill() -> None:
+    svg = (
+        "<svg width='120' height='120' xmlns='http://www.w3.org/2000/svg'>"
+        "<defs>"
+        "  <pattern id='solidBlue' width='100' height='100' patternUnits='userSpaceOnUse'>"
+        "    <rect width='100' height='100' fill='blue'/>"
+        "  </pattern>"
+        "</defs>"
+        "<rect x='10' y='10' width='100' height='100' fill='url(#solidBlue)'/>"
+        "</svg>"
+    )
+
+    parse_result = _build_parse_result(svg)
+    scene = _convert_with_resvg(parse_result)
+
+    rect = scene.elements[0]
+    assert isinstance(rect, Rectangle)
+    assert isinstance(rect.fill, SolidPaint)
+    assert rect.fill.rgb == "0000FF"
+
+
+def test_transformed_wrapper_pattern_does_not_collapse_to_solid_fill() -> None:
+    svg = (
+        "<svg width='120' height='120' xmlns='http://www.w3.org/2000/svg'>"
+        "<defs>"
+        "  <pattern id='shifted' width='100' height='100' patternUnits='userSpaceOnUse'>"
+        "    <g transform='translate(20,0)'>"
+        "      <rect width='100' height='100' fill='red'/>"
+        "    </g>"
+        "  </pattern>"
+        "</defs>"
+        "<rect x='10' y='10' width='100' height='100' fill='url(#shifted)'/>"
+        "</svg>"
+    )
+
+    parse_result = _build_parse_result(svg)
+    scene = _convert_with_resvg(parse_result)
+
+    rect = scene.elements[0]
+    assert isinstance(rect, Rectangle)
+    assert isinstance(rect.fill, PatternPaint)
+
+
 def test_grouped_dot_pattern_stays_native() -> None:
     svg = (
         "<svg width='50' height='50' xmlns='http://www.w3.org/2000/svg' "
@@ -1623,9 +2166,7 @@ def test_grouped_dot_pattern_on_path_stays_native_with_tile() -> None:
         == "dots"
     )
     assert (
-        element.metadata.get("policy", {}).get("geometry", {}).get(
-            "suggest_fallback"
-        )
+        element.metadata.get("policy", {}).get("geometry", {}).get("suggest_fallback")
         is None
     )
 
@@ -1679,9 +2220,9 @@ def test_polygon_respects_geometry_policy(monkeypatch):
     ):
         calls["called"] = True
         metadata = dict(metadata)
-        metadata.setdefault("policy", {}).setdefault("geometry", {})[
-            "render_mode"
-        ] = "emf"
+        metadata.setdefault("policy", {}).setdefault("geometry", {})["render_mode"] = (
+            "emf"
+        )
         return Image(
             origin=Point(0.0, 0.0),
             size=Rect(0.0, 0.0, 1.0, 1.0),
@@ -2035,6 +2576,38 @@ def test_marker_viewbox_scaling_applied() -> None:
     viewbox_meta = marker_path.metadata.get("marker_viewbox")
     assert viewbox_meta == {"min_x": 0.0, "min_y": 0.0, "width": 3.0, "height": 3.0}
     assert marker_path.metadata.get("marker_overflow") == "hidden"
+
+
+def test_marker_overflow_hidden_clips_oversized_filled_polygon() -> None:
+    svg = (
+        "<svg width='120' height='120' xmlns='http://www.w3.org/2000/svg'>"
+        "<defs>"
+        "  <marker id='box'>"
+        "    <rect width='100' height='100' fill='blue'/>"
+        "  </marker>"
+        "</defs>"
+        "<path d='M10 20 L25 20' stroke='#000' stroke-width='25' marker-end='url(#box)' fill='none'/>"
+        "</svg>"
+    )
+
+    parse_result = _build_parse_result(svg)
+    scene = _convert_with_resvg(parse_result)
+
+    marker_path = next(
+        element
+        for element in scene.elements
+        if isinstance(element, Path) and element.metadata.get("source") == "marker"
+    )
+    assert marker_path.bbox.x == pytest.approx(25.0)
+    assert marker_path.bbox.y == pytest.approx(20.0)
+    assert marker_path.bbox.width == pytest.approx(75.0)
+    assert marker_path.bbox.height == pytest.approx(75.0)
+    assert marker_path.metadata.get("marker_clip") == {
+        "x": 0.0,
+        "y": 0.0,
+        "width": 75.0,
+        "height": 75.0,
+    }
 
 
 def test_marker_preserve_aspect_ratio_meet() -> None:

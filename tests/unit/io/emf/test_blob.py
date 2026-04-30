@@ -53,6 +53,19 @@ def test_emf_blob_pen_cache_reused() -> None:
     assert pen1 == pen2
 
 
+def test_emf_blob_get_pen_converts_emu_width_to_device_pixels() -> None:
+    blob = EMFBlob(914400, 914400, dpi=96)
+    blob.get_pen(0x000000, 19050)
+
+    pen_record = next(
+        payload
+        for code, payload in _records(blob.finalize())
+        if code == EMFRecordType.EMR_CREATEPEN
+    )
+    _, pen_width_px = struct.unpack_from("<Ii", pen_record, 4)
+    assert pen_width_px == 2
+
+
 def test_emf_blob_clip_stack_records() -> None:
     blob = EMFBlob(914400, 914400)
     blob.push_clip_rect(0, 0, 100, 100)
@@ -80,10 +93,14 @@ def test_emf_blob_draw_polygon_writes_point_count() -> None:
     blob = EMFBlob(914400, 914400)
     brush = blob.create_solid_brush(0x0000FF)
     pen = blob.create_pen(0x0000FF, 1000)
-    blob.draw_polygon([(0, 0), (1000, 0), (1000, 1000)], brush_handle=brush, pen_handle=pen)
+    blob.draw_polygon(
+        [(0, 0), (1000, 0), (1000, 1000)], brush_handle=brush, pen_handle=pen
+    )
     emf_bytes = blob.finalize()
 
-    polygon_record = next(entry for entry in _records(emf_bytes) if entry[0] == EMFRecordType.EMR_POLYGON)
+    polygon_record = next(
+        entry for entry in _records(emf_bytes) if entry[0] == EMFRecordType.EMR_POLYGON
+    )
     payload = polygon_record[1]
     count = struct.unpack_from("<I", payload, 16)[0]
     assert count == 3

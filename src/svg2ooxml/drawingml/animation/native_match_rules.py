@@ -50,7 +50,9 @@ _GRADIENT_PAINT_ATTRIBUTES = {"stop-color", "stop-opacity"}
 _FILTER_PAINT_ATTRIBUTES = {"flood-color", "lighting-color"}
 
 
-def classify_native_match_core(animation: AnimationDefinition) -> MutableNativeAnimationMatch:
+def classify_native_match_core(
+    animation: AnimationDefinition,
+) -> MutableNativeAnimationMatch:
     if animation.animation_type == AnimationType.ANIMATE_MOTION:
         return MutableNativeAnimationMatch(
             level=NativeAnimationMatchLevel.EXACT_NATIVE,
@@ -231,11 +233,11 @@ def _classify_animate(animation: AnimationDefinition) -> MutableNativeAnimationM
 
     if attr == "stroke-width":
         return MutableNativeAnimationMatch(
-            NativeAnimationMatchLevel.EXACT_NATIVE,
-            "p:anim",
-            "stroke-weight-animation",
+            NativeAnimationMatchLevel.UNSUPPORTED_NATIVE,
+            "none",
+            "stroke-weight-dead-path",
             False,
-            "stroke-weight-native",
+            "stroke-weight-dead-path",
             visual_required=True,
         )
 

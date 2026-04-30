@@ -31,12 +31,22 @@ def parse_linear_gradient(
 ) -> LinearGradient:
     attributes = node.attributes
     units = normalize_gradient_units(attributes.get("gradientUnits"))
-    transform_matrix = matrix_from_commands(parse_transform(attributes.get("gradientTransform")))
+    transform_matrix = matrix_from_commands(
+        parse_transform(attributes.get("gradientTransform"))
+    )
     stops_list = _parse_stops(node)
     href = _extract_href(attributes)
     specified = tuple(
         key
-        for key in ("x1", "y1", "x2", "y2", "gradientUnits", "spreadMethod", "gradientTransform")
+        for key in (
+            "x1",
+            "y1",
+            "x2",
+            "y2",
+            "gradientUnits",
+            "spreadMethod",
+            "gradientTransform",
+        )
         if key in attributes
     )
     return LinearGradient(
@@ -69,12 +79,24 @@ def parse_radial_gradient(
 ) -> RadialGradient:
     attributes = node.attributes
     units = normalize_gradient_units(attributes.get("gradientUnits"))
-    transform_matrix = matrix_from_commands(parse_transform(attributes.get("gradientTransform")))
+    transform_matrix = matrix_from_commands(
+        parse_transform(attributes.get("gradientTransform"))
+    )
     stops_list = _parse_stops(node)
     href = _extract_href(attributes)
     specified = tuple(
         key
-        for key in ("cx", "cy", "r", "fx", "fy", "gradientUnits", "spreadMethod", "gradientTransform")
+        for key in (
+            "cx",
+            "cy",
+            "r",
+            "fx",
+            "fy",
+            "fr",
+            "gradientUnits",
+            "spreadMethod",
+            "gradientTransform",
+        )
         if key in attributes
     )
     default_cx = parse_gradient_coordinate(
@@ -103,6 +125,13 @@ def parse_radial_gradient(
             axis="y",
             default=str(default_cy),
         ),
+        fr=parse_gradient_coordinate(
+            attributes.get("fr"),
+            units=units,
+            context=context,
+            axis="x",
+            default="0%",
+        ),
         units=units,
         spread_method=attributes.get("spreadMethod") or "pad",
         transform=transform_matrix,
@@ -124,7 +153,9 @@ def resolve_linear_gradient_reference(
     units = _resolved_gradient_units(chain)
     x1 = _resolved_gradient_coordinate(chain, "x1", units=units, axis="x", default="0%")
     y1 = _resolved_gradient_coordinate(chain, "y1", units=units, axis="y", default="0%")
-    x2 = _resolved_gradient_coordinate(chain, "x2", units=units, axis="x", default="100%")
+    x2 = _resolved_gradient_coordinate(
+        chain, "x2", units=units, axis="x", default="100%"
+    )
     y2 = _resolved_gradient_coordinate(chain, "y2", units=units, axis="y", default="0%")
     return LinearGradient(
         x1=_required(x1),
@@ -132,7 +163,8 @@ def resolve_linear_gradient_reference(
         x2=_required(x2),
         y2=_required(y2),
         units=units,
-        spread_method=_resolved_gradient_token(chain, "spreadMethod", default="pad") or "pad",
+        spread_method=_resolved_gradient_token(chain, "spreadMethod", default="pad")
+        or "pad",
         transform=_resolved_gradient_transform(chain),
         stops=_resolved_gradient_stops(chain),
         href=None,
@@ -150,11 +182,18 @@ def resolve_radial_gradient_reference(
     chain = _radial_gradient_chain(node, paint_servers, visited)
     gradient = chain[0]
     units = _resolved_gradient_units(chain)
-    cx = _resolved_gradient_coordinate(chain, "cx", units=units, axis="x", default="50%")
-    cy = _resolved_gradient_coordinate(chain, "cy", units=units, axis="y", default="50%")
-    radius = _resolved_gradient_coordinate(chain, "r", units=units, axis="x", default="50%")
+    cx = _resolved_gradient_coordinate(
+        chain, "cx", units=units, axis="x", default="50%"
+    )
+    cy = _resolved_gradient_coordinate(
+        chain, "cy", units=units, axis="y", default="50%"
+    )
+    radius = _resolved_gradient_coordinate(
+        chain, "r", units=units, axis="x", default="50%"
+    )
     fx = _resolved_gradient_coordinate(chain, "fx", units=units, axis="x", default=None)
     fy = _resolved_gradient_coordinate(chain, "fy", units=units, axis="y", default=None)
+    fr = _resolved_gradient_coordinate(chain, "fr", units=units, axis="x", default="0%")
     resolved_cx = _required(cx)
     resolved_cy = _required(cy)
     return RadialGradient(
@@ -163,8 +202,10 @@ def resolve_radial_gradient_reference(
         r=_required(radius),
         fx=resolved_cx if fx is None else fx,
         fy=resolved_cy if fy is None else fy,
+        fr=_required(fr),
         units=units,
-        spread_method=_resolved_gradient_token(chain, "spreadMethod", default="pad") or "pad",
+        spread_method=_resolved_gradient_token(chain, "spreadMethod", default="pad")
+        or "pad",
         transform=_resolved_gradient_transform(chain),
         stops=_resolved_gradient_stops(chain),
         href=None,
@@ -189,7 +230,9 @@ def _parse_stops(node: SvgNode) -> list[GradientStop]:
 def _parse_stop(node: SvgNode) -> GradientStop | None:
     offset = parse_gradient_offset(node.attributes.get("offset"))
     color_value = node.styles.get("stop-color") or node.attributes.get("stop-color")
-    opacity_value = node.styles.get("stop-opacity") or node.attributes.get("stop-opacity")
+    opacity_value = node.styles.get("stop-opacity") or node.attributes.get(
+        "stop-opacity"
+    )
     opacity = parse_number_or_percent(opacity_value, 1.0)
     color = parse_color(color_value or "#000000", opacity)
     if color is None:

@@ -14,6 +14,7 @@ from svg2ooxml.common.units.lengths import (
 )
 from svg2ooxml.core.resvg.painting.paint import parse_color
 from svg2ooxml.core.resvg.usvg_tree import FilterNode, FilterPrimitive
+from svg2ooxml.filters.input_descriptors import paint_input_descriptors
 from svg2ooxml.filters.utils.parsing import parse_length
 from svg2ooxml.render import filters_region as _region
 from svg2ooxml.render.filters_image import plan_image_primitive
@@ -48,12 +49,16 @@ def _plan_filter(
     options: Mapping[str, Any] | None = None,
 ) -> FilterPlan:
     available: set[str] = {"SourceGraphic", "SourceAlpha"}
+    input_descriptors = _declared_input_descriptors(options)
+    available.update(input_descriptors)
     plans: list[FilterPrimitivePlan] = []
 
     for primitive in filter_node.primitives:
         tag_lower = primitive.tag.lower()
         if tag_lower not in RESVG_SUPPORTED_PRIMITIVES:
-            raise UnsupportedPrimitiveError(primitive.tag, "primitive not supported", primitive=primitive)
+            raise UnsupportedPrimitiveError(
+                primitive.tag, "primitive not supported", primitive=primitive
+            )
 
         color_mode = _region.resolve_color_mode(filter_node, primitive)
         attrs = primitive.attributes
@@ -61,32 +66,90 @@ def _plan_filter(
         extra: dict[str, Any] = {}
 
         if tag_lower == "fegaussianblur":
-            inputs.append(_normalise_input(attrs.get("in"), available, primitive, allow_default=True, label="in"))
+            inputs.append(
+                _normalise_input(
+                    attrs.get("in"),
+                    available,
+                    primitive,
+                    allow_default=True,
+                    label="in",
+                )
+            )
             extra["std_deviation"] = _parse_std_deviation(attrs.get("stdDeviation"))
         elif tag_lower == "feoffset":
-            inputs.append(_normalise_input(attrs.get("in"), available, primitive, allow_default=True, label="in"))
+            inputs.append(
+                _normalise_input(
+                    attrs.get("in"),
+                    available,
+                    primitive,
+                    allow_default=True,
+                    label="in",
+                )
+            )
             extra["dx"] = _parse_number(attrs.get("dx"))
             extra["dy"] = _parse_number(attrs.get("dy"))
         elif tag_lower == "fecolormatrix":
-            inputs.append(_normalise_input(attrs.get("in"), available, primitive, allow_default=True, label="in"))
+            inputs.append(
+                _normalise_input(
+                    attrs.get("in"),
+                    available,
+                    primitive,
+                    allow_default=True,
+                    label="in",
+                )
+            )
             if attrs.get("type", "matrix") == "matrix":
                 values = _parse_float_list(attrs.get("values"))
                 if values and len(values) != 20:
-                    raise UnsupportedPrimitiveError(primitive.tag, "color matrix requires 20 values", primitive=primitive)
+                    raise UnsupportedPrimitiveError(
+                        primitive.tag,
+                        "color matrix requires 20 values",
+                        primitive=primitive,
+                    )
         elif tag_lower == "fecomponenttransfer":
-            inputs.append(_normalise_input(attrs.get("in"), available, primitive, allow_default=True, label="in"))
+            inputs.append(
+                _normalise_input(
+                    attrs.get("in"),
+                    available,
+                    primitive,
+                    allow_default=True,
+                    label="in",
+                )
+            )
             extra["functions"] = _parse_component_transfer_functions(primitive)
         elif tag_lower == "feflood":
             inputs = []
         elif tag_lower == "feimage":
             inputs = []
-            extra["image"] = plan_image_primitive(primitive, options=options, error_cls=UnsupportedPrimitiveError)
+            extra["image"] = plan_image_primitive(
+                primitive, options=options, error_cls=UnsupportedPrimitiveError
+            )
         elif tag_lower == "fecomposite":
-            inputs.append(_normalise_input(attrs.get("in"), available, primitive, allow_default=True, label="in"))
-            inputs.append(_normalise_input(attrs.get("in2"), available, primitive, allow_default=False, label="in2"))
+            inputs.append(
+                _normalise_input(
+                    attrs.get("in"),
+                    available,
+                    primitive,
+                    allow_default=True,
+                    label="in",
+                )
+            )
+            inputs.append(
+                _normalise_input(
+                    attrs.get("in2"),
+                    available,
+                    primitive,
+                    allow_default=False,
+                    label="in2",
+                )
+            )
             operator = (attrs.get("operator") or "over").lower()
             if operator not in {"over", "in", "out", "atop", "xor", "arithmetic"}:
-                raise UnsupportedPrimitiveError(primitive.tag, f"operator {operator!r} not supported", primitive=primitive)
+                raise UnsupportedPrimitiveError(
+                    primitive.tag,
+                    f"operator {operator!r} not supported",
+                    primitive=primitive,
+                )
             extra["operator"] = operator
             if operator == "arithmetic":
                 extra["k1"] = _parse_number(attrs.get("k1"), 0.0)
@@ -94,20 +157,63 @@ def _plan_filter(
                 extra["k3"] = _parse_number(attrs.get("k3"), 0.0)
                 extra["k4"] = _parse_number(attrs.get("k4"), 0.0)
         elif tag_lower == "feblend":
-            inputs.append(_normalise_input(attrs.get("in"), available, primitive, allow_default=True, label="in"))
-            inputs.append(_normalise_input(attrs.get("in2"), available, primitive, allow_default=False, label="in2"))
+            inputs.append(
+                _normalise_input(
+                    attrs.get("in"),
+                    available,
+                    primitive,
+                    allow_default=True,
+                    label="in",
+                )
+            )
+            inputs.append(
+                _normalise_input(
+                    attrs.get("in2"),
+                    available,
+                    primitive,
+                    allow_default=False,
+                    label="in2",
+                )
+            )
             mode = (attrs.get("mode") or "normal").strip().lower()
             if mode not in {"normal", "multiply", "screen", "darken", "lighten"}:
-                raise UnsupportedPrimitiveError(primitive.tag, f"blend mode {mode!r} not supported", primitive=primitive)
+                raise UnsupportedPrimitiveError(
+                    primitive.tag,
+                    f"blend mode {mode!r} not supported",
+                    primitive=primitive,
+                )
             extra["mode"] = mode
         elif tag_lower == "fedisplacementmap":
-            inputs.append(_normalise_input(attrs.get("in"), available, primitive, allow_default=True, label="in"))
-            inputs.append(_normalise_input(attrs.get("in2"), available, primitive, allow_default=False, label="in2"))
+            inputs.append(
+                _normalise_input(
+                    attrs.get("in"),
+                    available,
+                    primitive,
+                    allow_default=True,
+                    label="in",
+                )
+            )
+            inputs.append(
+                _normalise_input(
+                    attrs.get("in2"),
+                    available,
+                    primitive,
+                    allow_default=False,
+                    label="in2",
+                )
+            )
             x_channel = (attrs.get("xChannelSelector") or "A").strip().upper()
             y_channel = (attrs.get("yChannelSelector") or "A").strip().upper()
-            if x_channel not in {"R", "G", "B", "A"} or y_channel not in {"R", "G", "B", "A"}:
+            if x_channel not in {"R", "G", "B", "A"} or y_channel not in {
+                "R",
+                "G",
+                "B",
+                "A",
+            }:
                 raise UnsupportedPrimitiveError(
-                    primitive.tag, "channel selectors must be one of R, G, B, A", primitive=primitive
+                    primitive.tag,
+                    "channel selectors must be one of R, G, B, A",
+                    primitive=primitive,
                 )
             scale = _parse_number(attrs.get("scale"), 0.0)
             extra["scale"] = scale
@@ -119,32 +225,66 @@ def _plan_filter(
         elif tag_lower in {"fediffuselighting", "fespecularlighting"}:
             light = _parse_light(primitive)
             if light is None:
-                raise UnsupportedPrimitiveError(primitive.tag, "missing light definition", primitive=primitive)
-            inputs.append(_normalise_input(attrs.get("in"), available, primitive, allow_default=True, label="in"))
+                raise UnsupportedPrimitiveError(
+                    primitive.tag, "missing light definition", primitive=primitive
+                )
+            inputs.append(
+                _normalise_input(
+                    attrs.get("in"),
+                    available,
+                    primitive,
+                    allow_default=True,
+                    label="in",
+                )
+            )
             extra["light"] = light
             extra["surface_scale"] = _parse_number(attrs.get("surfaceScale"), 1.0)
             if tag_lower == "fediffuselighting":
                 extra["constant"] = _parse_number(attrs.get("diffuseConstant"), 1.0)
             else:
                 extra["constant"] = _parse_number(attrs.get("specularConstant"), 1.0)
-                extra["exponent"] = max(1.0, _parse_number(attrs.get("specularExponent"), 1.0))
+                extra["exponent"] = max(
+                    1.0, _parse_number(attrs.get("specularExponent"), 1.0)
+                )
             extra["kernel_length"] = _parse_kernel_unit(attrs.get("kernelUnitLength"))
             extra["lighting_color"] = _parse_lighting_color(attrs, primitive.styles)
         elif tag_lower == "femerge":
             inputs = list(_collect_merge_inputs(primitive, available))
         elif tag_lower == "femorphology":
-            inputs.append(_normalise_input(attrs.get("in"), available, primitive, allow_default=True, label="in"))
+            inputs.append(
+                _normalise_input(
+                    attrs.get("in"),
+                    available,
+                    primitive,
+                    allow_default=True,
+                    label="in",
+                )
+            )
             operator = (attrs.get("operator") or "erode").strip().lower()
             if operator not in {"erode", "dilate"}:
-                raise UnsupportedPrimitiveError(primitive.tag, f"operator {operator!r} not supported", primitive=primitive)
+                raise UnsupportedPrimitiveError(
+                    primitive.tag,
+                    f"operator {operator!r} not supported",
+                    primitive=primitive,
+                )
             rx, ry = _parse_radius(attrs.get("radius"))
             extra["operator"] = operator
             extra["radius_x"] = rx
             extra["radius_y"] = ry
         elif tag_lower == "fetile":
-            inputs.append(_normalise_input(attrs.get("in"), available, primitive, allow_default=False, label="in"))
+            inputs.append(
+                _normalise_input(
+                    attrs.get("in"),
+                    available,
+                    primitive,
+                    allow_default=False,
+                    label="in",
+                )
+            )
         else:  # pragma: no cover - defensive, should not happen with whitelist
-            raise UnsupportedPrimitiveError(primitive.tag, "primitive handler missing", primitive=primitive)
+            raise UnsupportedPrimitiveError(
+                primitive.tag, "primitive handler missing", primitive=primitive
+            )
 
         plan = FilterPrimitivePlan(
             primitive=primitive,
@@ -159,7 +299,20 @@ def _plan_filter(
         if plan.result_name:
             available.add(plan.result_name)
 
-    return FilterPlan(filter_node=filter_node, primitives=plans)
+    return FilterPlan(
+        filter_node=filter_node,
+        primitives=plans,
+        input_descriptors=input_descriptors,
+    )
+
+
+def _declared_input_descriptors(
+    options: Mapping[str, Any] | None,
+) -> dict[str, dict[str, Any]]:
+    if not isinstance(options, Mapping):
+        return {}
+    raw_inputs = options.get("filter_inputs")
+    return paint_input_descriptors(raw_inputs)
 
 
 def _normalise_input(
@@ -173,22 +326,34 @@ def _normalise_input(
     if raw_value is None or not raw_value.strip():
         if allow_default:
             return None
-        raise UnsupportedPrimitiveError(primitive.tag, f"missing required input '{label}'", primitive=primitive)
+        raise UnsupportedPrimitiveError(
+            primitive.tag, f"missing required input '{label}'", primitive=primitive
+        )
     name = raw_value.strip()
     if name not in available:
-        raise UnsupportedPrimitiveError(primitive.tag, f"input '{name}' is not available", primitive=primitive)
+        raise UnsupportedPrimitiveError(
+            primitive.tag, f"input '{name}' is not available", primitive=primitive
+        )
     return name
 
 
-def _collect_merge_inputs(primitive: FilterPrimitive, available: Iterable[str]) -> tuple[str | None, ...]:
+def _collect_merge_inputs(
+    primitive: FilterPrimitive, available: Iterable[str]
+) -> tuple[str | None, ...]:
     inputs: list[str | None] = []
     for node in primitive.children:
         if node.tag.lower() != "femergenode":
             continue
-        node_input = _normalise_input(node.attributes.get("in"), available, node, allow_default=False, label="in")
+        node_input = _normalise_input(
+            node.attributes.get("in"), available, node, allow_default=False, label="in"
+        )
         inputs.append(node_input)
     if not inputs:
-        raise UnsupportedPrimitiveError(primitive.tag, "feMerge requires at least one feMergeNode", primitive=primitive)
+        raise UnsupportedPrimitiveError(
+            primitive.tag,
+            "feMerge requires at least one feMergeNode",
+            primitive=primitive,
+        )
     return tuple(inputs)
 
 
@@ -224,7 +389,9 @@ def _parse_radius(value: str | None) -> tuple[float, float]:
     return (max(0.0, values[0]), max(0.0, values[1]))
 
 
-def _parse_component_transfer_functions(primitive: FilterPrimitive) -> ComponentTransferPlan:
+def _parse_component_transfer_functions(
+    primitive: FilterPrimitive,
+) -> ComponentTransferPlan:
     defaults = {
         "r": ComponentTransferFunction("identity"),
         "g": ComponentTransferFunction("identity"),
@@ -245,17 +412,34 @@ def _parse_component_transfer_functions(primitive: FilterPrimitive) -> Component
         if func_type == "linear":
             slope = _parse_number(node.attributes.get("slope"), 1.0)
             intercept = _parse_number(node.attributes.get("intercept"), 0.0)
-            if any(node.attributes.get(name) for name in ("amplitude", "exponent", "offset")):
-                raise UnsupportedPrimitiveError(primitive.tag, "gamma parameters not supported", primitive=primitive)
-            defaults[channel] = ComponentTransferFunction("linear", slope=slope, intercept=intercept)
+            if any(
+                node.attributes.get(name)
+                for name in ("amplitude", "exponent", "offset")
+            ):
+                raise UnsupportedPrimitiveError(
+                    primitive.tag, "gamma parameters not supported", primitive=primitive
+                )
+            defaults[channel] = ComponentTransferFunction(
+                "linear", slope=slope, intercept=intercept
+            )
             continue
         if func_type == "table":
-            values = _parse_float_list(node.attributes.get("tableValues") or node.attributes.get("values"))
+            values = _parse_float_list(
+                node.attributes.get("tableValues") or node.attributes.get("values")
+            )
             if not values:
-                raise UnsupportedPrimitiveError(primitive.tag, "table function requires values", primitive=primitive)
-            defaults[channel] = ComponentTransferFunction("table", values=np.array(values, dtype=np.float32))
+                raise UnsupportedPrimitiveError(
+                    primitive.tag, "table function requires values", primitive=primitive
+                )
+            defaults[channel] = ComponentTransferFunction(
+                "table", values=np.array(values, dtype=np.float32)
+            )
             continue
-        raise UnsupportedPrimitiveError(primitive.tag, f"function type {func_type!r} not supported", primitive=primitive)
+        raise UnsupportedPrimitiveError(
+            primitive.tag,
+            f"function type {func_type!r} not supported",
+            primitive=primitive,
+        )
 
     return ComponentTransferPlan(
         red=defaults["r"],
@@ -299,7 +483,9 @@ def _parse_kernel_unit(value: str | None) -> tuple[float, float]:
     return (values[0], values[1])
 
 
-def _parse_lighting_color(attrs: Mapping[str, str], styles: Mapping[str, str]) -> tuple[float, float, float]:
+def _parse_lighting_color(
+    attrs: Mapping[str, str], styles: Mapping[str, str]
+) -> tuple[float, float, float]:
     candidate = attrs.get("lighting-color") or styles.get("lighting-color") or "#ffffff"
     color = parse_color(candidate, 1.0)
     if color is None:
@@ -329,7 +515,9 @@ def _parse_light(primitive: FilterPrimitive) -> dict[str, Any] | None:
             }
         if tag == "fespotlight":
             limiting = attrs.get("limitingConeAngle")
-            cone_angle = None if limiting is None else math.radians(_parse_number(limiting, 0.0))
+            cone_angle = (
+                None if limiting is None else math.radians(_parse_number(limiting, 0.0))
+            )
             return {
                 "type": "spot",
                 "x": _parse_number(attrs.get("x"), 0.0),

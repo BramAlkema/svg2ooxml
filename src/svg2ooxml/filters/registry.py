@@ -10,6 +10,7 @@ from typing import Any
 from lxml import etree
 
 from .base import Filter, FilterContext, FilterResult
+from .input_descriptors import paint_input_descriptors
 from .primitives.blend import BlendFilter
 from .primitives.color_matrix import ColorMatrixFilter
 from .primitives.component_transfer import ComponentTransferFilter
@@ -61,7 +62,9 @@ class FilterRegistry:
 
     def register(self, filter_obj: Filter) -> None:
         if filter_obj.filter_type in self._filters_by_type:
-            self._logger.debug("Replacing existing filter for type %s", filter_obj.filter_type)
+            self._logger.debug(
+                "Replacing existing filter for type %s", filter_obj.filter_type
+            )
         self._filters_by_type[filter_obj.filter_type] = filter_obj
         for tag in filter_obj.primitive_tags:
             bucket = self._filters_by_tag.setdefault(tag, [])
@@ -117,14 +120,21 @@ class FilterRegistry:
                 result = filter_obj.apply(primitive, child_context)
                 if result is None:
                     return None
-                name = result.result_name or primitive.get("result") or self._default_result_name(
-                    filter_obj, sequence_index, pipeline
+                name = (
+                    result.result_name
+                    or primitive.get("result")
+                    or self._default_result_name(filter_obj, sequence_index, pipeline)
                 )
                 result.result_name = name
                 pipeline[name] = result
                 return result
             except Exception:  # pragma: no cover - defensive
-                self._logger.debug("Filter %s failed for primitive %s", filter_obj.filter_type, tag, exc_info=True)
+                self._logger.debug(
+                    "Filter %s failed for primitive %s",
+                    filter_obj.filter_type,
+                    tag,
+                    exc_info=True,
+                )
         return None
 
     def _default_result_name(
@@ -141,7 +151,9 @@ class FilterRegistry:
             counter += 1
         return candidate
 
-    def _seed_base_inputs(self, pipeline: dict[str, FilterResult], context: FilterContext) -> None:
+    def _seed_base_inputs(
+        self, pipeline: dict[str, FilterResult], context: FilterContext
+    ) -> None:
         filter_inputs: dict[str, Any] = {}
         options = context.options if isinstance(context.options, dict) else {}
         raw_inputs = options.get("filter_inputs")
@@ -158,7 +170,9 @@ class FilterRegistry:
                 metadata.update(source_graphic_meta)
             pipeline["SourceGraphic"] = FilterResult(
                 success=True,
-                drawingml=build_exporter_hook("sourceGraphic", {"ref": "SourceGraphic"}),
+                drawingml=build_exporter_hook(
+                    "sourceGraphic", {"ref": "SourceGraphic"}
+                ),
                 metadata=metadata,
             )
         else:
@@ -171,7 +185,9 @@ class FilterRegistry:
             if isinstance(candidate_alpha, dict):
                 alpha_meta = copy.deepcopy(candidate_alpha)
             else:
-                alpha_meta = copy.deepcopy(source_graphic_meta) if source_graphic_meta else {}
+                alpha_meta = (
+                    copy.deepcopy(source_graphic_meta) if source_graphic_meta else {}
+                )
                 alpha_meta.pop("fill", None)
                 if alpha_meta:
                     alpha_meta["alpha_source"] = "SourceGraphic"
@@ -184,10 +200,24 @@ class FilterRegistry:
                 metadata=metadata_alpha,
             )
 
+        paint_descriptors = paint_input_descriptors(filter_inputs)
+        for input_name, candidate_paint in paint_descriptors.items():
+            if input_name in pipeline:
+                continue
+            metadata_paint = {"ref": input_name}
+            metadata_paint.update(copy.deepcopy(candidate_paint))
+            pipeline[input_name] = FilterResult(
+                success=True,
+                drawingml=build_exporter_hook(input_name, {"ref": input_name}),
+                metadata=metadata_paint,
+            )
+
     def clone(self) -> FilterRegistry:
         clone = FilterRegistry()
         clone._filters_by_type = dict(self._filters_by_type)
-        clone._filters_by_tag = {tag: list(filters) for tag, filters in self._filters_by_tag.items()}
+        clone._filters_by_tag = {
+            tag: list(filters) for tag, filters in self._filters_by_tag.items()
+        }
         return clone
 
 

@@ -9,6 +9,7 @@ from typing import Any
 from svg2ooxml.common.conversions.angles import degrees_to_ppt
 from svg2ooxml.common.conversions.opacity import clamp_opacity, opacity_to_ppt
 from svg2ooxml.common.conversions.scale import position_to_ppt
+from svg2ooxml.common.gradient_stops import remap_stops_for_radial_focal_radius
 from svg2ooxml.drawingml.xml_builder import a_elem, a_sub, color_choice, to_string
 from svg2ooxml.ir.paint import LinearGradientPaint, RadialGradientPaint
 
@@ -49,6 +50,8 @@ def normalize_gradient_for_drawingml_bbox(paint, shape_bbox):
         if paint.focal_point is not None:
             fx, fy = paint.focal_point
             kwargs["focal_point"] = ((fx - bx) / bw, (fy - by) / bh)
+        if paint.focal_radius is not None:
+            kwargs["focal_radius"] = paint.focal_radius / max(bw, bh)
         return replace(paint, **kwargs)
 
     return paint
@@ -121,6 +124,18 @@ def _expand_stops_for_spread(stops, spread_method: str | None):
     return deduped if deduped else stops
 
 
+def _apply_radial_focal_radius_to_stops(
+    stops, radius: float, focal_radius: float | None
+):
+    return remap_stops_for_radial_focal_radius(
+        stops,
+        radius=radius,
+        focal_radius=focal_radius,
+        offset_of=lambda stop: float(stop.offset),
+        with_offset=lambda stop, offset: replace(stop, offset=offset),
+    )
+
+
 def _linear_gradient_to_fill_elem(paint: LinearGradientPaint):
     """Create linear gradient fill element."""
     dx = paint.end[0] - paint.start[0]
@@ -164,6 +179,7 @@ def _radial_gradient_to_fill_elem(paint: RadialGradientPaint):
     bottom = position_to_ppt(max(0.0, 1.0 - (cy + radius)))
 
     stops = _expand_stops_for_spread(paint.stops, paint.spread_method)
+    stops = _apply_radial_focal_radius_to_stops(stops, radius, paint.focal_radius)
 
     gradFill = a_elem("gradFill", rotWithShape="1")
     gsLst = a_sub(gradFill, "gsLst")
@@ -197,6 +213,7 @@ def _gradient_stop_elem(stop):
 
 __all__ = [
     "_expand_stops_for_spread",
+    "_apply_radial_focal_radius_to_stops",
     "_gradient_stop_elem",
     "_linear_gradient_to_fill_elem",
     "_radial_gradient_to_fill_elem",

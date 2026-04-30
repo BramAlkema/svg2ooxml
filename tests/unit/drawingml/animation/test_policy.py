@@ -148,7 +148,7 @@ class TestEstimateMaxError:
         animation = Mock()
         animation.key_splines = [
             [0.0, 0.0, 1.0, 1.0],  # Linear (low error)
-            [0.42, 0, 0.58, 1],     # Ease-in-out (higher error)
+            [0.42, 0, 0.58, 1],  # Ease-in-out (higher error)
         ]
 
         error = policy._estimate_max_error(animation)
@@ -335,6 +335,20 @@ class TestShouldSkip:
         assert should_skip is True
         assert reason == "fallback_mode_not_native"
 
+    def test_animate_stroke_width_dead_path_is_skipped(self):
+        """Interpolated stroke.weight is valid XML but dead in PowerPoint runtime."""
+        policy = AnimationPolicy({})
+
+        animation = Mock()
+        animation.animation_type = Mock(value="animate")
+        animation.target_attribute = "stroke-width"
+        animation.key_splines = []
+        animation.timing = Mock(begin_triggers=[], end_triggers=[])
+
+        should_skip, reason = policy.should_skip(animation, 0.0)
+        assert should_skip is True
+        assert reason == "dead_path_stroke_weight"
+
 
 class TestShouldSuppressTiming:
     """Test should_suppress_timing logic."""
@@ -376,11 +390,13 @@ class TestIntegration:
     def test_complete_policy_evaluation(self):
         """Test complete policy evaluation workflow."""
         # Setup policy with multiple rules
-        policy = AnimationPolicy({
-            "fallback_mode": "native",
-            "allow_native_splines": True,
-            "max_spline_error": 0.05,
-        })
+        policy = AnimationPolicy(
+            {
+                "fallback_mode": "native",
+                "allow_native_splines": True,
+                "max_spline_error": 0.05,
+            }
+        )
 
         # Create animation with splines
         animation = Mock()
@@ -399,10 +415,12 @@ class TestIntegration:
 
     def test_multiple_constraints_suppresses_timing(self):
         """Multiple policy constraints should suppress timing."""
-        policy = AnimationPolicy({
-            "fallback_mode": "raster",
-            "allow_native_splines": False,
-        })
+        policy = AnimationPolicy(
+            {
+                "fallback_mode": "raster",
+                "allow_native_splines": False,
+            }
+        )
 
         animation = Mock()
         animation.key_splines = [[0.42, 0, 0.58, 1]]

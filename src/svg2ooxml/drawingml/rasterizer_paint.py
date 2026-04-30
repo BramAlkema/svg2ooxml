@@ -148,13 +148,14 @@ class RasterizerPaintMixin:
         if radius <= 0:
             return None
         fx, fy = self._radial_gradient_focus(paint, bounds, (cx, cy))
+        focal_radius = self._radial_gradient_focal_radius(paint, bounds)
         tile_mode = self._resolve_tile_mode(paint.spread_method)
         matrix = self._to_skia_matrix(paint.transform)
-        if fx != cx or fy != cy:
+        if fx != cx or fy != cy or focal_radius > 0:
             try:
                 return skia.GradientShader.MakeTwoPointConical(
                     skia.Point(fx, fy),
-                    0.0,
+                    focal_radius,
                     skia.Point(cx, cy),
                     radius,
                     colors,
@@ -166,7 +167,7 @@ class RasterizerPaintMixin:
             except TypeError:  # pragma: no cover - older skia signature
                 return skia.GradientShader.MakeTwoPointConical(
                     skia.Point(fx, fy),
-                    0.0,
+                    focal_radius,
                     skia.Point(cx, cy),
                     radius,
                     colors,
@@ -253,6 +254,16 @@ class RasterizerPaintMixin:
             fx = bounds.x + fx * bounds.width
             fy = bounds.y + fy * bounds.height
         return fx, fy
+
+    @staticmethod
+    def _radial_gradient_focal_radius(
+        paint: RadialGradientPaint,
+        bounds: Rect,
+    ) -> float:
+        focal_radius = paint.focal_radius or 0.0
+        if normalize_gradient_units(paint.gradient_units) == "objectBoundingBox":
+            return focal_radius * (bounds.width + bounds.height) * 0.5
+        return focal_radius
 
     _resolve_tile_mode = staticmethod(
         lambda spread_method: _skia_tile_mode(skia, spread_method)

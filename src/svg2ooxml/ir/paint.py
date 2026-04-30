@@ -69,6 +69,7 @@ class RadialGradientPaint:
     # Phase 4: Units & Spread tracking
     gradient_units: str | None = None  # "userSpaceOnUse" or "objectBoundingBox"
     spread_method: str | None = None  # "pad", "reflect", or "repeat"
+    focal_radius: float | None = None
 
 
 @dataclass(frozen=True)

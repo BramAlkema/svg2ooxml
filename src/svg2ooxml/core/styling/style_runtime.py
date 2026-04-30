@@ -11,7 +11,7 @@ from svg2ooxml.core.styling.pattern_merge import (
     merge_pattern_paint as _merge_pattern_paint,
 )
 from svg2ooxml.core.styling.style_helpers import parse_style_attr
-from svg2ooxml.ir.paint import PatternPaint
+from svg2ooxml.ir.paint import PatternPaint, SolidPaint
 from svg2ooxml.paint.resvg_bridge import resolve_paints_for_node
 from svg2ooxml.policy.fidelity import FidelityDecision, resolve_fidelity
 
@@ -137,11 +137,21 @@ def extract_style(converter, element: etree._Element) -> StyleResult:
     fill_disabled = _element_explicitly_disables_paint(element, "fill")
     stroke_disabled = _element_explicitly_disables_paint(element, "stroke")
 
-    fill = None if fill_disabled else (paints.fill if paints.fill is not None else base_style.fill)
+    fill = (
+        None
+        if fill_disabled
+        else (paints.fill if paints.fill is not None else base_style.fill)
+    )
     if isinstance(fill, PatternPaint) and isinstance(base_style.fill, PatternPaint):
         fill = _merge_pattern_paint(fill, base_style.fill)
+    elif isinstance(fill, PatternPaint) and isinstance(base_style.fill, SolidPaint):
+        fill = base_style.fill
 
-    stroke = None if stroke_disabled else (paints.stroke if paints.stroke is not None else base_style.stroke)
+    stroke = (
+        None
+        if stroke_disabled
+        else (paints.stroke if paints.stroke is not None else base_style.stroke)
+    )
     if (
         stroke is not None
         and base_style.stroke is not None
@@ -151,6 +161,13 @@ def extract_style(converter, element: etree._Element) -> StyleResult:
         stroke = replace(
             stroke, paint=_merge_pattern_paint(stroke.paint, base_style.stroke.paint)
         )
+    elif (
+        stroke is not None
+        and base_style.stroke is not None
+        and isinstance(getattr(stroke, "paint", None), PatternPaint)
+        and isinstance(getattr(base_style.stroke, "paint", None), SolidPaint)
+    ):
+        stroke = replace(stroke, paint=base_style.stroke.paint)
 
     opacity = base_style.opacity
     presentation = getattr(resvg_node, "presentation", None)

@@ -104,7 +104,7 @@ def parse_marker_definition(element: etree._Element) -> MarkerDefinition:
     ref_y = _parse_length(element.get("refY"), 0.0, axis="y")
     marker_width = max(_parse_length(element.get("markerWidth"), 3.0, axis="x"), 0.0)
     marker_height = max(_parse_length(element.get("markerHeight"), 3.0, axis="y"), 0.0)
-    orient = (element.get("orient") or "auto").strip()
+    orient = (element.get("orient") or "0").strip()
     marker_units = (element.get("markerUnits") or "strokeWidth").strip()
     overflow = (element.get("overflow") or element.get("style", "")).strip()
     if overflow not in {"visible", "hidden", "auto"}:

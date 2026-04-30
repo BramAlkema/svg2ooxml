@@ -359,13 +359,26 @@ Target order:
    - mixed animated groups
    - transform-origin and hinge/pivot semantics
    - compound transforms and sampled center motion
+   - semi-group experiments where a `grpSp` preserves group layout while
+     descendant animations remain independently targeted
    - generated fallback labels and metadata
    - openxml-audit capture evidence
+
+   Current stance: bee-class assets still use the flatten/lower path. The
+   original `grpSp` attempt broke the body apart when animated descendants were
+   kept inside an animated group. The newer group-local coordinate work fixes
+   render metadata localization, which raises a plausible future retry: preserve
+   the group wrapper, but localize descendant animation payloads too. That retry
+   must treat child rotate centers, scale centers, motion paths, and sampled
+   center metadata as group-local before it can replace the current bee escape
+   hatch.
 
    Exit criteria:
 
    - unsupported parent/child animation combinations degrade explicitly
    - transform-origin behavior is covered by focused visual or oracle tests
+   - any semi-group path proves child animations remain visually attached to the
+     grouped body under PowerPoint playback
    - animation fallback metadata says what was preserved and what was dropped
    - empirical claims point to openxml-audit evidence
 
@@ -440,6 +453,71 @@ Decision:
 
 > make PowerPoint output visibly closer to browser-rendered SVG, with ranked
 > evidence and explicit fallback accounting.
+
+Execution contract:
+
+- `tools.visual.corpus_audit` is the converter-side 0.9 measurement aggregator.
+  If it cannot express a needed converter metric, extend that tool and its tests
+  before adding a parallel one-off report script.
+- `openxml-audit` remains the authority for empirical PowerPoint behavior,
+  authored control decks, oracle corpus evidence, and research lab tooling.
+  PowerPoint-specific observations about authored or round-tripped XML promoted
+  into 0.9 planning must cite `openxml-audit`; this repo should only consume
+  those findings as emitter policy, test expectations, or compact release
+  evidence.
+- Local image/PPTX artefacts stay under ignored `reports/visual/...` paths.
+  Release-relevant evidence is promoted as compact Markdown/JSON summaries
+  under `docs/reference/telemetry/` only after the run is reproducible enough
+  to compare before and after a fix.
+- PowerPoint slideshow evidence is the release gate for PowerPoint-specific
+  visual fidelity. Converter-side capture of svg2ooxml-generated decks may live
+  here because it validates emitted output. Authored control decks, oracle
+  extraction, and PowerPoint behavior discovery still belong in `openxml-audit`.
+  LibreOffice/soffice rendering remains useful for cheap triage, build/open
+  checks, and CI-friendly smoke tests, but it is not a substitute for
+  PowerPoint slideshow evidence when a bug is PowerPoint-specific.
+- A 0.9 fix must name the failing ranked row it addresses, the metric it
+  improves, and the fallback or native path it changes.
+- If a ranked failure is caused by a known DrawingML limitation, the fix is to
+  make the fallback explicit, bounded, and traceable rather than pretending the
+  native mapping is equivalent.
+
+Baseline run shape:
+
+- static PowerPoint pass:
+  `python -m tools.visual.corpus_audit --renderer powerpoint --output reports/visual/powerpoint/audit/0.9-baseline --top 50`
+- animation PowerPoint pass:
+  `python -m tools.visual.corpus_audit --renderer powerpoint --check-animation --output reports/visual/powerpoint/audit/0.9-animation-baseline --top 50`
+- tier spot checks:
+  repeat the highest-ranked subset with `--fidelity-tier direct`, `mimic`,
+  `emf`, and `bitmap` only where fallback policy is part of the decision
+- CI-friendly triage pass:
+  `python -m tools.visual.corpus_audit --renderer soffice --output reports/visual/audit/0.9-triage --top 50`
+
+The exact input set can expand, but the first accepted baseline should include
+the local W3C corpus, curated visual fixtures, and any local body/sample corpus
+already wired through `tools.visual.corpus_sources`.
+
+Report contract:
+
+- per-case identity: SVG path, corpus name when known, artefact directory, and
+  fidelity tier when one was forced
+- pipeline health: build status, render/open status, browser render status,
+  diff status, and error category
+- visual metrics: SSIM or equivalent, pixel diff percentage, maximum bounding
+  box delta, source/target count delta, and rasterized leaf count
+- animation metrics: emitted/skipped native fragments, stable reason-code
+  totals, frame count, minimum/average animation SSIM, and maximum animation
+  pixel diff
+- fallback accounting: typed fallback asset counts, geometry totals, trace
+  stage totals, and any broadening of bitmap/EMF use
+- priority score: a deterministic heuristic that ranks broken builds first,
+  then PowerPoint render/open failures, slideshow animation mismatches, static
+  visual mismatches, structure drift, and unexpected fallback growth
+
+The score is a triage device, not a product metric. Before taking a fix, check
+the actual artefacts and trace reason codes; after the fix, rerun enough of the
+same report to prove the row moved or disappeared.
 
 Target order:
 
@@ -552,10 +630,13 @@ Target order:
 - fast end-to-end suite
 - local build and wheel metadata inspection
 - W3C build/open gates remain green
-- ranked browser-vs-PowerPoint report generated for the release candidate
+- ranked browser-vs-PowerPoint report generated for the release candidate,
+  with the command, input set, renderer, threshold, and environment noted
 - top-offender list updated with what improved and what remains broken
+- at least one before/after evidence note for each 0.9 headline fix
 - no new base-install optional dependency leaks
 - no broad fallback-rate increase without explicit reason-code accounting
+- README feature claims checked against the measured support level
 
 Non-targets for 0.9:
 
@@ -565,6 +646,8 @@ Non-targets for 0.9:
   the ranked corpus proves it is a top blocker
 - no expansion of empirical PowerPoint research assets in this repo; evidence
   still belongs in `openxml-audit` per ADR-033
+- no public claim that a feature is "supported" when the implementation only
+  validates XML or only works in a non-PowerPoint renderer
 
 Consequences:
 
@@ -576,6 +659,12 @@ Consequences:
 - docs must stop overstating CSS support; README and release notes should
   distinguish supported typed contexts from unresolved or intentionally deferred
   CSS features
+- report-generation code becomes part of the product quality surface; schema
+  drift, unstable reason codes, and hidden optional dependency imports are
+  release risks
+- the first implementation slice after this ADR should harden
+  `tools.visual.corpus_audit` output enough to produce the 0.9 baseline summary
+  without manual spreadsheet work
 
 ---
 
@@ -590,6 +679,21 @@ Consequences:
 3. **Glyph outlines via Skia** (last resort) — per-character custGeom shapes
    for non-uniform dx/dy/rotate. Vector quality, not editable. Skia Font
    objects cached by (family, size).
+
+### Stroke Width Ownership
+
+All DrawingML shape-line emission should flow through `stroke_to_xml()` so
+stroke width, opacity, cap/join, dash, gradient, and pattern behavior stay in
+one path. Per-character glyph outline text is a shape fallback, so it adapts
+`Run.stroke_*` fields into the shared `Stroke` model before emission rather
+than maintaining a separate text-only line-width serializer.
+
+This does not merge every stroke-width defect into one class. Known separate
+ingress points remain: resvg/DOM style-source drift for `<use>` clones,
+marker scaling from `markerUnits="strokeWidth"`, transformed non-scaling
+stroke policy, EMF/raster fallback stroke widths, and `stroke-width` animation
+fallback. Those should be fixed at their source boundary, then still emit
+through the shared DrawingML stroke serializer where the target is a shape.
 
 ### WordArt-First Policy
 WordArt preferred over outlines for textPath: `prefer_native_wordart=True`,

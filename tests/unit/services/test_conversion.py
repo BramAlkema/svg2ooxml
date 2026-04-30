@@ -85,6 +85,25 @@ def test_gradient_service_content_uses_shared_calc_coordinates() -> None:
     assert 'ang="2700000"' in content
 
 
+def test_gradient_service_content_applies_radial_focal_radius_stops() -> None:
+    service = GradientService()
+    gradient = etree.fromstring(
+        """
+        <radialGradient id="grad" r="50%" fr="12.5%">
+          <stop offset="0%" stop-color="#ff0000"/>
+          <stop offset="100%" stop-color="#0000ff"/>
+        </radialGradient>
+        """
+    )
+
+    service.register_gradient("grad", gradient)
+    content = service.get_gradient_content("grad")
+
+    assert content is not None
+    assert content.count("<a:gs ") == 3
+    assert 'pos="25000"' in content
+
+
 def test_pattern_service_detects_calc_rect_line() -> None:
     service = PatternService()
     pattern = etree.fromstring(

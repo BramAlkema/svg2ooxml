@@ -7,7 +7,7 @@ from dataclasses import replace
 from lxml import etree
 
 from svg2ooxml.core.styling.style_extractor import StyleResult
-from svg2ooxml.ir.paint import PatternPaint
+from svg2ooxml.ir.paint import PatternPaint, SolidPaint
 
 
 class ResvgPaintOverrideMixin:
@@ -69,6 +69,12 @@ class ResvgPaintOverrideMixin:
                             stroke_paint,
                             updated.stroke.paint,
                         )
+                    elif (
+                        isinstance(stroke_paint, PatternPaint)
+                        and updated.stroke is not None
+                        and isinstance(updated.stroke.paint, SolidPaint)
+                    ):
+                        stroke_paint = updated.stroke.paint
                     elif preserve_base_paint_opacity and updated.stroke is not None:
                         stroke_paint = self._paint_with_base_opacity(
                             stroke_paint,
@@ -117,6 +123,10 @@ class ResvgPaintOverrideMixin:
                     updated.fill, PatternPaint
                 ):
                     resvg_fill = self._merge_pattern_paint(resvg_fill, updated.fill)
+                elif isinstance(resvg_fill, PatternPaint) and isinstance(
+                    updated.fill, SolidPaint
+                ):
+                    resvg_fill = updated.fill
                 elif preserve_base_paint_opacity:
                     preserved_fill = self._paint_with_base_opacity(
                         resvg_fill,

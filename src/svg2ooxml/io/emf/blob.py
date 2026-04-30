@@ -10,9 +10,64 @@ from enum import IntEnum
 
 from .path import DashPattern, apply_dash_pattern
 
-EMFRecordType = IntEnum("EMFRecordType", dict(EMR_HEADER=1, EMR_POLYBEZIER=2, EMR_POLYGON=3, EMR_POLYLINE=4, EMR_POLYBEZIERTO=5, EMR_POLYLINETO=6, EMR_POLYPOLYLINE=7, EMR_POLYPOLYGON=8, EMR_EOF=14, EMR_SETPOLYFILLMODE=19, EMR_INTERSECTCLIPRECT=30, EMR_SAVEDC=33, EMR_RESTOREDC=34, EMR_SETWORLDTRANSFORM=35, EMR_SELECTOBJECT=37, EMR_CREATEPEN=38, EMR_CREATEBRUSHINDIRECT=39, EMR_DELETEOBJECT=40, EMR_RECTANGLE=43, EMR_BEGINPATH=59, EMR_ENDPATH=60, EMR_CLOSEFIGURE=61, EMR_FILLPATH=62, EMR_STROKEPATH=64, EMR_STRETCHDIBITS=65, EMR_FILLRGN=71, EMR_CREATEDIBPATTERNBRUSHPT=94))
-EMFBrushStyle = IntEnum("EMFBrushStyle", dict(BS_SOLID=0, BS_NULL=1, BS_HATCHED=2, BS_PATTERN=3, BS_INDEXED=4, BS_DIBPATTERN=5, BS_DIBPATTERNPT=6, BS_PATTERN8X8=7, BS_DIBPATTERN8X8=8, BS_MONOPATTERN=9))
-EMFHatchStyle = IntEnum("EMFHatchStyle", dict(HS_HORIZONTAL=0, HS_VERTICAL=1, HS_FDIAGONAL=2, HS_BDIAGONAL=3, HS_CROSS=4, HS_DIAGCROSS=5))
+EMFRecordType = IntEnum(
+    "EMFRecordType",
+    dict(
+        EMR_HEADER=1,
+        EMR_POLYBEZIER=2,
+        EMR_POLYGON=3,
+        EMR_POLYLINE=4,
+        EMR_POLYBEZIERTO=5,
+        EMR_POLYLINETO=6,
+        EMR_POLYPOLYLINE=7,
+        EMR_POLYPOLYGON=8,
+        EMR_EOF=14,
+        EMR_SETPOLYFILLMODE=19,
+        EMR_INTERSECTCLIPRECT=30,
+        EMR_SAVEDC=33,
+        EMR_RESTOREDC=34,
+        EMR_SETWORLDTRANSFORM=35,
+        EMR_SELECTOBJECT=37,
+        EMR_CREATEPEN=38,
+        EMR_CREATEBRUSHINDIRECT=39,
+        EMR_DELETEOBJECT=40,
+        EMR_RECTANGLE=43,
+        EMR_BEGINPATH=59,
+        EMR_ENDPATH=60,
+        EMR_CLOSEFIGURE=61,
+        EMR_FILLPATH=62,
+        EMR_STROKEPATH=64,
+        EMR_STRETCHDIBITS=65,
+        EMR_FILLRGN=71,
+        EMR_CREATEDIBPATTERNBRUSHPT=94,
+    ),
+)
+EMFBrushStyle = IntEnum(
+    "EMFBrushStyle",
+    dict(
+        BS_SOLID=0,
+        BS_NULL=1,
+        BS_HATCHED=2,
+        BS_PATTERN=3,
+        BS_INDEXED=4,
+        BS_DIBPATTERN=5,
+        BS_DIBPATTERNPT=6,
+        BS_PATTERN8X8=7,
+        BS_DIBPATTERN8X8=8,
+        BS_MONOPATTERN=9,
+    ),
+)
+EMFHatchStyle = IntEnum(
+    "EMFHatchStyle",
+    dict(
+        HS_HORIZONTAL=0,
+        HS_VERTICAL=1,
+        HS_FDIAGONAL=2,
+        HS_BDIAGONAL=3,
+        HS_CROSS=4,
+        HS_DIAGCROSS=5,
+    ),
+)
 
 
 NULL_BRUSH_HANDLE = 0x80000005
@@ -72,20 +127,28 @@ class EMFBlob:
         return data
 
     def _to_px(self, value: int | float) -> int:
-        return _i32(round(_finite_number(value, "coordinate") * self._scale), "coordinate")
+        return _i32(
+            round(_finite_number(value, "coordinate") * self._scale), "coordinate"
+        )
 
     def _to_px_point(self, point: tuple[int | float, int | float]) -> tuple[int, int]:
         return (self._to_px(point[0]), self._to_px(point[1]))
 
     def create_solid_brush(self, rgb: int) -> int:
-        return self._create_brush(style=EMFBrushStyle.BS_SOLID, color=_u32(rgb, "rgb"), hatch=0)
+        return self._create_brush(
+            style=EMFBrushStyle.BS_SOLID, color=_u32(rgb, "rgb"), hatch=0
+        )
 
     def create_hatch_brush(self, pattern: str, rgb: int) -> int:
         hatch = _HATCH.get(pattern, EMFHatchStyle.HS_HORIZONTAL)
-        return self._create_brush(style=EMFBrushStyle.BS_HATCHED, color=_u32(rgb, "rgb"), hatch=int(hatch))
+        return self._create_brush(
+            style=EMFBrushStyle.BS_HATCHED, color=_u32(rgb, "rgb"), hatch=int(hatch)
+        )
 
     def create_null_brush(self) -> None:
-        self._append_record(EMFRecordType.EMR_SELECTOBJECT, _U32.pack(NULL_BRUSH_HANDLE))
+        self._append_record(
+            EMFRecordType.EMR_SELECTOBJECT, _U32.pack(NULL_BRUSH_HANDLE)
+        )
 
     def create_pen(
         self,
@@ -98,8 +161,14 @@ class EMFBlob:
     ) -> int:
         handle = self._allocate_handle()
         width_px = max(1, int(width_px))
-        style = (pen_style & 0x0000000F) | (line_cap & 0x00000F00) | (line_join & 0x0000F000)
-        payload = _U32.pack(handle) + struct.pack("<IiiI", style, _i32(width_px, "width_px"), 0, _u32(rgb, "rgb"))
+        style = (
+            (pen_style & 0x0000000F)
+            | (line_cap & 0x00000F00)
+            | (line_join & 0x0000F000)
+        )
+        payload = _U32.pack(handle) + struct.pack(
+            "<IiiI", style, _i32(width_px, "width_px"), 0, _u32(rgb, "rgb")
+        )
         self._append_record(EMFRecordType.EMR_CREATEPEN, payload)
         return handle
 
@@ -115,7 +184,6 @@ class EMFBlob:
         bmi, bits = _split_bmp_payload(bmp_bytes)
         bmi_padded = self._pad4(bmi)
         bits_padded = self._pad4(bits)
-
         handle = self._allocate_handle()
         off_bmi = 8 + 6 * 4  # header + payload fields
         off_bits = off_bmi + len(bmi_padded)
@@ -159,10 +227,8 @@ class EMFBlob:
         bmi, bits = _split_bmp_payload(bmp_bytes)
         bmi_padded = self._pad4(bmi)
         bits_padded = self._pad4(bits)
-
         off_bmi = 8 + 18 * 4
         off_bits = off_bmi + len(bmi_padded)
-
         dest_left_px = self._to_px(dest_left)
         dest_top_px = self._to_px(dest_top)
         dest_width_px = max(1, self._to_px(dest_width))
@@ -195,13 +261,13 @@ class EMFBlob:
     def get_pen(
         self,
         rgb: int,
-        width_px: int = 1,
+        width_emu: int = 1,
         *,
         line_cap: int = 0,
         line_join: int = 0,
         pen_style: int = 0,
     ) -> int:
-        scaled_width = max(1, self._to_px(width_px))
+        scaled_width = max(1, self._to_px(width_emu))
         spec = (_u32(rgb, "rgb"), scaled_width, line_cap, line_join, pen_style)
         handle = self._pen_cache.get(spec)
         if handle is None:
@@ -221,7 +287,8 @@ class EMFBlob:
         *,
         pen_handle: int | None = None,
         pen_color: int | None = None,
-        pen_width_px: int = 1,
+        pen_width_emu: int = 1,
+        pen_width_px: int | None = None,
         dash_pattern: DashPattern | None = None,
         line_cap: int = 0,
         line_join: int = 0,
@@ -231,10 +298,14 @@ class EMFBlob:
             return
         if pen_handle is None:
             if pen_color is None:
-                raise ValueError("pen_color is required when pen_handle is not supplied")
+                raise ValueError(
+                    "pen_color is required when pen_handle is not supplied"
+                )
+            if pen_width_px is not None:
+                pen_width_emu = pen_width_px
             pen_handle = self.get_pen(
                 pen_color,
-                pen_width_px,
+                pen_width_emu,
                 line_cap=line_cap,
                 line_join=line_join,
                 pen_style=pen_style,
@@ -269,7 +340,9 @@ class EMFBlob:
             return
         if brush_handle is None:
             if brush_color is None:
-                raise ValueError("brush_color is required when brush_handle is not supplied")
+                raise ValueError(
+                    "brush_color is required when brush_handle is not supplied"
+                )
             brush_handle = self.get_solid_brush(brush_color)
 
         self._select_brush(brush_handle)
@@ -297,12 +370,16 @@ class EMFBlob:
     def select_object(self, handle: int | None) -> None:
         if handle is None:
             return
-        self._append_record(EMFRecordType.EMR_SELECTOBJECT, _U32.pack(_u32(handle, "handle")))
+        self._append_record(
+            EMFRecordType.EMR_SELECTOBJECT, _U32.pack(_u32(handle, "handle"))
+        )
 
     def delete_object(self, handle: int | None) -> None:
         if handle is None:
             return
-        self._append_record(EMFRecordType.EMR_DELETEOBJECT, _U32.pack(_u32(handle, "handle")))
+        self._append_record(
+            EMFRecordType.EMR_DELETEOBJECT, _U32.pack(_u32(handle, "handle"))
+        )
 
     def draw_polygon(
         self,
@@ -332,7 +409,9 @@ class EMFBlob:
         payload = _poly_payload(coord_list)
         self._append_record(EMFRecordType.EMR_POLYLINE, payload)
 
-    def fill_rectangle(self, left: int, top: int, width: int, height: int, brush_handle: int | None) -> None:
+    def fill_rectangle(
+        self, left: int, top: int, width: int, height: int, brush_handle: int | None
+    ) -> None:
         if brush_handle is None:
             self.create_null_brush()
         else:
@@ -341,7 +420,12 @@ class EMFBlob:
         top_px = self._to_px(top)
         width_px = max(1, self._to_px(width))
         height_px = max(1, self._to_px(height))
-        rect = _RECT.pack(left_px, top_px, _i32(left_px + width_px, "right"), _i32(top_px + height_px, "bottom"))
+        rect = _RECT.pack(
+            left_px,
+            top_px,
+            _i32(left_px + width_px, "right"),
+            _i32(top_px + height_px, "bottom"),
+        )
         self._append_record(EMFRecordType.EMR_RECTANGLE, rect)
 
     def finalize(self) -> bytes:
@@ -394,17 +478,23 @@ class EMFBlob:
         size = 8 + len(payload)
         if size > MAX_EMF_BYTES:
             raise ValueError("EMF record exceeds configured safety limit")
-        self._records.append(_REC.pack(int(record_type), _u32(size, "record size")) + payload)
+        self._records.append(
+            _REC.pack(int(record_type), _u32(size, "record size")) + payload
+        )
 
     def _select_pen(self, handle: int | None) -> None:
         if handle is None:
-            self._append_record(EMFRecordType.EMR_SELECTOBJECT, _U32.pack(NULL_PEN_HANDLE))
+            self._append_record(
+                EMFRecordType.EMR_SELECTOBJECT, _U32.pack(NULL_PEN_HANDLE)
+            )
         else:
             self.select_object(handle)
 
     def _select_brush(self, handle: int | None) -> None:
         if handle is None:
-            self._append_record(EMFRecordType.EMR_SELECTOBJECT, _U32.pack(NULL_BRUSH_HANDLE))
+            self._append_record(
+                EMFRecordType.EMR_SELECTOBJECT, _U32.pack(NULL_BRUSH_HANDLE)
+            )
         else:
             self.select_object(handle)
 
@@ -460,7 +550,9 @@ class EMFBlob:
         )
         self._append_record(EMFRecordType.EMR_POLYPOLYGON, payload)
 
-    def _ensure_int_points(self, points: Iterable[tuple[int | float, int | float]]) -> list[tuple[int, int]]:
+    def _ensure_int_points(
+        self, points: Iterable[tuple[int | float, int | float]]
+    ) -> list[tuple[int, int]]:
         return [self._to_px_point((x, y)) for x, y in points]
 
     def _init_header(self) -> None:
@@ -503,7 +595,11 @@ class EMFBlob:
 
 def _poly_payload(points: Sequence[tuple[int, int]]) -> bytes:
     min_x, min_y, max_x, max_y = _bounds(points)
-    return _RECT.pack(min_x, min_y, max_x, max_y) + _U32.pack(len(points)) + _pack_points(points)
+    return (
+        _RECT.pack(min_x, min_y, max_x, max_y)
+        + _U32.pack(len(points))
+        + _pack_points(points)
+    )
 
 
 def _pack_points(points: Iterable[tuple[int, int]]) -> bytes:
@@ -531,7 +627,9 @@ def _bounds(points: Sequence[tuple[int, int]]) -> tuple[int, int, int, int]:
     return min_x, min_y, max_x, max_y
 
 
-def _multi_bounds(polygons: Sequence[Sequence[tuple[int, int]]]) -> tuple[int, int, int, int]:
+def _multi_bounds(
+    polygons: Sequence[Sequence[tuple[int, int]]],
+) -> tuple[int, int, int, int]:
     min_x, min_y, max_x, max_y = _bounds(polygons[0])
     for polygon in polygons[1:]:
         p_min_x, p_min_y, p_max_x, p_max_y = _bounds(polygon)

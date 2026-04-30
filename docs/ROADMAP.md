@@ -1,6 +1,6 @@
 # Project Roadmap
 
-Last updated: 2026-04-29
+Last updated: 2026-04-30
 
 This roadmap is for the `svg2ooxml` converter/runtime package. Empirical
 PowerPoint behavior research, authored control decks, and durable oracle
@@ -24,6 +24,10 @@ evidence live in the companion repository
 
 ## Recent Release Focus
 
+- **0.8.2**: micro fidelity hardening for editable-first filter fallback
+  behavior, typed filter input surfaces, transformed per-character text
+  placement, inherited SVG text fallback styling, safer pattern solid-tile
+  collapse, and maintainability splits for text and corpus audit helpers
 - **0.8.1**: typed CSS value evaluation, broader calc coverage, parser
   hardening for non-finite authored values, and ADR-036 accepting 0.9 as a
   measured-fidelity release driven by ranked browser-vs-PowerPoint evidence

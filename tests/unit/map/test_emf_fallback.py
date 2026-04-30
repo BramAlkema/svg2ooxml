@@ -83,7 +83,7 @@ def test_emf_fallback_stroke_captures_pen_style() -> None:
 
     stroke = Stroke(
         paint=SolidPaint("FF0000"),
-        width=2.5,
+        width=3.0,
         join=StrokeJoin.BEVEL,
         cap=StrokeCap.ROUND,
         dash_array=[4.0, 2.0],
@@ -113,13 +113,17 @@ def test_emf_fallback_stroke_captures_pen_style() -> None:
 
     assert image is not None
     records = _records(image.data)
-    pen_record = next(payload for code, payload in records if code == EMFRecordType.EMR_CREATEPEN)
-    style_bits, width_emu = struct.unpack_from("<Ii", pen_record, 4)
+    pen_record = next(
+        payload for code, payload in records if code == EMFRecordType.EMR_CREATEPEN
+    )
+    style_bits, pen_width_px = struct.unpack_from("<Ii", pen_record, 4)
     assert style_bits & 0x00001000  # PS_JOIN_BEVEL
     assert style_bits & 0x00000000 == 0  # PS_ENDCAP_ROUND contributes zero bits
-    assert width_emu >= 1
+    assert pen_width_px == 3
 
-    polyline_records = [payload for code, payload in records if code == EMFRecordType.EMR_POLYLINE]
+    polyline_records = [
+        payload for code, payload in records if code == EMFRecordType.EMR_POLYLINE
+    ]
     assert len(polyline_records) >= 1
 
     emf_meta = metadata.get("emf_asset")

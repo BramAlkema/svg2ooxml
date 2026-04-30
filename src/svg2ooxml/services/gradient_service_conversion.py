@@ -15,6 +15,7 @@ from svg2ooxml.color.parsers import parse_color
 from svg2ooxml.common.conversions.angles import degrees_to_ppt
 from svg2ooxml.common.conversions.opacity import opacity_to_ppt, parse_opacity
 from svg2ooxml.common.conversions.scale import position_to_ppt
+from svg2ooxml.common.gradient_stops import remap_stops_for_radial_focal_radius
 from svg2ooxml.common.gradient_units import (
     parse_gradient_coordinate,
     parse_gradient_offset,
@@ -72,7 +73,7 @@ class GradientServiceConversionMixin:
         return (
             f"<!-- svg2ooxml:gradient complexity={analysis.complexity.value}"
             f" stops={analysis.metrics.stop_count}"
-            f" notes=\"{notes}\" -->"
+            f' notes="{notes}" -->'
         )
 
     def _coerce_descriptor(
@@ -81,16 +82,31 @@ class GradientServiceConversionMixin:
         definition: GradientDescriptor | etree._Element,
     ) -> GradientDescriptor | None:
         descriptor: GradientDescriptor
-        if isinstance(definition, (LinearGradientDescriptor, RadialGradientDescriptor, MeshGradientDescriptor)):
+        if isinstance(
+            definition,
+            (
+                LinearGradientDescriptor,
+                RadialGradientDescriptor,
+                MeshGradientDescriptor,
+            ),
+        ):
             descriptor = definition
         elif isinstance(definition, etree._Element):
             try:
                 descriptor = describe_gradient_element(definition)
             except Exception:  # pragma: no cover - defensive
-                logger.debug("Failed to convert gradient %s to descriptor", gradient_id, exc_info=True)
+                logger.debug(
+                    "Failed to convert gradient %s to descriptor",
+                    gradient_id,
+                    exc_info=True,
+                )
                 return None
         else:
-            logger.debug("Unsupported gradient definition type for %s: %r", gradient_id, type(definition))
+            logger.debug(
+                "Unsupported gradient definition type for %s: %r",
+                gradient_id,
+                type(definition),
+            )
             return None
 
         if descriptor.gradient_id in (None, ""):
@@ -113,7 +129,9 @@ class GradientServiceConversionMixin:
         elif isinstance(descriptor, MeshGradientDescriptor):
             element = build_mesh_gradient_element(descriptor)
         else:  # pragma: no cover - defensive
-            raise TypeError(f"Unsupported gradient descriptor type: {type(descriptor)!r}")
+            raise TypeError(
+                f"Unsupported gradient descriptor type: {type(descriptor)!r}"
+            )
 
         self._materialized_elements[gradient_id] = element
         return element
@@ -149,13 +167,14 @@ class GradientServiceConversionMixin:
     ) -> str:
         plan = analysis.plan if analysis else None
         max_stops = plan.simplify_to if plan and plan.simplify_to else None
-        gs_list = self._extract_gradient_stops(element, max_stops=max_stops)
+        stops = self._extract_gradient_stop_data(element, max_stops=max_stops)
+        stops = self._apply_radial_focal_radius_stops(stops, element)
         comment = self._analysis_comment(analysis)
 
         gradFill = a_elem("gradFill")
         gsLst = a_sub(gradFill, "gsLst")
-        for gs_elem in gs_list:
-            gsLst.append(gs_elem)
+        for position, color in stops:
+            gsLst.append(self._serialise_stop(position, color))
         a_sub(gradFill, "path", path="circle")
 
         result = to_string(gradFill)
@@ -170,9 +189,7 @@ class GradientServiceConversionMixin:
         rows, cols = self._analyze_mesh(element)
         comment = self._analysis_comment(analysis)
         return (
-            f"{comment}"
-            "<!-- svg2ooxml:mesh gradient -->"
-            f"<!-- rows={rows} cols={cols} -->"
+            f"{comment}<!-- svg2ooxml:mesh gradient --><!-- rows={rows} cols={cols} -->"
         )
 
     def _extract_gradient_stops(
@@ -181,6 +198,20 @@ class GradientServiceConversionMixin:
         *,
         max_stops: int | None = None,
     ) -> list[etree._Element]:
+        return [
+            self._serialise_stop(pos, color)
+            for pos, color in self._extract_gradient_stop_data(
+                element,
+                max_stops=max_stops,
+            )
+        ]
+
+    def _extract_gradient_stop_data(
+        self,
+        element: etree._Element,
+        *,
+        max_stops: int | None = None,
+    ) -> list[tuple[int, Color]]:
         stops = []
         for stop in self._iter_stops(element):
             pos = self._parse_offset(stop.get("offset"))
@@ -196,7 +227,37 @@ class GradientServiceConversionMixin:
         if max_stops is not None and max_stops >= 2 and len(stops) > max_stops:
             stops = self._simplify_stops(stops, max_stops)
 
-        return [self._serialise_stop(pos, color) for pos, color in stops]
+        return stops
+
+    def _apply_radial_focal_radius_stops(
+        self,
+        stops: list[tuple[int, Color]],
+        element: etree._Element,
+    ) -> list[tuple[int, Color]]:
+        if len(stops) < 2 or element.get("fr") is None:
+            return stops
+        units = element.get("gradientUnits")
+        radius = parse_gradient_coordinate(
+            element.get("r"),
+            units=units,
+            axis="x",
+            default="50%",
+        )
+        focal_radius = parse_gradient_coordinate(
+            element.get("fr"),
+            units=units,
+            axis="x",
+            default="0%",
+        )
+        if radius <= 1e-6 or focal_radius <= 1e-6:
+            return stops
+        return remap_stops_for_radial_focal_radius(
+            stops,
+            radius=radius,
+            focal_radius=focal_radius,
+            offset_of=lambda stop: stop[0] / 100000,
+            with_offset=lambda stop, offset: (position_to_ppt(offset), stop[1]),
+        )
 
     # ------------------------------------------------------------------ #
     # Support functions                                                  #
@@ -219,7 +280,9 @@ class GradientServiceConversionMixin:
 
         color = parse_color(color_value) or Color(0.0, 0.0, 0.0, 1.0)
         if opacity_value is not None:
-            color = color.with_alpha(color.a * parse_opacity(opacity_value, default=1.0))
+            color = color.with_alpha(
+                color.a * parse_opacity(opacity_value, default=1.0)
+            )
         return color
 
     def _parse_style(self, payload: str | None) -> dict[str, str]:

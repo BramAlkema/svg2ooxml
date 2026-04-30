@@ -202,7 +202,7 @@ Each non-Direct entry specifies which fallback tier(s) apply.
 | `stroke-dashoffset` | Rotate `custDash` array | Done | Tier 2 | `_apply_dash_offset()` in `paint_runtime.py` rotates the dash/gap array by the offset before emitting `<a:custDash>`. Pure arithmetic, zero visual loss. |
 | `stroke-opacity` | `<a:alpha>` on stroke fill | Direct | — | |
 | `paint-order: stroke fill markers` | Shape duplication: stroke-only + fill-only | Done | Tier 2 | When stroke before fill, emits two shapes at same position via `dataclasses.replace()`. Parsed from CSS and attribute. |
-| `vector-effect: non-scaling-stroke` | Default DrawingML behavior | Done | — | DrawingML `<a:ln w>` doesn't scale with shape transforms — matches non-scaling-stroke by default. |
+| `vector-effect: non-scaling-stroke` | Transform-aware stroke width policy | Partial | — | Shape converters bake transforms into geometry, so normal strokes are scaled in IR; `non-scaling-stroke` opts out and keeps the authored width. Non-uniform transforms use determinant-based scalar approximation. |
 
 ### 1.3 Opacity
 
@@ -239,7 +239,7 @@ Each non-Direct entry specifies which fallback tier(s) apply.
 | `spreadMethod="reflect"` | Expand stops in `gsLst` | Done | Tier 2 | Mirror gradient stops to fill [0,1]. |
 | `spreadMethod="repeat"` | Expand stops in `gsLst` | Done | Tier 2 | Duplicate stops N times to fill [0,1]. |
 | `fx`/`fy` (focal point ≠ center) | Shift `fillToRect` center | Done | Tier 2 | Gradient center blended 50% toward focal point. Lossy for extreme off-center but visible improvement. |
-| `fr` (focal radius, SVG2) | **No DrawingML concept** | Planned | Tier 2 | Add flat-color stop from center to `fr`, then gradient from `fr` to `r`. |
+| `fr` (focal radius, SVG2) | Stop remap approximation | Done | Tier 2 | Carries `fr` through radial gradient parsing/descriptors, then inserts a flat first-color span to `fr/r` before remapping remaining stops. Raster fallback uses Skia focal radius. |
 | `color-interpolation: linearRGB` | **DrawingML uses sRGB** | Done | Tier 2 | Pre-computed intermediate stops sampled in linearRGB, converted to sRGB. 6/6 SVGs pass. |
 
 ---
@@ -392,7 +392,14 @@ geometry is still vector-representable:
 | Filter on pure-geometry shapes (no gradients) | EMF with geometry + adjusted fills | Done | Handled by filter pipeline. |
 | Filter EMF diagnostic icons | Current schematic visualizations | Done | Present behavior: symbolic EMF icons (96×64px) showing filter type. Not pixel-accurate but vector. ADR-018 plans enrichment. |
 
-### 8.3 Must Rasterize (Tier 4)
+### 8.3 Filter Input Surface Support
+
+| SVG Filter Input | Strategy | Status | Notes |
+|------------------|----------|--------|-------|
+| `FillPaint` / `StrokePaint` | Synthetic paint surfaces for resvg filter execution | Done | Solid shape paint descriptors are derived from `SourceGraphic`; planner admits declared inputs and executor synthesizes fill-only/stroke-only source surfaces. |
+| `BackgroundImage` / `BackgroundAlpha` | Raster fallback | Partial | Auto routing bypasses editable descriptor approximations and uses raster fallback; exact backdrop isolation still needs follow-up. |
+
+### 8.4 Must Rasterize (Tier 4)
 
 Only when both DrawingML mimic AND EMF vector are insufficient:
 
@@ -524,7 +531,7 @@ attributes in their intended way.
 - Gradient/alpha/complex masks → mask service fallback ladder (done)
 - Group opacity (no overlap) → per-child alpha (done)
 - `paint-order` → duplicate shape
-- `vector-effect: non-scaling-stroke` → adjust width by transform scale
+- transformed normal strokes → adjust width by transform scale; `non-scaling-stroke` keeps authored width
 - `word-spacing` → extra space characters
 - `textPath` (preset match) → WordArt `prstTxWarp`
 - Per-character positioning → individual text boxes
@@ -662,7 +669,7 @@ methodology.
 | `calcMode="linear"` | Native from/to, TAV linear | Done | Default and preferred. |
 | `calcMode="paced"` numeric | Pre-computed paced keyTimes → TAV | Partial | Scalar pacing works; vector pacing incomplete. |
 | `calcMode="paced"` motion | Path-distance keyTimes | Partial | Depends on path-length approximation. |
-| `calcMode="discrete"` | `<p:set>` segments or discrete TAV | Gap | TAV builder always interpolates linearly. Oracle `emph/blink` shows the pattern. |
+| `calcMode="discrete"` | `<p:set>` segments or discrete TAV/path entries | Done | Numeric/color/transform/motion/opacity/set handlers preserve step changes; color/numeric prefer timed `<p:set>` where PPT ignores discrete interpolation. |
 | `calcMode="spline"` | Sampled cubic → dense linear TAVs | Gap | PPT has accel/decel but not arbitrary cubic per segment. |
 | `keyTimes` | TAV `tm` values | Done | Preserved as non-uniform segment timing. |
 | `keySplines` | Sampled into TAV segments | Gap | Raw spline metadata preserved in IR. |

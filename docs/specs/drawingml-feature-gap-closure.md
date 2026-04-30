@@ -43,7 +43,7 @@ existing metadata dict.
 
 ### NT-2. `fr` (focal radius, SVG2)
 
-**Tier 2 — stop insertion. Corpus: 0 SVGs.**
+**Tier 2 — stop insertion. Corpus: 0 SVGs. Status: implemented.**
 
 SVG2 `fr` attribute on `<radialGradient>` defines a focal circle radius.
 DrawingML has no concept of focal radius — the gradient always starts from a
@@ -53,8 +53,9 @@ point.
 offset 0 to `fr/r`, then map the remaining stops from `fr/r` to 1.0. This
 produces a solid disc at the focal radius before the gradient begins.
 
-**Where:** `_radial_gradient_to_fill_elem()` in `paint_runtime.py`, or in the
-resvg gradient adapter where stops are prepared.
+**Where:** resvg radial gradient parsing/descriptors carry `fr`; DrawingML
+radial gradient emission inserts the flat initial stop span. Raster fallback
+passes `fr` through Skia two-point conical gradients.
 
 **Priority:** Low — SVG2 feature, zero corpus usage.
 
@@ -85,17 +86,17 @@ outlines.
 
 ### NT-4. `vector-effect: non-scaling-stroke`
 
-**Tier 2 — transform-aware scaling. Corpus: 0 SVGs.**
+**Tier 2 — transform-aware scaling. Corpus: 0 SVGs. Initial implementation.**
 
 Keeps stroke width visually constant regardless of the element's transform
 scale. Without this, a `stroke-width: 2` on a `scale(3)` element renders as
 6px wide.
 
-**Approach:**
+**Implemented approach:**
 1. Parse `vector-effect` in style extraction.
-2. During IR conversion, when `vector-effect: non-scaling-stroke` is set,
-   divide the stroke width by the effective transform scale before storing
-   in the IR `Stroke` object.
+2. During IR conversion, normal strokes are multiplied by the effective
+   transform scale because geometry is already baked into DrawingML
+   coordinates. `vector-effect: non-scaling-stroke` keeps the authored width.
 3. Effective scale = `sqrt(abs(matrix.a * matrix.d - matrix.b * matrix.c))`
    (determinant-based uniform scale approximation).
 
@@ -116,14 +117,17 @@ approach is to render the group to an offscreen buffer, then composite the
 buffer with the specified opacity.
 
 **Approach:**
-1. Detect overlapping children via bounding box intersection.
+1. Detect overlapping children via rendered bounds, including stroke width for
+   zero-area lines and stroke-only shapes. Use exact radius intersection for
+   simple filled circle pairs after the rendered-bounds prefilter.
 2. When overlap is detected and group opacity < 1.0:
    - Rasterize the group via resvg/Skia to a PNG.
    - Embed as `<a:blipFill>` with `<a:alphaModFix amt="..."/>` for the opacity.
 3. When no overlap: per-child alpha (already done).
 
-**Complexity:** Medium — the rasterization pipeline exists but the overlap
-detection and group-to-image conversion need wiring.
+**Complexity:** Medium — the rasterization pipeline exists. Overlap detection
+is exact for simple filled circles but remains conservative for complex
+curves/effects and can be tightened further with more exact shape intersection.
 
 **Note:** The non-overlapping case is already handled (marked Done in map).
 This item covers only the overlapping case.
@@ -208,7 +212,7 @@ unless real-world usage demands it.
 Quick wins (1-2 hours each):
   NT-1  title/desc → descr          (15 SVGs, Tier 1, small)
   NT-4  non-scaling-stroke           (0 SVGs, Tier 2, small)
-  NT-2  fr focal radius              (0 SVGs, Tier 2, small)
+  NT-2  fr focal radius              (0 SVGs, Tier 2, done)
 
 Medium effort (half day each):
   NT-3  paint-order                  (0 SVGs, Tier 2, medium)

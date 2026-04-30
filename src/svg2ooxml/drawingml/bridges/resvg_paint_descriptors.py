@@ -47,6 +47,7 @@ class RadialGradientDescriptor:
     href: str | None = None
     specified: tuple[str, ...] = ("cx", "cy", "r", "fx", "fy")
     raw_attributes: dict[str, str] = field(default_factory=dict)
+    fr: float = 0.0
 
 
 @dataclass(slots=True)
@@ -62,7 +63,9 @@ class MeshGradientDescriptor:
     href: str | None = None
 
 
-GradientDescriptor = LinearGradientDescriptor | RadialGradientDescriptor | MeshGradientDescriptor
+GradientDescriptor = (
+    LinearGradientDescriptor | RadialGradientDescriptor | MeshGradientDescriptor
+)
 
 
 @dataclass(slots=True)

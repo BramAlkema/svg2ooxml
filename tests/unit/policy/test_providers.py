@@ -33,6 +33,8 @@ def test_text_policy_respects_quality() -> None:
     conservative = provider.evaluate(target, {"quality": "low"})
 
     assert balanced["fallback"]["missing_font_behavior"] == "outline"
+    assert balanced["fallback"]["dense_rotation_fallback"] == "auto"
+    assert balanced["fallback"]["bidi_override_fallback"] == "svg"
     assert balanced["allow_effects"] is True
     assert balanced["decision"].max_runs == 2048
 
@@ -47,14 +49,24 @@ def test_text_policy_allows_overrides() -> None:
 
     payload = provider.evaluate(
         target,
-        {"quality": "high", "text.embed_fonts": False, "text.wordart.enable": False},
+        {
+            "quality": "high",
+            "text.embed_fonts": False,
+            "text.wordart.enable": False,
+            "text.dense_rotation_fallback": "vector_outline",
+            "text.bidi_override_fallback": "native",
+        },
     )
 
     decision = payload["decision"]
 
     assert decision.embedding.embed_when_available is False
     assert decision.wordart.enable_detection is False
+    assert decision.fallback.dense_rotation_fallback == "vector_outline"
+    assert decision.fallback.bidi_override_fallback == "native"
     assert payload["embedding"]["embed_when_available"] is False
+    assert payload["fallback"]["dense_rotation_fallback"] == "vector_outline"
+    assert payload["fallback"]["bidi_override_fallback"] == "native"
 
 
 def test_text_policy_ignores_invalid_wordart_threshold_override() -> None:

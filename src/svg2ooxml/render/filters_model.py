@@ -58,14 +58,19 @@ _ADDITIONAL_UNSUPPORTED = {
 }
 
 UNSUPPORTED_FILTER_PRIMITIVES = tuple(
-    sorted((REGISTERED_FILTER_PRIMITIVES - RESVG_SUPPORTED_PRIMITIVES) | _ADDITIONAL_UNSUPPORTED)
+    sorted(
+        (REGISTERED_FILTER_PRIMITIVES - RESVG_SUPPORTED_PRIMITIVES)
+        | _ADDITIONAL_UNSUPPORTED
+    )
 )
 
 
 class UnsupportedPrimitiveError(RuntimeError):
     """Raised when a filter primitive cannot be handled by the resvg pipeline."""
 
-    def __init__(self, tag: str, reason: str, *, primitive: FilterPrimitive | None = None) -> None:
+    def __init__(
+        self, tag: str, reason: str, *, primitive: FilterPrimitive | None = None
+    ) -> None:
         message = f"{tag}: {reason}"
         super().__init__(message)
         self.tag = tag
@@ -115,6 +120,7 @@ class FilterPrimitivePlan:
 class FilterPlan:
     filter_node: FilterNode
     primitives: list[FilterPrimitivePlan]
+    input_descriptors: dict[str, dict[str, Any]] = field(default_factory=dict)
 
 
 __all__ = [

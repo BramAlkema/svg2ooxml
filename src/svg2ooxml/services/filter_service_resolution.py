@@ -2,9 +2,18 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
+from dataclasses import replace
 from typing import Any
 
 from svg2ooxml.services.filter_types import FilterEffectResult
+
+_RASTER_ONLY_FILTER_INPUTS = frozenset(
+    {
+        "BackgroundAlpha",
+        "BackgroundImage",
+    }
+)
 
 
 class FilterResolutionMixin:
@@ -54,6 +63,24 @@ class FilterResolutionMixin:
         resvg_preferred = strategy in {"resvg", "resvg-only"}
         resvg_only = strategy == "resvg-only"
 
+        if strategy in {"raster", "resvg"} and _uses_raster_only_filter_input(
+            descriptor
+        ):
+            raster_results = self._render_raster(
+                filter_element,
+                filter_context,
+                filter_ref,
+                strategy=strategy,
+            )
+            if raster_results:
+                return self._finalize_results(
+                    filter_ref,
+                    _annotate_raster_input_results(raster_results),
+                    filter_context,
+                )
+            if strategy == "raster":
+                return self._finalize_results(filter_ref, [], filter_context)
+
         resvg_result = None
         if resvg_enabled:
             resvg_result = self._render_resvg_filter(
@@ -63,7 +90,9 @@ class FilterResolutionMixin:
                 filter_ref,
             )
             if resvg_result is not None and resvg_only:
-                return self._finalize_results(filter_ref, [resvg_result], filter_context)
+                return self._finalize_results(
+                    filter_ref, [resvg_result], filter_context
+                )
             if resvg_result is None and resvg_only:
                 return self._finalize_results(filter_ref, [], filter_context)
 
@@ -71,7 +100,9 @@ class FilterResolutionMixin:
             native_results = self._render_native(filter_element, filter_context)
             if native_results:
                 results.extend(native_results)
-                emf_sources.extend(result for result in native_results if result.fallback == "emf")
+                emf_sources.extend(
+                    result for result in native_results if result.fallback == "emf"
+                )
                 if strategy == "native" and not resvg_preferred:
                     return self._finalize_results(filter_ref, results, filter_context)
                 if strategy == "auto" and not resvg_preferred:
@@ -80,20 +111,26 @@ class FilterResolutionMixin:
                         and result.metadata.get("terminal_stack") is True
                         for result in native_results
                     ):
-                        return self._finalize_results(filter_ref, results, filter_context)
+                        return self._finalize_results(
+                            filter_ref, results, filter_context
+                        )
 
-        skip_fallbacks = resvg_result is not None and not resvg_preferred and not results
+        skip_fallbacks = (
+            resvg_result is not None and not resvg_preferred and not results
+        )
 
         if not skip_fallbacks:
-            descriptor_results, raster_results_cache, results, emf_sources = self._resolve_fallbacks(
-                strategy=strategy,
-                filter_element=filter_element,
-                filter_context=filter_context,
-                filter_ref=filter_ref,
-                descriptor_payload=descriptor_payload,
-                bounds_payload=bounds_payload,
-                results=results,
-                emf_sources=emf_sources,
+            descriptor_results, raster_results_cache, results, emf_sources = (
+                self._resolve_fallbacks(
+                    strategy=strategy,
+                    filter_element=filter_element,
+                    filter_context=filter_context,
+                    filter_ref=filter_ref,
+                    descriptor_payload=descriptor_payload,
+                    bounds_payload=bounds_payload,
+                    results=results,
+                    emf_sources=emf_sources,
+                )
             )
 
         if resvg_result is not None and resvg_preferred:
@@ -107,7 +144,9 @@ class FilterResolutionMixin:
             )
         if resvg_result is not None and resvg_enabled:
             if not results:
-                return self._finalize_results(filter_ref, [resvg_result], filter_context)
+                return self._finalize_results(
+                    filter_ref, [resvg_result], filter_context
+                )
             results.append(resvg_result)
         return self._finalize_results(filter_ref, results, filter_context)
 
@@ -133,13 +172,20 @@ class FilterResolutionMixin:
         if strategy in {"vector", "emf", "auto"}:
             computed_vector = self._render_vector(filter_element, filter_context)
             if computed_vector:
-                emf_sources.extend(result for result in computed_vector if result.fallback == "emf")
+                emf_sources.extend(
+                    result for result in computed_vector if result.fallback == "emf"
+                )
                 if results:
                     results.extend(computed_vector)
                 else:
                     results = list(computed_vector)
                 if strategy in {"vector", "emf"}:
-                    return descriptor_results, raster_results_cache, results, emf_sources
+                    return (
+                        descriptor_results,
+                        raster_results_cache,
+                        results,
+                        emf_sources,
+                    )
 
         if strategy != "raster":
             descriptor_results = self._descriptor_fallback(
@@ -182,10 +228,43 @@ class FilterResolutionMixin:
             return self._finalize_results(filter_ref, native_results, filter_context)
         preferred_results = [resvg_result]
         if emf_sources:
-            preferred_results = self._attach_emf_metadata(preferred_results, emf_sources)
+            preferred_results = self._attach_emf_metadata(
+                preferred_results, emf_sources
+            )
         if raster_results_cache:
             self._attach_raster_metadata(preferred_results, raster_results_cache)
         return self._finalize_results(filter_ref, preferred_results, filter_context)
 
 
 __all__ = ["FilterResolutionMixin"]
+
+
+def _uses_raster_only_filter_input(descriptor: Any) -> bool:
+    primitives = getattr(descriptor, "primitives", ())
+    if not isinstance(primitives, Iterable):
+        return False
+    return any(_primitive_uses_raster_only_input(primitive) for primitive in primitives)
+
+
+def _primitive_uses_raster_only_input(primitive: Any) -> bool:
+    attributes = getattr(primitive, "attributes", None)
+    if isinstance(attributes, dict):
+        for key in ("in", "in2"):
+            value = attributes.get(key)
+            if isinstance(value, str) and value.strip() in _RASTER_ONLY_FILTER_INPUTS:
+                return True
+    children = getattr(primitive, "children", ())
+    if isinstance(children, Iterable):
+        return any(_primitive_uses_raster_only_input(child) for child in children)
+    return False
+
+
+def _annotate_raster_input_results(
+    results: list[FilterEffectResult],
+) -> list[FilterEffectResult]:
+    annotated: list[FilterEffectResult] = []
+    for result in results:
+        metadata = dict(result.metadata or {})
+        metadata.setdefault("raster_reason", "svg_filter_input_surface")
+        annotated.append(replace(result, metadata=metadata))
+    return annotated

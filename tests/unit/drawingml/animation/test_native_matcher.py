@@ -121,6 +121,17 @@ def test_classifies_skew_transform_as_mimic_native() -> None:
     assert match.mimic_allowed
 
 
+def test_classifies_stroke_width_animation_as_dead_path() -> None:
+    match = classify_native_animation(
+        _animation(target_attribute="stroke-width", values=["1", "2"])
+    )
+
+    assert match.level is NativeAnimationMatchLevel.UNSUPPORTED_NATIVE
+    assert match.primitive == "none"
+    assert match.reason == "stroke-weight-dead-path"
+    assert not match.mimic_allowed
+
+
 def test_native_match_serializes_to_metadata_shape() -> None:
     match = classify_native_animation(
         _animation(target_attribute="width", values=["10", "20"])
@@ -139,7 +150,9 @@ def test_native_match_serializes_to_metadata_shape() -> None:
     assert payload["limitations"] == []
 
 
-def test_oracle_backed_match_requires_ui_authored_roundtrip_and_slideshow_evidence() -> None:
+def test_oracle_backed_match_requires_ui_authored_roundtrip_and_slideshow_evidence() -> (
+    None
+):
     match = classify_native_animation(
         _animation(target_attribute="fill-opacity", values=["0.2", "0.8"])
     )
