@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional, Sequence, Tuple
 
 import numpy as np
 from PIL import Image, ImageChops, ImageStat
@@ -65,7 +65,7 @@ class ImageDiff:
         if missing:
             raise ImageDiffError(f"Generated output is missing slide(s): {', '.join(missing)}")
 
-        diff_paths: List[Path] = []
+        diff_paths: list[Path] = []
         worst_max = 0.0
         worst_mean = 0.0
 
@@ -138,9 +138,9 @@ class DiffResult:
     pixel_diff_percentage: float
     passed: bool
     threshold: float
-    diff_image: Optional[Image.Image] = None
-    baseline_shape: Optional[Tuple[int, int, int]] = None
-    actual_shape: Optional[Tuple[int, int, int]] = None
+    diff_image: Image.Image | None = None
+    baseline_shape: tuple[int, int, int] | None = None
+    actual_shape: tuple[int, int, int] | None = None
 
     def save_diff(self, path: str | Path) -> None:
         if self.diff_image is None:
@@ -172,8 +172,8 @@ class VisualDiffer:
         actual: Image.Image,
         generate_diff: bool = True,
     ) -> DiffResult:
-        baseline_rgb = baseline.convert("RGB")
-        actual_rgb = actual.convert("RGB")
+        baseline_rgb = _composite_to_rgb(baseline)
+        actual_rgb = _composite_to_rgb(actual)
 
         if baseline_rgb.size != actual_rgb.size:
             actual_rgb = _resize_to_match(actual_rgb, baseline_rgb)
@@ -261,6 +261,18 @@ def _resize_to_match(actual: Image.Image, baseline: Image.Image) -> Image.Image:
         )
     resample = getattr(Image, "Resampling", Image).LANCZOS
     return actual.resize(baseline.size, resample=resample)
+
+
+def _composite_to_rgb(
+    image: Image.Image,
+    *,
+    background: tuple[int, int, int] = (255, 255, 255),
+) -> Image.Image:
+    if image.mode in {"RGBA", "LA"} or "transparency" in image.info:
+        rgba = image.convert("RGBA")
+        backdrop = Image.new("RGBA", rgba.size, (*background, 255))
+        return Image.alpha_composite(backdrop, rgba).convert("RGB")
+    return image.convert("RGB")
 
 
 __all__ = [

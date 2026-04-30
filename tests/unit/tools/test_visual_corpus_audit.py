@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from PIL import Image
 from tools.visual.corpus_audit import (
     AuditResult,
     _apply_trace_metrics,
@@ -10,6 +11,8 @@ from tools.visual.corpus_audit import (
     _classify_corpus,
     _default_output_dir,
     _svg_has_animation,
+    _w3c_reference_png_for_svg,
+    audit_svg,
     audit_svgs,
     build_run_metadata,
     build_summary,
@@ -56,6 +59,15 @@ def test_resolve_audit_inputs_adds_named_corpus_checkout(tmp_path: Path) -> None
     assert resolved == [checkout]
 
 
+def test_resolve_audit_inputs_adds_local_w3c_corpus(tmp_path: Path) -> None:
+    resolved = resolve_audit_inputs(
+        named_corpora=["w3c"],
+        corpus_root=tmp_path,
+    )
+
+    assert resolved == [Path("tests/svg")]
+
+
 def test_artifact_subdir_keeps_external_paths_unique(tmp_path: Path) -> None:
     external_svg = tmp_path / "resvg-test-suite" / "tests" / "shapes" / "sample.svg"
     external_svg.parent.mkdir(parents=True)
@@ -70,6 +82,7 @@ def test_artifact_subdir_keeps_external_paths_unique(tmp_path: Path) -> None:
 
 def test_classify_corpus_names_known_inputs() -> None:
     assert _classify_corpus(Path("tests/corpus/w3c/sample.svg")) == "w3c"
+    assert _classify_corpus(Path("tests/svg/sample.svg")) == "w3c"
     assert (
         _classify_corpus(Path("tests/visual/fixtures/resvg/sample.svg"))
         == "visual-fixtures"
@@ -79,6 +92,95 @@ def test_classify_corpus_names_known_inputs() -> None:
         == "resvg-test-suite"
     )
     assert _classify_corpus(Path("external/sample.svg")) == "external"
+
+
+def test_w3c_reference_png_resolves_sibling_png_oracle(tmp_path: Path) -> None:
+    svg_path = tmp_path / "svg" / "sample.svg"
+    png_path = tmp_path / "png" / "sample.png"
+    svg_path.parent.mkdir()
+    png_path.parent.mkdir()
+    svg_path.write_text("<svg/>", encoding="utf-8")
+    png_path.write_bytes(b"png")
+
+    assert _w3c_reference_png_for_svg(svg_path) == png_path
+    assert _w3c_reference_png_for_svg(tmp_path / "other" / "sample.svg") is None
+
+
+def test_audit_svg_uses_w3c_png_reference_when_browser_is_skipped(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    svg_path = tmp_path / "svg" / "sample.svg"
+    png_path = tmp_path / "png" / "sample.png"
+    svg_path.parent.mkdir()
+    png_path.parent.mkdir()
+    svg_path.write_text("<svg xmlns='http://www.w3.org/2000/svg'/>", encoding="utf-8")
+    Image.new("RGB", (4, 4), "white").save(png_path)
+
+    class StubBuilder:
+        def build_from_svg(self, _svg_text, output_path, **_kwargs):
+            output_path.write_bytes(b"pptx")
+
+    class StubRenderer:
+        def render(self, _pptx_path, output_dir):
+            render_path = Path(output_dir) / "presentation.png"
+            Image.new("RGB", (4, 4), "white").save(render_path)
+            return type("Rendered", (), {"images": (render_path,)})()
+
+    class BrowserShouldNotRun:
+        def render_svg(self, *_args, **_kwargs):
+            raise AssertionError("browser renderer should not run")
+
+    class StubDiffer:
+        def compare(self, _baseline, _actual, *, generate_diff):
+            assert generate_diff is True
+            return type(
+                "Comparison",
+                (),
+                {
+                    "ssim_score": 1.0,
+                    "pixel_diff_percentage": 0.0,
+                    "passed": True,
+                    "diff_image": None,
+                },
+            )()
+
+    class StubStructure:
+        source_count = 0
+        target_count = 0
+        count_delta = 0
+
+        def rasterized_pairs(self):
+            return ()
+
+        def top_bbox_mismatches(self, *, limit):
+            return ()
+
+    monkeypatch.setattr(
+        "tools.visual.corpus_audit.compare_substructures",
+        lambda *_args, **_kwargs: StubStructure(),
+    )
+
+    result = audit_svg(
+        svg_path,
+        output_dir=tmp_path / "audit",
+        builder=StubBuilder(),
+        renderer=StubRenderer(),
+        render_available=True,
+        browser_renderer=BrowserShouldNotRun(),
+        browser_available=False,
+        differ=StubDiffer(),
+        skip_render=False,
+        skip_browser=True,
+        check_animation=False,
+        animation_duration=4.0,
+        animation_fps=4.0,
+    )
+
+    reference = Path(result.artifact_dir) / "browser" / "reference.png"
+    assert result.browser_status == "ok"
+    assert result.diff_status == "ok"
+    assert reference.read_bytes() == png_path.read_bytes()
 
 
 def test_default_output_dir_uses_powerpoint_reports_subtree() -> None:

@@ -330,15 +330,14 @@ class TestEdgeCases:
         assert result.ssim_score == pytest.approx(1.0)
         assert result.passed is True
     
-    def test_rgba_images_converted(self):
-        """Test that RGBA images are converted to RGB."""
-        rgba1 = Image.new("RGBA", (100, 100), color=(255, 0, 0, 128))
-        rgba2 = Image.new("RGBA", (100, 100), color=(255, 0, 0, 255))
+    def test_rgba_images_composited_over_white(self):
+        """Test that RGBA images are composited before comparison."""
+        rgba1 = Image.new("RGBA", (100, 100), color=(0, 0, 0, 0))
+        rgba2 = Image.new("RGB", (100, 100), color=(255, 255, 255))
         
         differ = VisualDiffer()
         result = differ.compare(rgba1, rgba2)
         
-        # Should succeed (alpha channel ignored after conversion)
         assert result.ssim_score == pytest.approx(1.0)
         assert result.passed is True
     

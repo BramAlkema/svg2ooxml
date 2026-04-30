@@ -11,6 +11,7 @@ from tools.visual.renderer import (
     VisualRendererError,
     _detect_slide_crop_box,
     _normalize_pngs,
+    _normalize_slide_capture,
     resolve_renderer,
 )
 from tools.visual.stack import default_visual_stack
@@ -245,6 +246,19 @@ def test_detect_slide_crop_box_ignores_center_content_shape() -> None:
     crop_box = _detect_slide_crop_box(image, target_size=(480, 360))
 
     assert crop_box is None
+
+
+def test_normalize_slide_capture_keeps_exact_size_edge_content() -> None:
+    image = Image.new("RGB", (480, 360), "white")
+    draw = ImageDraw.Draw(image)
+    draw.rectangle((0, 0, 99, 99), fill="blue")
+    draw.rectangle((379, 0, 479, 99), fill="blue")
+
+    normalized = _normalize_slide_capture(image, (480, 360))
+
+    assert normalized is image
+    assert normalized.size == (480, 360)
+    assert normalized.getpixel((50, 50)) == (0, 0, 255)
 
 
 def test_normalize_pngs_crops_before_resizing(

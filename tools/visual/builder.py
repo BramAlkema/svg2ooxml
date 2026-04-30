@@ -93,6 +93,7 @@ class PptxBuilder:
                 geometry_mode=self._geometry_mode,
             )
         else:
+            _register_source_asset_root(services, source_path)
             effective_filter_strategy = tier_filter_strategy or self._filter_strategy
             if effective_filter_strategy and services.filter_service is not None:
                 services.filter_service.set_strategy(effective_filter_strategy)
@@ -199,4 +200,38 @@ class PptxBuilder:
         return PptxBuildResult(pptx_path=pptx_path, slide_count=1)
 
 
-__all__ = ["PptxBuilder", "PptxBuildResult", "VisualBuildError"]
+def infer_source_asset_root(source_path: Path | None) -> Path | None:
+    """Infer the local corpus root for SVG-adjacent image/font resources."""
+
+    if source_path is None:
+        return None
+    try:
+        resolved = Path(source_path).expanduser().resolve()
+    except OSError:
+        resolved = Path(source_path).expanduser().absolute()
+
+    base_dir = resolved.parent
+    for candidate in (base_dir, *base_dir.parents):
+        if (candidate / "images").is_dir() or (candidate / "resources").is_dir():
+            return candidate
+    return base_dir
+
+
+def _register_source_asset_root(services: Any, source_path: Path | None) -> None:
+    resolver = getattr(services, "resolve", None)
+    registrar = getattr(services, "register", None)
+    if not callable(resolver) or not callable(registrar):
+        return
+    if resolver("asset_root") or resolver("root_dir") or resolver("source_root"):
+        return
+    asset_root = infer_source_asset_root(source_path)
+    if asset_root is not None:
+        registrar("asset_root", str(asset_root))
+
+
+__all__ = [
+    "PptxBuilder",
+    "PptxBuildResult",
+    "VisualBuildError",
+    "infer_source_asset_root",
+]

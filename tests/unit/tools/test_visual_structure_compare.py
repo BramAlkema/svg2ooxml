@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+import zipfile
 from pathlib import Path
 
 import pytest
@@ -7,6 +9,42 @@ from tools.visual.builder import PptxBuilder
 from tools.visual.structure_compare import compare_substructures
 
 from svg2ooxml.core.tracing import ConversionTracer
+
+
+def test_pptx_builder_resolves_parent_corpus_images(tmp_path: Path) -> None:
+    corpus_root = tmp_path / "corpus"
+    svg_dir = corpus_root / "svg"
+    image_dir = corpus_root / "images"
+    svg_dir.mkdir(parents=True)
+    image_dir.mkdir()
+    image_bytes = base64.b64decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0l"
+        "EQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII="
+    )
+    (image_dir / "pixel.png").write_bytes(image_bytes)
+    svg = """
+    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20">
+      <image href="../images/pixel.png" x="5" y="5" width="10" height="10" />
+    </svg>
+    """
+    source_path = svg_dir / "scene.svg"
+    source_path.write_text(svg, encoding="utf-8")
+    pptx_path = tmp_path / "image_parent_ref.pptx"
+
+    builder = PptxBuilder(
+        filter_strategy="resvg",
+        geometry_mode="resvg",
+        slide_size_mode="same",
+        allow_promotion=False,
+    )
+    builder.build_from_svg(svg, pptx_path, source_path=source_path)
+
+    with zipfile.ZipFile(pptx_path) as package:
+        media_files = [
+            name for name in package.namelist() if name.startswith("ppt/media/")
+        ]
+
+    assert any(name.endswith(".png") for name in media_files)
 
 
 def test_compare_substructures_preserves_leaf_order_and_bbox(tmp_path: Path) -> None:

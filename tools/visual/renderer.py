@@ -435,6 +435,8 @@ def _normalize_slide_capture(
     image: Image.Image,
     target_size: tuple[int, int],
 ) -> Image.Image:
+    if image.size == target_size:
+        return image
     normalized = image
     crop_box = _detect_slide_crop_box(image, target_size=target_size)
     if crop_box is not None:

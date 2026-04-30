@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import logging
 import os
+import shutil
 import sys
 from collections import Counter
 from collections.abc import Mapping, Sequence
@@ -311,7 +312,21 @@ def audit_svg(
                     )
 
     browser_image: Path | None = None
-    if not skip_browser:
+    w3c_reference = _w3c_reference_png_for_svg(svg_path)
+    if w3c_reference is not None:
+        browser_dir = artifact_dir / "browser"
+        browser_dir.mkdir(exist_ok=True)
+        browser_image = browser_dir / "reference.png"
+        try:
+            shutil.copyfile(w3c_reference, browser_image)
+        except OSError as exc:
+            result.browser_status = "error"
+            result.errors["browser"] = str(exc)
+            result.notes.append("W3C PNG reference copy failed.")
+            browser_image = None
+        else:
+            result.browser_status = "ok"
+    elif not skip_browser:
         if not browser_available:
             result.browser_status = "unavailable"
             result.notes.append("Browser renderer is not available.")
@@ -709,13 +724,27 @@ def _classify_corpus(svg_path: Path) -> str:
         return "w3c-harness"
     if _contains_path(parts, ("tests", "corpus", "w3c")):
         return "w3c"
+    if _contains_path(parts, ("tests", "svg")):
+        return "w3c"
     if _contains_path(parts, ("tests", "visual", "fixtures")):
         return "visual-fixtures"
     if _contains_path(parts, ("tests", "corpus")):
         return "tests-corpus"
-    if _contains_path(parts, ("tests", "svg")):
-        return "tests-svg"
     return "external"
+
+
+def _w3c_reference_png_for_svg(svg_path: Path) -> Path | None:
+    """Return the W3C suite PNG oracle for a source SVG when available."""
+
+    svg_path = Path(svg_path)
+    if svg_path.suffix.lower() != ".svg":
+        return None
+    if svg_path.parent.name != "svg":
+        return None
+    candidate = svg_path.parent.parent / "png" / f"{svg_path.stem}.png"
+    if candidate.is_file():
+        return candidate
+    return None
 
 
 def _contains_path(parts: Sequence[str], needle: Sequence[str]) -> bool:
@@ -760,7 +789,7 @@ def main() -> None:
         dest="named_corpora",
         choices=list_named_corpora(),
         default=[],
-        help="Named external corpus to include in the audit.",
+        help="Named corpus to include in the audit.",
     )
     parser.add_argument(
         "--corpus-root",
@@ -801,7 +830,7 @@ def main() -> None:
     parser.add_argument(
         "--skip-browser",
         action="store_true",
-        help="Skip Playwright browser rendering and SSIM diffing.",
+        help="Skip Playwright browser rendering; built-in PNG references may still be diffed.",
     )
     parser.add_argument(
         "--browser-threshold",

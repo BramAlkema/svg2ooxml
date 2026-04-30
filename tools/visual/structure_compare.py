@@ -15,6 +15,7 @@ from svg2ooxml.ir.scene import Group
 from svg2ooxml.ir.shapes import Rectangle
 from svg2ooxml.ir.text import TextFrame
 from svg2ooxml.services import configure_services
+from tools.visual.builder import infer_source_asset_root
 
 EMU_PER_PX = 9525.0
 PRESENTATION_NS = "http://schemas.openxmlformats.org/presentationml/2006/main"
@@ -147,6 +148,14 @@ def compare_substructures(
             geometry_mode=geometry_mode,
         )
     else:
+        if source_path is not None and not (
+            services.resolve("asset_root")
+            or services.resolve("root_dir")
+            or services.resolve("source_root")
+        ):
+            asset_root = infer_source_asset_root(source_path)
+            if asset_root is not None:
+                services.register("asset_root", str(asset_root))
         if filter_strategy and services.filter_service is not None:
             services.filter_service.set_strategy(filter_strategy)
         policy_context = getattr(services, "policy_context", None)

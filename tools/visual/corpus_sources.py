@@ -15,9 +15,18 @@ class CorpusSource:
     checkout_dir_name: str
     svg_subpaths: tuple[str, ...]
     description: str
+    local_input_paths: tuple[str, ...] = ()
 
 
 KNOWN_CORPORA: dict[str, CorpusSource] = {
+    "w3c": CorpusSource(
+        name="w3c",
+        repo_url="https://www.w3.org/Graphics/SVG/Test/20110816/",
+        checkout_dir_name="tests",
+        svg_subpaths=("svg",),
+        description="Local W3C SVG 1.1 2nd Edition 20110816 snapshot.",
+        local_input_paths=("tests/svg",),
+    ),
     "resvg-test-suite": CorpusSource(
         name="resvg-test-suite",
         repo_url="https://github.com/linebender/resvg-test-suite.git",
@@ -60,6 +69,15 @@ def resolve_named_corpus_inputs(
     resolved: list[Path] = []
     for name in names:
         source = _lookup_corpus(name)
+        if source.local_input_paths:
+            for subpath in source.local_input_paths:
+                candidate = Path(subpath)
+                if not candidate.exists():
+                    raise FileNotFoundError(
+                        f"Named corpus '{name}' is missing expected local path {candidate}."
+                    )
+                resolved.append(candidate)
+            continue
         checkout = base_root / source.checkout_dir_name
         if not checkout.exists():
             raise FileNotFoundError(
@@ -83,6 +101,7 @@ def describe_named_corpora() -> dict[str, dict[str, str]]:
             "repo_url": source.repo_url,
             "checkout_dir_name": source.checkout_dir_name,
             "svg_subpaths": ", ".join(source.svg_subpaths),
+            "local_input_paths": ", ".join(source.local_input_paths),
             "description": source.description,
         }
         for name, source in KNOWN_CORPORA.items()
