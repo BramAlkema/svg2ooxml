@@ -173,7 +173,7 @@ def collect_per_character_text_layout(
     hierarchical, so flatten that structure here while preserving rotate-list
     inheritance and whitespace consumption.
     """
-    if not _has_rotate_tree(element):
+    if not has_rotate_tree(element):
         return None
 
     font_service = context.services.resolve("font")
@@ -353,12 +353,19 @@ def _apply_coordinate_space(
         abs_x[index], abs_y[index] = coord_space.apply_point(x, y)
 
 
-def _has_rotate_tree(element: etree._Element) -> bool:
+def has_rotate_tree(element: etree._Element) -> bool:
     for node in element.iter():
         tag = _local_name(getattr(node, "tag", "")).lower()
         if tag not in {"text", "tspan"}:
             continue
-        if node.get("rotate"):
+        if _has_non_zero_rotate(node.get("rotate")):
+            return True
+    return False
+
+
+def _has_non_zero_rotate(value: str | None) -> bool:
+    for token in parse_number_list(value):
+        if abs(token) > 1e-9:
             return True
     return False
 
@@ -409,4 +416,8 @@ def _local_name(tag: object) -> str:
     return tag
 
 
-__all__ = ["PerCharacterTextLayout", "collect_per_character_text_layout"]
+__all__ = [
+    "PerCharacterTextLayout",
+    "collect_per_character_text_layout",
+    "has_rotate_tree",
+]

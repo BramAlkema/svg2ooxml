@@ -666,6 +666,111 @@ Consequences:
   `tools.visual.corpus_audit` output enough to produce the 0.9 baseline summary
   without manual spreadsheet work
 
+### Corpus Feedback Loop for 0.9 Closure (ADR-037)
+
+Status: accepted for the 0.9 release stream.
+
+Context:
+
+The W3C SVG 1.1 corpus is now local in this repository under the same
+`tests/svg`, `tests/png`, and `tests/harness` tree. During the current corpus
+feedback pass, several failures that looked like renderer regressions turned
+out to be measurement or packaging issues:
+
+- transparent W3C PNGs carried hidden black RGB, so naive RGB conversion made
+  correct output look wrong
+- simple SVG checkerboard patterns needed an actual transparent raster tile,
+  not a DrawingML preset approximation
+- filter lighting fallbacks could be visually acceptable while their embedded
+  PNG alpha still exposed checkerboard in consumers that show transparency
+- some high scores were caused by revision/footer drift or structure/raster
+  accounting even when the relevant visual content was fixed
+
+The risk is a loop of ad hoc fixes where every new W3C row creates a local
+patch, but the release story never converges. 0.9 needs a repeatable feedback
+loop that turns corpus failures into classified decisions.
+
+Decision:
+
+0.9 closure uses a ranked corpus-feedback loop, not a file-by-file migration
+checklist.
+
+Operating rules:
+
+- Use the existing local W3C corpus mirror. Do not create a duplicate corpus or
+  alternate fixture tree unless a source file is genuinely absent.
+- Compare against the W3C PNGs where they exist, and against browser-rendered
+  references where PNGs are missing or known stale.
+- Normalize reference alpha before judging content. Transparent pixels must be
+  composited over the same background as the generated slide image before RGB
+  diffing.
+- Work from the ranked top-offender window, usually top 40, and keep the run
+  directory in `reports/visual/...` so every row has inspectable artefacts.
+- For each target, decide one of four outcomes:
+  - `fixed`: behavior changed and the ranked row improved or disappeared
+  - `measurement-fixed`: audit/diff/reference handling changed and a false
+    positive was removed
+  - `accepted-limitation`: DrawingML or PowerPoint cannot represent the SVG
+    behavior natively, so fallback metadata and bounds were made explicit
+  - `deferred`: the row needs a broader subsystem change and is documented as
+    such
+- Add a focused regression test for every code fix. Visual evidence alone is
+  not enough.
+- Prefer narrow subsystem fixes over per-file overrides. A corpus row may be
+  the trigger, but the patch should explain the SVG feature it fixes.
+- Do not change SVG semantics only to improve a screenshot. If a visual problem
+  is really a media-alpha, background-compositing, or audit-normalization issue,
+  fix that boundary instead of altering filter, pattern, or geometry semantics.
+
+Batch cadence:
+
+- Run a single-case audit while investigating one row.
+- After a fix, rerun the same single case and inspect the PPTX media, slide
+  render, browser/reference image, and trace counters.
+- After several fixes, rerun the current top-offender batch with the same
+  command and compare ranked rows, not only pass/fail status.
+- Promote only compact summaries to docs. Raw PPTX, PNG, and browser artefacts
+  remain under ignored `reports/visual/...`.
+
+Current target classes:
+
+1. Reference/diff correctness: alpha normalization, stale PNG detection, and
+   browser fallback when a W3C PNG is misleading.
+2. Paint-server fidelity: patterns, gradients, inherited paint, `currentColor`,
+   object-bounding-box vs user-space coordinates, and tile phase.
+3. Filter fallback fidelity: source-surface rendering, `SourceGraphic` /
+   `SourceAlpha`, filter-region bounds, lighting alpha/background behavior, and
+   deterministic fallback asset registration.
+4. Text and transform fallback routing: rotated `tspan`, dense text, and
+   cases where PowerPoint-native text is worse than a bounded vector or bitmap
+   fallback.
+5. Structural SVG features: `<use>`, `<symbol>`, links, clipping/masking, and
+   external image/resource resolution.
+
+0.9 acceptance for corpus feedback:
+
+- the release candidate has a reproducible ranked W3C report with command,
+  renderer, threshold, environment, and input set recorded
+- top-ranked failures are classified, not merely observed
+- the top-offender batch shows no unexplained build/open failures
+- fixed rows have focused tests and before/after audit directories
+- fallback growth is accounted for by reason code and does not silently mask a
+  native regression
+- known limitations are explicit in metadata, docs, or issue notes instead of
+  being hidden behind generic bitmap fallback
+
+Consequences:
+
+- "Next target" means the next ranked corpus row, not the next SVG file in
+  lexical order.
+- A high score is a triage pointer. It is not automatically a bug until the
+  reference image, generated media, slide render, and trace metadata agree.
+- Measurement fixes are first-class 0.9 work because they prevent us from
+  optimizing against false failures.
+- The corpus pass should leave the project with a durable ranked ledger of
+  what was fixed, what was measured differently, what is knowingly deferred,
+  and why.
+
 ---
 
 ## Text Rendering Strategy

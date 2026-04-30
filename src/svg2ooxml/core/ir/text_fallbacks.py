@@ -20,6 +20,9 @@ from svg2ooxml.core.ir.text.dense_rotation_fallback import (
 )
 from svg2ooxml.core.ir.text.layout import estimate_text_bbox
 from svg2ooxml.core.ir.text.positioning_metadata import PerCharacterTextLayout
+from svg2ooxml.core.ir.text.positioning_metadata import (
+    has_rotate_tree as _has_rotate_tree_impl,
+)
 from svg2ooxml.ir.geometry import Point, Rect
 from svg2ooxml.ir.scene import Image
 from svg2ooxml.ir.text import Run, TextAnchor, TextFrame
@@ -67,26 +70,20 @@ class TextFallbackMixin:
     ) -> Image | None:
         mode = dense_rotation_fallback_mode(decision)
         if mode in {"auto", "auto_vector_outline"}:
-            if has_tspan_descendant(element):
-                return self._convert_svg_text_fallback(
-                    element=element,
-                    metadata=metadata,
-                    mode="svg",
-                    policy_key="dense_rotation_fallback",
-                    image_source="dense_rotated_text",
-                    reason="dense_tspan_rotation",
-                    split="dense_rotation_fallback",
-                    requested_mode=mode,
-                )
             if self._vector_outline_available():
                 return None
+            reason = (
+                "dense_tspan_rotation_skia_unavailable"
+                if has_tspan_descendant(element)
+                else "dense_per_character_rotation_skia_unavailable"
+            )
             return self._convert_svg_text_fallback(
                 element=element,
                 metadata=metadata,
                 mode="svg",
                 policy_key="dense_rotation_fallback",
                 image_source="dense_rotated_text",
-                reason="dense_per_character_rotation_skia_unavailable",
+                reason=reason,
                 split="dense_rotation_fallback",
                 requested_mode=mode,
             )
@@ -302,7 +299,7 @@ def layout_range_bbox(
 
 
 def has_rotate_tree(element: etree._Element) -> bool:
-    return any(bool(node.get("rotate")) for node in element.iter())
+    return _has_rotate_tree_impl(element)
 
 
 def has_tspan_descendant(element: etree._Element) -> bool:

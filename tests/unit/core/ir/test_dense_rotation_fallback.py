@@ -3,6 +3,7 @@ from __future__ import annotations
 from lxml import etree
 
 from svg2ooxml.core.ir.text.dense_rotation_fallback import source_text_svg_payload
+from svg2ooxml.core.ir.text.positioning_metadata import has_rotate_tree
 
 
 def test_source_text_svg_payload_preserves_root_inherited_styles() -> None:
@@ -28,3 +29,15 @@ def test_source_text_svg_payload_preserves_root_inherited_styles() -> None:
     assert svg.get("width") == "120"
     assert svg.get("height") == "80"
     assert svg.get("viewBox") == "0 0 120 80"
+
+
+def test_has_rotate_tree_ignores_zero_angles() -> None:
+    root = etree.fromstring(
+        """
+        <svg xmlns="http://www.w3.org/2000/svg">
+          <text rotate="0 0 0">AB</text>
+        </svg>
+        """
+    )
+
+    assert not has_rotate_tree(root)
