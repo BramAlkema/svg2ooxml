@@ -26,6 +26,11 @@ DEFAULT_PAINT_STYLE: dict[str, Any] = {
     "stroke": None,
     "stroke_opacity": 1.0,
     "stroke_width_px": 1.0,
+    "stroke_linecap": "butt",
+    "stroke_linejoin": "miter",
+    "stroke_miterlimit": "4",
+    "stroke_dasharray": None,
+    "stroke_dashoffset": None,
     "opacity": 1.0,
     "vector_effect": "none",
 }
@@ -147,6 +152,43 @@ def compute_paint_style(
             app, stroke_width, context, unit_converter, CSSOrigin.PRESENTATION_ATTR
         )
 
+    set_optional_keyword(
+        app,
+        "stroke_linecap",
+        "stroke-linecap",
+        element.get("stroke-linecap"),
+        CSSOrigin.PRESENTATION_ATTR,
+    )
+    set_optional_keyword(
+        app,
+        "stroke_linejoin",
+        "stroke-linejoin",
+        element.get("stroke-linejoin"),
+        CSSOrigin.PRESENTATION_ATTR,
+    )
+    set_optional_keyword(
+        app,
+        "stroke_miterlimit",
+        "stroke-miterlimit",
+        element.get("stroke-miterlimit"),
+        CSSOrigin.PRESENTATION_ATTR,
+    )
+    set_optional_keyword(
+        app,
+        "stroke_dasharray",
+        "stroke-dasharray",
+        element.get("stroke-dasharray"),
+        CSSOrigin.PRESENTATION_ATTR,
+        none_as_null=True,
+    )
+    set_optional_keyword(
+        app,
+        "stroke_dashoffset",
+        "stroke-dashoffset",
+        element.get("stroke-dashoffset"),
+        CSSOrigin.PRESENTATION_ATTR,
+    )
+
     opacity = element.get("opacity")
     if opacity is not None:
         set_float_property(
@@ -210,6 +252,52 @@ def compute_paint_style(
                 set_stroke_width(
                     app, value, context, unit_converter, CSSOrigin.INLINE, important
                 )
+            elif name == "stroke-linecap":
+                set_optional_keyword(
+                    app,
+                    "stroke_linecap",
+                    "stroke-linecap",
+                    value,
+                    CSSOrigin.INLINE,
+                    important,
+                )
+            elif name == "stroke-linejoin":
+                set_optional_keyword(
+                    app,
+                    "stroke_linejoin",
+                    "stroke-linejoin",
+                    value,
+                    CSSOrigin.INLINE,
+                    important,
+                )
+            elif name == "stroke-miterlimit":
+                set_optional_keyword(
+                    app,
+                    "stroke_miterlimit",
+                    "stroke-miterlimit",
+                    value,
+                    CSSOrigin.INLINE,
+                    important,
+                )
+            elif name == "stroke-dasharray":
+                set_optional_keyword(
+                    app,
+                    "stroke_dasharray",
+                    "stroke-dasharray",
+                    value,
+                    CSSOrigin.INLINE,
+                    important,
+                    none_as_null=True,
+                )
+            elif name == "stroke-dashoffset":
+                set_optional_keyword(
+                    app,
+                    "stroke_dashoffset",
+                    "stroke-dashoffset",
+                    value,
+                    CSSOrigin.INLINE,
+                    important,
+                )
             elif name == "opacity":
                 set_float_property(
                     app, "opacity", "opacity", value, CSSOrigin.INLINE, important
@@ -272,6 +360,52 @@ def apply_stylesheet_paints(
             set_stroke_width(
                 app, value, context, unit_converter, decl.origin, decl.important
             )
+        elif name == "stroke-linecap":
+            set_optional_keyword(
+                app,
+                "stroke_linecap",
+                "stroke-linecap",
+                value,
+                decl.origin,
+                decl.important,
+            )
+        elif name == "stroke-linejoin":
+            set_optional_keyword(
+                app,
+                "stroke_linejoin",
+                "stroke-linejoin",
+                value,
+                decl.origin,
+                decl.important,
+            )
+        elif name == "stroke-miterlimit":
+            set_optional_keyword(
+                app,
+                "stroke_miterlimit",
+                "stroke-miterlimit",
+                value,
+                decl.origin,
+                decl.important,
+            )
+        elif name == "stroke-dasharray":
+            set_optional_keyword(
+                app,
+                "stroke_dasharray",
+                "stroke-dasharray",
+                value,
+                decl.origin,
+                decl.important,
+                none_as_null=True,
+            )
+        elif name == "stroke-dashoffset":
+            set_optional_keyword(
+                app,
+                "stroke_dashoffset",
+                "stroke-dashoffset",
+                value,
+                decl.origin,
+                decl.important,
+            )
         elif name == "opacity":
             set_float_property(
                 app, "opacity", "opacity", value, decl.origin, decl.important
@@ -320,6 +454,24 @@ def set_keyword_property(
     app.origin[css_name] = origin
 
 
+def set_optional_keyword(
+    app: PaintApplication,
+    style_key: str,
+    css_name: str,
+    value: str | None,
+    origin: CSSOrigin,
+    importance_flag: bool = False,
+    *,
+    none_as_null: bool = False,
+) -> None:
+    token = (value or "").strip()
+    if not token:
+        return
+    app.style[style_key] = None if none_as_null and token.lower() == "none" else token
+    app.importance[css_name] = importance_flag
+    app.origin[css_name] = origin
+
+
 def set_stroke_width(
     app: PaintApplication,
     value: str | None,
@@ -341,4 +493,5 @@ __all__ = [
     "apply_stylesheet_paints",
     "compute_paint_style",
     "default_paint_style",
+    "set_optional_keyword",
 ]

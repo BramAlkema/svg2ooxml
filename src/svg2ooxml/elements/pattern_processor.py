@@ -116,9 +116,16 @@ class PatternProcessor:
         element: ET.Element,
         *,
         analysis: PatternAnalysis,
+        phase_x: float = 0.0,
+        phase_y: float = 0.0,
     ) -> tuple[bytes, int, int] | None:
-        """Build a reusable tile image for simple translated dot patterns."""
-        return _build_tile_payload(element, analysis=analysis)
+        """Build a reusable tile image for simple SVG patterns."""
+        return _build_tile_payload(
+            element,
+            analysis=analysis,
+            phase_x=phase_x,
+            phase_y=phase_y,
+        )
 
     @staticmethod
     def _perform_pattern_analysis(

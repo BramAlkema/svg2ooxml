@@ -16,6 +16,8 @@ from svg2ooxml.core.resvg.painting.gradients import GradientStop, RadialGradient
 from svg2ooxml.core.resvg.painting.paint import Color
 from svg2ooxml.core.traversal.hooks import TraversalHooksMixin
 from svg2ooxml.drawingml.bridges.resvg_gradient_adapter import radial_gradient_to_paint
+from svg2ooxml.ir.paint import GradientStop as IRGradientStop
+from svg2ooxml.ir.paint import LinearGradientPaint
 
 
 class MockConverter(TraversalHooksMixin):
@@ -42,6 +44,27 @@ class MockConverter(TraversalHooksMixin):
 
 class TestGradientTransformTelemetry:
     """Test telemetry serialization for gradient transforms."""
+
+    def test_linear_gradient_serialization_preserves_units_and_spread(self):
+        """Test serialized paint descriptors keep gradient policy metadata."""
+        paint = LinearGradientPaint(
+            stops=[
+                IRGradientStop(offset=0.0, rgb="FF0000", opacity=1.0),
+                IRGradientStop(offset=1.0, rgb="0000FF", opacity=0.75),
+            ],
+            start=(0.0, 0.5),
+            end=(1.0, 0.5),
+            gradient_id="grad1",
+            gradient_units="objectBoundingBox",
+            spread_method="reflect",
+        )
+        converter = MockConverter()
+
+        result = converter._serialize_paint(paint)
+
+        assert result["type"] == "linearGradient"
+        assert result["gradient_units"] == "objectBoundingBox"
+        assert result["spread_method"] == "reflect"
 
     def test_radial_gradient_no_transform_telemetry(self):
         """Test radial gradient without transform has no telemetry fields."""

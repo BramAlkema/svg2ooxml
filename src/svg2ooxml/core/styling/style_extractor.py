@@ -7,6 +7,8 @@ from typing import TYPE_CHECKING, Any
 
 from lxml import etree
 
+from svg2ooxml.color import parse_color
+from svg2ooxml.color.utils import rgb_object_to_hex
 from svg2ooxml.common.conversions.opacity import parse_opacity
 from svg2ooxml.common.math_utils import finite_float
 from svg2ooxml.common.style.resolver import StyleResolver
@@ -35,6 +37,9 @@ from svg2ooxml.core.styling.style_helpers import (
 from svg2ooxml.core.styling.style_helpers import (
     parse_optional_float as _parse_optional_float,
 )
+from svg2ooxml.core.styling.style_helpers import (
+    parse_style_attr as _parse_style_attr,
+)
 from svg2ooxml.drawingml.bridges.resvg_paint_bridge import (
     MeshGradientDescriptor,
 )
@@ -60,6 +65,75 @@ class StyleResult:
     opacity: float
     effects: list[Effect]
     metadata: dict[str, Any]
+
+
+def _style_token(value: Any) -> str | None:
+    if value is None:
+        return None
+    return str(value)
+
+
+def _resolve_fill_rule(
+    element: etree._Element,
+    paint_style: dict[str, Any],
+) -> str | None:
+    candidates = [paint_style.get("fill_rule")]
+    current: etree._Element | None = element
+    while current is not None:
+        candidates.append(current.get("fill-rule"))
+        candidates.append(_parse_style_attr(current.get("style")).get("fill-rule"))
+        parent = current.getparent()
+        current = parent if isinstance(parent, etree._Element) else None
+
+    for candidate in candidates:
+        if not isinstance(candidate, str):
+            continue
+        token = candidate.strip().lower()
+        if token in {"evenodd", "even-odd"}:
+            return "evenodd"
+        if token == "nonzero":
+            return "nonzero"
+    return None
+
+
+def _split_paint_server_fallback(token: str) -> tuple[str | None, str | None]:
+    stripped = token.strip()
+    if not stripped.startswith("url("):
+        return None, None
+    depth = 0
+    for index, char in enumerate(stripped):
+        if char == "(":
+            depth += 1
+        elif char == ")":
+            depth -= 1
+            if depth == 0:
+                paint_server = stripped[: index + 1].strip()
+                fallback = stripped[index + 1 :].strip() or None
+                return paint_server, fallback
+    return stripped, None
+
+
+def _solid_fallback_paint(token: str | None, opacity: float) -> SolidPaint | None:
+    if token is None:
+        return None
+    stripped = token.strip()
+    if not stripped or stripped.lower() == "none":
+        return None
+    color = parse_color(stripped)
+    if color is None or color.a <= 0.0:
+        return None
+    rgb = rgb_object_to_hex(color, default=None)
+    if rgb is None:
+        return None
+    alpha = max(0.0, min(1.0, float(color.a) * opacity))
+    return SolidPaint(rgb=rgb, opacity=alpha)
+
+
+def _is_empty_pattern_descriptor(descriptor: Any) -> bool:
+    try:
+        return float(descriptor.width) <= 0.0 or float(descriptor.height) <= 0.0
+    except (TypeError, ValueError):
+        return False
 
 
 class StyleExtractor:
@@ -134,6 +208,10 @@ class StyleExtractor:
         if vector_effect and vector_effect != "none":
             metadata["vector_effect"] = vector_effect
 
+        fill_rule = _resolve_fill_rule(element, paint_style)
+        if fill_rule is not None:
+            metadata["fill_rule"] = fill_rule
+
         return StyleResult(
             fill=fill,
             stroke=stroke,
@@ -182,7 +260,9 @@ class StyleExtractor:
         stripped = token.strip()
         if not stripped or stripped.lower() == "none":
             return None
-        paint_id = _extract_url_id(stripped)
+        paint_server_token, fallback_token = _split_paint_server_fallback(stripped)
+        fallback_paint = _solid_fallback_paint(fallback_token, opacity)
+        paint_id = _extract_url_id(paint_server_token or stripped)
         if paint_id:
             gradient_service = services.gradient_service
             descriptor = gradient_service.get(paint_id) if gradient_service else None
@@ -227,9 +307,12 @@ class StyleExtractor:
                 pattern_service.get(paint_id) if pattern_service else None
             )
             if pattern_descriptor is not None:
+                if _is_empty_pattern_descriptor(pattern_descriptor):
+                    return fallback_paint
                 pattern_paint = build_pattern_paint(
                     pattern_id=paint_id,
                     services=services,
+                    element=element,
                     context=context,
                 )
                 if pattern_paint is not None:
@@ -244,8 +327,10 @@ class StyleExtractor:
                         tracer=self._tracer,
                     )
                     return pattern_paint
-                return PatternPaint(pattern_id=paint_id)
+                return fallback_paint or PatternPaint(pattern_id=paint_id)
             # Unknown paint reference – fall through to solid paint with raw token.
+            if fallback_paint is not None:
+                return fallback_paint
         hex_color = _normalize_hex(stripped)
         if hex_color is None:
             return None
@@ -321,8 +406,8 @@ class StyleExtractor:
             1.0,
         )
         stroke_width = max(0.0, stroke_width if stroke_width is not None else 1.0)
-        join_attr = (element.get("stroke-linejoin") or "miter").lower()
-        cap_attr = (element.get("stroke-linecap") or "butt").lower()
+        join_attr = str(paint_style.get("stroke_linejoin") or "miter").lower()
+        cap_attr = str(paint_style.get("stroke_linecap") or "butt").lower()
 
         stroke_join = {
             "round": StrokeJoin.ROUND,
@@ -334,9 +419,9 @@ class StyleExtractor:
             "square": StrokeCap.SQUARE,
         }.get(cap_attr, StrokeCap.BUTT)
 
-        dash_array = _parse_dash_array(element.get("stroke-dasharray"))
-        dash_offset = _parse_length(element.get("stroke-dashoffset")) or 0.0
-        miter_limit = _parse_optional_float(element.get("stroke-miterlimit")) or 4.0
+        dash_array = _parse_dash_array(_style_token(paint_style.get("stroke_dasharray")))
+        dash_offset = _parse_length(_style_token(paint_style.get("stroke_dashoffset"))) or 0.0
+        miter_limit = _parse_optional_float(_style_token(paint_style.get("stroke_miterlimit"))) or 4.0
         stroke_opacity_value = paint_style.get("stroke_opacity", 1.0)
         stroke_opacity = parse_opacity(
             stroke_opacity_value if stroke_opacity_value is not None else 0.0,

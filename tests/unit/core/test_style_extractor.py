@@ -9,7 +9,7 @@ from svg2ooxml.common.style.resolver import StyleResolver
 from svg2ooxml.common.units import UnitConverter
 from svg2ooxml.core.styling.style_extractor import StyleExtractor
 from svg2ooxml.drawingml.bridges.resvg_paint_bridge import describe_gradient_element
-from svg2ooxml.ir.paint import LinearGradientPaint, SolidPaint
+from svg2ooxml.ir.paint import LinearGradientPaint, SolidPaint, StrokeCap, StrokeJoin
 from svg2ooxml.services import configure_services
 
 
@@ -108,6 +108,32 @@ def test_style_extractor_resolves_calc_stroke_dash_lengths() -> None:
     assert style.stroke is not None
     assert style.stroke.dash_array == [32.0, 24.0]
     assert style.stroke.dash_offset == pytest.approx(16.0 / 3.0)
+
+
+def test_style_extractor_inherits_stroke_dash_presentation() -> None:
+    markup = """
+        <svg xmlns='http://www.w3.org/2000/svg'>
+            <g stroke='#000000' stroke-width='3'
+               stroke-linecap='round' stroke-linejoin='bevel'
+               stroke-dasharray='25 5' stroke-dashoffset='4'>
+                <circle id='target' cx='10' cy='10' r='5'/>
+            </g>
+        </svg>
+    """
+    root, circle = _build_svg(markup)
+
+    resolver = StyleResolver()
+    resolver.collect_css(root)
+    extractor = StyleExtractor(resolver)
+
+    style = extractor.extract(circle, DummyServices())
+
+    assert style.stroke is not None
+    assert style.stroke.width == pytest.approx(3.0)
+    assert style.stroke.cap is StrokeCap.ROUND
+    assert style.stroke.join is StrokeJoin.BEVEL
+    assert style.stroke.dash_array == [25.0, 5.0]
+    assert style.stroke.dash_offset == pytest.approx(4.0)
 
 
 def test_style_extractor_accepts_calc_opacity_and_stroke_width() -> None:

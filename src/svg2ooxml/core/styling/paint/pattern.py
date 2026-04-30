@@ -45,6 +45,7 @@ def build_pattern_paint(
     *,
     pattern_id: str,
     services: ConversionServices,
+    element: etree._Element | None = None,
     context: Any | None = None,
 ) -> PatternPaint | SolidPaint | None:
     pattern_service = services.pattern_service
@@ -73,6 +74,7 @@ def build_pattern_paint(
     tile_image = None
     tile_width_px = None
     tile_height_px = None
+    phase_x, phase_y = _tile_phase(pattern_descriptor, element)
     processor = get_pattern_processor(services)
     if processor is not None:
         try:
@@ -97,6 +99,8 @@ def build_pattern_paint(
             tile_payload = processor.build_tile_payload(
                 pattern_element,
                 analysis=analysis,
+                phase_x=phase_x,
+                phase_y=phase_y,
             )
             if tile_payload is not None:
                 tile_image, tile_width_px, tile_height_px = tile_payload
@@ -120,6 +124,20 @@ def build_pattern_paint(
         tile_width_px=tile_width_px,
         tile_height_px=tile_height_px,
     )
+
+
+def _tile_phase(
+    descriptor: PatternDescriptor,
+    element: etree._Element | None,
+) -> tuple[float, float]:
+    if element is None or descriptor.units != "userSpaceOnUse":
+        return 0.0, 0.0
+    tag = local_name(element.tag)
+    if tag != "rect":
+        return 0.0, 0.0
+    x = parse_float_attr(element, "x", axis="x", default=0.0) or 0.0
+    y = parse_float_attr(element, "y", axis="y", default=0.0) or 0.0
+    return x - float(descriptor.x or 0.0), y - float(descriptor.y or 0.0)
 
 
 def _solid_tile_pattern_paint(

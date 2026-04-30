@@ -150,7 +150,7 @@ def extract_style(converter, element: etree._Element) -> StyleResult:
     stroke = (
         None
         if stroke_disabled
-        else (paints.stroke if paints.stroke is not None else base_style.stroke)
+        else _merge_resvg_stroke(paints.stroke, base_style.stroke)
     )
     if (
         stroke is not None
@@ -189,6 +189,31 @@ def extract_style(converter, element: etree._Element) -> StyleResult:
 
 
 __all__ = ["extract_style"]
+
+
+def _merge_resvg_stroke(resvg_stroke, base_stroke):
+    if resvg_stroke is None:
+        return base_stroke
+    if base_stroke is None:
+        return resvg_stroke
+
+    updates = {}
+    if resvg_stroke.dash_array is None and base_stroke.dash_array is not None:
+        updates["dash_array"] = base_stroke.dash_array
+    if resvg_stroke.dash_offset in (None, 0.0) and base_stroke.dash_offset not in (
+        None,
+        0.0,
+    ):
+        updates["dash_offset"] = base_stroke.dash_offset
+    if resvg_stroke.cap.value == "butt" and base_stroke.cap.value != "butt":
+        updates["cap"] = base_stroke.cap
+    if resvg_stroke.join.value == "miter" and base_stroke.join.value != "miter":
+        updates["join"] = base_stroke.join
+    if resvg_stroke.miter_limit == 4.0 and base_stroke.miter_limit != 4.0:
+        updates["miter_limit"] = base_stroke.miter_limit
+    if updates:
+        return replace(resvg_stroke, **updates)
+    return resvg_stroke
 
 
 def _element_explicitly_disables_paint(
