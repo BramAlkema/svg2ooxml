@@ -12,10 +12,25 @@ from svg2ooxml.ir.shapes import Circle, Ellipse, Rectangle
 class RasterizerShapeMixin:
     def _draw_element(self, canvas, element) -> bool:
         """Draw a single IR element onto a canvas. Returns True on success."""
+        if isinstance(element, Group):
+            return self._draw_group(canvas, element)
         try:
             geometry_bounds = self._element_bounds(element)
         except TypeError:
             return False
+        clip_path = self._clip_path(element)
+        if clip_path is not None:
+            if clip_path.isEmpty():
+                return False
+            canvas.save()
+            canvas.clipPath(clip_path, skia.ClipOp.kIntersect, True)
+            try:
+                return self._draw_unclipped_element(canvas, element, geometry_bounds)
+            finally:
+                canvas.restore()
+        return self._draw_unclipped_element(canvas, element, geometry_bounds)
+
+    def _draw_unclipped_element(self, canvas, element, geometry_bounds: Rect) -> bool:
         if isinstance(element, Rectangle):
             return self._draw_rectangle(canvas, element, geometry_bounds)
         if isinstance(element, Circle):
@@ -24,20 +39,26 @@ class RasterizerShapeMixin:
             return self._draw_ellipse(canvas, element, geometry_bounds)
         if isinstance(element, IRPath):
             return self._draw_path(canvas, element, geometry_bounds)
-        if isinstance(element, Group):
-            drawn_any = False
-            if element.opacity < 1.0:
-                canvas.saveLayerAlpha(None, int(round(element.opacity * 255)))
-            else:
-                canvas.save()
-            try:
-                for child in element.children:
-                    if self._draw_element(canvas, child):
-                        drawn_any = True
-            finally:
-                canvas.restore()
-            return drawn_any
         return False
+
+    def _draw_group(self, canvas, element: Group) -> bool:
+        drawn_any = False
+        clip_path = self._clip_path(element)
+        if clip_path is not None and clip_path.isEmpty():
+            return False
+        if element.opacity < 1.0:
+            canvas.saveLayerAlpha(None, int(round(element.opacity * 255)))
+        else:
+            canvas.save()
+        try:
+            if clip_path is not None:
+                canvas.clipPath(clip_path, skia.ClipOp.kIntersect, True)
+            for child in element.children:
+                if self._draw_element(canvas, child):
+                    drawn_any = True
+        finally:
+            canvas.restore()
+        return drawn_any
 
     def _draw_rectangle(self, canvas: skia.Canvas, rect: Rectangle, bounds: Rect) -> bool:
         sk_rect = skia.Rect.MakeXYWH(
@@ -102,7 +123,14 @@ class RasterizerShapeMixin:
     def _draw_path(self, canvas: skia.Canvas, path: IRPath, bounds: Rect) -> bool:
         if not path.segments:
             return False
-        sk_path = self._build_skia_path(path.segments, path.is_closed)
+        fill_rule = None
+        if isinstance(path.metadata, dict):
+            fill_rule = path.metadata.get("fill_rule")
+        sk_path = self._build_skia_path(
+            path.segments,
+            path.is_closed,
+            fill_rule=fill_rule if isinstance(fill_rule, str) else None,
+        )
         drawn = False
         if path.fill is not None:
             paint = self._paint_from_fill(path.fill, bounds, opacity=path.opacity)

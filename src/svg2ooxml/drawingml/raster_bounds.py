@@ -17,6 +17,8 @@ from svg2ooxml.common.units.lengths import (
     resolve_user_length_px,
 )
 
+_NON_FILTER_PRIMITIVE_TAGS = {"desc", "metadata", "title"}
+
 
 def _finite_float(value: object, default: float | None = None) -> float | None:
     return finite_float(value, default)
@@ -201,7 +203,10 @@ def descriptor_from_filter_element(
     for child in filter_element:
         if not isinstance(child.tag, str):
             continue
-        primitive_tags.append(local_name(child.tag))
+        tag = local_name(child.tag)
+        if tag.lower() in _NON_FILTER_PRIMITIVE_TAGS:
+            continue
+        primitive_tags.append(tag)
     if not region and not primitive_tags and not filter_element.attrib:
         return None
     return {

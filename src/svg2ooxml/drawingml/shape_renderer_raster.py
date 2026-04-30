@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import replace
 
 from svg2ooxml.ir.geometry import Point, Rect
-from svg2ooxml.ir.paint import RadialGradientPaint
+from svg2ooxml.ir.paint import LinearGradientPaint, RadialGradientPaint
 from svg2ooxml.ir.scene import Image
 from svg2ooxml.policy.constants import FALLBACK_BITMAP, FALLBACK_RASTERIZE
 
@@ -25,10 +25,12 @@ class ShapeRendererRasterMixin:
         hyperlink_xml: str,
     ) -> tuple[str, int] | None:
         gradient_raster = self._needs_gradient_raster(element)
+        clip_raster = self._needs_clip_raster(element)
         geometry_policy = self._geometry_policy(metadata)
         fallback = geometry_policy.get("suggest_fallback")
         if (
             not gradient_raster
+            and not clip_raster
             and fallback not in {FALLBACK_BITMAP, FALLBACK_RASTERIZE}
         ):
             return None
@@ -38,6 +40,9 @@ class ShapeRendererRasterMixin:
         if gradient_raster:
             geometry_policy.setdefault("suggest_fallback", FALLBACK_RASTERIZE)
             geometry_policy.setdefault("gradient_rasterize", True)
+        if clip_raster:
+            geometry_policy.setdefault("suggest_fallback", FALLBACK_RASTERIZE)
+            geometry_policy.setdefault("clip_rasterize", True)
         try:
             result = rasterizer.rasterize(element)
         except Exception:  # pragma: no cover - defensive
@@ -93,6 +98,8 @@ class ShapeRendererRasterMixin:
 
     def _needs_gradient_raster(self, element) -> bool:
         fill = getattr(element, "fill", None)
+        if _has_fully_transparent_gradient_stop(fill):
+            return True
         if (
             isinstance(fill, RadialGradientPaint)
             and fill.policy_decision == "rasterize_nonuniform"
@@ -101,12 +108,23 @@ class ShapeRendererRasterMixin:
         stroke = getattr(element, "stroke", None)
         if stroke is not None:
             paint = getattr(stroke, "paint", None)
+            if _has_fully_transparent_gradient_stop(paint):
+                return True
             if (
                 isinstance(paint, RadialGradientPaint)
                 and paint.policy_decision == "rasterize_nonuniform"
             ):
                 return True
         return False
+
+    def _needs_clip_raster(self, element) -> bool:
+        clip = getattr(element, "clip", None)
+        if clip is None:
+            return False
+        return bool(
+            getattr(clip, "skia_path", None) is not None
+            or getattr(clip, "path_segments", None)
+        )
 
     def _apply_gradient_fallback(self, element, metadata: dict[str, object]):
         geometry_policy = self._geometry_policy(metadata)
@@ -153,6 +171,12 @@ class ShapeRendererRasterMixin:
             geometry_policy = {}
             policy["geometry"] = geometry_policy
         return geometry_policy
+
+
+def _has_fully_transparent_gradient_stop(paint: object) -> bool:
+    if not isinstance(paint, (LinearGradientPaint, RadialGradientPaint)):
+        return False
+    return any(float(getattr(stop, "opacity", 1.0)) <= 0.001 for stop in paint.stops)
 
 
 __all__ = ["ShapeRendererRasterMixin"]

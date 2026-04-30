@@ -79,6 +79,34 @@ class RasterAdapterPreviewRuntimeMixin:
             height_px=height_px,
         )
 
+    def _build_background_svg_markup(
+        self,
+        *,
+        source_element: etree._Element,
+        source_root: etree._Element | None,
+        descriptor: dict[str, Any] | None,
+        bounds: dict[str, float | Any] | None,
+        width_px: int,
+        height_px: int,
+    ) -> str | None:
+        width_px, height_px = self._safe_raster_size(
+            (width_px, height_px),
+            default=_DEFAULT_PLACEHOLDER_SIZE,
+        )
+        resolved_bounds = self._resolved_filter_bounds(
+            descriptor=descriptor,
+            bounds=bounds,
+            default_width=width_px,
+            default_height=height_px,
+        )
+        return self._preview_builder.build_background_svg_markup(
+            source_element=source_element,
+            source_root=source_root,
+            resolved_bounds=resolved_bounds,
+            width_px=width_px,
+            height_px=height_px,
+        )
+
     def _source_element_from_context(self, context) -> etree._Element | None:
         return self._preview_builder.source_element_from_context(context)
 

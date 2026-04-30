@@ -47,6 +47,7 @@ RESVG_SUPPORTED_PRIMITIVES = {
     "feturbulence",
     "fediffuselighting",
     "fespecularlighting",
+    "feconvolvematrix",
 }
 
 # Primitives registered in the legacy FilterRegistry but not yet handled by the

@@ -38,11 +38,13 @@ def resolve_runs_xml(frame: TextFrame, register_navigation) -> str:
     # Prefer IR runs when they carry attributes (lang, font_variant) that
     # the pre-built resvg runs_xml would miss.
     ir_runs = frame.runs or []
+    metadata = getattr(frame, "metadata", None)
+    force_ir_runs = isinstance(metadata, dict) and bool(metadata.get("bidi_override"))
     has_enriched_attrs = any(
         getattr(run, "language", None) or getattr(run, "font_variant", None)
         for run in ir_runs
     )
-    if not has_enriched_attrs:
+    if not force_ir_runs and not has_enriched_attrs:
         resvg_runs = _resvg_runs_xml(frame, register_navigation)
         if resvg_runs:
             return resvg_runs

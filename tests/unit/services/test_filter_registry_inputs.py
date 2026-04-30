@@ -91,3 +91,41 @@ def test_seed_base_inputs_derives_paint_inputs_from_source_graphic() -> None:
     assert pipeline["FillPaint"].metadata["stroke"] is None
     assert pipeline["StrokePaint"].metadata["paint_source"] == "StrokePaint"
     assert pipeline["StrokePaint"].metadata["fill"] is None
+
+
+def test_seed_base_inputs_derives_group_paint_inputs_recursively() -> None:
+    registry = FilterRegistry()
+    filter_element = etree.Element("filter")
+    child_descriptor = {
+        "shape_type": "Circle",
+        "geometry": [
+            {"type": "line", "start": (0.0, 0.0), "end": (10.0, 0.0)}
+        ],
+        "closed": True,
+        "fill": {"type": "solid", "rgb": "FF0000", "opacity": 1.0},
+        "stroke": {
+            "width": 2.0,
+            "paint": {"type": "solid", "rgb": "0000FF", "opacity": 1.0},
+        },
+    }
+    context = FilterContext(
+        filter_element=filter_element,
+        options={
+            "filter_inputs": {
+                "SourceGraphic": {
+                    "shape_type": "Group",
+                    "children": [child_descriptor],
+                },
+            }
+        },
+    )
+    pipeline: dict[str, FilterResult] = {}
+
+    registry._seed_base_inputs(pipeline, context)
+
+    fill_child = pipeline["FillPaint"].metadata["children"][0]
+    stroke_child = pipeline["StrokePaint"].metadata["children"][0]
+    assert fill_child["fill"]["type"] == "solid"
+    assert fill_child["stroke"] is None
+    assert stroke_child["fill"] is None
+    assert stroke_child["stroke"]["paint"]["rgb"] == "0000FF"

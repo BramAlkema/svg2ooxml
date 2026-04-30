@@ -134,11 +134,18 @@ class DrawingMLElementMixin:
         shape_id: int,
         metadata: dict[str, object],
     ):
-        clip_bounds, clip_diags = clip_bounds_for(getattr(element, "clip", None))
+        clip_ref = getattr(element, "clip", None)
+        clip_bounds, clip_diags = clip_bounds_for(clip_ref)
         mask_xml, mask_diags = self._mask_pipeline.render(element)
 
         if clip_bounds is not None and isinstance(metadata, dict):
             metadata["_clip_bounds"] = clip_bounds
+
+        if getattr(clip_ref, "is_empty", False) and hasattr(element, "opacity"):
+            try:
+                element = replace(element, opacity=0.0)
+            except TypeError:
+                pass
 
         if mask_xml == "<!-- HIDDEN -->" and hasattr(element, "opacity"):
             try:
@@ -240,9 +247,11 @@ class DrawingMLElementMixin:
         shape_id: int,
         metadata: dict[str, object],
     ) -> str | None:
-        if (
-            element.opacity >= 1.0
-            or not children_overlap(element.children)
+        if _group_contains_filter_fallback(element):
+            return None
+        clip_raster = _group_requires_clip_raster(element)
+        if not clip_raster and (
+            element.opacity >= 1.0 or not children_overlap(element.children)
         ):
             return None
         rasterizer = self._resolve_rasterizer()
@@ -258,7 +267,7 @@ class DrawingMLElementMixin:
                 stage="paint",
                 metadata={
                     "shape_id": shape_id,
-                    "reason": "overlapping_children_with_opacity",
+                    "reason": "clip_path" if clip_raster else "overlapping_children_with_opacity",
                     "opacity": element.opacity,
                     "child_count": len(element.children),
                 },
@@ -331,3 +340,26 @@ class DrawingMLElementMixin:
 
 
 __all__ = ["DrawingMLElementMixin"]
+
+
+def _group_contains_filter_fallback(group: Group) -> bool:
+    for child in group.children:
+        child_metadata = getattr(child, "metadata", None)
+        if isinstance(child_metadata, dict) and (
+            child_metadata.get("filters") or child_metadata.get("filter_metadata")
+        ):
+            return True
+        if isinstance(child, Group) and _group_contains_filter_fallback(child):
+            return True
+    return False
+
+
+def _group_requires_clip_raster(group: Group) -> bool:
+    clip = getattr(group, "clip", None)
+    return bool(
+        clip is not None
+        and (
+            getattr(clip, "skia_path", None) is not None
+            or getattr(clip, "path_segments", None)
+        )
+    )

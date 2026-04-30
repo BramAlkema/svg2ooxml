@@ -93,6 +93,20 @@ def _paint_input_options() -> dict[str, object]:
     }
 
 
+def _linear_gradient_descriptor() -> dict[str, object]:
+    return {
+        "type": "linearGradient",
+        "stops": [
+            {"offset": 0.0, "rgb": "FF0000", "opacity": 1.0},
+            {"offset": 1.0, "rgb": "0000FF", "opacity": 1.0},
+        ],
+        "start": (0.0, 0.5),
+        "end": (1.0, 0.5),
+        "gradient_units": "objectBoundingBox",
+        "spread_method": "pad",
+    }
+
+
 def test_plan_filter_rejects_unsupported_primitive() -> None:
     primitive = FilterPrimitive(
         tag="feDropShadow",
@@ -209,6 +223,115 @@ def test_apply_filter_uses_declared_stroke_paint_surface() -> None:
     assert edge[2] > 0.4
     assert edge[3] > 0.4
     assert center[3] < 0.05
+
+
+def test_apply_filter_uses_declared_gradient_paint_surfaces() -> None:
+    pytest.importorskip("skia")
+
+    fill_blur = FilterPrimitive(
+        tag="feGaussianBlur",
+        attributes={"in": "FillPaint", "stdDeviation": "0"},
+        styles={},
+    )
+    fill_node = _make_filter_node([fill_blur])
+    gradient = _linear_gradient_descriptor()
+    fill_plan = plan_filter(
+        fill_node,
+        options={"filter_inputs": {"FillPaint": _rect_descriptor(fill=gradient)}},
+    )
+    assert fill_plan is not None
+
+    surface = Surface.make(10, 10)
+    viewport = Viewport(
+        width=10, height=10, min_x=0.0, min_y=0.0, scale_x=1.0, scale_y=1.0
+    )
+
+    fill_result = apply_filter(surface, fill_plan, (0.0, 0.0, 10.0, 10.0), viewport)
+
+    left = fill_result.data[5, 2]
+    right = fill_result.data[5, 8]
+    assert left[0] > left[2]
+    assert right[2] > right[0]
+    assert left[3] > 0.8
+    assert right[3] > 0.8
+
+    stroke_blur = FilterPrimitive(
+        tag="feGaussianBlur",
+        attributes={"in": "StrokePaint", "stdDeviation": "0"},
+        styles={},
+    )
+    stroke_node = _make_filter_node([stroke_blur])
+    stroke_plan = plan_filter(
+        stroke_node,
+        options={
+            "filter_inputs": {
+                "StrokePaint": _rect_descriptor(
+                    stroke={
+                        "width": 2.0,
+                        "paint": gradient,
+                        "join": "miter",
+                        "cap": "butt",
+                        "miter_limit": 4.0,
+                        "dash_array": None,
+                        "dash_offset": 0.0,
+                        "opacity": 1.0,
+                    }
+                )
+            }
+        },
+    )
+    assert stroke_plan is not None
+
+    stroke_result = apply_filter(
+        surface,
+        stroke_plan,
+        (0.0, 0.0, 10.0, 10.0),
+        viewport,
+    )
+
+    stroke_left = stroke_result.data[0, 2]
+    stroke_right = stroke_result.data[0, 8]
+    assert stroke_left[0] > stroke_left[2]
+    assert stroke_right[2] > stroke_right[0]
+    assert stroke_left[3] > 0.2
+    assert stroke_right[3] > 0.2
+
+
+def test_apply_filter_uses_provided_background_input_surface() -> None:
+    blur = FilterPrimitive(
+        tag="feGaussianBlur",
+        attributes={"in": "BackgroundImage", "stdDeviation": "0"},
+        styles={},
+    )
+    filter_node = _make_filter_node([blur])
+    plan = plan_filter(
+        filter_node,
+        options={"available_filter_inputs": ["BackgroundImage"]},
+    )
+    assert plan is not None
+    assert plan.primitives[0].inputs == ("BackgroundImage",)
+
+    source = Surface.make(4, 4)
+    background = Surface.make(4, 4)
+    background.data[..., 1] = 1.0
+    background.data[..., 3] = 1.0
+    viewport = Viewport(
+        width=4, height=4, min_x=0.0, min_y=0.0, scale_x=1.0, scale_y=1.0
+    )
+
+    result = apply_filter(
+        source,
+        plan,
+        (0.0, 0.0, 4.0, 4.0),
+        viewport,
+        input_surfaces={"BackgroundImage": background},
+    )
+
+    pixel = result.data[2, 2]
+    assert pixel[1] > 0.8
+    assert pixel[0] < 0.05
+    assert pixel[2] < 0.05
+    assert pixel[3] > 0.8
 
 
 def test_apply_filter_blend_lighten() -> None:
@@ -413,6 +536,95 @@ def test_apply_filter_component_transfer_linear_and_table() -> None:
         pixel[:3], np.array([0.3, 0.4, 0.8], dtype=np.float32), atol=1e-3
     )
     assert pixel[3] == pytest.approx(1.0)
+
+
+def test_plan_filter_accepts_convolve_matrix_edge_mode() -> None:
+    convolve = FilterPrimitive(
+        tag="feConvolveMatrix",
+        attributes={
+            "kernelMatrix": "0 0 0 0 1 0 0 0 0",
+            "edgeMode": "wrap",
+            "result": "convolved",
+        },
+        styles={},
+    )
+    filter_node = _make_filter_node([convolve])
+
+    plan = plan_filter(filter_node)
+
+    assert plan is not None
+    primitive = plan.primitives[0]
+    assert primitive.extra["edge_mode"] == "wrap"
+    assert primitive.extra["order_x"] == 3
+    assert primitive.extra["order_y"] == 3
+
+
+def test_apply_filter_convolve_matrix_edge_modes_differ() -> None:
+    def run(edge_mode: str) -> Surface:
+        convolve = FilterPrimitive(
+            tag="feConvolveMatrix",
+            attributes={
+                "kernelMatrix": "0 0 0 0 0 1 0 0 0",
+                "edgeMode": edge_mode,
+            },
+            styles={},
+        )
+        filter_node = _make_filter_node([convolve])
+        plan = plan_filter(filter_node)
+        assert plan is not None
+
+        surface = Surface.make(3, 3)
+        surface.data[..., 0] = np.array([0.2, 0.5, 0.8], dtype=np.float32)
+        surface.data[..., 3] = 1.0
+        bounds = (0.0, 0.0, 3.0, 3.0)
+        viewport = Viewport(
+            width=3, height=3, min_x=0.0, min_y=0.0, scale_x=1.0, scale_y=1.0
+        )
+        return apply_filter(surface, plan, bounds, viewport)
+
+    duplicate = run("duplicate")
+    wrap = run("wrap")
+    none = run("none")
+
+    assert duplicate.data[1, 2, 0] == pytest.approx(0.8)
+    assert wrap.data[1, 2, 0] == pytest.approx(0.2)
+    assert none.data[1, 2, 0] == pytest.approx(0.0)
+    assert duplicate.data[1, 2, 3] == pytest.approx(1.0)
+
+
+def test_apply_filter_convolve_matrix_bias_preserves_transparent_alpha() -> None:
+    convolve = FilterPrimitive(
+        tag="feConvolveMatrix",
+        attributes={
+            "order": "1",
+            "kernelMatrix": "1",
+            "bias": "1",
+            "preserveAlpha": "false",
+        },
+        styles={},
+    )
+    filter_node = _make_filter_node([convolve])
+    plan = plan_filter(filter_node)
+    assert plan is not None
+
+    surface = Surface.make(2, 1)
+    surface.data[0, 0, :] = np.array([0.0, 0.5, 0.0, 0.5], dtype=np.float32)
+    surface.data[0, 1, :] = np.array([0.0, 0.0, 0.0, 0.0], dtype=np.float32)
+    bounds = (0.0, 0.0, 2.0, 1.0)
+    viewport = Viewport(
+        width=2, height=1, min_x=0.0, min_y=0.0, scale_x=1.0, scale_y=1.0
+    )
+
+    result = apply_filter(surface, plan, bounds, viewport)
+
+    assert result.data[0, 0, 3] == pytest.approx(0.5)
+    np.testing.assert_allclose(
+        result.data[0, 0, :3],
+        np.array([0.5, 0.5, 0.5], dtype=np.float32),
+        atol=1e-6,
+    )
+    assert result.data[0, 1, 3] == pytest.approx(0.0)
+    np.testing.assert_allclose(result.data[0, 1, :3], np.zeros(3), atol=1e-6)
 
 
 def test_apply_filter_morphology_dilate() -> None:

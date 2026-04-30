@@ -32,7 +32,6 @@ class Rasterizer(
         if isinstance(element, Image):
             return None
 
-        geometry_bounds = self._element_bounds(element)
         bounds = self._expanded_bounds(element)
         if bounds.width <= 0 or bounds.height <= 0:
             return None
@@ -61,17 +60,9 @@ class Rasterizer(
         canvas.scale(self._scale, self._scale)
         canvas.translate(-bounds.x, -bounds.y)
 
-        drawn = False
-        if isinstance(element, Rectangle):
-            drawn = self._draw_rectangle(canvas, element, geometry_bounds)
-        elif isinstance(element, Circle):
-            drawn = self._draw_circle(canvas, element, geometry_bounds)
-        elif isinstance(element, Ellipse):
-            drawn = self._draw_ellipse(canvas, element, geometry_bounds)
-        elif isinstance(element, IRPath):
-            drawn = self._draw_path(canvas, element, geometry_bounds)
-        else:
+        if not isinstance(element, (Rectangle, Circle, Ellipse, IRPath)):
             return None
+        drawn = self._draw_element(canvas, element)
 
         if not drawn:
             return None
@@ -131,9 +122,18 @@ class Rasterizer(
         canvas.translate(-bounds.x, -bounds.y)
 
         drawn_any = False
-        for child in group.children:
-            if self._draw_element(canvas, child):
-                drawn_any = True
+        canvas.save()
+        try:
+            clip_path = self._clip_path(group)
+            if clip_path is not None and clip_path.isEmpty():
+                return None
+            if clip_path is not None:
+                canvas.clipPath(clip_path, skia.ClipOp.kIntersect, True)
+            for child in group.children:
+                if self._draw_element(canvas, child):
+                    drawn_any = True
+        finally:
+            canvas.restore()
 
         if not drawn_any:
             return None

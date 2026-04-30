@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 
 from svg2ooxml.common.units.lengths import parse_number
@@ -22,6 +23,8 @@ def apply_filter(
     plan: FilterPlan,
     bounds: tuple[float, float, float, float],
     viewport: Any,
+    *,
+    input_surfaces: Mapping[str, Surface] | None = None,
 ) -> Surface:
     region = _region.compute_filter_region(plan.filter_node, bounds, viewport)
     unit_scale = _region.primitive_unit_scale(plan.filter_node, bounds, viewport)
@@ -30,6 +33,10 @@ def apply_filter(
         "SourceGraphic": surface.clone(),
         "SourceAlpha": _ops.extract_alpha(surface),
     }
+    if isinstance(input_surfaces, Mapping):
+        for name, input_surface in input_surfaces.items():
+            if isinstance(name, str) and isinstance(input_surface, Surface):
+                images[name] = input_surface.clone()
     _seed_declared_input_surfaces(
         images,
         plan,
@@ -154,6 +161,8 @@ def apply_filter(
                         primitive=primitive,
                     )
                 work_result = _ops.apply_component_transfer(primary, functions)
+            elif tag_lower == "feconvolvematrix":
+                work_result = _ops.apply_convolve_matrix(primary, primitive_plan.extra)
             elif tag_lower == "femorphology":
                 operator = primitive_plan.extra.get("operator", "erode")
                 radius_x = (

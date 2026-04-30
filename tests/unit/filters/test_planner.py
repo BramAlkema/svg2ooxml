@@ -67,6 +67,33 @@ def test_resolve_filter_element_resolves_number_calc_dimensions() -> None:
     assert descriptor.region["width"] == pytest.approx(20.0)
 
 
+def test_resolve_filter_element_skips_descriptive_filter_children() -> None:
+    descriptor = _descriptor(
+        "<filter id='background'>"
+        "  <desc>test metadata</desc>"
+        "  <feOffset in='BackgroundImage' result='offset' dx='0' dy='125'/>"
+        "  <title>not a primitive</title>"
+        "  <metadata><ignored/></metadata>"
+        "  <feGaussianBlur in='offset' stdDeviation='8'/>"
+        "</filter>"
+    )
+
+    assert [primitive.tag for primitive in descriptor.primitives] == [
+        "feOffset",
+        "feGaussianBlur",
+    ]
+    plan = FilterPlanner().build_resvg_plan(
+        descriptor,
+        options={"available_filter_inputs": ["BackgroundImage"]},
+    )
+
+    assert plan is not None
+    assert [primitive.tag for primitive in plan.primitives] == [
+        "feOffset",
+        "feGaussianBlur",
+    ]
+
+
 def test_resvg_viewport_rejects_non_finite_or_huge_bounds() -> None:
     planner = FilterPlanner()
 

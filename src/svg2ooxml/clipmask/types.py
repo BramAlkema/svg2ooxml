@@ -19,6 +19,8 @@ class ClipDefinition:
     clip_rule: str | None
     transform: Matrix2D | None
     primitives: tuple[dict[str, Any], ...] = ()
+    skia_path: Any | None = field(default=None, compare=False, repr=False)
+    is_empty: bool = False
 
 
 @dataclass(slots=True)

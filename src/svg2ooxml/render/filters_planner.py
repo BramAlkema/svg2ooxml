@@ -51,6 +51,7 @@ def _plan_filter(
     available: set[str] = {"SourceGraphic", "SourceAlpha"}
     input_descriptors = _declared_input_descriptors(options)
     available.update(input_descriptors)
+    available.update(_declared_available_inputs(options))
     plans: list[FilterPrimitivePlan] = []
 
     for primitive in filter_node.primitives:
@@ -117,6 +118,17 @@ def _plan_filter(
                 )
             )
             extra["functions"] = _parse_component_transfer_functions(primitive)
+        elif tag_lower == "feconvolvematrix":
+            inputs.append(
+                _normalise_input(
+                    attrs.get("in"),
+                    available,
+                    primitive,
+                    allow_default=True,
+                    label="in",
+                )
+            )
+            extra.update(_parse_convolve_matrix_params(primitive))
         elif tag_lower == "feflood":
             inputs = []
         elif tag_lower == "feimage":
@@ -315,6 +327,19 @@ def _declared_input_descriptors(
     return paint_input_descriptors(raw_inputs)
 
 
+def _declared_available_inputs(options: Mapping[str, Any] | None) -> set[str]:
+    if not isinstance(options, Mapping):
+        return set()
+    raw_inputs = options.get("available_filter_inputs")
+    if not isinstance(raw_inputs, Iterable) or isinstance(raw_inputs, (str, bytes)):
+        return set()
+    return {
+        token
+        for value in raw_inputs
+        if isinstance(value, str) and (token := value.strip())
+    }
+
+
 def _normalise_input(
     raw_value: str | None,
     available: Iterable[str],
@@ -447,6 +472,57 @@ def _parse_component_transfer_functions(
         blue=defaults["b"],
         alpha=defaults["a"],
     )
+
+
+def _parse_convolve_matrix_params(primitive: FilterPrimitive) -> dict[str, Any]:
+    attrs = primitive.attributes
+    order_values = _parse_float_list(attrs.get("order"))
+    if len(order_values) >= 2:
+        order_x = max(1, int(order_values[0]))
+        order_y = max(1, int(order_values[1]))
+    elif order_values:
+        order_x = order_y = max(1, int(order_values[0]))
+    else:
+        order_x = order_y = 3
+
+    kernel = _parse_float_list(attrs.get("kernelMatrix"))
+    expected_len = order_x * order_y
+    if len(kernel) != expected_len:
+        raise UnsupportedPrimitiveError(
+            primitive.tag,
+            f"kernelMatrix requires {expected_len} values",
+            primitive=primitive,
+        )
+
+    default_divisor = sum(kernel)
+    if abs(default_divisor) <= 1e-12:
+        default_divisor = 1.0
+
+    target_x = int(_parse_number(attrs.get("targetX"), order_x // 2))
+    target_y = int(_parse_number(attrs.get("targetY"), order_y // 2))
+    if target_x < 0 or target_x >= order_x or target_y < 0 or target_y >= order_y:
+        raise UnsupportedPrimitiveError(
+            primitive.tag,
+            "targetX/targetY outside kernel bounds",
+            primitive=primitive,
+        )
+
+    edge_mode = (attrs.get("edgeMode") or "duplicate").strip().lower()
+    if edge_mode not in {"duplicate", "wrap", "none"}:
+        edge_mode = "duplicate"
+
+    return {
+        "order_x": order_x,
+        "order_y": order_y,
+        "kernel": kernel,
+        "divisor": _parse_number(attrs.get("divisor"), default_divisor),
+        "bias": _parse_number(attrs.get("bias"), 0.0),
+        "target_x": target_x,
+        "target_y": target_y,
+        "edge_mode": edge_mode,
+        "preserve_alpha": (attrs.get("preserveAlpha") or "false").strip().lower()
+        == "true",
+    }
 
 
 def _parse_turbulence_params(primitive: FilterPrimitive) -> dict[str, Any]:

@@ -248,8 +248,9 @@ class FilterRenderer(FilterRendererCompatibilityMixin):
         )
 
         try:
-            bounds = self._planner.resvg_bounds(options_map, descriptor)
-            viewport = self._planner.resvg_viewport(bounds)
+            filter_bounds = self._planner.resvg_bounds(options_map, descriptor)
+            source_bounds = _source_bounds_from_options(options_map, filter_bounds)
+            viewport = self._planner.resvg_viewport(filter_bounds)
         except Exception as exc:  # pragma: no cover - defensive
             self._logger.debug(
                 "Failed to compute resvg viewport for %s", filter_id, exc_info=True
@@ -277,16 +278,30 @@ class FilterRenderer(FilterRendererCompatibilityMixin):
             drawingml_renderer=self._drawingml_renderer,
             trace=_trace,
         )
+        deferred_promotion = None
         if promotion is not None:
-            _trace(
-                "resvg_promoted_emf",
-                primitive=plan.primitives[0].tag,
-                width_px=viewport.width,
-                height_px=viewport.height,
-                primitive_count=len(plan.primitives),
-                primitives=[primitive.tag for primitive in plan.primitives],
-            )
-            return promotion
+            if _should_defer_lighting_promotion(
+                promotion,
+                plan,
+                options_map if isinstance(options_map, Mapping) else None,
+            ):
+                deferred_promotion = promotion
+                _trace(
+                    "resvg_promotion_deferred",
+                    reason="lighting_bitmap_preferred",
+                    primitive_count=len(plan.primitives),
+                    primitives=[primitive.tag for primitive in plan.primitives],
+                )
+            else:
+                _trace(
+                    "resvg_promoted_emf",
+                    primitive=plan.primitives[0].tag,
+                    width_px=viewport.width,
+                    height_px=viewport.height,
+                    primitive_count=len(plan.primitives),
+                    primitives=[primitive.tag for primitive in plan.primitives],
+                )
+                return promotion
 
         source_surface = None
         try:
@@ -298,17 +313,23 @@ class FilterRenderer(FilterRendererCompatibilityMixin):
         except Exception:  # pragma: no cover - defensive fallback
             source_surface = None
         if source_surface is None:
+            if deferred_promotion is not None:
+                return deferred_promotion
             source_surface = seed_source_surface(viewport.width, viewport.height)
         try:
-            result_surface = apply_filter(source_surface, plan, bounds, viewport)
+            result_surface = apply_filter(source_surface, plan, source_bounds, viewport)
         except UnsupportedPrimitiveError as exc:
             _trace("resvg_unsupported_primitive", primitive=str(exc))
+            if deferred_promotion is not None:
+                return deferred_promotion
             return None
         except Exception as exc:  # pragma: no cover - defensive
             self._logger.debug(
                 "Resvg filter application failed for %s", filter_id, exc_info=True
             )
             _trace("resvg_execution_failed", error=str(exc))
+            if deferred_promotion is not None:
+                return deferred_promotion
             return None
 
         if self._planner.plan_has_turbulence(plan):
@@ -343,23 +364,25 @@ class FilterRenderer(FilterRendererCompatibilityMixin):
             "height_px": viewport.height,
             "descriptor": descriptor_payload,
             "bounds": {
-                "x": bounds[0],
-                "y": bounds[1],
-                "width": bounds[2] - bounds[0],
-                "height": bounds[3] - bounds[1],
+                "x": filter_bounds[0],
+                "y": filter_bounds[1],
+                "width": filter_bounds[2] - filter_bounds[0],
+                "height": filter_bounds[3] - filter_bounds[1],
             },
             "plan_primitives": plan_summary,
         }
-        metadata["fallback_assets"] = [
-            {
-                "type": "raster",
-                "format": "png",
-                "data": png_bytes,
-                "relationship_id": relationship_id,
-                "width_px": viewport.width,
-                "height_px": viewport.height,
-            }
-        ]
+        fallback_asset: dict[str, Any] = {
+            "type": "raster",
+            "format": "png",
+            "data": png_bytes,
+            "relationship_id": relationship_id,
+            "width_px": viewport.width,
+            "height_px": viewport.height,
+        }
+        if _plan_prefers_flattened_background(plan):
+            fallback_asset["flatten_for_powerpoint"] = True
+            metadata["flatten_for_powerpoint"] = True
+        metadata["fallback_assets"] = [fallback_asset]
 
         effect = CustomEffect(drawingml=f"<!-- svg2ooxml:resvg filter={filter_id} -->")
         _trace(
@@ -425,3 +448,58 @@ class FilterRenderer(FilterRendererCompatibilityMixin):
     attach_raster_metadata = staticmethod(_attach_raster_metadata)
 
 __all__ = ["FilterRenderer"]
+
+
+def _source_bounds_from_options(
+    options: Any,
+    fallback: tuple[float, float, float, float],
+) -> tuple[float, float, float, float]:
+    if not isinstance(options, Mapping):
+        return fallback
+    bbox = options.get("ir_bbox")
+    if not isinstance(bbox, Mapping):
+        return fallback
+    try:
+        x = float(bbox.get("x", fallback[0]))
+        y = float(bbox.get("y", fallback[1]))
+        width = float(bbox.get("width", fallback[2] - fallback[0]))
+        height = float(bbox.get("height", fallback[3] - fallback[1]))
+    except (TypeError, ValueError):
+        return fallback
+    if width <= 0 or height <= 0:
+        return fallback
+    return (x, y, x + width, y + height)
+
+
+def _should_defer_lighting_promotion(
+    promotion: FilterEffectResult,
+    plan: Any,
+    options: Mapping[str, Any] | None,
+) -> bool:
+    if not isinstance(options, Mapping):
+        return False
+    strategy = str(options.get("resolved_strategy") or "").strip().lower()
+    if strategy not in {"resvg", "resvg-only"}:
+        return False
+    if not isinstance(options.get("filter_inputs"), Mapping):
+        return False
+    metadata = promotion.metadata if isinstance(promotion.metadata, Mapping) else {}
+    if metadata.get("approximation") == "editable_lighting":
+        return True
+    lighting_primitives = metadata.get("lighting_primitives")
+    if isinstance(lighting_primitives, list) and lighting_primitives:
+        return True
+    primitives = getattr(plan, "primitives", ())
+    return any(
+        str(getattr(primitive, "tag", "")).lower()
+        in {"fediffuselighting", "fespecularlighting"}
+        for primitive in primitives
+    )
+
+
+def _plan_prefers_flattened_background(plan: Any) -> bool:
+    return any(
+        str(getattr(primitive, "tag", "")).lower()
+        in {"fediffuselighting", "fespecularlighting"}
+        for primitive in getattr(plan, "primitives", ()) or ()
+    )

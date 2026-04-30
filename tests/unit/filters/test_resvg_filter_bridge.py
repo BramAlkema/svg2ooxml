@@ -3,7 +3,11 @@
 from __future__ import annotations
 
 from svg2ooxml.core.resvg.normalizer import normalize_svg_string
-from svg2ooxml.filters.resvg_bridge import resolve_filter_node, resolve_filter_reference
+from svg2ooxml.filters.resvg_bridge import (
+    resolve_filter_element,
+    resolve_filter_node,
+    resolve_filter_reference,
+)
 
 
 def _find_rect_with_filter(tree) -> object:
@@ -38,3 +42,27 @@ def test_resolve_filter_reference_collects_primitives() -> None:
 
     direct = resolve_filter_node(result.tree.filters["f1"])
     assert direct == resolved
+
+
+def test_resolve_filter_element_resolves_lighting_current_color_from_ancestors() -> None:
+    svg_markup = """
+        <svg xmlns="http://www.w3.org/2000/svg">
+            <defs color="#00FF00">
+                <filter id="greenLight">
+                    <feDiffuseLighting lighting-color="currentColor">
+                        <feDistantLight azimuth="0" elevation="90"/>
+                    </feDiffuseLighting>
+                </filter>
+            </defs>
+        </svg>
+    """
+    root = normalize_svg_string(svg_markup).document.root.source
+    filter_element = root.xpath(
+        ".//*[local-name()='filter' and @id='greenLight']"
+    )[0]
+
+    resolved = resolve_filter_element(filter_element)
+
+    primitive = resolved.primitives[0]
+    assert primitive.attributes["lighting-color"] == "#00FF00"
+    assert primitive.extras["lighting_color"] == "#00FF00"

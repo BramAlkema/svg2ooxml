@@ -39,12 +39,22 @@ def derive_paint_input_descriptor(
     if input_name not in PAINT_INPUT_NAMES or not isinstance(source_graphic, dict):
         return None
     descriptor = copy.deepcopy(source_graphic)
+    _apply_paint_input_mode(descriptor, input_name)
+    descriptor["paint_source"] = input_name
+    return descriptor
+
+
+def _apply_paint_input_mode(descriptor: dict[str, Any], input_name: str) -> None:
+    children = descriptor.get("children")
+    if isinstance(children, list):
+        for child in children:
+            if isinstance(child, dict):
+                _apply_paint_input_mode(child, input_name)
+        return
     if input_name == "FillPaint":
         descriptor["stroke"] = None
     else:
         descriptor["fill"] = None
-    descriptor["paint_source"] = input_name
-    return descriptor
 
 
 __all__ = [

@@ -284,6 +284,62 @@ def test_render_scene_from_ir_flattens_filter_png_assets_against_scene_backgroun
     assert flattened.getpixel((1, 0)) == (0, 255, 0, 255)
 
 
+def test_shape_filter_fallback_flattens_registered_picture_when_requested() -> None:
+    writer = DrawingMLWriter()
+    image = PILImage.new("RGBA", (2, 1), (0, 0, 0, 0))
+    image.putpixel((0, 0), (255, 0, 0, 255))
+    buffer = BytesIO()
+    image.save(buffer, format="PNG")
+
+    rect = Rectangle(
+        bounds=Rect(x=0, y=0, width=10, height=10),
+        fill=SolidPaint("FF0000"),
+        metadata={
+            "filters": [{"id": "blur", "fallback": "bitmap"}],
+            "filter_metadata": {
+                "blur": {"bounds": {"x": 0.0, "y": 0.0, "width": 10.0, "height": 10.0}}
+            },
+            "policy": {
+                "media": {
+                    "filter_assets": {
+                        "blur": [
+                            {
+                                "type": "raster",
+                                "data": buffer.getvalue(),
+                                "relationship_id": "rIdRasterTest",
+                                "flatten_for_powerpoint": True,
+                            }
+                        ]
+                    }
+                }
+            },
+        },
+    )
+    scene = IRScene(
+        elements=[rect], width_px=20, height_px=20, background_color="00FF00"
+    )
+
+    result = writer.render_scene_from_ir(scene)
+
+    root = ET.fromstring(result.slide_xml.encode("utf-8"))
+    ns = {
+        "a": "http://schemas.openxmlformats.org/drawingml/2006/main",
+        "p": "http://schemas.openxmlformats.org/presentationml/2006/main",
+        "r": "http://schemas.openxmlformats.org/officeDocument/2006/relationships",
+    }
+    blip = root.find(".//p:pic/p:blipFill/a:blip", ns)
+    assert blip is not None
+    relationship_id = blip.attrib[
+        "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}embed"
+    ]
+    picture_media = next(
+        asset for asset in result.assets.media if asset.relationship_id == relationship_id
+    )
+    flattened = PILImage.open(BytesIO(picture_media.data)).convert("RGBA")
+    assert flattened.getpixel((0, 0)) == (255, 0, 0, 255)
+    assert flattened.getpixel((1, 0)) == (0, 255, 0, 255)
+
+
 def test_render_reuses_identical_pattern_tile_media_on_slide() -> None:
     writer = DrawingMLWriter()
     tile_data = b"\x89PNG\r\n\x1a\n" + b"\x00" * 50
@@ -424,6 +480,40 @@ def test_render_textframe_rtl_explicit_direction() -> None:
     assert 'rtl="1"' in xml
     # START anchor in RTL should become right-aligned
     assert 'algn="r"' in xml
+
+
+def test_render_textframe_bidi_override_uses_ir_runs() -> None:
+    writer = DrawingMLWriter()
+    frame = TextFrame(
+        origin=Point(0, 0),
+        anchor=TextAnchor.START,
+        bbox=Rect(0, 0, 100, 20),
+        runs=[
+            Run(
+                text="\u202eText in Hebrew\u202c",
+                font_family="Arial",
+                font_size_pt=12,
+                rgb="000000",
+            )
+        ],
+        direction="rtl",
+        metadata={
+            "bidi_override": {
+                "strategy": "unicode_controls",
+                "direction": "rtl",
+            },
+            "resvg_text": {
+                "strategy": "runs",
+                "runs_xml": "<a:r><a:t>stale</a:t></a:r>",
+            },
+        },
+    )
+
+    result = writer.render_scene([frame])
+    xml = result.slide_xml
+
+    assert "\u202eText in Hebrew\u202c" in xml
+    assert "stale" not in xml
 
 
 def test_render_textframe_ltr_no_rtl_attr() -> None:
@@ -923,6 +1013,46 @@ def test_leaf_group_with_filter_fallback_renders_single_picture() -> None:
     assert 'r:embed="rIdFilterBlur"' in result.slide_xml
 
 
+def test_opacity_group_with_child_filter_does_not_swallow_filter_fallback() -> None:
+    writer = DrawingMLWriter()
+    filtered = Rectangle(
+        bounds=Rect(10, 10, 20, 20),
+        fill=SolidPaint("ED7D31"),
+        metadata={
+            "filters": [{"id": "blur", "fallback": "bitmap"}],
+            "filter_metadata": {
+                "blur": {"bounds": {"x": 0.0, "y": 0.0, "width": 30.0, "height": 30.0}}
+            },
+            "policy": {
+                "media": {
+                    "filter_assets": {
+                        "blur": [
+                            {
+                                "type": "raster",
+                                "data": b"\x89PNG\r\n\x1a\n",
+                                "relationship_id": "rIdFilterBlur",
+                            }
+                        ]
+                    }
+                }
+            },
+        },
+    )
+    group = Group(
+        children=[
+            Rectangle(bounds=Rect(0, 0, 20, 20), fill=SolidPaint("4472C4")),
+            filtered,
+        ],
+        opacity=0.5,
+    )
+
+    result = writer.render_scene([group])
+
+    assert "<p:pic>" in result.slide_xml
+    assert any(asset.data == b"\x89PNG\r\n\x1a\n" for asset in result.assets.media)
+    assert all(asset.source != "rasterized_group" for asset in result.assets.media)
+
+
 def test_leaf_group_filter_fallback_without_relationship_id_avoids_slide_layout_rid() -> (
     None
 ):
@@ -1134,6 +1264,26 @@ def test_render_linear_gradient_fill() -> None:
     assert 'pos="100000"' in xml
 
 
+def test_render_fully_transparent_gradient_stop_as_raster() -> None:
+    pytest.importorskip("skia")
+    writer = DrawingMLWriter()
+    gradient = LinearGradientPaint(
+        stops=[
+            GradientStop(offset=0.0, rgb="00FF00", opacity=1.0),
+            GradientStop(offset=1.0, rgb="00FF00", opacity=0.0),
+        ],
+        start=(0.0, 0.0),
+        end=(1.0, 0.0),
+    )
+    rect = Rectangle(bounds=Rect(0, 0, 20, 10), fill=gradient)
+
+    result = writer.render_scene([rect])
+
+    assert "<a:gradFill" not in result.slide_xml
+    assert "<p:pic>" in result.slide_xml
+    assert any(asset.source == "image" for asset in result.assets.media)
+
+
 def test_render_path_with_arrow_markers() -> None:
     writer = DrawingMLWriter()
     segments = [LineSegment(Point(0, 0), Point(50, 0))]
@@ -1300,13 +1450,32 @@ def test_path_clip_path_serialisation() -> None:
 
     # Non-standard element must not appear in output.
     assert "<a:clipPath>" not in result.slide_xml
-    # Shape still renders.
-    assert "<p:sp>" in result.slide_xml
+    # Clipped path now renders through the picture fallback path.
+    assert "<p:pic>" in result.slide_xml
     # Clip diagnostic is recorded.
     assert any(
         "clip1" in msg.lower() or "clip" in msg.lower()
         for msg in result.assets.diagnostics
     )
+
+
+def test_empty_clip_path_hides_target_shape() -> None:
+    writer = DrawingMLWriter()
+    path = IRPath(
+        segments=[
+            LineSegment(Point(0, 0), Point(20, 0)),
+            LineSegment(Point(20, 0), Point(20, 10)),
+            LineSegment(Point(20, 10), Point(0, 10)),
+            LineSegment(Point(0, 10), Point(0, 0)),
+        ],
+        fill=SolidPaint("FF0000"),
+        clip=ClipRef(clip_id="empty", is_empty=True),
+    )
+
+    result = writer.render_scene([path])
+
+    assert '<a:alpha val="0"/>' in result.slide_xml
+    assert any("empty" in msg and "hidden" in msg for msg in result.assets.diagnostics)
 
 
 def test_mask_approximated_to_clip_path() -> None:
@@ -1648,7 +1817,7 @@ def test_image_no_clip_defaults_to_rect() -> None:
 
 
 def test_clipped_path_gets_overlay_pic() -> None:
-    """Path with clip path_segments produces shape + EMF overlay picture."""
+    """Path with clip path_segments produces picture overlay."""
     writer = DrawingMLWriter()
     clip_segments = (
         LineSegment(Point(2, 2), Point(8, 2)),
@@ -1676,13 +1845,13 @@ def test_clipped_path_gets_overlay_pic() -> None:
 
     result = writer.render_scene([path])
 
-    # Path shape renders.
-    assert "<p:sp>" in result.slide_xml
+    # Path renders through the clip overlay picture path.
+    assert "<p:pic>" in result.slide_xml
     # Overlay picture renders.
     assert "<p:pic>" in result.slide_xml
-    # Overlay is an EMF media asset.
+    # Overlay is emitted as a rasterized media asset.
     media = list(result.assets.media)
-    assert any(m.content_type == "image/x-emf" for m in media)
+    assert any(m.content_type in {"image/png", "image/x-emf"} for m in media)
 
 
 def test_unclipped_path_no_overlay() -> None:

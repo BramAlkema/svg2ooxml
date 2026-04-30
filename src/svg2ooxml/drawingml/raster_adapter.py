@@ -26,6 +26,10 @@ from svg2ooxml.drawingml.raster_bounds import (
     source_graphic_descriptor_from_context,
     viewport_scale,
 )
+from svg2ooxml.drawingml.raster_filter_transform import (
+    matrix_from_options,
+    transform_bounds_mapping,
+)
 from svg2ooxml.drawingml.raster_preview import RasterPreviewBuilder
 from svg2ooxml.drawingml.skia_bridge import (
     NUMPY_AVAILABLE,
@@ -97,6 +101,11 @@ class RasterAdapter(RasterAdapterRenderingMixin):
             default_width=default_size[0],
             default_height=default_size[1],
         )
+        ctm = matrix_from_options(getattr(context, "options", None))
+        if (descriptor or {}).get("filter_units") == "userSpaceOnUse":
+            transformed_bounds = transform_bounds_mapping(resolved_bounds, ctm)
+            if transformed_bounds is not None:
+                resolved_bounds = transformed_bounds
         width_px, height_px = self._derive_dimensions(
             context, default_size, descriptor, resolved_bounds
         )
@@ -376,9 +385,16 @@ class RasterAdapter(RasterAdapterRenderingMixin):
 
         from svg2ooxml.services.image_service import FileResolver
 
+        file_resolvers: list[FileResolver] = []
         for resolver in resolvers():
             if isinstance(resolver, FileResolver):
+                file_resolvers.append(resolver)
+        for resolver in reversed(file_resolvers):
+            if resolver.asset_root != resolver.base_dir:
                 return resolver.base_dir, resolver.asset_root
+        if file_resolvers:
+            resolver = file_resolvers[-1]
+            return resolver.base_dir, resolver.asset_root
         return None, None
 
 

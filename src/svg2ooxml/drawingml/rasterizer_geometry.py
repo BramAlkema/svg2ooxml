@@ -6,7 +6,8 @@ from collections.abc import Iterable
 
 from svg2ooxml.common.geometry.paths.drawingml import compute_path_bounds
 from svg2ooxml.drawingml.rasterizer_backend import skia
-from svg2ooxml.ir.geometry import BezierSegment, LineSegment, Rect, SegmentType
+from svg2ooxml.drawingml.skia_path import skia_path_from_segments
+from svg2ooxml.ir.geometry import Rect, SegmentType
 from svg2ooxml.ir.paint import Stroke
 from svg2ooxml.ir.scene import Group, Image
 from svg2ooxml.ir.scene import Path as IRPath
@@ -18,28 +19,31 @@ class RasterizerGeometryMixin:
         self,
         segments: Iterable[SegmentType],
         closed: bool,
+        fill_rule: str | None = None,
     ) -> skia.Path:
-        segment_list = list(segments)
-        path = skia.Path()
-        if not segment_list:
-            return path
-        first_segment = segment_list[0]
-        path.moveTo(first_segment.start.x, first_segment.start.y)
-        for segment in segment_list:
-            if isinstance(segment, LineSegment):
-                path.lineTo(segment.end.x, segment.end.y)
-            elif isinstance(segment, BezierSegment):
-                path.cubicTo(
-                    segment.control1.x,
-                    segment.control1.y,
-                    segment.control2.x,
-                    segment.control2.y,
-                    segment.end.x,
-                    segment.end.y,
-                )
-        if closed:
-            path.close()
-        return path
+        path = skia_path_from_segments(
+            list(segments),
+            closed=closed,
+            fill_rule=fill_rule,
+        )
+        return path if path is not None else skia.Path()
+
+    def _clip_path(self, element) -> skia.Path | None:
+        clip = getattr(element, "clip", None)
+        if clip is None:
+            return None
+        if getattr(clip, "is_empty", False):
+            return skia.Path()
+        skia_clip = getattr(clip, "skia_path", None)
+        if skia_clip is not None:
+            try:
+                return skia.Path(skia_clip)
+            except Exception:
+                return skia_clip
+        segments = getattr(clip, "path_segments", None)
+        if segments:
+            return self._build_skia_path(segments, True)
+        return None
 
     def _expanded_bounds(self, element) -> Rect:
         bounds = self._element_bounds(element)

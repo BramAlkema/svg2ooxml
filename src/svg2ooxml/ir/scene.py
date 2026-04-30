@@ -43,6 +43,8 @@ class ClipRef:
     custom_geometry_xml: str | None = field(default=None, compare=False)
     custom_geometry_bounds: Rect | None = field(default=None, compare=False)
     custom_geometry_size: tuple[int, int] | None = field(default=None, compare=False)
+    skia_path: Any | None = field(default=None, compare=False, repr=False)
+    is_empty: bool = False
 
     def __post_init__(self) -> None:
         if not self.clip_id:
@@ -195,7 +197,12 @@ class Group:
 
     @property
     def bbox(self) -> Rect:
-        boxes = [child.bbox for child in self.children if hasattr(child, "bbox")]
+        boxes = [
+            child.bbox
+            for child in self.children
+            if hasattr(child, "bbox")
+            and (child.bbox.width > 0.0 or child.bbox.height > 0.0)
+        ]
         if not boxes:
             return Rect(0, 0, 0, 0)
         min_x = min(box.x for box in boxes)

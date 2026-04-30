@@ -15,6 +15,8 @@ from svg2ooxml.common.units.lengths import parse_number
 from svg2ooxml.core.resvg.parser.presentation import Presentation
 from svg2ooxml.core.resvg.usvg_tree import FilterNode, FilterPrimitive, Tree
 
+_NON_FILTER_PRIMITIVE_TAGS = {"desc", "metadata", "title"}
+
 
 @dataclass(slots=True)
 class FilterPrimitiveDescriptor:
@@ -163,15 +165,17 @@ def _descriptor_from_primitive(primitive: FilterPrimitive) -> FilterPrimitiveDes
 
 def _descriptor_from_element(element: etree._Element) -> FilterPrimitiveDescriptor | None:
     tag = _local_name(getattr(element, "tag", ""))
-    if not tag:
+    if not tag or tag.lower() in _NON_FILTER_PRIMITIVE_TAGS:
         return None
+    styles = parse_style_declarations(element.get("style"))[0]
     attributes = {
         key: value
         for key, value in element.attrib.items()
         if key != "style"
     }
-    extras = _collect_lighting_metadata_from_element(tag, element)
-    styles = parse_style_declarations(element.get("style"))[0]
+    if tag.lower() in {"fediffuselighting", "fespecularlighting"}:
+        attributes, styles = _resolve_lighting_color_attributes(element, attributes, styles)
+    extras = _collect_lighting_metadata_from_element(tag, element, attributes)
     children: list[FilterPrimitiveDescriptor] = []
     for child in element:
         descriptor = _descriptor_from_element(child)
@@ -239,10 +243,14 @@ def _collect_lighting_metadata(tag: str, attributes: Mapping[str, str], children
     return {key: value for key, value in extras.items() if value not in {"", None}}
 
 
-def _collect_lighting_metadata_from_element(tag: str, element: etree._Element) -> dict[str, str]:
+def _collect_lighting_metadata_from_element(
+    tag: str,
+    element: etree._Element,
+    attributes: Mapping[str, str] | None = None,
+) -> dict[str, str]:
     if tag.lower() not in {"fediffuselighting", "fespecularlighting"}:
         return {}
-    attrs = element.attrib
+    attrs = attributes if attributes is not None else element.attrib
     dummy_children = tuple(
         FilterPrimitive(
             tag=_local_name(child.tag),
@@ -253,6 +261,46 @@ def _collect_lighting_metadata_from_element(tag: str, element: etree._Element) -
         for child in element
     )
     return _collect_lighting_metadata(tag, attrs, dummy_children)
+
+
+def _resolve_lighting_color_attributes(
+    element: etree._Element,
+    attributes: dict[str, str],
+    styles: dict[str, str],
+) -> tuple[dict[str, str], dict[str, str]]:
+    candidate = styles.get("lighting-color") or attributes.get("lighting-color")
+    if not candidate:
+        return attributes, styles
+    resolved = _resolve_current_color(candidate, element)
+    if resolved == candidate:
+        return attributes, styles
+    attributes = dict(attributes)
+    styles = dict(styles)
+    attributes["lighting-color"] = resolved
+    if "lighting-color" in styles:
+        styles["lighting-color"] = resolved
+    return attributes, styles
+
+
+def _resolve_current_color(value: str, element: etree._Element) -> str:
+    if value.strip().lower() != "currentcolor":
+        return value
+    current_color = _find_inherited_color(element)
+    return current_color or value
+
+
+def _find_inherited_color(element: etree._Element) -> str | None:
+    current: etree._Element | None = element
+    while current is not None:
+        styles = parse_style_declarations(current.get("style"))[0]
+        style_color = styles.get("color")
+        if style_color and style_color.strip().lower() not in {"inherit", "currentcolor"}:
+            return style_color
+        attr_color = current.get("color")
+        if attr_color and attr_color.strip().lower() not in {"inherit", "currentcolor"}:
+            return attr_color
+        current = current.getparent()
+    return None
 
 
 def _filter_element_attributes(attributes: Mapping[str, str]) -> dict[str, str]:

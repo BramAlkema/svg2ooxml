@@ -160,6 +160,11 @@ class AssetPipeline:
 
         data_bytes = data if isinstance(data, (bytes, bytearray)) else bytes(data)
         metadata = image.metadata if isinstance(image.metadata, dict) else {}
+        if (
+            metadata.get("image_source") == "filter_fallback"
+            and bool(metadata.get("flatten_for_powerpoint"))
+        ):
+            data_bytes = self._flatten_filter_png(bytes(data_bytes))
         if metadata.get("image_source") == "pattern_tile":
             digest = hashlib.md5(data_bytes, usedforsecurity=False).hexdigest()
             cache_key = (content_type, digest)

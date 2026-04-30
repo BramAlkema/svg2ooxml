@@ -29,6 +29,15 @@ def test_image_service_base64_data_uri_is_case_insensitive() -> None:
     assert resource.mime_type == "image/png"
 
 
+def test_image_service_base64_data_uri_ignores_attribute_whitespace() -> None:
+    service = ImageService()
+
+    resource = service.resolve("data:image/png;base64, Zm9v\n YmFy ")
+
+    assert resource is not None
+    assert resource.data == b"foobar"
+
+
 def test_image_service_rejects_invalid_base64_data_uri() -> None:
     service = ImageService()
 

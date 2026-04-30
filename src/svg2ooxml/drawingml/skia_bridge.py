@@ -16,7 +16,7 @@ from svg2ooxml.common.math_utils import coerce_positive_float, finite_float
 from svg2ooxml.common.numpy_compat import NUMPY_AVAILABLE, REAL_NUMPY
 from svg2ooxml.drawingml.paint_converter import (
     _UNSUPPORTED_SOURCE_STYLE,
-    _color4f_from_paint_descriptor,
+    _fill_paint_from_descriptor,
     _float_or,
     _is_point_pair,
     _stroke_paint_from_descriptor,
@@ -123,6 +123,58 @@ def descriptor_to_skia_path(descriptor: dict[str, Any]):
     return path if started else None
 
 
+def _draw_descriptor_on_canvas(
+    canvas,
+    descriptor: dict[str, Any],
+    *,
+    inherited_opacity: float = 1.0,
+) -> bool:
+    children = descriptor.get("children")
+    if isinstance(children, list):
+        opacity = inherited_opacity * _float_or(descriptor.get("opacity"), 1.0)
+        for child in children:
+            if not isinstance(child, dict):
+                return False
+            if not _draw_descriptor_on_canvas(
+                canvas,
+                child,
+                inherited_opacity=opacity,
+            ):
+                return False
+        return True
+
+    path = descriptor_to_skia_path(descriptor)
+    if path is None:
+        return False
+
+    descriptor_bbox = descriptor.get("bbox")
+    paint_bounds = _coerce_bounds(descriptor_bbox, default_width=1, default_height=1)
+    if paint_bounds is None:
+        return False
+
+    opacity = inherited_opacity * _float_or(descriptor.get("opacity"), 1.0)
+    fill_paint = _fill_paint_from_descriptor(
+        descriptor.get("fill"),
+        opacity,
+        paint_bounds,
+    )
+    if fill_paint is _UNSUPPORTED_SOURCE_STYLE:
+        return False
+    if fill_paint is not None:
+        canvas.drawPath(path, fill_paint)
+
+    stroke_paint = _stroke_paint_from_descriptor(
+        descriptor.get("stroke"),
+        opacity,
+        paint_bounds,
+    )
+    if stroke_paint is _UNSUPPORTED_SOURCE_STYLE:
+        return False
+    if stroke_paint is not None:
+        canvas.drawPath(path, stroke_paint)
+    return True
+
+
 # ------------------------------------------------------------------ #
 # Surface rendering from descriptor                                  #
 # ------------------------------------------------------------------ #
@@ -141,9 +193,9 @@ def render_surface_from_descriptor(
     if not _transform_is_identity(descriptor.get("transform")):
         return None
 
-    source_bounds = bounds
+    source_bounds = bounds if isinstance(bounds, dict) and bounds else None
     descriptor_bbox = descriptor.get("bbox")
-    if isinstance(descriptor_bbox, dict) and descriptor_bbox:
+    if source_bounds is None and isinstance(descriptor_bbox, dict) and descriptor_bbox:
         source_bounds = descriptor_bbox
     if not isinstance(source_bounds, dict):
         return None
@@ -161,32 +213,9 @@ def render_surface_from_descriptor(
     canvas.scale(width_px / width, height_px / height)
     canvas.translate(-x, -y)
 
-    path = descriptor_to_skia_path(descriptor)
-    if path is None:
+    if not _draw_descriptor_on_canvas(canvas, descriptor):
         canvas.restore()
         return None
-
-    opacity = _float_or(descriptor.get("opacity"), 1.0)
-    fill = descriptor.get("fill")
-    stroke = descriptor.get("stroke")
-    fill_color = _color4f_from_paint_descriptor(fill, opacity)
-    if fill_color is _UNSUPPORTED_SOURCE_STYLE:
-        canvas.restore()
-        return None
-    if fill_color is not None:
-        paint = skia.Paint(
-            AntiAlias=True,
-            Style=skia.Paint.kFill_Style,
-            Color4f=fill_color,
-        )
-        canvas.drawPath(path, paint)
-
-    stroke_paint = _stroke_paint_from_descriptor(stroke, opacity)
-    if stroke_paint is _UNSUPPORTED_SOURCE_STYLE:
-        canvas.restore()
-        return None
-    if stroke_paint is not None:
-        canvas.drawPath(path, stroke_paint)
 
     canvas.restore()
     try:

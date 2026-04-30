@@ -35,6 +35,26 @@ def test_rotated_glyph_bbox_uses_rotated_outline_bounds() -> None:
     assert rotated.bbox != pytest.approx(plain.bbox)
 
 
+def test_positioned_glyph_renderer_converts_point_size_to_svg_pixels() -> None:
+    import skia
+
+    font = skia.Font(skia.Typeface("Arial"), 35.0)
+    glyph_id = font.textToGlyphs("H")[0]
+    path = font.getPath(int(glyph_id))
+    assert path is not None
+    expected = path.getBounds()
+
+    actual = compute_positioned_glyph_bboxes(
+        "H",
+        "Arial",
+        26.25,
+        [GlyphPlacement(0.0, 0.0, 0.0)],
+    )[0]
+
+    assert actual.bbox[2] == pytest.approx(expected.width(), rel=0.01)
+    assert actual.bbox[3] == pytest.approx(expected.height(), rel=0.01)
+
+
 def test_rotated_glyph_bbox_pivots_around_text_position() -> None:
     placement = GlyphPlacement(100.0, 100.0, 90.0)
 

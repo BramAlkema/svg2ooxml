@@ -21,6 +21,10 @@ def clip_bounds_for(clip_ref: ClipRef | None) -> tuple[Rect | None, list[str]]:
     if clip_ref is None:
         return None, diagnostics
 
+    if clip_ref.is_empty:
+        diagnostics.append(f"Clip {clip_ref.clip_id} is empty; target hidden.")
+        return None, diagnostics
+
     if clip_ref.custom_geometry_bounds:
         diagnostics.append(
             f"Clip {clip_ref.clip_id} bounds extracted from custom geometry."

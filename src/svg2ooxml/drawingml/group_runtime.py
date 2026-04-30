@@ -14,6 +14,8 @@ from svg2ooxml.ir.scene import Path as IRPath
 from svg2ooxml.ir.shapes import Circle, Ellipse, Line, Polygon, Polyline, Rectangle
 from svg2ooxml.ir.text import TextFrame as IRTextFrame
 
+from .skia_path import skia
+
 
 def children_overlap(children) -> bool:
     """Return True if any two children have overlapping rendered bounds."""
@@ -287,6 +289,7 @@ def _move_clip_ref(clip: ClipRef | None, dx: float, dy: float) -> ClipRef | None
         clip,
         bounding_box=_move_rect_or_none(clip.bounding_box, dx, dy),
         custom_geometry_bounds=_move_rect_or_none(clip.custom_geometry_bounds, dx, dy),
+        skia_path=_move_skia_path(getattr(clip, "skia_path", None), dx, dy),
     )
 
 
@@ -375,6 +378,18 @@ def _move_rect_or_none(rect: Rect | None, dx: float, dy: float) -> Rect | None:
     if rect is None:
         return None
     return Rect(rect.x - dx, rect.y - dy, rect.width, rect.height)
+
+
+def _move_skia_path(path, dx: float, dy: float):
+    if path is None or skia is None:
+        return path
+    try:
+        moved = skia.Path(path)
+        matrix = skia.Matrix.Translate(float(-dx), float(-dy))
+        moved.transform(matrix)
+        return moved
+    except Exception:
+        return path
 
 
 def _move_rect_like(value: object, dx: float, dy: float) -> object:

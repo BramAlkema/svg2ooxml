@@ -43,6 +43,15 @@ def test_clip_bounds_for_none_returns_none() -> None:
     assert diagnostics == []
 
 
+def test_clip_bounds_for_empty_clip_returns_none_with_hidden_diagnostic() -> None:
+    clip_ref = ClipRef(clip_id="empty", is_empty=True)
+
+    bounds, diagnostics = clip_bounds_for(clip_ref)
+
+    assert bounds is None
+    assert any("empty" in msg and "hidden" in msg for msg in diagnostics)
+
+
 def test_clip_xml_for_returns_empty_string() -> None:
     """Legacy API always returns empty XML string."""
     clip_ref = ClipRef(

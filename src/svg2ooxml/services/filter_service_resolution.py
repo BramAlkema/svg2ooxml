@@ -224,7 +224,7 @@ class FilterResolutionMixin:
         raster_results_cache: list[FilterEffectResult],
     ) -> list[FilterEffectResult]:
         native_results = [result for result in results if result.fallback is None]
-        if native_results:
+        if native_results and not _prefer_resvg_bitmap_result(resvg_result):
             return self._finalize_results(filter_ref, native_results, filter_context)
         preferred_results = [resvg_result]
         if emf_sources:
@@ -268,3 +268,19 @@ def _annotate_raster_input_results(
         metadata.setdefault("raster_reason", "svg_filter_input_surface")
         annotated.append(replace(result, metadata=metadata))
     return annotated
+
+
+def _prefer_resvg_bitmap_result(result: FilterEffectResult) -> bool:
+    if result.fallback != "bitmap":
+        return False
+    metadata = result.metadata if isinstance(result.metadata, dict) else {}
+    if metadata.get("renderer") != "resvg":
+        return False
+    primitives = metadata.get("primitives")
+    if not isinstance(primitives, list):
+        return False
+    return any(
+        isinstance(primitive, str)
+        and primitive.lower() in {"fediffuselighting", "fespecularlighting"}
+        for primitive in primitives
+    )

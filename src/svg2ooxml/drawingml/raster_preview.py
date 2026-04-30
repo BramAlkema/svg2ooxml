@@ -44,6 +44,13 @@ def _local_url_ids_from_value(value: str) -> set[str]:
     return ids
 
 
+def _enables_new_background(element: etree._Element) -> bool:
+    value = element.get("enable-background")
+    if not isinstance(value, str):
+        return False
+    return value.strip().lower().startswith("new")
+
+
 class RasterPreviewBuilder:
     """Build temporary SVG documents used by raster fallback rendering."""
 
@@ -190,6 +197,62 @@ class RasterPreviewBuilder:
         )
         return etree.tostring(svg_root, encoding="unicode")
 
+    def build_background_svg_markup(
+        self,
+        *,
+        source_element: etree._Element,
+        source_root: etree._Element | None,
+        resolved_bounds: dict[str, float] | None,
+        width_px: int,
+        height_px: int,
+    ) -> str | None:
+        svg_ns = "http://www.w3.org/2000/svg"
+        xlink_ns = "http://www.w3.org/1999/xlink"
+        width_px = _positive_dimension(width_px)
+        height_px = _positive_dimension(height_px)
+        background_subtree = self.build_background_subtree(
+            source_element=source_element,
+            source_root=source_root,
+            svg_ns=svg_ns,
+        )
+        if background_subtree is None:
+            return None
+
+        svg_root = etree.Element(
+            f"{{{svg_ns}}}svg",
+            nsmap={None: svg_ns, "xlink": xlink_ns},
+            attrib={
+                "width": str(width_px),
+                "height": str(height_px),
+            },
+        )
+        defs = etree.SubElement(svg_root, f"{{{svg_ns}}}defs")
+        if isinstance(source_root, etree._Element):
+            for defs_child in self.iter_defs_children(source_root):
+                defs.append(defs_child)
+
+        preserve_user_space = self.requires_original_user_space(
+            background_subtree,
+            source_root,
+        )
+        svg_root.set(
+            "viewBox",
+            self.preview_viewbox(
+                bounds=resolved_bounds,
+                width_px=width_px,
+                height_px=height_px,
+                preserve_user_space=preserve_user_space,
+            ),
+        )
+        svg_root.append(
+            self.localize_source_subtree(
+                background_subtree,
+                resolved_bounds,
+                preserve_user_space=preserve_user_space,
+            )
+        )
+        return etree.tostring(svg_root, encoding="unicode")
+
     def source_element_from_context(self, context) -> etree._Element | None:
         options = getattr(context, "options", None)
         if not isinstance(options, dict):
@@ -231,6 +294,52 @@ class RasterPreviewBuilder:
             wrapper = etree.Element(ancestor.tag, attrib=dict(ancestor.attrib))
             wrapper.append(node)
             node = wrapper
+        self.flatten_transforms_in_place(node)
+        return node
+
+    def build_background_subtree(
+        self,
+        *,
+        source_element: etree._Element | None,
+        source_root: etree._Element | None,
+        svg_ns: str,
+    ) -> etree._Element | None:
+        del svg_ns
+        if source_element is None:
+            return None
+        parent = source_element.getparent()
+        if parent is None:
+            return None
+
+        node: etree._Element | None = None
+        branch_child = source_element
+        current = parent
+        include_previous_siblings = True
+        while current is not None and current is not source_root:
+            if local_name(current.tag).lower() != "defs":
+                wrapper = etree.Element(current.tag, attrib=dict(current.attrib))
+                wrapper.attrib.pop("filter", None)
+                wrapper.attrib.pop("opacity", None)
+                if include_previous_siblings:
+                    for sibling in current:
+                        if sibling is branch_child:
+                            break
+                        if (
+                            isinstance(sibling.tag, str)
+                            and local_name(sibling.tag).lower() != "defs"
+                        ):
+                            wrapper.append(deepcopy(sibling))
+                if node is not None:
+                    wrapper.append(node)
+                if len(wrapper):
+                    node = wrapper
+                if _enables_new_background(current):
+                    include_previous_siblings = False
+                branch_child = current
+            current = current.getparent()
+
+        if node is None:
+            return None
         self.flatten_transforms_in_place(node)
         return node
 

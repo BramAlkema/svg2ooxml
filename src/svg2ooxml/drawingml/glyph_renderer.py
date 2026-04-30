@@ -17,19 +17,29 @@ except Exception:
     skia = None  # type: ignore
     SKIA_AVAILABLE = False
 
-# Cache Skia Font objects by (family, size) — typeface creation is ~0.4ms each
+# Cache Skia Font objects by (family, px size) — typeface creation is ~0.4ms each
 _font_cache: dict[tuple[str, float], object] = {}
 
 
 def _get_font(family: str, size_pt: float):
-    """Get or create a cached Skia Font."""
-    key = (family, size_pt)
+    """Get or create a cached Skia Font for an IR point-size run."""
+    size_px = _font_size_px(size_pt)
+    key = (family, size_px)
     font = _font_cache.get(key)
     if font is None:
         typeface = skia.Typeface(family)
-        font = skia.Font(typeface, size_pt)
+        font = skia.Font(typeface, size_px)
         _font_cache[key] = font
     return font
+
+
+def _font_size_px(size_pt: float) -> float:
+    """Convert the IR font size in points to SVG user pixels."""
+    try:
+        size = float(size_pt)
+    except (TypeError, ValueError):
+        size = 12.0
+    return max(size * (96.0 / 72.0), 0.01)
 
 
 @dataclass(frozen=True)

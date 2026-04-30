@@ -162,6 +162,70 @@ def apply_component_transfer(surface: Surface, plan: ComponentTransferPlan) -> S
     return result
 
 
+def apply_convolve_matrix(surface: Surface, params: Mapping[str, Any]) -> Surface:
+    order_x = max(1, int(parse_number(params.get("order_x"), 3.0)))
+    order_y = max(1, int(parse_number(params.get("order_y"), 3.0)))
+    kernel_values = params.get("kernel")
+    if not isinstance(kernel_values, Sequence):
+        raise UnsupportedPrimitiveError("feConvolveMatrix", "kernel missing")
+    if len(kernel_values) != order_x * order_y:
+        raise UnsupportedPrimitiveError(
+            "feConvolveMatrix", "kernel size does not match order"
+        )
+
+    kernel = np.array(kernel_values, dtype=np.float32).reshape(order_y, order_x)
+    divisor = parse_number(params.get("divisor"), float(kernel.sum()) or 1.0)
+    if abs(divisor) <= _lighting._EPSILON:
+        divisor = 1.0
+    bias = parse_number(params.get("bias"), 0.0)
+
+    target_x = int(parse_number(params.get("target_x"), float(order_x // 2)))
+    target_y = int(parse_number(params.get("target_y"), float(order_y // 2)))
+    if target_x < 0 or target_x >= order_x or target_y < 0 or target_y >= order_y:
+        raise UnsupportedPrimitiveError(
+            "feConvolveMatrix", "targetX/targetY outside kernel bounds"
+        )
+
+    left = target_x
+    right = order_x - target_x - 1
+    top = target_y
+    bottom = order_y - target_y - 1
+    edge_mode = str(params.get("edge_mode") or "duplicate").strip().lower()
+    if edge_mode == "wrap":
+        padded = np.pad(surface.data, ((top, bottom), (left, right), (0, 0)), mode="wrap")
+    elif edge_mode == "none":
+        padded = np.pad(
+            surface.data,
+            ((top, bottom), (left, right), (0, 0)),
+            mode="constant",
+            constant_values=0.0,
+        )
+    else:
+        padded = np.pad(surface.data, ((top, bottom), (left, right), (0, 0)), mode="edge")
+
+    result = np.zeros_like(surface.data)
+    height = surface.height
+    width = surface.width
+    for row in range(order_y):
+        for col in range(order_x):
+            weight = kernel[row, col]
+            if weight == 0:
+                continue
+            result += padded[row : row + height, col : col + width, :] * weight
+
+    result = result / divisor
+    result_alpha = np.clip(result[..., 3], 0.0, 1.0)
+    result[..., :3] = result[..., :3] + bias * result_alpha[..., None]
+    result[..., 3] = result_alpha
+    result = np.clip(result, 0.0, 1.0)
+
+    if params.get("preserve_alpha"):
+        result[..., 3] = surface.data[..., 3]
+    result[..., :3] = np.minimum(result[..., :3], result[..., 3:4])
+
+    return Surface(surface.width, surface.height, result.astype(np.float32))
+
+
 def apply_morphology(surface: Surface, operator: str, radius_x: float, radius_y: float) -> Surface:
     rx = max(int(round(radius_x)), 0)
     ry = max(int(round(radius_y)), 0)
@@ -429,6 +493,7 @@ __all__ = [
     "apply_color_matrix",
     "apply_component_transfer",
     "apply_composite",
+    "apply_convolve_matrix",
     "apply_flood",
     "apply_gaussian_blur",
     "apply_merge",

@@ -73,3 +73,40 @@ def test_user_space_reference_detection_handles_quoted_url_refs() -> None:
     rect = svg.xpath(".//*[local-name()='rect']")[0]
 
     assert builder.requires_original_user_space(rect, svg)
+
+
+def test_background_subtree_includes_ancestor_previous_siblings_until_background_reset() -> None:
+    builder = RasterPreviewBuilder()
+    svg = etree.fromstring("""
+        <svg xmlns="http://www.w3.org/2000/svg">
+          <g id="outer">
+            <g id="previous-test">
+              <rect id="outside" x="0" y="0" width="10" height="10"/>
+            </g>
+            <g id="test" enable-background="new" transform="translate(100,0)">
+              <rect id="rect-bg" x="25" y="25" width="100" height="100"/>
+              <g id="opacity-parent" opacity=".5">
+                <circle id="circle-bg" cx="125" cy="75" r="45"/>
+                <polygon id="target" points="160,25 160,125 240,75"
+                         filter="url(#shift)"/>
+              </g>
+            </g>
+          </g>
+        </svg>
+        """)
+    ns = {"svg": "http://www.w3.org/2000/svg"}
+    target = svg.xpath(".//svg:polygon[@id='target']", namespaces=ns)[0]
+
+    subtree = builder.build_background_subtree(
+        source_element=target,
+        source_root=svg,
+        svg_ns="http://www.w3.org/2000/svg",
+    )
+
+    assert subtree is not None
+    assert subtree.xpath(".//*[@id='rect-bg']")
+    assert subtree.xpath(".//*[@id='circle-bg']")
+    assert not subtree.xpath(".//*[@id='target']")
+    assert not subtree.xpath(".//*[@id='outside']")
+    opacity_parent = subtree.xpath(".//*[@id='opacity-parent']")[0]
+    assert opacity_parent.get("opacity") is None

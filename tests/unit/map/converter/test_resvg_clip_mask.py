@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import pytest
 from lxml import etree
 
 from svg2ooxml.core.ir import IRConverter
@@ -147,6 +148,112 @@ def test_resvg_clip_bounding_box_tracks_transformed_nested_use_positions() -> No
     assert clip_ref.bounding_box.y == 11.0
     assert clip_ref.bounding_box.width == 9.0
     assert clip_ref.bounding_box.height == 6.0
+
+
+def test_resvg_clip_intersects_child_clip_path() -> None:
+    pytest.importorskip("skia")
+    svg_markup = """
+        <svg xmlns='http://www.w3.org/2000/svg'>
+            <defs>
+                <circle id='c1' cx='100' cy='100' r='50'/>
+                <circle id='c2' cx='150' cy='150' r='50'/>
+                <clipPath id='clipCircle1'><use href='#c1'/></clipPath>
+                <clipPath id='clipInClip'>
+                    <use href='#c2' clip-path='url(#clipCircle1)'/>
+                </clipPath>
+            </defs>
+            <rect id='shape' width='200' height='200' clip-path='url(#clipInClip)'/>
+        </svg>
+    """
+
+    converter = _build_converter()
+    svg_root = etree.fromstring(svg_markup)
+    converter._build_resvg_lookup(svg_root)
+    definition = converter._resvg_clip_definitions["clipInClip"]
+
+    assert definition.skia_path is not None
+    assert definition.bounding_box == Rect(100.0, 100.0, 50.0, 50.0)
+
+
+def test_resvg_clip_intersects_clip_path_element_clip() -> None:
+    pytest.importorskip("skia")
+    svg_markup = """
+        <svg xmlns='http://www.w3.org/2000/svg'>
+            <defs>
+                <circle id='c1' cx='100' cy='100' r='50'/>
+                <circle id='c2' cx='150' cy='150' r='50'/>
+                <clipPath id='clipCircle1'><use href='#c1'/></clipPath>
+                <clipPath id='clipOnClip' clip-path='url(#clipCircle1)'>
+                    <use href='#c2'/>
+                </clipPath>
+            </defs>
+            <rect id='shape' width='200' height='200' clip-path='url(#clipOnClip)'/>
+        </svg>
+    """
+
+    converter = _build_converter()
+    svg_root = etree.fromstring(svg_markup)
+    converter._build_resvg_lookup(svg_root)
+    definition = converter._resvg_clip_definitions["clipOnClip"]
+
+    assert definition.skia_path is not None
+    assert definition.bounding_box == Rect(100.0, 100.0, 50.0, 50.0)
+
+
+def test_resvg_clip_preserves_empty_hidden_and_display_none_clip_paths() -> None:
+    svg_markup = """
+        <svg xmlns='http://www.w3.org/2000/svg'>
+            <defs>
+                <clipPath id='emptyclip'/>
+                <clipPath id='hiddenclip'>
+                    <rect width='100' height='100' visibility='hidden'/>
+                </clipPath>
+                <clipPath id='displayclip'>
+                    <rect width='100' height='100' display='none'/>
+                </clipPath>
+                <clipPath id='opacityclip'>
+                    <rect width='100' height='100' opacity='0'/>
+                </clipPath>
+            </defs>
+            <rect id='empty' width='100' height='100' clip-path='url(#emptyclip)'/>
+            <rect id='hidden' width='100' height='100' clip-path='url(#hiddenclip)'/>
+            <rect id='display' width='100' height='100' clip-path='url(#displayclip)'/>
+            <rect id='opacity' width='100' height='100' clip-path='url(#opacityclip)'/>
+        </svg>
+    """
+
+    converter = _build_converter()
+    svg_root = etree.fromstring(svg_markup)
+    converter._build_resvg_lookup(svg_root)
+
+    parse_result = ParseResult.success_with(
+        svg_root,
+        element_count=sum(1 for _ in svg_root.iter()),
+    )
+    converter._prepare_context(parse_result)
+
+    for clip_id in ("emptyclip", "hiddenclip", "displayclip"):
+        definition = converter._clip_definitions[clip_id]
+        assert definition.is_empty is True
+        assert definition.segments == ()
+        assert definition.primitives == ()
+
+        rect_element = svg_root.find(f"{{http://www.w3.org/2000/svg}}rect[@id='{clip_id.removesuffix('clip')}']")
+        assert rect_element is not None
+        clip_ref = resolve_clip_ref(
+            rect_element,
+            clip_definitions=converter._clip_definitions,
+            services=converter._services,
+            logger=converter._logger,
+            tolerance=0.25,
+            is_axis_aligned=lambda matrix, tol: True,
+        )
+        assert clip_ref is not None
+        assert clip_ref.is_empty is True
+
+    opacity_definition = converter._clip_definitions["opacityclip"]
+    assert opacity_definition.is_empty is False
+    assert opacity_definition.segments
 
 
 def test_resvg_mask_flags_raster_and_unsupported_nodes() -> None:

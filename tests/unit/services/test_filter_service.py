@@ -156,7 +156,7 @@ def test_filter_context_ignores_non_mapping_policy() -> None:
 
 
 def test_filter_service_resolve_ignores_non_mapping_policy_context() -> None:
-    service = FilterService(registry=_NoopRegistry())
+    service = FilterService()
     service.register_filter(
         "blur",
         _make_descriptor(
@@ -515,6 +515,25 @@ def test_raster_adapter_safe_size_caps_huge_dimensions() -> None:
     ) == (64, 64)
 
 
+def test_raster_adapter_resource_roots_prefer_explicit_asset_root(tmp_path: Path) -> None:
+    svg_dir = tmp_path / "svg"
+    svg_dir.mkdir()
+    image_service = ImageService()
+    image_service.register_resolver(FileResolver(svg_dir))
+    image_service.register_resolver(FileResolver(svg_dir, asset_root=tmp_path))
+    services = ConversionServices()
+    services.register("image", image_service)
+    context = FilterContext(
+        filter_element=_make_filter_element("<filter id='lighting'/>"),
+        services=services,
+    )
+
+    resources_dir, asset_root = RasterAdapter._resource_roots_from_context(context)
+
+    assert resources_dir == svg_dir.resolve()
+    assert asset_root == tmp_path.resolve()
+
+
 def test_raster_adapter_renders_source_element_with_transparent_edges() -> None:
     pytest.importorskip("skia")
 
@@ -804,6 +823,65 @@ def test_raster_adapter_infers_filter_region_from_filter_element() -> None:
     assert bounds.get("y") == pytest.approx(1.5)
     assert bounds.get("width") == pytest.approx(162.0)
     assert bounds.get("height") == pytest.approx(162.0)
+
+
+def test_raster_adapter_uses_filter_region_for_background_surface_without_descriptor() -> None:
+    pytest.importorskip("skia")
+
+    adapter = RasterAdapter()
+    svg = etree.fromstring("""
+        <svg xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <filter id="shift" filterUnits="userSpaceOnUse"
+                    x="0" y="0" width="1200" height="400">
+              <desc>descriptive text is not a primitive</desc>
+              <feOffset in="BackgroundImage" dx="0" dy="125"/>
+              <feGaussianBlur stdDeviation="8"/>
+            </filter>
+          </defs>
+          <g transform="scale(0.4) translate(-200 300)">
+            <g transform="translate(540,0)">
+              <rect x="25" y="25" width="100" height="100" fill="fuchsia"/>
+              <g id="target" filter="url(#shift)" opacity=".5">
+                <circle cx="125" cy="75" r="45" fill="#D3FF00"/>
+                <polygon points="160,25 160,125 240,75" fill="#7A16FF"/>
+              </g>
+            </g>
+          </g>
+        </svg>
+        """)
+    ns = {"svg": "http://www.w3.org/2000/svg"}
+    filter_element = svg.xpath(".//svg:filter[@id='shift']", namespaces=ns)[0]
+    target = svg.xpath(".//svg:g[@id='target']", namespaces=ns)[0]
+    context = FilterContext(
+        filter_element=filter_element,
+        options={
+            "element": target,
+            "ir_bbox": {"x": 168.0, "y": 130.0, "width": 64.0, "height": 40.0},
+            "ctm": {"a": 0.4, "b": 0.0, "c": 0.0, "d": 0.4, "e": 136.0, "f": 120.0},
+        },
+    )
+
+    result = adapter.render_filter(
+        filter_id="shift",
+        filter_element=filter_element,
+        context=context,
+        default_size=(64, 40),
+    )
+
+    image = Image.open(BytesIO(result.image_bytes)).convert("RGBA")
+    alpha_bbox = image.getchannel("A").getbbox()
+    assert result.metadata["primitives"] == ("feOffset", "feGaussianBlur")
+    assert result.metadata["bounds"] == {
+        "x": 136.0,
+        "y": 120.0,
+        "width": 480.0,
+        "height": 160.0,
+    }
+    assert alpha_bbox is not None
+    assert alpha_bbox[0] < 20
+    assert 45 < alpha_bbox[1] < 65
+    assert alpha_bbox[2] < 80
 
 
 def test_raster_adapter_object_bounding_box_numeric_region_scales_by_bbox() -> None:
@@ -1309,6 +1387,54 @@ def test_resvg_promotes_diffuse_lighting_chain() -> None:
         event for event in tracer.events if event["action"] == "resvg_lighting_promoted"
     ]
     assert lighting_events
+
+
+def test_resvg_lighting_prefers_bitmap_with_source_descriptor() -> None:
+    pytest.importorskip("skia")
+
+    service = FilterService()
+    descriptor = _make_descriptor(
+        "<filter id='lit'>"
+        "  <feDiffuseLighting surfaceScale='2' diffuseConstant='1.2' lighting-color='#00ff00'>"
+        "    <feDistantLight azimuth='0' elevation='90'/>"
+        "  </feDiffuseLighting>"
+        "</filter>"
+    )
+    service.register_filter("lit", descriptor)
+    service.set_strategy("resvg")
+
+    results = service.resolve_effects(
+        "lit",
+        context={
+            "ir_bbox": {"x": 0.0, "y": 0.0, "width": 20.0, "height": 20.0},
+            "filter_inputs": {
+                "SourceGraphic": {
+                    "shape_type": "Path",
+                    "geometry": [
+                        {"type": "line", "start": (0.0, 0.0), "end": (20.0, 0.0)},
+                        {"type": "line", "start": (20.0, 0.0), "end": (20.0, 20.0)},
+                        {"type": "line", "start": (20.0, 20.0), "end": (0.0, 20.0)},
+                        {"type": "line", "start": (0.0, 20.0), "end": (0.0, 0.0)},
+                    ],
+                    "closed": True,
+                    "fill": {"type": "solid", "rgb": "FF0000", "opacity": 1.0},
+                    "stroke": None,
+                    "opacity": 1.0,
+                    "bbox": {"x": 0.0, "y": 0.0, "width": 20.0, "height": 20.0},
+                }
+            },
+        },
+    )
+
+    assert results
+    effect = results[0]
+    assert effect.fallback == "bitmap"
+    metadata = effect.metadata or {}
+    assert metadata.get("renderer") == "resvg"
+    asset = metadata["fallback_assets"][0]
+    assert asset.get("flatten_for_powerpoint") is True
+    image = Image.open(BytesIO(asset["data"])).convert("RGBA")
+    assert image.getchannel("A").getextrema()[1] > 0
 
 
 def test_resvg_promotes_specular_lighting_chain() -> None:

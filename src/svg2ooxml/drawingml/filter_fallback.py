@@ -171,6 +171,7 @@ def render_shape_filter_fallback(
         }
         for source in (
             candidate.metadata,
+            asset,
             (
                 asset.get("metadata")
                 if isinstance(asset.get("metadata"), Mapping)
@@ -182,6 +183,18 @@ def render_shape_filter_fallback(
             blip_color_transforms = source.get("blip_color_transforms")
             if isinstance(blip_color_transforms, list) and blip_color_transforms:
                 image_metadata["blip_color_transforms"] = list(blip_color_transforms)
+                break
+        for source in (
+            candidate.metadata,
+            asset,
+            (
+                asset.get("metadata")
+                if isinstance(asset.get("metadata"), Mapping)
+                else None
+            ),
+        ):
+            if isinstance(source, Mapping) and bool(source.get("flatten_for_powerpoint")):
+                image_metadata["flatten_for_powerpoint"] = True
                 break
         if candidate.asset_type == "emf":
             image_metadata["emf_asset"] = {
