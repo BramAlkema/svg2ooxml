@@ -16,6 +16,7 @@ from svg2ooxml.common.svg_refs import (
 )
 from svg2ooxml.core.parser.switch_evaluator import SwitchEvaluator
 from svg2ooxml.core.styling import style_runtime, use_expander
+from svg2ooxml.core.styling.style_helpers import parse_style_attr
 from svg2ooxml.core.traversal.clipping_hooks import ClippingHooksMixin
 from svg2ooxml.core.traversal.constants import DEFAULT_TOLERANCE
 from svg2ooxml.core.traversal.coordinate_space import CoordinateSpace
@@ -23,6 +24,26 @@ from svg2ooxml.core.traversal.runtime import local_name
 from svg2ooxml.core.traversal.shape_creation_hooks import ShapeCreationMixin
 from svg2ooxml.core.traversal.styling_hooks import StylingHooksMixin
 from svg2ooxml.ir.scene import Group
+
+
+def _matrix_payload(matrix) -> dict[str, float]:
+    return {
+        "a": float(getattr(matrix, "a", 1.0)),
+        "b": float(getattr(matrix, "b", 0.0)),
+        "c": float(getattr(matrix, "c", 0.0)),
+        "d": float(getattr(matrix, "d", 1.0)),
+        "e": float(getattr(matrix, "e", 0.0)),
+        "f": float(getattr(matrix, "f", 0.0)),
+    }
+
+
+def _element_has_filter(element: etree._Element) -> bool:
+    if element.get("filter"):
+        return True
+    style = element.get("style")
+    if not isinstance(style, str) or "filter" not in style:
+        return False
+    return "filter" in parse_style_attr(style)
 
 
 class TraversalHooksMixin(ShapeCreationMixin, StylingHooksMixin, ClippingHooksMixin):
@@ -45,9 +66,9 @@ class TraversalHooksMixin(ShapeCreationMixin, StylingHooksMixin, ClippingHooksMi
     def convert_group(
         self, element: etree._Element, children: list, matrix
     ) -> Group | None:
-        if not children:
+        if not children and not _element_has_filter(element):
             return None
-        clip_ref = self._resolve_clip_ref(element)
+        clip_ref = self._resolve_clip_ref(element, use_transform=matrix)
         mask_ref, mask_instance = self._resolve_mask_ref(element)
 
         style = style_runtime.extract_style(self, element)
@@ -149,7 +170,7 @@ class TraversalHooksMixin(ShapeCreationMixin, StylingHooksMixin, ClippingHooksMi
             return None
 
     def attach_metadata(
-        self, ir_object, element: etree._Element, navigation_spec
+        self, ir_object, element: etree._Element, navigation_spec, matrix=None
     ) -> None:
         if ir_object is None or not hasattr(ir_object, "metadata"):
             return
@@ -193,7 +214,10 @@ class TraversalHooksMixin(ShapeCreationMixin, StylingHooksMixin, ClippingHooksMi
             except Exception:  # pragma: no cover - defensive
                 metadata["navigation"] = navigation_spec
 
+        if matrix is not None:
+            metadata["_ctm"] = _matrix_payload(matrix)
         self._apply_filter_metadata(ir_object, element, metadata)
+        metadata.pop("_ctm", None)
 
     # ------------------------------------------------------------------ #
     # SVG switch evaluation                                             #

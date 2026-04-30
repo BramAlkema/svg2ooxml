@@ -10,6 +10,7 @@ from lxml import etree
 
 from svg2ooxml.common.conversions.opacity import parse_opacity
 from svg2ooxml.core.styling.style_extractor import StyleResult
+from svg2ooxml.core.styling.style_helpers import parse_style_attr
 from svg2ooxml.ir.paint import Stroke, StrokeCap, StrokeJoin
 
 
@@ -156,6 +157,9 @@ class ResvgStyleSupportMixin:
             metadata=metadata,
             context=self._css_context,
         )
+        fill_rule = _fill_rule_from_element(element, paint_style)
+        if fill_rule is not None:
+            metadata["fill_rule"] = fill_rule
         return StyleResult(
             fill=fill,
             stroke=stroke,
@@ -237,3 +241,23 @@ class ResvgStyleSupportMixin:
 
 
 __all__ = ["ResvgStyleSupportMixin"]
+
+
+def _fill_rule_from_element(
+    element: etree._Element,
+    paint_style: Mapping[str, Any],
+) -> str | None:
+    candidates = (
+        paint_style.get("fill_rule"),
+        element.get("fill-rule"),
+        parse_style_attr(element.get("style")).get("fill-rule"),
+    )
+    for candidate in candidates:
+        if not isinstance(candidate, str):
+            continue
+        token = candidate.strip().lower()
+        if token in {"evenodd", "even-odd"}:
+            return "evenodd"
+        if token == "nonzero":
+            return "nonzero"
+    return None

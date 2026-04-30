@@ -31,7 +31,7 @@ class ShapeResvgRoutingMixin:
                 if use_target is not None
                 else ""
             )
-            if use_target_tag == "image":
+            if use_target_tag in {"image", "symbol"}:
                 expanded_result = self.expand_use(
                     element=element,
                     coord_space=coord_space,

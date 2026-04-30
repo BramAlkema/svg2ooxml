@@ -53,6 +53,23 @@ def test_parse_does_not_expand_external_entities(tmp_path) -> None:
     assert "XXE_PROBE_CONTENT" not in "".join(compat_result.svg_root.itertext())
 
 
+def test_parse_expands_safe_internal_markup_entities() -> None:
+    svg = (
+        "<!DOCTYPE svg ["
+        "<!ENTITY Box \"<rect width='5' height='6' fill='blue'/>\">"
+        "]>"
+        "<svg width='10' height='10' xmlns='http://www.w3.org/2000/svg'>&Box;</svg>"
+    )
+
+    result = SVGParser().parse(svg)
+
+    assert result.success is True
+    rect = result.svg_root.find("{http://www.w3.org/2000/svg}rect")
+    assert rect is not None
+    assert rect.get("width") == "5"
+    assert result.metadata["preparse"]["internal_entity_expansions"] == 1
+
+
 def test_parse_rejects_non_svg_root() -> None:
     parser = SVGParser()
 

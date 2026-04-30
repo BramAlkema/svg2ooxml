@@ -9,8 +9,11 @@ import pytest
 from lxml import etree
 
 from svg2ooxml.common.geometry import Matrix2D
+from svg2ooxml.common.units import UnitConverter
 from svg2ooxml.core.ir.text_converter import TextConverter
+from svg2ooxml.core.resvg.usvg_tree import TextSpan
 from svg2ooxml.core.traversal.coordinate_space import CoordinateSpace
+from svg2ooxml.ir.text import TextAnchor
 
 
 class _DummyServices:
@@ -19,11 +22,18 @@ class _DummyServices:
 
 
 class _DummyContext:
-    def __init__(self) -> None:
+    def __init__(self, *, width: float = 100.0, height: float = 100.0) -> None:
         self.services = _DummyServices()
         self.style_resolver = None
         self.logger = logging.getLogger(__name__)
         self.resvg_tree = None
+        self.unit_converter = UnitConverter()
+        self.conversion_context = self.unit_converter.create_context(
+            width=width,
+            height=height,
+            viewport_width=width,
+            viewport_height=height,
+        )
 
     def policy_options(self, _target: str):
         return None
@@ -78,6 +88,7 @@ class _MockTextNode:
     )
     styles: dict[str, str] = field(default_factory=dict)
     children: list[object] = field(default_factory=list)
+    spans: list[TextSpan] = field(default_factory=list)
     source: object | None = None
 
 
@@ -106,3 +117,29 @@ def test_resvg_text_respects_coord_space_scale_in_runs_and_metadata() -> None:
     resvg_meta = frame.metadata["resvg_text"]
     assert resvg_meta["strategy"] == "runs"
     assert 'sz="1500"' in resvg_meta["runs_xml"]
+
+
+def test_resvg_text_origin_resolves_percentage_and_em_lengths() -> None:
+    converter = TextConverter(_DummyContext(width=480.0, height=360.0))
+    coord_space = CoordinateSpace()
+    node = _MockTextNode(
+        text_content="feConvolveMatrix 'edgeMode'",
+        text_style=_MockTextStyle(font_size=13.5),
+        attributes={"x": "50%", "y": "3em"},
+        styles={"text-anchor": "middle"},
+        spans=[TextSpan(text="feConvolveMatrix 'edgeMode'", x=50.0, y=3.0)],
+    )
+
+    frame = converter.convert(
+        element=etree.fromstring(
+            '<text x="50%" y="3em" style="font-size:18px; text-anchor:middle">'
+            "feConvolveMatrix 'edgeMode'</text>"
+        ),
+        coord_space=coord_space,
+        resvg_node=node,
+    )
+
+    assert frame is not None
+    assert frame.anchor is TextAnchor.MIDDLE
+    assert frame.origin.x == pytest.approx(240.0)
+    assert frame.origin.y == pytest.approx(54.0)

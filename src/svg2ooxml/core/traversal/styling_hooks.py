@@ -89,6 +89,9 @@ class StylingHooksMixin:
                     filter_context_payload["ir_bbox"] = bbox_dict
                 if descriptor_payload is not None:
                     filter_context_payload["resvg_descriptor"] = descriptor_payload
+                ctm = metadata.get("_ctm")
+                if isinstance(ctm, dict):
+                    filter_context_payload["ctm"] = dict(ctm)
                 if tracer is not None:
                     filter_context_payload["tracer"] = tracer
 

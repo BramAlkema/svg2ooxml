@@ -161,8 +161,9 @@ def decode_data_uri(
         if part.strip()
     )
     if is_base64:
+        payload = "".join(payload.split())
         try:
-            data = base64.b64decode(payload.strip(), validate=True)
+            data = base64.b64decode(payload, validate=True)
         except (ValueError, binascii.Error):
             return None
     else:

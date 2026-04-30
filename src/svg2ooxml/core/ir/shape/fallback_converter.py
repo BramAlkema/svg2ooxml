@@ -28,7 +28,10 @@ class ShapeFallbackPathMixin:
         coord_space,
     ):
         style = styles_runtime.extract_style(self, element)
-        clip_ref = self._resolve_clip_ref(element)
+        clip_ref = self._resolve_clip_ref(
+            element,
+            use_transform=coord_space.current,
+        )
         mask_ref, mask_instance = self._resolve_mask_ref(element)
         policy = self._policy_options("geometry")
         allow_emf_fallback, allow_bitmap_fallback = self._geometry_fallback_flags(

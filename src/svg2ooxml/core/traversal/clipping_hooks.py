@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from lxml import etree
 
+from svg2ooxml.common.geometry import Matrix2D
 from svg2ooxml.core.traversal import clipping
 from svg2ooxml.core.traversal.constants import DEFAULT_TOLERANCE
 from svg2ooxml.core.traversal.geometry_utils import is_axis_aligned
@@ -13,7 +14,12 @@ from svg2ooxml.ir.scene import ClipRef, MaskInstance, MaskRef
 class ClippingHooksMixin:
     """Mixin providing clipping and masking resolution methods."""
 
-    def _resolve_clip_ref(self, element: etree._Element) -> ClipRef | None:
+    def _resolve_clip_ref(
+        self,
+        element: etree._Element,
+        *,
+        use_transform: Matrix2D | None = None,
+    ) -> ClipRef | None:
         clip_ref = clipping.resolve_clip_ref(
             element,
             clip_definitions=self._clip_definitions,
@@ -21,6 +27,7 @@ class ClippingHooksMixin:
             logger=self._logger,
             tolerance=DEFAULT_TOLERANCE,
             is_axis_aligned=is_axis_aligned,
+            use_transform=use_transform,
         )
         if clip_ref is not None:
             decision = (

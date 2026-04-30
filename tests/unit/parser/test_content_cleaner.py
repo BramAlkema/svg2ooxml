@@ -22,6 +22,23 @@ def test_prepare_svg_content_adds_declaration_and_strips_bom() -> None:
     assert report["encoding_replacements"] == 0
 
 
+def test_prepare_svg_content_expands_safe_internal_markup_entities() -> None:
+    raw = (
+        "<!DOCTYPE svg ["
+        "<!ENTITY Viewport \"<rect x='.5' y='.5' width='49' height='29'/>\">"
+        "]>"
+        "<svg width='50' height='30'>&Viewport;</svg>"
+    )
+
+    report: dict[str, object] = {}
+    cleaned = prepare_svg_content(raw, report=report)
+
+    assert "&Viewport;" not in cleaned
+    assert "<rect x='.5' y='.5' width='49' height='29'/>" in cleaned
+    assert report["internal_entities_defined"] == 1
+    assert report["internal_entity_expansions"] == 1
+
+
 def test_prepare_svg_content_rejects_non_svg() -> None:
     report: dict[str, object] = {}
     with pytest.raises(ValueError):

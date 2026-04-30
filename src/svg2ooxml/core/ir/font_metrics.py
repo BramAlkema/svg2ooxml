@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import unicodedata
 from dataclasses import dataclass
 from hashlib import sha1
 from pathlib import Path
@@ -142,12 +143,14 @@ def estimate_run_width(text: str, run: Run, font_service: Any | None) -> float:
     if font_px <= 0:
         return 0.0
 
+    visible_text = _visible_metric_text(text)
+
     metrics = resolve_font_metrics(font_service, run)
     if metrics is None:
-        return len(text) * font_px * 0.6
+        return len(visible_text) * font_px * 0.6
 
     width_units = 0.0
-    for ch in text:
+    for ch in visible_text:
         if ch == "\n":
             continue
         glyph_name = metrics.cmap.get(ord(ch))
@@ -157,6 +160,10 @@ def estimate_run_width(text: str, run: Run, font_service: Any | None) -> float:
         width_units += metrics.advances.get(glyph_name, metrics.default_advance)
 
     return (width_units / metrics.units_per_em) * font_px
+
+
+def _visible_metric_text(text: str) -> str:
+    return "".join(ch for ch in text if unicodedata.category(ch) != "Cf")
 
 
 __all__ = ["FontMetrics", "load_font_metrics", "resolve_font_metrics", "estimate_run_width"]

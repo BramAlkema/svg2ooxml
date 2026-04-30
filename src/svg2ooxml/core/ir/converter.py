@@ -236,9 +236,9 @@ class IRConverter:
         )
 
     def attach_metadata(
-        self, ir_object, element: etree._Element, navigation_spec
+        self, ir_object, element: etree._Element, navigation_spec, matrix=None
     ) -> None:
-        self._shape_pipeline.attach_metadata(ir_object, element, navigation_spec)
+        self._shape_pipeline.attach_metadata(ir_object, element, navigation_spec, matrix)
 
     def _apply_filter_metadata(
         self, ir_object, element: etree._Element, metadata: dict[str, Any]

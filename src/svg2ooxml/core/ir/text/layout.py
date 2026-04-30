@@ -85,7 +85,34 @@ def parse_number_list(value: str | None) -> list[float]:
 def resvg_text_origin(
     resvg_node: Any,
     coord_space: CoordinateSpace,
+    *,
+    context: IRConverterContext | None = None,
+    font_size_pt: float = 12.0,
 ) -> tuple[float, float]:
+    attrs = getattr(resvg_node, "attributes", {}) or {}
+    raw_x = attrs.get("x")
+    raw_y = attrs.get("y")
+    raw_dx = attrs.get("dx")
+    raw_dy = attrs.get("dy")
+    if any(value for value in (raw_x, raw_y, raw_dx, raw_dy)):
+        x_vals = parse_text_length_list(
+            raw_x, font_size_pt, axis="x", context=context
+        )
+        y_vals = parse_text_length_list(
+            raw_y, font_size_pt, axis="y", context=context
+        )
+        dx_vals = parse_text_length_list(
+            raw_dx, font_size_pt, axis="x", context=context
+        )
+        dy_vals = parse_text_length_list(
+            raw_dy, font_size_pt, axis="y", context=context
+        )
+        base_x = x_vals[0] if x_vals else 0.0
+        base_y = y_vals[0] if y_vals else 0.0
+        base_x += dx_vals[0] if dx_vals else 0.0
+        base_y += dy_vals[0] if dy_vals else 0.0
+        return coord_space.apply_point(base_x, base_y)
+
     spans = getattr(resvg_node, "spans", None)
     if spans:
         first = spans[0]
@@ -93,7 +120,6 @@ def resvg_text_origin(
         y = getattr(first, "y", 0.0)
         return coord_space.apply_point(float(x), float(y))
 
-    attrs = getattr(resvg_node, "attributes", {}) or {}
     x_vals = parse_number_list(attrs.get("x"))
     y_vals = parse_number_list(attrs.get("y"))
     dx_vals = parse_number_list(attrs.get("dx"))
@@ -107,7 +133,14 @@ def resvg_text_origin(
 
 def resvg_text_anchor(resvg_node: Any) -> TextAnchor:
     attrs = getattr(resvg_node, "attributes", {}) or {}
-    anchor_token = attrs.get("text-anchor") or attrs.get("textAnchor") or "start"
+    styles = getattr(resvg_node, "styles", {}) or {}
+    anchor_token = (
+        attrs.get("text-anchor")
+        or attrs.get("textAnchor")
+        or styles.get("text-anchor")
+        or styles.get("textAnchor")
+        or "start"
+    )
     return {
         "middle": TextAnchor.MIDDLE,
         "end": TextAnchor.END,
@@ -116,7 +149,8 @@ def resvg_text_anchor(resvg_node: Any) -> TextAnchor:
 
 def resvg_text_direction(resvg_node: Any) -> str | None:
     attrs = getattr(resvg_node, "attributes", {}) or {}
-    direction = attrs.get("direction")
+    styles = getattr(resvg_node, "styles", {}) or {}
+    direction = attrs.get("direction") or styles.get("direction")
     if isinstance(direction, str):
         token = direction.strip().lower()
         if token in ("rtl", "ltr"):

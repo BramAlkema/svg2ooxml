@@ -137,7 +137,9 @@ def process_group(traversal, element: etree._Element, active_navigation, recurse
         child_nodes.extend(recurse(child, active_navigation))
     group = traversal._converter.convert_group(element, child_nodes, traversal._coord_space.current)
     if group:
-        traversal._converter.attach_metadata(group, element, active_navigation)
+        traversal._converter.attach_metadata(
+            group, element, active_navigation, traversal._coord_space.current
+        )
         return [group]
     return []
 
@@ -165,7 +167,9 @@ def process_use(traversal, element: etree._Element, active_navigation, recurse) 
 
         ir_elements: list = []
         for item in converted_items:
-            traversal._converter.attach_metadata(item, element, active_navigation)
+            traversal._converter.attach_metadata(
+                item, element, active_navigation, traversal._coord_space.current
+            )
             ir_elements.append(item)
         return ir_elements
 
@@ -184,10 +188,14 @@ def process_use(traversal, element: etree._Element, active_navigation, recurse) 
             for child in item:
                 if child is None:
                     continue
-                traversal._converter.attach_metadata(child, element, active_navigation)
+                traversal._converter.attach_metadata(
+                    child, element, active_navigation, traversal._coord_space.current
+                )
                 ir_elements.append(child)
             continue
-        traversal._converter.attach_metadata(item, element, active_navigation)
+        traversal._converter.attach_metadata(
+            item, element, active_navigation, traversal._coord_space.current
+        )
         ir_elements.append(item)
     return ir_elements
 
@@ -216,7 +224,9 @@ def process_generic(traversal, tag: str, element: etree._Element, active_navigat
     for item in converted:
         if item is None:
             continue
-        traversal._converter.attach_metadata(item, element, active_navigation)
+        traversal._converter.attach_metadata(
+            item, element, active_navigation, traversal._coord_space.current
+        )
         ir_elements.append(item)
     return ir_elements
 

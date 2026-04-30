@@ -102,6 +102,7 @@ class ResvgConversionContextMixin:
             element,
             element_local,
             source_element,
+            global_transform,
         )
 
         return ResvgConversionContext(
@@ -220,12 +221,16 @@ class ResvgConversionContextMixin:
         element: etree._Element,
         element_local: str,
         source_element: etree._Element | None,
+        use_transform: Matrix2D | None,
     ) -> tuple[ClipRef | None, MaskRef | None, MaskInstance | None]:
-        clip_ref = self._resolve_clip_ref(element)
+        clip_ref = self._resolve_clip_ref(element, use_transform=use_transform)
         mask_ref, mask_instance = self._resolve_mask_ref(element)
         if element_local == "use" and isinstance(source_element, etree._Element):
             if clip_ref is None:
-                clip_ref = self._resolve_clip_ref(source_element)
+                clip_ref = self._resolve_clip_ref(
+                    source_element,
+                    use_transform=use_transform,
+                )
             if mask_ref is None and mask_instance is None:
                 mask_ref, mask_instance = self._resolve_mask_ref(source_element)
         return clip_ref, mask_ref, mask_instance

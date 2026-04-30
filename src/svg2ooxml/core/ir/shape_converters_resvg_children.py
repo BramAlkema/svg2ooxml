@@ -13,6 +13,7 @@ from svg2ooxml.core.styling.stroke_width_policy import (
     apply_transform_stroke_width_policy,
 )
 from svg2ooxml.core.styling.style_extractor import StyleResult
+from svg2ooxml.core.styling.style_helpers import parse_style_attr
 from svg2ooxml.ir.scene import ClipRef, Group, MaskInstance, MaskRef
 
 
@@ -69,15 +70,26 @@ class ResvgChildConversionMixin:
         use_instance = getattr(node, "use_source", None)
         if isinstance(use_instance, etree._Element):
             self._append_metadata_element_id(node_metadata, use_instance.get("id"))
+            fill_rule = _fill_rule_from_element(use_instance)
+            if fill_rule is not None:
+                node_metadata["fill_rule"] = fill_rule
+        if node_source is not None and "fill_rule" not in node_metadata:
+            fill_rule = _fill_rule_from_element(node_source)
+            if fill_rule is not None:
+                node_metadata["fill_rule"] = fill_rule
         return node_metadata
 
     def _resvg_clip_mask_for_source(
         self,
         child_element: etree._Element | None,
+        use_transform: Matrix2D | None,
     ) -> tuple[ClipRef | None, MaskRef | None, MaskInstance | None]:
         if child_element is None:
             return None, None, None
-        child_clip_ref = self._resolve_clip_ref(child_element)
+        child_clip_ref = self._resolve_clip_ref(
+            child_element,
+            use_transform=use_transform,
+        )
         child_mask_ref, child_mask_instance = self._resolve_mask_ref(child_element)
         return child_clip_ref, child_mask_ref, child_mask_instance
 
@@ -152,7 +164,7 @@ class ResvgChildConversionMixin:
                 metadata=child_metadata,
             )
             child_clip_ref, child_mask_ref, child_mask_instance = (
-                self._resvg_clip_mask_for_source(child_source_element)
+                self._resvg_clip_mask_for_source(child_source_element, child_global)
             )
             child_node_type = type(child).__name__
 
@@ -219,3 +231,18 @@ class ResvgChildConversionMixin:
 
 
 __all__ = ["ResvgChildConversionMixin"]
+
+
+def _fill_rule_from_element(element: etree._Element) -> str | None:
+    for candidate in (
+        element.get("fill-rule"),
+        parse_style_attr(element.get("style")).get("fill-rule"),
+    ):
+        if not isinstance(candidate, str):
+            continue
+        token = candidate.strip().lower()
+        if token in {"evenodd", "even-odd"}:
+            return "evenodd"
+        if token == "nonzero":
+            return "nonzero"
+    return None

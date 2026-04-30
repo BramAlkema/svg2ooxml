@@ -337,6 +337,7 @@ class SafeSVGNormalizer:
             "class",
             "style",
             "transform",
+            "filter",
             "fill",
             "stroke",
             "opacity",

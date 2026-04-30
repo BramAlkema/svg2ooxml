@@ -60,9 +60,9 @@ def convert_rect(
     style = extract_style(converter, element)
     metadata = dict(style.metadata)
     converter._attach_policy_metadata(metadata, "geometry")
-    clip_ref = converter._resolve_clip_ref(element)
-    mask_ref, mask_instance = converter._resolve_mask_ref(element)
     matrix = coord_space.current
+    clip_ref = converter._resolve_clip_ref(element, use_transform=matrix)
+    mask_ref, mask_instance = converter._resolve_mask_ref(element)
     style = apply_transform_stroke_width_policy(
         style,
         element=element,

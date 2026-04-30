@@ -93,7 +93,10 @@ class ShapeImageMixin:
             coord_space.apply_point(px, py) for (px, py) in rect_points
         ]
         bbox = _compute_bbox(transformed_points)
-        clip_ref = self._resolve_clip_ref(element)
+        clip_ref = self._resolve_clip_ref(
+            element,
+            use_transform=coord_space.current,
+        )
         mask_ref, mask_instance = self._resolve_mask_ref(element)
         metadata: dict[str, Any] = dict(style.metadata)
         if resource and resource.source:
@@ -101,6 +104,9 @@ class ShapeImageMixin:
         if href:
             metadata["href"] = href
         metadata["image_layout"] = image_layout
+        src_rect = image_layout.get("src_rect")
+        if isinstance(src_rect, tuple) and len(src_rect) == 4:
+            metadata["_src_rect"] = src_rect
         self._attach_policy_metadata(metadata, "image")
         if image_policy:
             self._attach_policy_metadata(metadata, "image", extra=image_policy)
@@ -178,7 +184,7 @@ class ShapeImageMixin:
             return viewport_rect, layout
 
         preserve = parse_preserve_aspect_ratio(element.get("preserveAspectRatio"))
-        if preserve.is_none or preserve.meet_or_slice.lower() == "slice":
+        if preserve.is_none:
             return viewport_rect, layout
 
         engine = ViewportEngine()
@@ -202,7 +208,47 @@ class ShapeImageMixin:
             "width": float(content_rect.width),
             "height": float(content_rect.height),
         }
+        if preserve.meet_or_slice.lower() == "slice":
+            src_rect = self._slice_src_rect(
+                viewport_rect=viewport_rect,
+                content_rect=content_rect,
+            )
+            if src_rect is not None:
+                layout["src_rect"] = src_rect
+            return viewport_rect, layout
         return content_rect, layout
+
+    @staticmethod
+    def _slice_src_rect(
+        *,
+        viewport_rect: Rect,
+        content_rect: Rect,
+    ) -> tuple[int, int, int, int] | None:
+        width = max(float(content_rect.width), 1e-9)
+        height = max(float(content_rect.height), 1e-9)
+        left = max(0.0, float(viewport_rect.x - content_rect.x)) / width
+        top = max(0.0, float(viewport_rect.y - content_rect.y)) / height
+        right = max(
+            0.0,
+            float(
+                (content_rect.x + content_rect.width)
+                - (viewport_rect.x + viewport_rect.width)
+            ),
+        ) / width
+        bottom = max(
+            0.0,
+            float(
+                (content_rect.y + content_rect.height)
+                - (viewport_rect.y + viewport_rect.height)
+            ),
+        ) / height
+        src_rect = tuple(
+            max(0, min(100_000, int(round(value * 100_000))))
+            for value in (left, top, right, bottom)
+        )
+        if not any(src_rect):
+            return None
+        return src_rect
 
     def _resolve_intrinsic_image_size(
         self,

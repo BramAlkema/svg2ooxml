@@ -15,14 +15,18 @@ from svg2ooxml.core.traversal.bridges.resvg_clip_mask_bounds import (
     normalize_mask_mode,
     parse_region,
 )
-from svg2ooxml.core.traversal.bridges.resvg_clip_mask_gather import gather_segments
+from svg2ooxml.core.traversal.bridges.resvg_clip_mask_gather import (
+    gather_clip_path,
+    gather_segments,
+)
 from svg2ooxml.core.traversal.bridges.resvg_clip_mask_meta import (
     child_ids,
     mask_policy_hints,
     raw_region,
     serialized_sources,
 )
-from svg2ooxml.ir.geometry import SegmentType
+from svg2ooxml.drawingml.skia_path import skia_path_bounds, skia_path_to_segments
+from svg2ooxml.ir.geometry import Rect, SegmentType
 
 
 def collect_resvg_clip_definitions(tree: Tree | None) -> dict[str, ClipDefinition]:
@@ -35,6 +39,17 @@ def collect_resvg_clip_definitions(tree: Tree | None) -> dict[str, ClipDefinitio
     for clip_id, clip_node in tree.clip_paths.items():
         segments: list[SegmentType] = []
         primitives: list[dict[str, Any]] = []
+        clip_rule = (
+            clip_node.attributes.get("clip-rule")
+            or clip_node.styles.get("clip-rule")
+            or None
+        )
+        skia_path = gather_clip_path(
+            clip_node,
+            clip_node.transform,
+            tree,
+            visited={clip_id},
+        )
         gather_segments(
             clip_node.children,
             clip_node.transform,
@@ -43,20 +58,32 @@ def collect_resvg_clip_definitions(tree: Tree | None) -> dict[str, ClipDefinitio
             primitives_out=primitives,
             visited=set(),
         )
+        skia_bbox = skia_path_bounds(skia_path)
+        if skia_path is not None:
+            op_segments = skia_path_to_segments(skia_path)
+            if op_segments:
+                segments = op_segments
         if not segments and not primitives:
+            if _clip_path_is_empty(clip_node):
+                definitions[clip_id] = ClipDefinition(
+                    clip_id=clip_id,
+                    segments=(),
+                    bounding_box=Rect(0.0, 0.0, 0.0, 0.0),
+                    clip_rule=clip_rule,
+                    transform=_matrix_to_matrix2d(clip_node.transform),
+                    primitives=(),
+                    skia_path=skia_path,
+                    is_empty=True,
+                )
             continue
-        bbox = (
-            compute_segments_bbox(segments)
-            if segments
-            else compute_primitives_bbox(primitives)
-        )
+        if skia_bbox is not None:
+            bbox = skia_bbox
+        elif segments:
+            bbox = compute_segments_bbox(segments)
+        else:
+            bbox = compute_primitives_bbox(primitives)
         if bbox is None:
             continue
-        clip_rule = (
-            clip_node.attributes.get("clip-rule")
-            or clip_node.styles.get("clip-rule")
-            or None
-        )
         definitions[clip_id] = ClipDefinition(
             clip_id=clip_id,
             segments=tuple(segments),
@@ -64,8 +91,43 @@ def collect_resvg_clip_definitions(tree: Tree | None) -> dict[str, ClipDefinitio
             clip_rule=clip_rule,
             transform=_matrix_to_matrix2d(clip_node.transform),
             primitives=tuple(primitives),
+            skia_path=skia_path,
         )
     return definitions
+
+
+def _clip_path_is_empty(clip_node: Any) -> bool:
+    children = getattr(clip_node, "children", ()) or ()
+    return not any(_has_visible_clip_candidate(child) for child in children)
+
+
+def _has_visible_clip_candidate(node: Any) -> bool:
+    if _is_non_rendered(node):
+        return False
+    tag = str(getattr(node, "tag", "")).lower()
+    if tag in {"g", "svg", "clippath"}:
+        children = getattr(node, "children", ()) or ()
+        return any(_has_visible_clip_candidate(child) for child in children)
+    if tag in {"path", "rect", "circle", "ellipse", "polygon", "polyline", "line", "use", "image"}:
+        return True
+    return True
+
+
+def _is_non_rendered(node: Any) -> bool:
+    display = _presentation_value(node, "display")
+    if display == "none":
+        return True
+    visibility = _presentation_value(node, "visibility")
+    return visibility in {"hidden", "collapse"}
+
+
+def _presentation_value(node: Any, name: str) -> str | None:
+    attrs = getattr(node, "attributes", {}) or {}
+    styles = getattr(node, "styles", {}) or {}
+    value = attrs.get(name)
+    if styles.get(name) is not None:
+        value = styles.get(name)
+    return str(value).strip().lower() if value is not None else None
 
 
 def collect_resvg_mask_info(tree: Tree | None) -> dict[str, MaskInfo]:

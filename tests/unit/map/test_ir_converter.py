@@ -465,6 +465,26 @@ def test_use_symbol_expands_children() -> None:
     assert "inst1" in element_ids
 
 
+def test_symbol_definition_outside_defs_is_not_rendered_directly() -> None:
+    parse_result = _build_parse_result(
+        "<svg width='120' height='120' xmlns='http://www.w3.org/2000/svg'>"
+        "  <symbol id='icon'>"
+        "    <rect width='100' height='100' fill='red'/>"
+        "  </symbol>"
+        "  <use id='inst1' x='5' y='7' href='#icon' fill='#010203'/>"
+        "</svg>"
+    )
+
+    scene = _convert_with_resvg(parse_result)
+
+    rectangles = _collect_rectangles(scene.elements)
+    assert len(rectangles) == 1
+    assert rectangles[0].bounds.x == pytest.approx(5.0)
+    assert rectangles[0].bounds.y == pytest.approx(7.0)
+    assert rectangles[0].fill is not None
+    assert rectangles[0].fill.rgb == "FF0000"
+
+
 def test_foreign_object_with_nested_svg_produces_group() -> None:
     parse_result = _build_parse_result(
         "<svg width='200' height='200' xmlns='http://www.w3.org/2000/svg'>"
@@ -666,6 +686,33 @@ def test_use_image_expands_when_resvg_use_node_is_unsupported() -> None:
     assert "imageUse" in element_ids
 
 
+def test_use_symbol_with_image_expands_when_resvg_use_node_is_unsupported() -> None:
+    parse_result = _build_parse_result(
+        "<svg width='160' height='160' xmlns='http://www.w3.org/2000/svg'>"
+        "  <symbol id='imageSymbol' viewBox='0 0 100 100' preserveAspectRatio='none'>"
+        "    <image id='symbolImage' href='https://example.com/foo.png' width='100' height='100'/>"
+        "  </symbol>"
+        "  <use id='imageUse' href='#imageSymbol' x='20' y='30' width='40' height='50'/>"
+        "</svg>"
+    )
+
+    scene = _convert_with_resvg(parse_result)
+
+    assert len(scene.elements) == 1
+    group = scene.elements[0]
+    assert isinstance(group, Group)
+    images = [child for child in group.children if isinstance(child, Image)]
+    assert len(images) == 1
+    image = images[0]
+    assert image.href == "https://example.com/foo.png"
+    assert image.origin.x == pytest.approx(20.0)
+    assert image.origin.y == pytest.approx(30.0)
+    assert image.size.width == pytest.approx(40.0)
+    assert image.size.height == pytest.approx(50.0)
+    element_ids = set(group.metadata.get("element_ids", []))
+    assert {"imageSymbol", "imageUse"} <= element_ids
+
+
 def test_image_geometry_resolves_svg_length_units() -> None:
     parse_result = _build_parse_result(
         "<svg width='200' height='100' xmlns='http://www.w3.org/2000/svg'>"
@@ -682,6 +729,28 @@ def test_image_geometry_resolves_svg_length_units() -> None:
     assert image.origin.y == pytest.approx(37.7952755906)
     assert image.size.width == pytest.approx(75.5905511811)
     assert image.size.height == pytest.approx(50.0)
+
+
+def test_image_slice_preserve_aspect_ratio_emits_src_rect_crop() -> None:
+    png_1x1 = (
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/"
+        "x8AAwMCAO+/p9sAAAAASUVORK5CYII="
+    )
+    parse_result = _build_parse_result(
+        "<svg width='100' height='100' xmlns='http://www.w3.org/2000/svg'>"
+        f"<image href='data:image/png;base64,{png_1x1}' width='50' height='30' "
+        "preserveAspectRatio='xMidYMid slice'/>"
+        "</svg>"
+    )
+
+    scene = convert_parser_output(parse_result)
+
+    assert len(scene.elements) == 1
+    image = scene.elements[0]
+    assert isinstance(image, Image)
+    assert image.size.width == pytest.approx(50.0)
+    assert image.size.height == pytest.approx(30.0)
+    assert image.metadata["_src_rect"] == (0, 20000, 0, 20000)
 
 
 def test_image_source_path_fallback_respects_registered_asset_root(tmp_path) -> None:
@@ -1194,7 +1263,7 @@ def test_dense_rotation_auto_uses_vector_outline_for_simple_text() -> None:
     )
 
 
-def test_dense_rotation_auto_uses_svg_for_nested_tspan_rotation() -> None:
+def test_dense_rotation_auto_uses_vector_outline_for_nested_tspan_rotation() -> None:
     svg = (
         "<svg width='200' height='200' xmlns='http://www.w3.org/2000/svg'>"
         "<text font-size='20' x='10' y='80' rotate='0 10 20'>"
@@ -1203,6 +1272,42 @@ def test_dense_rotation_auto_uses_svg_for_nested_tspan_rotation() -> None:
         "</svg>"
     )
     parse_result = _build_parse_result(svg)
+
+    scene = _convert_with_resvg(parse_result)
+
+    frames = [
+        element
+        for root in scene.elements
+        for element in _iter_scene_elements(root)
+        if isinstance(element, TextFrame)
+    ]
+    images = [
+        element
+        for root in scene.elements
+        for element in _iter_scene_elements(root)
+        if isinstance(element, Image)
+    ]
+    assert images == []
+    assert len(frames) == 1
+    assert frames[0].text_content == "ABC"
+    assert isinstance(frames[0].metadata.get("per_char"), dict)
+
+
+def test_dense_tspan_rotation_falls_back_to_svg_without_outline_backend(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    svg = (
+        "<svg width='200' height='200' xmlns='http://www.w3.org/2000/svg'>"
+        "<text font-size='20' x='10' y='80' rotate='0 10 20'>"
+        "A<tspan rotate='30 40'>BC</tspan>"
+        "</text>"
+        "</svg>"
+    )
+    parse_result = _build_parse_result(svg)
+    monkeypatch.setattr(
+        "svg2ooxml.core.ir.text_converter._vector_outline_available",
+        lambda: False,
+    )
 
     scene = _convert_with_resvg(parse_result)
 
@@ -1222,12 +1327,12 @@ def test_dense_rotation_auto_uses_svg_for_nested_tspan_rotation() -> None:
     assert frames == []
     assert images[0].metadata["text_fallback"] == {
         "mode": "svg",
-        "reason": "dense_tspan_rotation",
+        "reason": "dense_tspan_rotation_skia_unavailable",
         "requested_mode": "auto",
     }
 
 
-def test_dense_tspan_rotation_falls_back_to_svg_without_outline_backend(
+def test_dense_rotation_simple_text_falls_back_to_svg_without_outline_backend(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     svg = (
@@ -1302,7 +1407,7 @@ def test_rtl_end_anchor_keeps_text_frame_inside_viewport() -> None:
     assert text.bbox.x == pytest.approx(10.0)
 
 
-def test_bidi_override_mixed_script_defaults_to_svg_text_fallback() -> None:
+def test_bidi_override_mixed_script_defaults_to_native_controls() -> None:
     svg = (
         "<svg width='240' height='120' xmlns='http://www.w3.org/2000/svg'>"
         "<text x='10' y='60' direction='rtl' unicode-bidi='bidi-override'>"
@@ -1314,27 +1419,32 @@ def test_bidi_override_mixed_script_defaults_to_svg_text_fallback() -> None:
 
     scene = _convert_with_resvg(parse_result)
 
-    images = [
-        element
-        for root in scene.elements
-        for element in _iter_scene_elements(root)
-        if isinstance(element, Image)
-    ]
     frames = [
         element
         for root in scene.elements
         for element in _iter_scene_elements(root)
         if isinstance(element, TextFrame)
     ]
-    assert len(images) == 1
-    assert frames == []
-    image = images[0]
-    assert image.format == "svg"
-    assert image.metadata["image_source"] == "bidi_override_text"
-    assert image.metadata["text_fallback"]["reason"] == "bidi_override_mixed_script"
-    assert image.metadata["policy"]["text"]["bidi_override_fallback"] == "svg"
-    assert image.data is not None
-    assert b"unicode-bidi" in image.data
+    images = [
+        element
+        for root in scene.elements
+        for element in _iter_scene_elements(root)
+        if isinstance(element, Image)
+    ]
+    assert images == []
+    assert len(frames) == 1
+    frame = frames[0]
+    assert frame.direction == "rtl"
+    assert frame.runs[0].text.startswith("\u202e")
+    assert frame.runs[0].text.endswith("\u202c")
+    assert frame.metadata["bidi_override"] == {
+        "strategy": "unicode_controls",
+        "direction": "rtl",
+    }
+    assert (
+        frame.metadata["policy"]["text"]["fallback"]["bidi_override_fallback"]
+        == "native"
+    )
 
 
 def test_bidi_override_native_override_keeps_text_frame() -> None:
@@ -1367,6 +1477,28 @@ def test_bidi_override_native_override_keeps_text_frame() -> None:
     assert images == []
     assert len(frames) == 1
     assert frames[0].direction == "rtl"
+    assert frames[0].runs[0].text.startswith("\u202e")
+
+
+def test_bidi_override_ltr_reverses_rtl_span_for_native_controls() -> None:
+    svg = (
+        "<svg width='240' height='120' xmlns='http://www.w3.org/2000/svg'>"
+        "<text x='10' y='60' direction='ltr' unicode-bidi='bidi-override'>"
+        'Text "אני יכול" is in Hebrew'
+        "</text>"
+        "</svg>"
+    )
+    parse_result = _build_parse_result(svg)
+
+    scene = _convert_with_resvg(parse_result)
+
+    frame = next(
+        element
+        for root in scene.elements
+        for element in _iter_scene_elements(root)
+        if isinstance(element, TextFrame)
+    )
+    assert frame.runs[0].text == '\u202dText "לוכי ינא" is in Hebrew\u202c'
 
 
 def test_positioned_tspans_without_rotation_emit_separate_native_text_frames() -> None:
@@ -2050,6 +2182,78 @@ def test_full_tile_rect_pattern_collapses_to_solid_fill() -> None:
     assert isinstance(rect, Rectangle)
     assert isinstance(rect.fill, SolidPaint)
     assert rect.fill.rgb == "0000FF"
+
+
+def test_rect_checkerboard_pattern_builds_transparent_tile_image() -> None:
+    svg = (
+        "<svg width='120' height='120' xmlns='http://www.w3.org/2000/svg'>"
+        "<defs>"
+        "  <pattern id='checker' x='0' y='0' width='20' height='20' "
+        "           patternUnits='userSpaceOnUse'>"
+        "    <rect x='0' y='0' width='10' height='10' fill='gray'/>"
+        "    <rect x='10' y='10' width='10' height='10' fill='gray'/>"
+        "  </pattern>"
+        "</defs>"
+        "<rect x='20' y='70' width='100' height='100' fill='url(#checker)'/>"
+        "</svg>"
+    )
+
+    parse_result = _build_parse_result(svg)
+    scene = _convert_with_resvg(parse_result)
+
+    rect = scene.elements[0]
+    assert isinstance(rect, Rectangle)
+    paint = rect.fill
+    assert isinstance(paint, PatternPaint)
+    assert paint.tile_image is not None
+    assert paint.tile_width_px == 20
+    assert paint.tile_height_px == 20
+
+    from io import BytesIO
+
+    from PIL import Image as PILImage
+
+    tile = PILImage.open(BytesIO(paint.tile_image)).convert("RGBA")
+    assert tile.getpixel((5, 5))[3] == 0
+    assert tile.getpixel((15, 5)) == (128, 128, 128, 255)
+    assert tile.getpixel((5, 15)) == (128, 128, 128, 255)
+
+
+def test_empty_pattern_uses_paint_server_fallback_color() -> None:
+    svg = (
+        "<svg width='120' height='120' xmlns='http://www.w3.org/2000/svg'>"
+        "<defs>"
+        "  <pattern id='empty' width='0' height='0' patternUnits='userSpaceOnUse'>"
+        "    <rect width='100' height='100' fill='red'/>"
+        "  </pattern>"
+        "</defs>"
+        "<rect x='10' y='10' width='100' height='100' fill='url(#empty) lime'/>"
+        "</svg>"
+    )
+
+    parse_result = _build_parse_result(svg)
+    scene = _convert_with_resvg(parse_result)
+
+    rect = scene.elements[0]
+    assert isinstance(rect, Rectangle)
+    assert isinstance(rect.fill, SolidPaint)
+    assert rect.fill.rgb == "00FF00"
+
+
+def test_missing_paint_server_uses_fallback_color() -> None:
+    svg = (
+        "<svg width='120' height='120' xmlns='http://www.w3.org/2000/svg'>"
+        "<rect x='10' y='10' width='100' height='100' fill='url(#missing) lime'/>"
+        "</svg>"
+    )
+
+    parse_result = _build_parse_result(svg)
+    scene = _convert_with_resvg(parse_result)
+
+    rect = scene.elements[0]
+    assert isinstance(rect, Rectangle)
+    assert isinstance(rect.fill, SolidPaint)
+    assert rect.fill.rgb == "00FF00"
 
 
 def test_transformed_wrapper_pattern_does_not_collapse_to_solid_fill() -> None:

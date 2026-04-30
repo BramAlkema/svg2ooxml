@@ -90,7 +90,7 @@ class ElementTraversal:
             if tag == "g":
                 return traversal_runtime.process_group(self, element, active_navigation, self._extract_recursive)
 
-            if tag == "defs":
+            if tag in {"defs", "symbol"}:
                 return ir_elements
 
             if tag == "use":

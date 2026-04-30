@@ -15,6 +15,7 @@ from svg2ooxml.ir.paint import (
     SolidPaint,
     Stroke,
 )
+from svg2ooxml.ir.scene import Group as IRGroup
 from svg2ooxml.ir.scene import Path as IRShapePath
 from svg2ooxml.ir.shapes import (
     Circle as IRShapeCircle,
@@ -43,8 +44,10 @@ class ShapeCreationMixin:
         if isinstance(ir_object, list):
             if not ir_object:
                 return None
-            return self._shape_descriptor(ir_object[0])
+            return self._group_descriptor(IRGroup(children=ir_object))
 
+        if isinstance(ir_object, IRGroup):
+            return self._group_descriptor(ir_object)
         if isinstance(ir_object, IRShapePath):
             return self._path_descriptor(ir_object)
         if isinstance(ir_object, IRShapeRectangle):
@@ -60,6 +63,22 @@ class ShapeCreationMixin:
         if isinstance(ir_object, IRShapeLine):
             return self._line_descriptor(ir_object)
         return None
+
+    def _group_descriptor(self, group: IRGroup) -> dict[str, Any] | None:
+        children = [
+            descriptor
+            for child in group.children
+            if (descriptor := self._shape_descriptor(child)) is not None
+        ]
+        if not children:
+            return None
+        return {
+            "shape_type": "Group",
+            "children": children,
+            "opacity": getattr(group, "opacity", 1.0),
+            "transform": self._serialize_matrix(getattr(group, "transform", None)),
+            "bbox": self._serialize_rect(group.bbox),
+        }
 
     def _path_descriptor(self, path: IRShapePath) -> dict[str, Any]:
         return {
@@ -234,6 +253,8 @@ class ShapeCreationMixin:
                 "end": tuple(paint.end),
                 "transform": self._serialize_matrix(paint.transform),
                 "gradient_id": paint.gradient_id,
+                "gradient_units": paint.gradient_units,
+                "spread_method": paint.spread_method,
             }
         if isinstance(paint, RadialGradientPaint):
             result = {
@@ -245,8 +266,11 @@ class ShapeCreationMixin:
                 "center": tuple(paint.center),
                 "radius": float(paint.radius),
                 "focal_point": tuple(paint.focal_point) if paint.focal_point else None,
+                "focal_radius": paint.focal_radius,
                 "transform": self._serialize_matrix(paint.transform),
                 "gradient_id": paint.gradient_id,
+                "gradient_units": paint.gradient_units,
+                "spread_method": paint.spread_method,
             }
 
             # Phase 1: Include transform telemetry fields if present

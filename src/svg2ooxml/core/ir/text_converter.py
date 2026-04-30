@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import unicodedata
 from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any
 
@@ -10,6 +11,10 @@ from lxml import etree
 
 from svg2ooxml.common.geometry.algorithms import CurveTextPositioner, PathSamplingMethod
 from svg2ooxml.core.ir.smart_font_bridge import SmartFontBridge
+from svg2ooxml.core.ir.text.dense_rotation_fallback import (
+    bidi_override_fallback_mode,
+    has_mixed_ltr_rtl_text,
+)
 from svg2ooxml.core.ir.text.font_metrics import (
     FONT_FALLBACKS,
     apply_text_decision,
@@ -41,6 +46,9 @@ from svg2ooxml.core.ir.text.positioning_metadata import (
 )
 from svg2ooxml.core.ir.text_fallbacks import TextFallbackMixin
 from svg2ooxml.core.ir.text_fallbacks import has_rotate_tree as _has_rotate_tree
+from svg2ooxml.core.ir.text_fallbacks import (
+    uses_bidi_override as _uses_bidi_override,
+)
 from svg2ooxml.core.ir.text_fallbacks import (
     vector_outline_available as _fallback_vector_outline_available,
 )
@@ -119,6 +127,7 @@ class TextConverter(TextFallbackMixin, PositionedTextMixin, TextRunsMixin):
         text_content = getattr(resvg_node, "text_content", None) or ""
         if not text_content.strip():
             return None
+        source_text_content = text_content
 
         run = run_from_resvg_node(resvg_node, text_content)
         text_scale = text_scale_for_coord_space(coord_space)
@@ -133,6 +142,8 @@ class TextConverter(TextFallbackMixin, PositionedTextMixin, TextRunsMixin):
         if lang and not run.language:
             run = _replace(run, language=lang.strip())
 
+        source_font_size_pt = run.font_size_pt
+
         # font-variant: small-caps -> cap="small" on rPr
         font_variant = element.get("font-variant", "").strip().lower()
         if not font_variant:
@@ -146,9 +157,33 @@ class TextConverter(TextFallbackMixin, PositionedTextMixin, TextRunsMixin):
         run = scale_run_metrics(run, text_scale)
         updated, run_policy = self.apply_policy(run)
         runs = [updated]
-        origin_x, origin_y = resvg_text_origin(resvg_node, coord_space)
+        origin_x, origin_y = resvg_text_origin(
+            resvg_node,
+            coord_space,
+            context=self._context,
+            font_size_pt=source_font_size_pt,
+        )
         anchor = resvg_text_anchor(resvg_node)
         direction = resvg_text_direction(resvg_node)
+        decision = self._resolve_policy_decision()
+        bidi_override_metadata = None
+        if _should_apply_native_bidi_override(
+            element=element,
+            style_attr=style_attr,
+            text_content=source_text_content,
+            direction=direction,
+            decision=decision,
+        ):
+            bidi_direction = _bidi_override_direction(direction)
+            updated = _replace(
+                updated,
+                text=_wrap_bidi_override_controls(updated.text, bidi_direction),
+            )
+            runs = [updated]
+            bidi_override_metadata = {
+                "strategy": "unicode_controls",
+                "direction": bidi_direction,
+            }
         positioned_layout = collect_per_character_text_layout(
             element,
             run=updated,
@@ -209,6 +244,8 @@ class TextConverter(TextFallbackMixin, PositionedTextMixin, TextRunsMixin):
         self._context.attach_policy_metadata(metadata, "text")
         if font_variant == "small-caps":
             metadata["font_variant"] = "small-caps"
+        if bidi_override_metadata is not None:
+            metadata["bidi_override"] = bidi_override_metadata
 
         # writing-mode -> vert attribute on bodyPr
         writing_mode = element.get("writing-mode", "").strip().lower()
@@ -217,10 +254,9 @@ class TextConverter(TextFallbackMixin, PositionedTextMixin, TextRunsMixin):
                 wm = re.search(r"writing-mode\s*:\s*([^;]+)", style_attr)
                 if wm:
                     writing_mode = wm.group(1).strip().lower()
-        decision = self._resolve_policy_decision()
         bidi_image = self._convert_bidi_override_text_fallback(
             element=element,
-            text_content=text_content,
+            text_content=source_text_content,
             metadata=metadata,
             style_attr=style_attr,
             decision=decision,
@@ -492,6 +528,59 @@ def _parse_float(value: str | None, *, default: float | None = None) -> float | 
 
 def _vector_outline_available() -> bool:
     return _fallback_vector_outline_available()
+
+
+def _should_apply_native_bidi_override(
+    *,
+    element: etree._Element,
+    style_attr: str,
+    text_content: str,
+    direction: str | None,
+    decision: TextPolicyDecision | None,
+) -> bool:
+    del direction
+    if not _uses_bidi_override(element, style_attr):
+        return False
+    if not has_mixed_ltr_rtl_text(text_content):
+        return False
+    mode = bidi_override_fallback_mode(decision)
+    return mode in {"native", "auto", "unicode_controls", "visual_native"}
+
+
+def _bidi_override_direction(direction: str | None) -> str:
+    token = (direction or "").strip().lower()
+    return "rtl" if token == "rtl" else "ltr"
+
+
+def _wrap_bidi_override_controls(text: str, direction: str) -> str:
+    if direction != "rtl":
+        text = _reverse_rtl_spans_for_ltr_override(text)
+    control = "\u202e" if direction == "rtl" else "\u202d"
+    return f"{control}{text}\u202c"
+
+
+def _reverse_rtl_spans_for_ltr_override(text: str) -> str:
+    chars = list(text)
+    span_start: int | None = None
+    last_rtl: int | None = None
+
+    def flush() -> None:
+        nonlocal span_start, last_rtl
+        if span_start is not None and last_rtl is not None and last_rtl > span_start:
+            chars[span_start : last_rtl + 1] = reversed(chars[span_start : last_rtl + 1])
+        span_start = None
+        last_rtl = None
+
+    for index, char in enumerate(chars):
+        bidi = unicodedata.bidirectional(char)
+        if bidi in {"R", "AL", "AN"}:
+            if span_start is None:
+                span_start = index
+            last_rtl = index
+        elif bidi == "L" and span_start is not None:
+            flush()
+    flush()
+    return "".join(chars)
 
 
 __all__ = ["TextConverter", "FONT_FALLBACKS"]

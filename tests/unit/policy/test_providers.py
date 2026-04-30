@@ -34,7 +34,7 @@ def test_text_policy_respects_quality() -> None:
 
     assert balanced["fallback"]["missing_font_behavior"] == "outline"
     assert balanced["fallback"]["dense_rotation_fallback"] == "auto"
-    assert balanced["fallback"]["bidi_override_fallback"] == "svg"
+    assert balanced["fallback"]["bidi_override_fallback"] == "native"
     assert balanced["allow_effects"] is True
     assert balanced["decision"].max_runs == 2048
 
