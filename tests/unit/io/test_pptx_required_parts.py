@@ -1,4 +1,4 @@
-"""Tests for required PPTX parts (presProps, viewProps, tableStyles)."""
+"""Tests for required PPTX parts (OPC root rels, presProps, viewProps, tableStyles)."""
 
 import tempfile
 import zipfile
@@ -6,6 +6,7 @@ from pathlib import Path
 
 from lxml import etree as ET
 
+import svg2ooxml
 from svg2ooxml.core.pptx_exporter import SvgPageSource, SvgToPptxExporter
 from svg2ooxml.drawingml.generator import px_to_emu
 from svg2ooxml.drawingml.writer import DEFAULT_SLIDE_SIZE
@@ -30,6 +31,8 @@ def test_pptx_includes_required_parts():
         # Verify files exist in PPTX
         with zipfile.ZipFile(output_path, "r") as z:
             files = set(z.namelist())
+
+            assert "_rels/.rels" in files, "Missing OPC package root relationships"
 
             # Check required XML files exist
             assert "ppt/presProps.xml" in files, "Missing presProps.xml"
@@ -225,8 +228,9 @@ def test_powerpoint_validation_compliance():
         with zipfile.ZipFile(output_path, "r") as z:
             files = set(z.namelist())
 
-            # Required files per ECMA-376
+            # Required files per ECMA-376 / OPC
             required_files = [
+                "_rels/.rels",
                 "ppt/presProps.xml",
                 "ppt/viewProps.xml",
                 "ppt/tableStyles.xml",
@@ -300,3 +304,10 @@ def test_hyperlink_format_does_not_use_invalid_ppaction():
     finally:
         if output_path.exists():
             output_path.unlink()
+
+
+def test_clean_slate_package_includes_opc_root_rels() -> None:
+    """setuptools `**/*` package-data omits dotfiles; wheel must ship `_rels/.rels`."""
+    pkg_root = Path(svg2ooxml.__file__).resolve().parent
+    rels = pkg_root / "assets" / "pptx_scaffold" / "clean_slate" / "_rels" / ".rels"
+    assert rels.is_file(), f"missing OPC root relationships scaffold: {rels}"

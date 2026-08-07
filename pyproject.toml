@@ -119,7 +119,12 @@ markers = [
 ]
 
 [tool.setuptools.package-data]
-svg2ooxml = ["assets/pptx_scaffold/**/*"]
+# setuptools globs do not match dot-prefixed filenames, so `**/*` omits
+# `clean_slate/_rels/.rels` (required OPC package root relationships).
+svg2ooxml = [
+  "assets/pptx_scaffold/**/*",
+  "assets/pptx_scaffold/clean_slate/_rels/.rels",
+]
 
 [tool.setuptools.packages.find]
 where = [ "src", ".",]
