@@ -71,6 +71,26 @@ not the fit space, is the dominant term. The source comment at
 `pptx_export.py:361` (`path="shape"` matched the roundtrip better than
 `"circle"`) suggests the authors already suspected gradient geometry.
 
+**One of the three is already calibrated, and by us.**
+[`blur-fidelity-results.md`](../../reference/research/blur-fidelity-results.md)
+measured `<a:blur>` on macOS desktop PowerPoint and found it is a **true
+Gaussian** — an edge-response fit to a pure erf with RMS ≈ 0.001 across
+rad = 5/15/30/60 px, which no box or stacked-box kernel can produce — with
+calibration `σ ≈ rad / 3.25`. SplatThis's blur style carries
+`PPTX_BLUR_RAD_PER_SIGMA = 3.25` (`export_common.py:27`), the same constant.
+
+That is the contrast worth holding onto: the blur path's constant is an
+empirical measurement with a written method and a stated caveat (one platform;
+Windows and Web unverified). The `0.40` and `0.25` alpha scalars have no such
+backing recorded anywhere. Same file, three constants, two very different
+epistemic statuses — and it is the *uncalibrated* ones a handoff would inherit.
+
+[`blur-fidelity-and-scaling.md`](../../reference/research/blur-fidelity-and-scaling.md)
+frames the open remainder and notes directly that "the splat-rendering work and
+svg2ooxml's filter exporter both depend on this" — cost scaling with shape count
+and `rad` is still unmeasured, which is exactly the budget question a bounded
+splat region raises.
+
 **Discriminating test** — cheap, and the harness already exists: fit one corpus
 image twice, `compositing_space="linear"` vs `"srgb"`, both with the scalar
 forced to `1.0`, and grade each against the target. If the sRGB fit lands
