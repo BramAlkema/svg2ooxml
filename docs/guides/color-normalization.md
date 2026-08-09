@@ -11,6 +11,11 @@ The `ColorSpaceService` now supports multiple levels of raster normalization. Po
 
 Normalisation metadata is attached under `policy.image.colorspace_metadata`, including source/output formats, palette statistics, and (when enabled) perceptual transform details. For a command-line view of the same diagnostics, see [`color-advanced.md`](./color-advanced.md) and the `tools/color_palette_report.py` helper.
 
+These policies govern **raster** payloads only. Vector colour emission — what
+reaches `<a:srgbClr>` in the slide XML — is a separate, stricter contract with
+no normalisation step: see
+[`../reference/research/drawingml-srgb-emission-contract.md`](../reference/research/drawingml-srgb-emission-contract.md).
+
 ## Installing optional dependencies
 
 ```

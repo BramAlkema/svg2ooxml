@@ -119,6 +119,114 @@ def test_convert_pages_creates_multi_slide_package(tmp_path, parallel: bool) -> 
         assert "00FF00" in slide2_xml
 
 
+def _srgb_to_linear_byte(value: int) -> int:
+    """Linearise one display-sRGB byte — the transform that must NOT be applied."""
+
+    c = value / 255.0
+    linear = c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+    return round(linear * 255)
+
+
+def _linear_to_srgb_byte(value: int) -> int:
+    """Encode one linear-light byte to display sRGB — likewise must NOT be applied."""
+
+    c = value / 255.0
+    encoded = c * 12.92 if c <= 0.0031308 else 1.055 * (c ** (1 / 2.4)) - 0.055
+    return round(encoded * 255)
+
+
+def _gamma_shifted_variants(hex_value: str) -> set[str]:
+    """Both directions of a stray gamma transform applied to ``hex_value``."""
+
+    channels = [int(hex_value[i : i + 2], 16) for i in (0, 2, 4)]
+    return {
+        "".join(f"{transform(channel):02X}" for channel in channels)
+        for transform in (_srgb_to_linear_byte, _linear_to_srgb_byte)
+    }
+
+
+def test_srgb_clr_carries_display_srgb_bytes_verbatim(tmp_path) -> None:
+    """``a:srgbClr`` receives the author's display-sRGB bytes with no gamma transform.
+
+    PowerPoint interpolates gradient stops in linear light and alpha-composites in
+    display sRGB. Neither is ours to compensate for: pre-linearising stop colours to
+    move a gradient's midpoint would corrupt the endpoints, which are the only colours
+    the author actually specified. Gradient stops carry the weight of this test because
+    that is where the compensating transform is tempting to add.
+
+    See docs/reference/research/drawingml-srgb-emission-contract.md
+    """
+
+    # Mid-tones only — #000000/#FFFFFF are fixpoints of both transfer functions and
+    # would let a stray gamma transform through unnoticed.
+    stop_start, stop_mid, stop_end = "808080", "336699", "CC3300"
+    solid = "6699CC"
+
+    exporter = SvgToPptxExporter()
+    svg_markup = (
+        "<svg xmlns='http://www.w3.org/2000/svg' width='100' height='100'>"
+        "<defs><linearGradient id='grad' x1='0' y1='0' x2='1' y2='0'>"
+        f"<stop offset='0' stop-color='#{stop_start}'/>"
+        f"<stop offset='0.5' stop-color='#{stop_mid}' stop-opacity='0.5'/>"
+        f"<stop offset='1' stop-color='#{stop_end}'/>"
+        "</linearGradient></defs>"
+        "<rect width='100' height='60' fill='url(#grad)'/>"
+        f"<rect y='70' width='100' height='30' fill='#{solid}'"
+        f" stroke='#{stop_end}' stroke-width='2'/>"
+        "</svg>"
+    )
+
+    output_path = tmp_path / "srgb-fidelity.pptx"
+    exporter.convert_string(svg_markup, output_path)
+
+    with zipfile.ZipFile(output_path, "r") as archive:
+        slide_xml = archive.read("ppt/slides/slide1.xml").decode("utf-8")
+
+    root = ET.fromstring(slide_xml.encode())
+    ns = {"a": "http://schemas.openxmlformats.org/drawingml/2006/main"}
+
+    stops = root.findall(".//a:gradFill/a:gsLst/a:gs", ns)
+    assert stops, "Expected the linear gradient to emit DrawingML gradient stops"
+
+    stop_colors = [
+        color.get("val")
+        for stop in stops
+        if (color := stop.find("a:srgbClr", ns)) is not None
+    ]
+    for expected in (stop_start, stop_mid, stop_end):
+        assert expected in stop_colors, (
+            f"Gradient stop #{expected} must reach a:srgbClr unchanged; "
+            f"got {stop_colors}"
+        )
+
+    # Alpha rides the same contract: display-sRGB compositing means the opacity is
+    # scaled to PPT units, never curved.
+    alphas = [
+        alpha.get("val")
+        for stop in stops
+        if (alpha := stop.find("a:srgbClr/a:alpha", ns)) is not None
+    ]
+    assert "50000" in alphas, f"stop-opacity 0.5 must emit alpha 50000; got {alphas}"
+
+    solid_fills = {
+        color.get("val") for color in root.findall(".//a:solidFill/a:srgbClr", ns)
+    }
+    assert solid in solid_fills, f"Solid fill #{solid} must survive verbatim"
+    assert stop_end in {
+        color.get("val") for color in root.findall(".//a:ln//a:srgbClr", ns)
+    }, f"Stroke colour #{stop_end} must survive verbatim"
+
+    # Belt and braces: no gamma-shifted variant of any probe colour appears anywhere
+    # in the slide part, in either direction.
+    upper_xml = slide_xml.upper()
+    for source in (stop_start, stop_mid, stop_end, solid):
+        for shifted in _gamma_shifted_variants(source):
+            assert shifted not in upper_xml, (
+                f"Found gamma-shifted colour {shifted} in slide XML — #{source} was "
+                "transformed on the way to a:srgbClr"
+            )
+
+
 def test_parallel_convert_pages_rejects_custom_render_components(tmp_path) -> None:
     exporter = SvgToPptxExporter(parser=object())  # type: ignore[arg-type]
     pages = [
