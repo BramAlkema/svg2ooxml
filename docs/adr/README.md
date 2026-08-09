@@ -81,6 +81,58 @@ Dual native-effect architecture: `effectLst` for simple DrawingML effects,
 `effectDag` for compositing/mask graphs needing alpha operators. Context-aware
 color-transform emission. Policy-gated rollout.
 
+### Consolidate Raster Backends on the Scene Renderer (ADR-039, proposed)
+
+**Context.** The repo carries two independent Skia rasterizers with duplicated
+shader helpers — `prepare_gradient_stops`, `linear_gradient_points`,
+`to_skia_matrix`, `make_*_gradient_shader` appear in both, ~300 lines each:
+
+- `render/` — the filter pipeline. A **scene renderer**: it walks the usvg tree
+  and concats each node's transform onto the canvas
+  (`render/pipeline.py:147-150`), consuming resvg paint types.
+- `drawingml/rasterizer*` — the geometry fallback for
+  `FALLBACK_RASTERIZE`/`FALLBACK_BITMAP`. Draws **one element standalone** with
+  only `canvas.scale()` + `canvas.translate(-bounds.x, -bounds.y)`
+  (`rasterizer.py:60-61`), consuming IR paint types.
+
+They are not equivalent, and the difference is a live defect. IR elements reach
+the fallback with geometry already baked into final space but
+`userSpaceOnUse` gradient coordinates still verbatim from the SVG — the paint
+for one gallardo region holds `start=(-337.70929, 476.72092)`, byte-identical
+to the source `x1`/`y1`, while its geometry sits at `x:[-8,669]`. The scene
+renderer never sees this because its canvas CTM reconciles the two; its own
+source notes as much (`pipeline.py:185`: "node.transform is ALREADY applied to
+the canvas"). The standalone fallback has no such matrix, so every gradient it
+draws is evaluated in the wrong space — filling the shape from whichever end of
+the ramp the stale coordinates land on. On `gallardo.svg` that is 11 blank
+rasters and 4 flat ones out of 15. See
+[`../notes/issues/blank-gradient-rasters.md`](../notes/issues/blank-gradient-rasters.md).
+
+**Decision (proposed).** Route the geometry raster fallback through the `render/`
+scene path and delete `drawingml/rasterizer_paint.py`'s shader duplication.
+
+**Why deletion over repair.** Repairing in place requires two things: locating
+the stage that accumulates ancestor group transforms (`convert_path` passes only
+`path_node.transform`, which is identity for these nodes, so accumulation
+happens elsewhere and is not yet found), then threading it into the fallback —
+*and* keeping two shader implementations in agreement indefinitely. They agree
+today only by parallel maintenance. Consolidation removes the bug and the
+duplication in one move and does not depend on answering the open question.
+
+**Cost.** The fallback renders a single element against its own bounds; the
+scene path renders a tree with a viewport. Reconciling those calling
+conventions is the real work. Blast radius on baselines is modest: 23 of 1202
+test SVGs use `userSpaceOnUse` gradients, and there are 8 visual goldens.
+
+**Stacks with a second question.** `_has_fully_transparent_gradient_stop`
+(`shape_renderer_raster.py:176`) diverts *any* gradient carrying an alpha-0 stop
+to raster — the standard vector-art shading idiom. DrawingML expresses alpha-0
+stops natively and `test_srgb_clr_carries_display_srgb_bytes_verbatim` pins
+per-stop alpha surviving end to end. If a PowerPoint oracle deck confirms
+alpha-0 stops render correctly, that trigger should be deleted, and these
+elements never reach any rasterizer. If it does not, they reach one that works.
+The two changes are independent and both worth making.
+
 ---
 
 ## Animation
