@@ -75,7 +75,7 @@ jobs:
 
       - name: Upload W3C animation gate reports
         if: always()
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v3
         with:
           name: w3c-animation-gate-reports
           path: |
@@ -134,7 +134,7 @@ jobs:
 
       - name: Upload full animation gate report
         if: always()
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v3
         with:
           name: w3c-animation-gate-full-report
           path: |
