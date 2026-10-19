@@ -1,4 +1,4 @@
-FROM python:3.14-slim
+FROM python:3.15-slim
 
 ARG FONTFORGE_REF=a01d2ebf2013b8de6c7972cab1f962400bd93171
 
